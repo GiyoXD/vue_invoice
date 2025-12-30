@@ -1,0 +1,25 @@
+
+# Ignore Database Files (Large)
+database/*.db
+database/*.sqlite
+
+# Ignore Generated Blueprints and Outputs, but keep structure
+database/blueprints/registry/*
+!database/blueprints/registry/.gitkeep
+
+# Ignore Output Directory
+output/
+result.xlsx
+
+# Ignore Logs
+run_log/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+
+# Environment
+.env
+.venv
+env/
+venv/

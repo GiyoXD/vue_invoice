@@ -1,0 +1,218 @@
+{
+  "_meta": {
+    "config_version": "2.1_generated",
+    "customer": "Generated",
+    "created": "2025-11-27",
+    "description": "Auto-generated from CLW250046.xlsx"
+  },
+  "data_preparation_module_hint": {
+    "priority": [
+      "po"
+    ],
+    "numbers_per_group_by_po": 7
+  },
+  "features": {
+    "enable_text_replacement": false,
+    "enable_auto_calculations": true,
+    "debug_mode": false
+  },
+  "processing": {
+    "sheets": [
+      "Invoice"
+    ],
+    "data_sources": {
+      "Invoice": "aggregation"
+    }
+  },
+  "styling_bundle": {
+    "defaults": {
+      "borders": {
+        "default_border": "full_grid",
+        "default_style": "thin",
+        "exceptions": {
+          "col_static": "side_only"
+        }
+      }
+    },
+    "Invoice": {
+      "columns": {},
+      "row_contexts": {
+        "header": {
+          "bold": true,
+          "font_size": 11.0,
+          "font_name": "宋体",
+          "border_style": "thin",
+          "row_height": 35
+        },
+        "data": {
+          "bold": false,
+          "font_size": 12.0,
+          "font_name": "宋体",
+          "border_style": "thin",
+          "row_height": 35
+        },
+        "footer": {
+          "bold": true,
+          "font_size": 11.0,
+          "font_name": "宋体",
+          "border_style": "thin",
+          "row_height": 35
+        }
+      }
+    }
+  },
+  "layout_bundle": {
+    "Invoice": {
+      "structure": {
+        "header_row": 2,
+        "columns": [
+          {
+            "id": "col_unknown",
+            "header": "入库日期"
+          },
+          {
+            "id": "col_unknown",
+            "header": "入库单号"
+          },
+          {
+            "id": "col_unknown",
+            "header": "订单号"
+          },
+          {
+            "id": "col_unknown",
+            "header": "TTX编号"
+          },
+          {
+            "id": "col_unknown",
+            "header": "产品编号"
+          },
+          {
+            "id": "col_unknown",
+            "header": "描述"
+          },
+          {
+            "id": "col_unknown",
+            "header": "级别"
+          },
+          {
+            "id": "col_unknown",
+            "header": "张数"
+          },
+          {
+            "id": "col_unknown",
+            "header": "尺数"
+          },
+          {
+            "id": "col_unknown",
+            "header": "件数"
+          },
+          {
+            "id": "col_unknown",
+            "header": "托数"
+          },
+          {
+            "id": "col_unknown",
+            "header": "单价"
+          },
+          {
+            "id": "col_unknown",
+            "header": "总价"
+          },
+          {
+            "id": "col_unknown",
+            "header": "净重"
+          },
+          {
+            "id": "col_unknown",
+            "header": "毛重"
+          },
+          {
+            "id": "col_unknown",
+            "header": "Remark"
+          }
+        ]
+      },
+      "data_flow": {
+        "mappings": {
+          "po": {
+            "column": "col_po",
+            "source_key": 0
+          },
+          "item": {
+            "column": "col_item",
+            "source_key": 1
+          },
+          "description": {
+            "column": "col_desc",
+            "source_key": 3,
+            "fallback_on_none": "LEATHER",
+            "fallback_on_DAF": "LEATHER"
+          },
+          "sqft": {
+            "column": "col_qty_sf",
+            "source_value": "sqft_sum"
+          },
+          "unit_price": {
+            "column": "col_unit_price",
+            "source_key": 2
+          },
+          "amount": {
+            "column": "col_amount",
+            "formula": "{col_qty_sf} * {col_unit_price}"
+          }
+        }
+      },
+      "content": {
+        "static": {
+          "col_static": [
+            "VENDOR#:",
+            "Des: LEATHER",
+            "MADE IN CAMBODIA"
+          ]
+        }
+      },
+      "footer": {
+        "total_text_column_id": "col_po",
+        "total_text": "TOTAL OF:",
+        "pallet_count_column_id": "col_item",
+        "sum_column_ids": [
+          "col_qty_sf",
+          "col_amount"
+        ],
+        "add_ons": {
+          "weight_summary": {
+            "enabled": false,
+            "label_col_id": "col_po",
+            "value_col_id": "col_item",
+            "mode": [
+              "daf",
+              "standard"
+            ]
+          },
+          "leather_summary": {
+            "enabled": true,
+            "mode": [
+              "daf",
+              "standard"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "defaults": {
+    "footer": {
+      "show_total": true,
+      "show_pallet_count": true,
+      "total_text": "TOTAL:",
+      "merge_total_cells": true,
+      "sum_columns": [
+        "col_qty_pcs",
+        "col_qty_sf",
+        "col_net",
+        "col_gross",
+        "col_cbm"
+      ]
+    }
+  }
+}

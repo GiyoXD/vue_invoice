@@ -1,0 +1,93 @@
+================================================================================
+HEADERS FOUND IN EXCEL FILE
+================================================================================
+Excel File: C:\Users\JPZ031127\Desktop\main_stream_lit_giyo\GENERATE_INVOICE_STREAMLIT_WEB\src\data_parser\experiment_file\CLW250046.xlsx
+Analysis Time: 2025-11-27T08:14:38.149001
+================================================================================
+
+SHEET: Sheet1
+----------------------------------------
+Start Row: 2
+Header Font: 宋体 11.0
+Data Font: 宋体 12.0
+
+HEADERS FOUND:
+   1. '入库日期' (Row: 2, Col: 1) ❌ MISSING
+   2. '入库单号' (Row: 2, Col: 2) ❌ MISSING
+   3. '订单号' (Row: 2, Col: 3) ❌ MISSING
+   4. 'TTX编号' (Row: 2, Col: 4) ❌ MISSING
+   5. '产品编号' (Row: 2, Col: 5) ❌ MISSING
+   6. '描述' (Row: 2, Col: 6) ❌ MISSING
+   7. '级别' (Row: 2, Col: 7) ❌ MISSING
+   8. '张数' (Row: 2, Col: 8) ❌ MISSING
+   9. '尺数' (Row: 2, Col: 9) ❌ MISSING
+  10. '件数' (Row: 2, Col: 10) ❌ MISSING
+  11. '托数' (Row: 2, Col: 11) ❌ MISSING
+  12. '单价' (Row: 2, Col: 12) ❌ MISSING
+  13. '总价' (Row: 2, Col: 13) ❌ MISSING
+  14. '净重' (Row: 2, Col: 14) ❌ MISSING
+  15. '毛重' (Row: 2, Col: 15) ❌ MISSING
+  16. 'Remark' (Row: 2, Col: 19) ❌ MISSING
+
+================================================================================
+
+MISSING HEADERS SUMMARY
+================================================================================
+Found 16 headers that are not in mapping_config.json:
+
+   1. '入库日期'
+   2. '入库单号'
+   3. '订单号'
+   4. 'TTX编号'
+   5. '产品编号'
+   6. '描述'
+   7. '级别'
+   8. '张数'
+   9. '尺数'
+  10. '件数'
+  11. '托数'
+  12. '单价'
+  13. '总价'
+  14. '净重'
+  15. '毛重'
+  16. 'Remark'
+
+================================================================================
+
+MAPPING SUGGESTIONS
+================================================================================
+To add missing headers to mapping_config.json, use:
+python generate_config/add_mapping.py --add-header "HEADER_TEXT:column_id"
+
+Suggested column IDs based on header content:
+- col_static: For mark/note columns
+- col_po: For purchase order columns
+- col_item: For item number columns
+- col_dc: For document/delivery code columns
+- col_desc: For description columns
+- col_qty_sf: For quantity/square feet columns
+- col_unit_price: For unit price columns
+- col_amount: For amount/total columns
+- col_net: For net weight columns
+- col_gross: For gross weight columns
+- col_cbm: For cubic meter columns
+- col_pallet: For pallet number columns
+- col_remarks: For remarks/notes columns
+
+Example commands for missing headers:
+python generate_config/add_mapping.py --add-header "入库日期:col_unknown"
+python generate_config/add_mapping.py --add-header "入库单号:col_unknown"
+python generate_config/add_mapping.py --add-header "订单号:col_unknown"
+python generate_config/add_mapping.py --add-header "TTX编号:col_unknown"
+python generate_config/add_mapping.py --add-header "产品编号:col_unknown"
+python generate_config/add_mapping.py --add-header "描述:col_unknown"
+python generate_config/add_mapping.py --add-header "级别:col_unknown"
+python generate_config/add_mapping.py --add-header "张数:col_unknown"
+python generate_config/add_mapping.py --add-header "尺数:col_unknown"
+python generate_config/add_mapping.py --add-header "件数:col_unknown"
+python generate_config/add_mapping.py --add-header "托数:col_unknown"
+python generate_config/add_mapping.py --add-header "单价:col_unknown"
+python generate_config/add_mapping.py --add-header "总价:col_unknown"
+python generate_config/add_mapping.py --add-header "净重:col_unknown"
+python generate_config/add_mapping.py --add-header "毛重:col_unknown"
+python generate_config/add_mapping.py --add-header "Remark:col_static"

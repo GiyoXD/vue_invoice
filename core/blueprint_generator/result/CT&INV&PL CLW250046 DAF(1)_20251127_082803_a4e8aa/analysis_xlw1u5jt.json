@@ -1,0 +1,301 @@
+{
+  "file_path": "C:\\Users\\JPZ031127\\Desktop\\main_stream_lit_giyo\\GENERATE_INVOICE_STREAMLIT_WEB\\src\\config_manager\\experiment_file\\CT&INV&PL CLW250046 DAF(1).xlsx",
+  "timestamp": "2025-11-27T08:28:05.217250",
+  "sheets": [
+    {
+      "sheet_name": "Invoice",
+      "header_font": {
+        "name": "Times New Roman",
+        "size": 12.0
+      },
+      "data_font": {
+        "name": "Times New Roman",
+        "size": 12.0
+      },
+      "start_row": 18,
+      "header_positions": [
+        {
+          "keyword": "Mark & N\u00ba",
+          "row": 18,
+          "column": 1
+        },
+        {
+          "keyword": "P.O. N\u00ba",
+          "row": 18,
+          "column": 2
+        },
+        {
+          "keyword": "Description",
+          "row": 18,
+          "column": 3
+        },
+        {
+          "keyword": "ITEM N\u00ba",
+          "row": 18,
+          "column": 5
+        },
+        {
+          "keyword": "Quantity\n(SF)",
+          "row": 18,
+          "column": 6
+        },
+        {
+          "keyword": "Unit price\n(USD)",
+          "row": 18,
+          "column": 7
+        },
+        {
+          "keyword": "Amount(USD)",
+          "row": 18,
+          "column": 8
+        }
+      ],
+      "number_formats": [
+        {
+          "column_id": "col_qty_sf",
+          "excel_format": "#,##0.00",
+          "description": "Decimal numbers (2 places) with comma separators"
+        },
+        {
+          "column_id": "col_unit_price",
+          "excel_format": "#,##0.00",
+          "description": "Decimal numbers (2 places) with comma separators"
+        },
+        {
+          "column_id": "col_amount",
+          "excel_format": "#,##0.00",
+          "description": "Decimal numbers (2 places) with comma separators"
+        }
+      ],
+      "alignments": [
+        {
+          "column_id": "col_static",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_po",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_desc",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_item",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_qty_sf",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_unit_price",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_amount",
+          "horizontal": "center",
+          "vertical": "center"
+        }
+      ],
+      "fallbacks": null,
+      "fob_summary_description": false,
+      "weight_summary_enabled": false
+    },
+    {
+      "sheet_name": "Packing list",
+      "header_font": {
+        "name": "Times New Roman",
+        "size": 12.0
+      },
+      "data_font": {
+        "name": "Times New Roman",
+        "size": 12.0
+      },
+      "start_row": 18,
+      "header_positions": [
+        {
+          "keyword": "Mark & N\u00ba",
+          "row": 18,
+          "column": 1
+        },
+        {
+          "keyword": "Pallet\nNO.",
+          "row": 18,
+          "column": 2
+        },
+        {
+          "keyword": "P.O N\u00ba",
+          "row": 18,
+          "column": 3
+        },
+        {
+          "keyword": "ITEM N\u00ba",
+          "row": 18,
+          "column": 4
+        },
+        {
+          "keyword": "Description",
+          "row": 18,
+          "column": 5
+        },
+        {
+          "keyword": "Quantity",
+          "row": 18,
+          "column": 6
+        },
+        {
+          "keyword": "N.W (kgs)",
+          "row": 18,
+          "column": 8
+        },
+        {
+          "keyword": "G.W (kgs)",
+          "row": 18,
+          "column": 9
+        },
+        {
+          "keyword": "CBM",
+          "row": 18,
+          "column": 10
+        },
+        {
+          "keyword": "PCS",
+          "row": 19,
+          "column": 6
+        },
+        {
+          "keyword": "SF",
+          "row": 19,
+          "column": 7
+        },
+        {
+          "keyword": "PCS",
+          "row": 19,
+          "column": 6
+        },
+        {
+          "keyword": "SF",
+          "row": 19,
+          "column": 7
+        }
+      ],
+      "number_formats": [
+        {
+          "column_id": "col_item",
+          "excel_format": "@",
+          "description": "Custom format: @"
+        },
+        {
+          "column_id": "col_qty_sf",
+          "excel_format": "#,##0",
+          "description": "Whole numbers with comma separators"
+        },
+        {
+          "column_id": "col_qty_sf",
+          "excel_format": "#,##0.00",
+          "description": "Decimal numbers (2 places) with comma separators"
+        },
+        {
+          "column_id": "col_net",
+          "excel_format": "#,##0.00",
+          "description": "Decimal numbers (2 places) with comma separators"
+        },
+        {
+          "column_id": "col_gross",
+          "excel_format": "#,##0.00",
+          "description": "Decimal numbers (2 places) with comma separators"
+        },
+        {
+          "column_id": "col_cbm",
+          "excel_format": "#,##0.00",
+          "description": "Decimal numbers (2 places) with comma separators"
+        }
+      ],
+      "alignments": [
+        {
+          "column_id": "col_static",
+          "horizontal": "left",
+          "vertical": "top"
+        },
+        {
+          "column_id": "col_pallet",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_po",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_item",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_desc",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_qty_sf",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_net",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_gross",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_cbm",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_qty_pcs",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_qty_sf",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_qty_pcs",
+          "horizontal": "center",
+          "vertical": "center"
+        },
+        {
+          "column_id": "col_qty_sf",
+          "horizontal": "center",
+          "vertical": "center"
+        }
+      ],
+      "fallbacks": {
+        "column_id": "col_desc",
+        "fallback_texts": [
+          "LEATHER"
+        ],
+        "fallback_DAF_texts": [
+          "LEATHER"
+        ]
+      },
+      "fob_summary_description": true,
+      "weight_summary_enabled": false
+    }
+  ]
+}

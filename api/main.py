@@ -1,0 +1,415 @@
+from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Body
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import JSONResponse, FileResponse
+from pydantic import BaseModel
+import shutil
+import os
+import json
+from pathlib import Path
+import uuid
+from typing import List, Optional
+import datetime
+
+# Import core orchestrator
+from core.orchestrator import Orchestrator
+import subprocess
+import sys
+
+# Define Project Root
+from core.system_config import sys_config
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+CONFIG_GEN_DIR = PROJECT_ROOT / "core" / "blueprint_generator"
+MAPPING_CONFIG_PATH = sys_config.mapping_config_path
+
+SYSTEM_HEADERS = [
+    "col_po", "col_item", "col_desc", "col_qty_pcs", "col_qty_sf", 
+    "col_unit_price", "col_amount", "col_net", "col_gross", "col_cbm", 
+    "col_pallet", "col_remarks", "col_static", "col_dc"
+]
+
+app = FastAPI()
+
+# Mount frontend
+app.mount("/frontend", StaticFiles(directory=str(sys_config.frontend_dir), html=True), name="frontend")
+app.mount("/static", StaticFiles(directory=str(sys_config.frontend_dir), html=True), name="static")
+
+
+orchestrator = Orchestrator()
+
+# Temporary storage for uploads
+UPLOAD_DIR = Path("temp_uploads")
+OUTPUT_DIR = Path("output")
+UPLOAD_DIR.mkdir(exist_ok=True)
+OUTPUT_DIR.mkdir(exist_ok=True)
+
+class GenerateRequest(BaseModel):
+    identifier: str
+    json_path: str
+    invoice_no: str
+    invoice_date: str
+    invoice_ref: Optional[str] = ""
+
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok"}
+
+@app.post("/api/upload")
+async def upload_excel(file: UploadFile = File(...)):
+    """
+    Uploads an Excel file and processes it to JSON.
+    Returns the identifier and json path.
+    """
+    try:
+        file_path = UPLOAD_DIR / file.filename
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # Process to JSON using Orchestrator
+        json_output_dir = UPLOAD_DIR / "processed"
+        json_output_dir.mkdir(exist_ok=True)
+
+        json_path, identifier = orchestrator.process_excel_to_json(file_path, json_output_dir)
+        
+        # Generate Configuration & Clean Template
+        # Generate Configuration & Clean Template
+        # DISABLE AUTO-GEN: This was causing "Shipping List as Template" issues.
+        # The user should use "Add New Company" to create templates explicitly.
+        # If we auto-gen here, we create a specific bundle for every invoice (e.g. CM25048E_config)
+        # which overrides the general bundle (CM_config) and might be broken (failed cleaning).
+        
+        # try:
+        #     # Resolve config directory (where InvoiceAssetResolver looks)
+        #     project_root = Path(".").resolve()
+        #     bundle_config_dir = project_root / "database" / "blueprints" / "registry"
+        #     bundle_config_dir.mkdir(parents=True, exist_ok=True)
+        #     
+        #     print(f"Generating configuration for {file_path.name}...")
+        #     config_orchestrator.run(str(file_path), options={'output_dir': str(bundle_config_dir)})
+        # except Exception as config_error:
+        #     print(f"Warning: Config generation failed: {config_error}")
+        #     import traceback
+        #     traceback.print_exc()
+
+        
+        # Default Invoice No to filename stem
+        default_inv_no = Path(file.filename).stem
+        
+        return {
+            "status": "success",
+            "file_name": file.filename,
+            "identifier": identifier,
+            "json_path": str(json_path),
+            "default_inv_no": default_inv_no, # Suggest this to frontend
+            "message": "File processed and configuration generated successfully"
+        }
+    except Exception as e:
+        import traceback
+        return JSONResponse(status_code=500, content={"error": str(e), "traceback": traceback.format_exc()})
+
+from core.blueprint_generator.orchestrator import ConfigOrchestrator
+# Initialize Config Orchestrator
+# Initialize Config Orchestrator
+# We use the project root's database/blueprints/config/bundled as the target
+config_base_dir = PROJECT_ROOT / "database" / "blueprints" / "registry"
+# ConfigOrchestrator expects a base_dir, usually for finding its own resources or default output
+# We can pass project_root or just let it handle defaults.
+config_orchestrator = ConfigOrchestrator(base_dir=PROJECT_ROOT)
+
+
+
+@app.post("/api/generate")
+async def generate_invoice(request: GenerateRequest):
+    """
+    Trigger invoice generation with metadata overrides.
+    """
+    try:
+        # Resolve paths
+        json_path_obj = Path(request.json_path)
+        if not json_path_obj.exists():
+             return JSONResponse(status_code=404, content={"error": "JSON file not found. Please upload again."})
+
+        # Define output path
+        output_path = OUTPUT_DIR / request.identifier
+        output_path.mkdir(exist_ok=True)
+
+        # Default Template/Config dirs
+        template_dir = PROJECT_ROOT / "database" / "blueprints" / "template"
+        config_dir = PROJECT_ROOT / "database" / "blueprints" / "registry"
+
+        # Load the existing JSON data
+        try:
+            with open(json_path_obj, 'r', encoding='utf-8') as f:
+                full_data = json.load(f)
+        except Exception as e:
+             return JSONResponse(status_code=500, content={"error": f"Failed to load JSON data: {str(e)}"})
+
+        # Update with overrides
+        if "invoice_info" not in full_data:
+            full_data["invoice_info"] = {}
+        
+        full_data["invoice_info"]["col_inv_no"] = request.invoice_no
+        full_data["invoice_info"]["col_inv_date"] = request.invoice_date
+        full_data["invoice_info"]["col_inv_ref"] = request.invoice_ref
+        
+        # Pass FULL modified data to orchestrator
+        result_path = orchestrator.generate_invoice(
+            json_path=json_path_obj,
+            output_path=output_path / f"{request.identifier}_Invoice.xlsx",
+            template_dir=template_dir,
+            config_dir=config_dir,
+            input_data_dict=full_data 
+        )
+        
+        # Open file explorer to the output directory
+        try:
+             os.startfile(result_path.parent)
+        except Exception:
+             pass # Ignore if fails (e.g. headless)
+
+        # Read the generated metadata to send back validation info
+        metadata_content = {}
+        try:
+            meta_path = result_path.parent / f"{result_path.stem}_metadata.json"
+            if meta_path.exists():
+                with open(meta_path, 'r', encoding='utf-8') as f:
+                    metadata_content = json.load(f)
+        except Exception:
+            pass
+
+        return {
+            "status": "completed",
+            "output_path": str(result_path),
+            "message": f"Invoice generated at {result_path}",
+            "metadata": metadata_content
+        }
+
+
+    except Exception as e:
+        import traceback
+        return JSONResponse(status_code=500, content={"error": str(e), "traceback": traceback.format_exc()})
+
+
+@app.get("/api/history")
+async def get_history():
+    """
+    Retrieve list of past runs from the run_log registry.
+    """
+    run_log_dir = Path("run_log")
+    history = []
+    
+    if run_log_dir.exists():
+        # List all json files
+        for f in run_log_dir.glob("*_metadata.json"):
+            try:
+                # Parse filename: Timestamp_Filename_metadata.json
+                # We can just read the file content for better info
+                with open(f, 'r', encoding='utf-8') as json_file:
+                    data = json.load(json_file)
+                    
+                    history.append({
+                        "filename": f.name,
+                        "timestamp": data.get("timestamp"),
+                        "output_file": data.get("output_file"),
+                        "status": data.get("status"),
+                        "item_count": data.get("database_export", {}).get("summary", {}).get("item_count", 0),
+                        "total_sqft": data.get("database_export", {}).get("summary", {}).get("total_sqft", 0)
+                    })
+            except Exception:
+                continue # Skip corrupted files
+
+    # Sort by timestamp descending
+    history.sort(key=lambda x: x["timestamp"] or "", reverse=True)
+    return history
+
+@app.get("/api/history/view")
+async def view_history_item(filename: str):
+    """
+    Retrieve specific metadata file content from run_log.
+    """
+    run_log_dir = Path("run_log")
+    file_path = run_log_dir / filename
+    
+    if not file_path.exists():
+        # Security check: ensure simple filename, no traversal
+        if ".." in filename or "/" in filename:
+             return JSONResponse(status_code=400, content={"error": "Invalid filename"})
+        return JSONResponse(status_code=404, content={"error": "File not found"})
+        
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": "Could not read file"})
+
+# --- Helper Functions for Template Extractor ---
+
+def get_header_suggestions(header_text: str) -> str:
+    header_lower = header_text.lower()
+    suggestions = {
+        "col_po": ['p.o', 'po'], "col_item": ['item', 'no.'], "col_desc": ['description', 'desc'],
+        "col_qty_sf": ['quantity', 'qty'], "col_unit_price": ['unit', 'price'], "col_amount": ['amount', 'total', 'value'],
+        "col_net": ['n.w', 'net'], "col_gross": ['g.w', 'gross'], "col_cbm": ['cbm'],
+        "col_pallet": ['pallet'], "col_remarks": ['remarks', 'notes'], "col_static": ['mark', 'note']
+    }
+    for col_id, keywords in suggestions.items():
+        if any(word in header_lower for word in keywords):
+            return col_id
+    return "col_unknown"
+
+def get_missing_headers(analysis_file_path: str):
+    try:
+        with open(analysis_file_path, 'r', encoding='utf-8') as f:
+            analysis_data = json.load(f)
+            
+        missing_headers = []
+        
+        # Iterate through all sheets and headers
+        for sheet in analysis_data.get('sheets', []):
+            for header_pos in sheet.get('header_positions', []):
+                col_id = header_pos.get('col_id', '')
+                header_text = header_pos.get('keyword', '')
+                
+                # Logic: If ID is "col_unknown_...", it needs mapping.
+                if col_id.startswith("col_unknown"):
+                    # Double check if it's already in mapping (frontend might have missed it or partial reload)
+                    # But generally, if Scanner said Unknown, it means it wasn't in User Mapping EITHER.
+                    missing_headers.append({
+                        "text": header_text, 
+                        "suggestion": get_header_suggestions(header_text)
+                    })
+        
+        return missing_headers
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        return []
+
+def update_mapping_config(new_mappings: dict):
+    try:
+        mapping_data = {"header_text_mappings": {"mappings": {}}}
+        if MAPPING_CONFIG_PATH.exists():
+            with open(MAPPING_CONFIG_PATH, 'r', encoding='utf-8') as f:
+                mapping_data = json.load(f)
+        
+        if "header_text_mappings" not in mapping_data: mapping_data["header_text_mappings"] = {"mappings": {}}
+        if "mappings" not in mapping_data["header_text_mappings"]: mapping_data["header_text_mappings"]["mappings"] = {}
+
+        # Filter out 'col_unknown' or invalid mappings
+        filtered_mappings = {k: v for k, v in new_mappings.items() if v and v != "col_unknown"}
+
+        if filtered_mappings:
+            mapping_data["header_text_mappings"]["mappings"].update(filtered_mappings)
+
+            with open(MAPPING_CONFIG_PATH, 'w', encoding='utf-8') as f:
+                json.dump(mapping_data, f, indent=2, ensure_ascii=False)
+        return True
+    except Exception:
+        return False
+
+@app.get("/api/download")
+async def download_file(path: str):
+    """
+    Download a file from an absolute path.
+    """
+    file_path = Path(path)
+    if not file_path.exists() or not file_path.is_file():
+        return JSONResponse(status_code=404, content={"error": "File not found"})
+        
+    return FileResponse(file_path, filename=file_path.name, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+
+# --- Template Extractor API ---
+from core.system_config import sys_config
+
+TEMP_DIR = sys_config.temp_uploads_dir
+TEMPLATE_OUTPUT_DIR = sys_config.templates_dir
+CONFIG_OUTPUT_DIR = sys_config.registry_dir
+
+# Import Unified Generator
+from core.blueprint_generator.blueprint_generator import BlueprintGenerator
+
+class TemplateConfig(BaseModel):
+    file_prefix: str
+    user_mappings: dict
+    temp_filename: str
+
+@app.post("/api/template/analyze")
+async def analyze_template(file: UploadFile = File(...)):
+    TEMP_DIR.mkdir(parents=True, exist_ok=True)
+    temp_path = TEMP_DIR / file.filename
+    
+    try:
+        with open(temp_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        analysis_output_path = TEMP_DIR / f"{file.filename}_analysis.json"
+        
+        # Use BlueprintGenerator directly
+        # Initialize with project root to ensure it finds mapping config
+        generator = BlueprintGenerator(PROJECT_ROOT)
+        
+        # Analyze returns JSON string, we parse it to object for response or save to file
+        json_output = generator.analyze(str(temp_path), legacy_format=True)
+        
+        # Save to analysis_output_path for get_missing_headers to read
+        with open(analysis_output_path, 'w', encoding='utf-8') as f:
+            f.write(json_output)
+            
+        missing_headers = get_missing_headers(str(analysis_output_path))
+        
+        # Clean up analysis file immediately, keep excel for next step
+        if analysis_output_path.exists():
+            analysis_output_path.unlink()
+            
+        return {
+            "missing_headers": missing_headers,
+            "temp_filename": file.filename,
+            "suggested_prefix": file.filename.split('.')[0]
+        }
+    except Exception as e:
+        import traceback
+        return JSONResponse(status_code=500, content={"error": str(e), "traceback": traceback.format_exc()})
+
+@app.post("/api/template/generate")
+async def generate_template(config: TemplateConfig):
+    try:
+        # 1. Update mappings
+        if config.user_mappings:
+            if not update_mapping_config(config.user_mappings):
+                return JSONResponse(status_code=500, content={"error": "Failed to update mapping config"})
+
+        # 2. Setup paths
+        temp_path = TEMP_DIR / config.temp_filename
+        if not temp_path.exists():
+             return JSONResponse(status_code=404, content={"error": "Original uploaded file not found. Please re-upload."})
+
+        TEMPLATE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        CONFIG_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+        target_template_path = TEMPLATE_OUTPUT_DIR / f"{config.file_prefix}.xlsx"
+        
+        # Copy file to template dir
+        shutil.copy2(temp_path, target_template_path)
+        
+        # 3. Run Generator directly
+        generator = BlueprintGenerator(PROJECT_ROOT)
+        
+        # Generate bundle
+        result_path = generator.generate(
+            template_path=str(target_template_path),
+            output_dir=str(CONFIG_OUTPUT_DIR),
+            dry_run=False
+        )
+        
+        if not result_path:
+             return JSONResponse(status_code=500, content={"error": "Config generation failed (no result path returned)"})
+
+        return {"status": "success", "message": f"Template {config.file_prefix} created successfully!"}
+
+    except Exception as e:
+        import traceback
+        return JSONResponse(status_code=500, content={"error": str(e), "traceback": traceback.format_exc()})
+
+
+

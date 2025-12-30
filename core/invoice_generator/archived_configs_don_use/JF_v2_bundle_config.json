@@ -1,0 +1,671 @@
+{
+  "_meta": {
+    "config_version": "2.1_developer_optimized",
+    "customer": "JF",
+    "created": "2025-10-31",
+    "description": "Developer-friendly config with DRY principles and inheritance"
+  },
+  "data_preparation_module_hint": {
+    "prority": [
+      "po"
+    ],
+    "numbers_per_group_by_po": 7
+  },
+  "template_store": {},
+  "features": {
+    "_comment": "Feature flags for optional/experimental functionality",
+    "enable_text_replacement": false,
+    "enable_conditional_formatting": false,
+    "enable_data_validation": false,
+    "enable_auto_calculations": true,
+    "enable_print_area": false,
+    "enable_page_breaks": false,
+    "debug_mode": false
+  },
+  "extensions": {
+    "_comment": "Custom extensions - add new features here without breaking existing config",
+    "_available_hooks": [
+      "pre_build",
+      "post_build",
+      "pre_style",
+      "post_style"
+    ],
+    "custom": {}
+  },
+  "processing": {
+    "sheets": [
+      "Invoice",
+      "Contract",
+      "Packing list"
+    ],
+    "data_sources": {
+      "Invoice": "aggregation",
+      "Contract": "aggregation",
+      "Packing list": "processed_tables_multi"
+    }
+  },
+  "styling_bundle": {
+    "_comment": "Centralized styling - all styles explicit per sheet (no inheritance due to inconsistent styling across invoices)",
+    "defaults": {
+      "borders": {
+        "_comment": "Border configuration - same for all sheets",
+        "default_border": "full_grid",
+        "default_style": "thin",
+        "exceptions": {
+          "col_static": "side_only"
+        }
+      }
+    },
+    "Invoice": {
+      "_comment": "NEW FORMAT: ID-driven styling with columns + row_contexts",
+      "columns": {
+        "col_static": {
+          "format": "@",
+          "alignment": "center",
+          "width": 24.71
+        },
+        "col_po": {
+          "format": "@",
+          "alignment": "center",
+          "width": 28
+        },
+        "col_item": {
+          "format": "@",
+          "alignment": "center",
+          "width": 22.14
+        },
+        "col_desc": {
+          "format": "@",
+          "alignment": "center",
+          "wrap_text": true,
+          "width": 20
+        },
+        "col_qty_sf": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "width": 15
+        },
+        "col_unit_price": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "width": 15
+        },
+        "col_amount": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "width": 18
+        }
+      },
+      "row_contexts": {
+        "header": {
+          "bold": true,
+          "font_size": 12,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 35
+        },
+        "data": {
+          "bold": false,
+          "font_size": 12,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 35
+        },
+        "footer": {
+          "bold": true,
+          "font_size": 12,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 35,
+          "add_ons": {
+            "weight_summary": {
+              "enabled": true,
+              "label_col_id": "col_po",
+              "value_col_id": "col_item",
+              "mode": [
+                "daf",
+                "standard"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "Contract": {
+      "_comment": "NEW FORMAT: ID-driven styling with columns + row_contexts",
+      "columns": {
+        "col_no": {
+          "format": "@",
+          "alignment": "center",
+          "width": 14
+        },
+        "col_item": {
+          "format": "@",
+          "alignment": "center",
+          "width": 27
+        },
+        "col_qty_sf": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "width": 27
+        },
+        "col_unit_price": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "width": 28
+        },
+        "col_amount": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "width": 47
+        }
+      },
+      "row_contexts": {
+        "header": {
+          "bold": true,
+          "font_size": 16,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 36
+        },
+        "data": {
+          "bold": false,
+          "font_size": 14,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 30
+        },
+        "footer": {
+          "bold": true,
+          "font_size": 16,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 36
+        }
+      }
+    },
+    "Packing list": {
+      "_comment": "NEW FORMAT: ID-driven styling with columns + row_contexts",
+      "columns": {
+        "col_static": {
+          "format": "@",
+          "alignment": "center",
+          "wrap_text": true,
+          "width": 24.71
+        },
+        "col_po": {
+          "format": "@",
+          "alignment": "center",
+          "wrap_text": true,
+          "width": 17
+        },
+        "col_item": {
+          "format": "@",
+          "alignment": "center",
+          "wrap_text": true,
+          "width": 22.14
+        },
+        "col_desc": {
+          "format": "@",
+          "alignment": "center",
+          "wrap_text": true,
+          "width": 26
+        },
+        "col_qty_header": {
+          "format": "@",
+          "alignment": "center",
+          "wrap_text": true,
+          "width": 15
+        },
+        "col_qty_pcs": {
+          "format": "#,##0",
+          "alignment": "center",
+          "width": 15
+        },
+        "col_qty_sf": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "width": 15
+        },
+        "col_net": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "width": 15
+        },
+        "col_gross": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "width": 15
+        },
+        "col_cbm": {
+          "format": "0.00",
+          "alignment": "center",
+          "width": 15
+        }
+      },
+      "row_contexts": {
+        "header": {
+          "bold": true,
+          "font_size": 12,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 27
+        },
+        "data": {
+          "bold": false,
+          "font_size": 12,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 27
+        },
+        "footer": {
+          "bold": true,
+          "font_size": 12,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 27
+        }
+      },
+      "_legacy_column_specific": {
+        "col_static": {
+          "alignment": {
+            "horizontal": "left",
+            "vertical": "top"
+          }
+        }
+      }
+    }
+  },
+  "layout_bundle": {
+    "_comment": "Layout configuration - structure, data flow, content, and footer rules",
+    "Invoice": {
+      "_sections": [
+        "structure",
+        "data_flow",
+        "content",
+        "footer"
+      ],
+      "structure": {
+        "header_row": 21,
+        "columns": [
+          {
+            "id": "col_static",
+            "header": "Mark & Nº"
+          },
+          {
+            "id": "col_po",
+            "header": "P.O. Nº",
+            "format": "@"
+          },
+          {
+            "id": "col_item",
+            "header": "ITEM Nº",
+            "format": "@"
+          },
+          {
+            "id": "col_desc",
+            "header": "Description"
+          },
+          {
+            "id": "col_qty_sf",
+            "header": "Quantity(SF)",
+            "format": "#,##0.00"
+          },
+          {
+            "id": "col_unit_price",
+            "header": "Unit price (USD)",
+            "format": "#,##0.00"
+          },
+          {
+            "id": "col_amount",
+            "header": "Amount (USD)",
+            "format": "#,##0.00"
+          }
+        ]
+      },
+      "data_flow": {
+        "mappings": {
+          "po": {
+            "column": "col_po",
+            "source_key": 0
+          },
+          "item": {
+            "column": "col_item",
+            "source_key": 1
+          },
+          "description": {
+            "column": "col_desc",
+            "source_key": 3,
+            "fallback_on_none": "LEATHER",
+            "fallback_on_DAF": "LEATHER"
+          },
+          "sqft": {
+            "column": "col_qty_sf",
+            "source_value": "sqft_sum"
+          },
+          "unit_price": {
+            "column": "col_unit_price",
+            "source_key": 2
+          },
+          "amount": {
+            "column": "col_amount",
+            "formula": "{col_qty_sf} * {col_unit_price}"
+          }
+        }
+      },
+      "content": {
+        "static": {
+          "col_static": [
+            "VENDOR#:",
+            "Des: LEATHER",
+            "MADE IN CAMBODIA"
+          ]
+        }
+      },
+      "footer": {
+        "total_text_column_id": "col_po",
+        "total_text": "TOTAL OF:",
+        "pallet_count_column_id": "col_item",
+        "sum_column_ids": [
+          "col_qty_sf",
+          "col_amount"
+        ],
+        "merge_rules": [],
+        "add_ons": {
+          "before_footer": {
+            "enabled": false,
+            "column_id": "col_po",
+            "text": "HS.CODE: 4107.12.00"
+          },
+          "weight_summary": {
+            "enabled": true,
+            "label_col_id": "col_po",
+            "value_col_id": "col_item",
+            "mode": [
+              "daf",
+              "standard"
+            ]
+          },
+          "leather_summary": {
+            "enabled": false,
+            "mode": [
+              "daf",
+              "standard"
+            ]
+          }
+        }
+      }
+    },
+    "Contract": {
+      "_sections": [
+        "structure",
+        "data_flow",
+        "footer"
+      ],
+      "structure": {
+        "header_row": 15,
+        "columns": [
+          {
+            "id": "col_no",
+            "header": "No.",
+            "format": "@"
+          },
+          {
+            "id": "col_item",
+            "header": "ITEM Nº"
+          },
+          {
+            "id": "col_qty_sf",
+            "header": "Quantity(SF)",
+            "format": "#,##0.00"
+          },
+          {
+            "id": "col_unit_price",
+            "header": "Unit Price(USD)",
+            "format": "#,##0.00"
+          },
+          {
+            "id": "col_amount",
+            "header": "Total value(USD)",
+            "format": "#,##0.00"
+          }
+        ]
+      },
+      "data_flow": {
+        "mappings": {
+          "po": {
+            "column": "col_po",
+            "source_key": 0
+          },
+          "item": {
+            "column": "col_item",
+            "source_key": 1
+          },
+          "desc": {
+            "column": "col_desc",
+            "source_key": 3,
+            "fallback_on_none": "LEATHER",
+            "fallback_on_DAF": "LEATHER"
+          },
+          "sqft": {
+            "column": "col_qty_sf",
+            "source_value": "sqft_sum"
+          },
+          "unit_price": {
+            "column": "col_unit_price",
+            "source_key": 2
+          },
+          "amount": {
+            "column": "col_amount",
+            "formula": "{col_qty_sf} * {col_unit_price}"
+          }
+        }
+      },
+      "footer": {
+        "total_text_column_id": "col_no",
+        "total_text": "TOTAL OF:",
+        "pallet_count_column_id": "col_item",
+        "sum_column_ids": [
+          "col_qty_sf",
+          "col_amount"
+        ],
+        "merge_rules": [],
+        "add_ons": {
+          "weight_summary": {
+            "enabled": false,
+            "label_col_id": "col_no",
+            "value_col_id": "col_item",
+            "mode": [
+              "daf",
+              "standard"
+            ]
+          },
+          "leather_summary": {
+            "enabled": false,
+            "mode": [
+              "daf",
+              "standard"
+            ]
+          }
+        }
+      }
+    },
+    "Packing list": {
+      "_sections": [
+        "structure",
+        "data_flow",
+        "content",
+        "footer"
+      ],
+      "structure": {
+        "header_row": 21,
+        "columns": [
+          {
+            "id": "col_static",
+            "header": "Mark & Nº",
+            "rowspan": 2,
+            "colspan": 1
+          },
+          {
+            "id": "col_po",
+            "header": "P.O Nº",
+            "rowspan": 2,
+            "format": "@"
+          },
+          {
+            "id": "col_item",
+            "header": "ITEM Nº",
+            "rowspan": 2,
+            "format": "@"
+          },
+          {
+            "id": "col_blank_test",
+            "header": "blank test",
+            "rowspan": 2,
+            "format": "@",
+            "skip_in_daf": true
+          },
+          {
+            "id": "col_desc",
+            "header": "Description",
+            "rowspan": 2,
+            "format": "@"
+          },
+          {
+            "id": "col_qty_header",
+            "header": "Quantity(SF)",
+            "colspan": 2,
+            "children": [
+              {
+                "id": "col_qty_pcs",
+                "header": "PCS",
+                "format": "#,##0"
+              },
+              {
+                "id": "col_qty_sf",
+                "header": "SF",
+                "format": "#,##0.00"
+              }
+            ]
+          },
+          {
+            "id": "col_net",
+            "header": "N.W (kgs)",
+            "rowspan": 2,
+            "format": "#,##0.00"
+          },
+          {
+            "id": "col_gross",
+            "header": "G.W (kgs)",
+            "rowspan": 2,
+            "format": "#,##0.00"
+          },
+          {
+            "id": "col_cbm",
+            "header": "CBM",
+            "rowspan": 2,
+            "format": "0.00"
+          }
+        ]
+      },
+      "data_flow": {
+        "mappings": {
+          "po": {
+            "column": "col_po"
+          },
+          "item": {
+            "column": "col_item"
+          },
+          "description": {
+            "column": "col_desc",
+            "fallback_on_none": "LEATHER",
+            "fallback_on_DAF": "LEATHER"
+          },
+          "pcs": {
+            "column": "col_qty_pcs"
+          },
+          "sqft": {
+            "column": "col_qty_sf"
+          },
+          "net": {
+            "column": "col_net"
+          },
+          "gross": {
+            "column": "col_gross"
+          },
+          "cbm": {
+            "column": "col_cbm"
+          }
+        }
+      },
+      "content": {
+        "static": {
+          "col_static": [
+            "VENDOR#:",
+            "Des: LEATHER",
+            "Case Qty:",
+            "MADE IN CAMBODIA"
+          ]
+        }
+      },
+      "footer": {
+        "total_text_column_id": "col_po",
+        "total_text": "TOTAL OF:",
+        "pallet_count_column_id": "col_desc",
+        "sum_column_ids": [
+          "col_qty_pcs",
+          "col_qty_sf",
+          "col_net",
+          "col_gross",
+          "col_cbm"
+        ],
+        "merge_rules": [
+          {
+            "start_column_id": "col_po",
+            "colspan": 1,
+            "comment": "Merge TOTAL text across first 2 columns"
+          }
+        ],
+        "add_ons": {
+          "before_footer": {
+            "enabled": true,
+            "column_id": "col_po",
+            "text": "LEATHER (HS.CODE: 4107.12.00)",
+            "merge": 2
+          },
+          "weight_summary": {
+            "enabled": false,
+            "label_col_id": "col_po",
+            "value_col_id": "col_item",
+            "mode": [
+              "daf",
+              "standard"
+            ]
+          },
+          "leather_summary": {
+            "enabled": true,
+            "mode": [
+              "daf",
+              "standard"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "defaults": {
+    "footer": {
+      "show_total": true,
+      "show_pallet_count": true,
+      "total_text": "TOTAL:",
+      "merge_total_cells": true,
+      "sum_columns": [
+        "col_qty_pcs",
+        "col_qty_sf",
+        "col_net",
+        "col_gross",
+        "col_cbm"
+      ]
+    }
+  }
+}

@@ -1,0 +1,11 @@
+HEADERS FOUND IN EXCEL FILE
+================================================================================
+
+MISSING HEADERS:
+  - Date:
+  - EXPORTER:
+  - CALIFOR UPHOLSTERY MATERIALS CO., LTD.
+  - INVOICE NO :
+  - JFTIME
+  - XIN BAVET SEZ, Road No. 316A, Trapeang Bon and Prey Kokir Villages,
+  - JFINV
