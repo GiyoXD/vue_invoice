@@ -11,6 +11,11 @@ from typing import Optional, Dict, Any
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+from core.data_parser.main import run_invoice_automation
+from core.blueprint_generator.blueprint_generator import BlueprintGenerator as BlueprintGenService
+from core.invoice_generator.generate_invoice import run_invoice_generation
+from core.utils.pipeline_monitor import PipelineMonitor
+
 class PipelineOrchestrator:
     def __init__(self, input_excel: str, output_dir: str):
         self.input_excel = Path(input_excel).resolve()
@@ -34,70 +39,49 @@ class PipelineOrchestrator:
         
         self.invoice_metadata_path = self.output_dir / "invoice_generation_metadata.json" # Invoice Gen usually saves to output dir?
 
-    def runs_step(self, step_name: str, command: list, metadata_path: Path) -> bool:
-        """Run a pipeline step and verify its metadata."""
-        logger.info(f"--- Running Step: {step_name} ---")
-        logger.info(f"Command: {' '.join(command)}")
+    def runs_step(self, step_name: str, func, *args, **kwargs) -> bool:
+        """Run a pipeline step directly and verify its metadata."""
+        tid = kwargs.pop('trace_id', 'unknown')
+        logger.info(f"--- Running Step: {step_name} [{tid}] ---")
         
         try:
-            result = subprocess.run(command, cwd=Path.cwd(), capture_output=True, text=True)
-            
-            # Log Output
-            if result.stdout:
-                logger.info(f"[{step_name} STDOUT]\n{result.stdout}")
-            if result.stderr:
-                logger.warning(f"[{step_name} STDERR]\n{result.stderr}")
-                
-            if result.returncode != 0:
-                logger.error(f"Step {step_name} failed with exit code {result.returncode}")
-                return False
-                
-            # Check Metadata
-            if not metadata_path.exists():
-                logger.error(f"Step {step_name} completed but metadata file not found at: {metadata_path}")
-                return False
-                
-            with open(metadata_path, 'r') as f:
-                metadata = json.load(f)
-                
-            status = metadata.get("status")
-            logger.info(f"Step {step_name} Status: {status}")
-            
-            if status in ["success", "success_with_warnings", "partial_success"]:
-                if status != "success":
-                    logger.warning(f"Step {step_name} had warnings/partial success. Check log.")
-                return True
-            else:
-                logger.error(f"Step {step_name} marked as {status}. Stopping.")
-                return False
+            # Direct execution in the same process
+            func(*args, **kwargs)
+            return True
                 
         except Exception as e:
             logger.error(f"Orchestrator failed to run step {step_name}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False
 
     def run(self):
-        logger.info(f"Starting Pipeline for: {self.input_excel}")
+        # Initialize Context-Aware Tracing (The Snitch)
+        from core.utils.snitch import start_trace
+        tid = start_trace()
+        logger.info(f"Starting Pipeline for: {self.input_excel} | TraceID: {tid}")
         
         # 1. Data Parser
-        cmd_parser = [
-            sys.executable, "-m", "core.data_parser.main",
-            "--input-excel", str(self.input_excel),
-            "--output-dir", str(self.output_dir)
-        ]
-        if not self.runs_step("Data Parser", cmd_parser, self.parser_metadata_path):
+        def run_parser():
+             run_invoice_automation(
+                input_excel_override=str(self.input_excel),
+                output_dir_override=str(self.output_dir)
+             )
+             
+        if not self.runs_step("Data Parser", run_parser, trace_id=tid):
             return
 
         # 2. Blueprint Generator
         # We want to output config to the same base output dir? Or a specific 'configs' dir?
         # Standard: invoice_generator/src/config_bundled/ OR temp_test_data?
         # Let's verify generation into the output_dir.
-        cmd_blueprint = [
-            sys.executable, "-m", "core.blueprint_generator.blueprint_generator",
-            str(self.input_excel),
-            "--output", str(self.output_dir)
-             # Note: Blueprint Generator saves {Customer}/{Customer}_config.json inside output dir
-        ]
-        if not self.runs_step("Blueprint Generator", cmd_blueprint, self.blueprint_metadata_path):
+        def run_blueprint():
+             # Initialize generator
+             gen = BlueprintGenService(output_base_dir=self.output_dir)
+             # Run generation
+             gen.generate(str(self.input_excel))
+
+        if not self.runs_step("Blueprint Generator", run_blueprint, trace_id=tid):
             return
 
         # Locate Generated Config
@@ -137,22 +121,22 @@ class PipelineOrchestrator:
 
         # 3. Invoice Generator
         # generate_invoice.py usage: generate_invoice.py [-o OUTPUT] ... input_data_file
-        cmd_invoice = [
-             sys.executable, "core/invoice_generator/generate_invoice.py",
-             str(self.parsed_data_path), # Positional Argument: Input Data File
-             "--config", str(self.generated_config_path),
-             "-o", str(self.output_dir)
-        ]
-        
-        if self.generated_template_path.exists():
-            cmd_invoice.extend(["--template", str(self.generated_template_path)])
+        def run_invoice_gen():
+            run_invoice_generation(
+                 input_data_path=self.parsed_data_path,
+                 explicit_config_path=self.generated_config_path,
+                 output_path=self.output_dir,
+                 explicit_template_path=self.generated_template_path if self.generated_template_path.exists() else None,
+                 template_dir=None, # will use default logic if explicit path not provided
+                 config_dir=None # will use default logic
+            )
         
         # Metadata for invoice generator? 
         # Check generate_invoice.py to see where it saves metadata.
         # It usually uses `GenerationMonitor`.
         
         # We'll run it and check result.
-        if not self.runs_step("Invoice Generator", cmd_invoice, self.invoice_metadata_path):
+        if not self.runs_step("Invoice Generator", run_invoice_gen, trace_id=tid):
             # If explicit metadata path check fails, we might check if result PDF exists?
             pass
             

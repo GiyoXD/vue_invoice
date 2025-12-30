@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from .excel_scanner import TemplateAnalysisResult, SheetAnalysis, ColumnInfo
 from .rules import BlueprintRules
+from core.utils.snitch import snitch
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,7 @@ class ConfigBuilder:
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
     
+    @snitch
     def build_config(self, analysis: TemplateAnalysisResult) -> Dict[str, Any]:
         """
         Build complete bundle config from template analysis.

@@ -148,14 +148,10 @@ def load_and_update_mappings():
     TARGET_HEADERS_MAP dictionary. This makes the configuration dynamic.
     """
     try:
-        # Construct an absolute path to the JSON file relative to this script's location
-        # This ensures the file is found regardless of the current working directory
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        # Point to database/config/mapper/mapping_config.json
-        # src/data_parser/../../database/config/mapper/mapping_config.json
-        json_path = os.path.join(base_dir, '..', '..', 'database', 'config', 'mapper', 'mapping_config.json')
+        from core.system_config import sys_config
+        json_path = sys_config.mapping_config_path
         
-        if not os.path.exists(json_path):
+        if not json_path.exists():
             print(f"Warning: Mapping config file not found at {json_path}. Using default TARGET_HEADERS_MAP.")
             return
 

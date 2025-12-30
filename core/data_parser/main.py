@@ -362,13 +362,22 @@ def make_json_serializable(data):
 
 # <<< MODIFIED FUNCTION SIGNATURE >>>
 # Import PipelineMonitor
+
 from core.utils.pipeline_monitor import PipelineMonitor
+from core.utils.snitch import snitch
 
 # ... (Previous code)
 
-def run_invoice_automation(input_excel_override: Optional[str] = None, output_dir_override: Optional[str] = None):
-    """Main function to find tables, extract, and process data for each."""
-    
+@snitch
+def run_invoice_automation(
+    input_excel_override: str = None,
+    output_dir_override: str = None,
+    monitor_override: PipelineMonitor = None
+) -> Tuple[Path, str]:
+    """
+    Main entry point for the invoice automation process.
+    Refactored to be callable as a library function.
+    """
     # 1. Determine Output Directory (Fast Fail)
     if output_dir_override:
         output_dir = Path(output_dir_override).resolve()

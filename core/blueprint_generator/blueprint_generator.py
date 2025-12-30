@@ -21,6 +21,7 @@ from .config_builder import ConfigBuilder
 from .legacy_migrator import LegacyConfigMigrator
 from .validator import ConfigValidator
 from core.utils.pipeline_monitor import PipelineMonitor
+from core.utils.snitch import snitch
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +151,7 @@ class BlueprintGenerator:
         
         return config_file
     
+    @snitch
     def generate(self, template_path: str, output_dir: Optional[str] = None,
                  dry_run: bool = False, monitor: Optional[PipelineMonitor] = None) -> Optional[Path]:
         """

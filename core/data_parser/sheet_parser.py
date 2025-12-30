@@ -179,7 +179,7 @@ def find_and_map_smart_headers(sheet: Worksheet) -> Optional[Tuple[int, Dict[str
             current_row_score += best_candidate['score']
 
         # --- NEW LOGGING LINE FOR DIAGNOSTICS ---
-        logging.info(f"{prefix} Evaluated Row {row_num} | Score: {current_row_score} | Mapping: {potential_mapping}")
+        logging.debug(f"{prefix} Evaluated Row {row_num} | Score: {current_row_score} | Mapping: {potential_mapping}")
 
         if len(potential_mapping) >= 3 and current_row_score > highest_row_score:
             highest_row_score = current_row_score

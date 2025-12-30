@@ -7,6 +7,7 @@ from typing import List, Dict, Tuple
 # Import the logic directly!
 from core.invoice_generator.generate_invoice import run_invoice_generation
 from core.data_parser.main import run_invoice_automation
+from core.utils.snitch import snitch
 
 class Orchestrator:
     """
@@ -17,6 +18,7 @@ class Orchestrator:
     def __init__(self):
         self.project_root = Path(__file__).parent.parent
         
+    @snitch
     def process_excel_to_json(self, excel_path: Path, output_dir: Path) -> Tuple[Path, str]:
         """
         Directly calls the Data Parser library function.
@@ -37,6 +39,7 @@ class Orchestrator:
             tb = traceback.format_exc()
             raise RuntimeError(f"Data Parser Failed:\n{tb}") from e
 
+    @snitch
     def generate_invoice(self, 
                         json_path: Path, 
                         output_path: Path, 

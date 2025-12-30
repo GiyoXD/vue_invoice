@@ -20,6 +20,7 @@ from openpyxl.cell.cell import MergedCell
 from openpyxl.utils import get_column_letter
 
 from .rules import BlueprintRules
+from core.utils.snitch import snitch
 
 logger = logging.getLogger(__name__)
 
@@ -284,6 +285,7 @@ class ExcelLayoutScanner:
              
         return best_row, best_header_cells
     
+    @snitch
     def scan_template(self, template_path: str, mapping_config: Optional[Dict[str, Any]] = None) -> TemplateAnalysisResult:
         """
         Analyze an Excel template file and extract structure.
