@@ -83,9 +83,15 @@ export default {
             <div class="card" v-if="currentStep === 3" style="text-align: center; animation-delay: 0.1s">
                 <div style="font-size: 4rem; margin-bottom: 1rem;">🎉</div>
                 <h2>Template Created!</h2>
-                <p style="color: #94a3b8; margin-bottom: 2rem;">
+                <p style="color: #94a3b8; margin-bottom: 1rem;">
                     The template <strong>{{ filePrefix }}</strong> has been configured successfully.
-                    You can now go to the Generator and process lists for this company.
+                </p>
+                <div v-if="bundlePath" style="background: rgba(34, 197, 94, 0.1); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1.5rem; text-align: left;">
+                    <p style="color: #86efac; margin: 0 0 0.5rem 0; font-size: 0.875rem;">📁 Bundle created at:</p>
+                    <code style="color: #22c55e; font-size: 0.8rem; word-break: break-all;">{{ bundlePath }}</code>
+                </div>
+                <p style="color: #94a3b8; margin-bottom: 2rem;">
+                    You can now go to the Generator and process invoices for this company.
                 </p>
                 <button class="btn" @click="resetFlow">Process Another</button>
             </div>
@@ -104,6 +110,7 @@ export default {
         const filePrefix = ref("");
         const userMappings = reactive({});
         const confirmedHeaders = ref([]);
+        const bundlePath = ref("");
 
         const handleFileUpload = (e) => {
             selectedFile.value = e.target.files[0];
@@ -191,6 +198,7 @@ export default {
                 const data = await res.json();
 
                 if (res.ok) {
+                    bundlePath.value = data.bundle_path || '';
                     currentStep.value = 3;
                 } else {
                     throw new Error(data.error || "Generation failed");
@@ -209,6 +217,7 @@ export default {
             filePrefix.value = "";
             missingHeaders.value = [];
             statusMessage.value = "";
+            bundlePath.value = "";
         };
 
         return {
@@ -226,7 +235,8 @@ export default {
             userMappings,
             confirmedHeaders,
             toggleMapping,
-            systemHeaders: SYSTEM_HEADERS
+            systemHeaders: SYSTEM_HEADERS,
+            bundlePath
         };
     }
 };

@@ -350,8 +350,7 @@ async def download_file(path: str):
 from core.system_config import sys_config
 
 TEMP_DIR = sys_config.temp_uploads_dir
-TEMPLATE_OUTPUT_DIR = sys_config.templates_dir
-CONFIG_OUTPUT_DIR = sys_config.registry_dir
+# Note: Template generation now outputs to bundled/{prefix}/ folder via sys_config.bundled_dir
 
 # Import Unified Generator
 from core.blueprint_generator.blueprint_generator import BlueprintGenerator
@@ -404,39 +403,47 @@ async def analyze_template(file: UploadFile = File(...)):
 
 @app.post("/api/template/generate")
 async def generate_template(config: TemplateConfig):
+    """
+    Generate a template bundle for a new customer.
+    
+    Creates a bundled folder structure:
+    bundled/{prefix}/
+      - {prefix}.xlsx (template)
+      - {prefix}_config.json (config)
+    """
     try:
-        # 1. Update mappings
+        # 1. Update global mappings if user provided any
         if config.user_mappings:
             if not update_mapping_config(config.user_mappings):
                 return JSONResponse(status_code=500, content={"error": "Failed to update mapping config"})
 
-        # 2. Setup paths
+        # 2. Setup paths - NEW BUNDLED STRUCTURE
         temp_path = TEMP_DIR / config.temp_filename
         if not temp_path.exists():
-             return JSONResponse(status_code=404, content={"error": "Original uploaded file not found. Please re-upload."})
+            return JSONResponse(status_code=404, content={"error": "Original uploaded file not found. Please re-upload."})
 
-        TEMPLATE_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-        CONFIG_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-        target_template_path = TEMPLATE_OUTPUT_DIR / f"{config.file_prefix}.xlsx"
-        
-        # Copy file to template dir
-        shutil.copy2(temp_path, target_template_path)
-        
-        # 3. Run Generator directly
+        # 3. Run Generator - it will create bundled/{prefix}/ folder automatically
         generator = BlueprintGenerator(PROJECT_ROOT)
         
-        # Generate bundle
+        # Pass bundled_dir as output and user's custom prefix for naming
         result_path = generator.generate(
-            template_path=str(target_template_path),
-            output_dir=str(CONFIG_OUTPUT_DIR),
-            dry_run=False
+            template_path=str(temp_path),  # Use the temp file directly
+            output_dir=str(sys_config.bundled_dir),  # Generator creates {prefix}/ inside this
+            dry_run=False,
+            custom_prefix=config.file_prefix  # Use user's prefix for folder/file naming
         )
         
         if not result_path:
-             return JSONResponse(status_code=500, content={"error": "Config generation failed (no result path returned)"})
+            return JSONResponse(status_code=500, content={"error": "Config generation failed (no result path returned)"})
 
-        return {"status": "success", "message": f"Template {config.file_prefix} created successfully!"}
+        # The generator creates the folder using the custom_prefix
+        customer_bundle_dir = result_path.parent
+
+        return {
+            "status": "success", 
+            "message": f"Template {config.file_prefix} created successfully!",
+            "bundle_path": str(customer_bundle_dir)
+        }
 
     except Exception as e:
         import traceback

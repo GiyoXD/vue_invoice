@@ -153,7 +153,8 @@ class BlueprintGenerator:
     
     @snitch
     def generate(self, template_path: str, output_dir: Optional[str] = None,
-                 dry_run: bool = False, monitor: Optional[PipelineMonitor] = None) -> Optional[Path]:
+                 dry_run: bool = False, monitor: Optional[PipelineMonitor] = None,
+                 custom_prefix: Optional[str] = None) -> Optional[Path]:
         """
         Generate bundle config from template.
         
@@ -161,6 +162,8 @@ class BlueprintGenerator:
             template_path: Path to Excel template file
             output_dir: Optional custom output directory
             dry_run: If True, print config but don't save
+            monitor: Optional pipeline monitor for logging
+            custom_prefix: Optional custom prefix to use instead of auto-detected customer code
             
         Returns:
             Path to generated config file, or None if dry_run
@@ -183,9 +186,18 @@ class BlueprintGenerator:
         
         self._print_analysis_summary(analysis)
         
+        # Use custom prefix if provided, otherwise use detected customer code
+        effective_prefix = custom_prefix if custom_prefix else analysis.customer_code
+        if custom_prefix:
+            self.logger.info(f"\n   Using custom prefix: {effective_prefix}")
+        
         # Step 2: Build bundle config
         self.logger.info("\n[Step 2] Building blueprint config...")
         bundle = self.builder.build_config(analysis)
+        
+        # Update bundle metadata with effective prefix
+        if custom_prefix and "_meta" in bundle:
+            bundle["_meta"]["customer"] = custom_prefix
 
         # Step 2b: Validate Config Structure
         self.logger.info("\n[Step 2b] Validating config structure...")
@@ -208,25 +220,26 @@ class BlueprintGenerator:
             print(json.dumps(bundle, indent=2, ensure_ascii=False))
             return None
         
-        # Determine output path
+        # Determine output path using effective prefix
         if output_dir:
             output_base = Path(output_dir)
         else:
             output_base = self.output_base_dir
         
-        config_dir = output_base / analysis.customer_code
-        config_file = config_dir / f"{analysis.customer_code}_config.json"
+        config_dir = output_base / effective_prefix
+        config_file = config_dir / f"{effective_prefix}_config.json"
         
         # Create directory
         config_dir.mkdir(parents=True, exist_ok=True)
 
         # Step 3: Generate Clean Template
         if not dry_run:
-            template_path_res, layout_metadata = self._generate_clean_template(template_path, analysis, config_dir, monitor)
+            template_path_res, layout_metadata = self._generate_clean_template(
+                template_path, analysis, config_dir, monitor, effective_prefix
+            )
             
             # SAVE SEPARATE TEMPLATE CONFIG
-            # User request: "create a seperate, this new config is template config"
-            template_config_file = config_dir / f"{analysis.customer_code}_template.json"
+            template_config_file = config_dir / f"{effective_prefix}_template.json"
             
             self.logger.info(f"   Saving Template Config: {template_config_file.name}")
             with open(template_config_file, 'w', encoding='utf-8') as f:
@@ -247,7 +260,8 @@ class BlueprintGenerator:
         return config_file
 
     def _generate_clean_template(self, template_path: Path, analysis: TemplateAnalysisResult, 
-                                 output_dir: Path, monitor: Optional[PipelineMonitor] = None) -> Tuple[Path, Dict[str, Any]]:
+                                 output_dir: Path, monitor: Optional[PipelineMonitor] = None,
+                                 custom_prefix: Optional[str] = None) -> Tuple[Path, Dict[str, Any]]:
         """
         Generate a clean template from the raw input file.
         
@@ -255,6 +269,8 @@ class BlueprintGenerator:
             template_path: Path to raw Excel file
             analysis: Analysis result
             output_dir: Directory to save clean template
+            monitor: Optional pipeline monitor
+            custom_prefix: Optional custom prefix for naming (uses customer_code if not provided)
             
         Returns:
             Tuple of (Path to saved clean template, layout_metadata)
@@ -272,8 +288,11 @@ class BlueprintGenerator:
         # Clean it (updated to return tuple)
         cleaned_wb, layout_metadata = sanitizer.sanitize_template(wb, analysis)
         
+        # Use custom prefix if provided, otherwise use detected customer code
+        effective_prefix = custom_prefix if custom_prefix else analysis.customer_code
+        
         # Save it
-        template_file = output_dir / f"{analysis.customer_code}.xlsx"
+        template_file = output_dir / f"{effective_prefix}.xlsx"
         try:
             cleaned_wb.save(template_file)
             self.logger.info(f"   Cleaned Template: {template_file.name}")
