@@ -57,6 +57,17 @@ class ExcelTemplateSanitizer:
                 ws = workbook[sheet_analysis.name]
                 sheet_layout = self._clean_sheet(ws, sheet_analysis)
                 layout_metadata[sheet_analysis.name] = sheet_layout
+        
+        # === FIX FOR CORRUPTION ===
+        # Clear all images from sheets before returning.
+        # Images in openpyxl can cause corruption when the workbook is saved
+        # after row deletions. We've already captured image data to metadata.
+        for sheet in workbook.worksheets:
+            if hasattr(sheet, '_images'):
+                sheet._images = []
+            # Also clear drawings which can cause issues
+            if hasattr(sheet, '_charts'):
+                sheet._charts = []
                 
         return workbook, layout_metadata
 
@@ -147,11 +158,11 @@ class ExcelTemplateSanitizer:
         else:
             rows_to_delete = end_delete - start_delete + 1
         
-        # 3. Capture Images (Before Deletion)
-        # Capture strictly ABOVE deletion (Header images) and BELOW deletion (Footer images)
-        header_imgs, footer_imgs = self._capture_images_from_sheet(ws, start_delete, end_delete, rows_to_delete)
-        preserved_layout["header_images"] = header_imgs
-        preserved_layout["footer_images"] = footer_imgs
+        
+        # 3. SKIP Image Capture - was causing corruption
+        # Images are cleared in sanitize_template() before saving
+        preserved_layout["header_images"] = []
+        preserved_layout["footer_images"] = []
         
         if rows_to_delete > 0:
             self.logger.info(f"    Deleting ENTIRE TABLE: {rows_to_delete} rows (Rows {start_delete}-{end_delete} | Header {start_delete} to Footer {end_delete})")
@@ -257,38 +268,69 @@ class ExcelTemplateSanitizer:
         scan_rows = header_row - 1
         if scan_rows < 1: return
         
+        # Track cells we've already injected into to prevent duplicates
+        injected_cells = set()
+        
         for row in range(1, scan_rows + 1):
             for col in range(1, 15): # Scan first 15 columns
                 cell = ws.cell(row=row, column=col)
                 value = self._get_cell_value(cell)
                 
                 if value:
+                    # Skip if this cell already has a JF placeholder
+                    if value.upper().startswith("JF"):
+                        continue
+                    
                     val_lower = value.lower().strip()
-                    # Remove trailing punctuation like :, ., or spaces
+                    # Keep original for some checks, clean version for others
                     val_clean = val_lower.rstrip(':').rstrip('.').strip()
+                    # Also normalize spaces and dots for matching
+                    val_normalized = val_clean.replace('.', ' ').replace('  ', ' ')
 
                     # Fuzzy / Key matching
                     placeholder = None
-                    if "invoice no" in val_clean or "inv no" in val_clean:
+                    
+                    # INVOICE NO detection
+                    if "invoice no" in val_normalized or "inv no" in val_normalized or val_normalized == "inv":
                         placeholder = "JFINV"
-                    elif "date" in val_clean and len(val_clean) < 15: # Avoid "Shipping Date" column headers if they appear here
+                    
+                    # DATE detection (but avoid long strings like "Shipping Date")
+                    elif "date" in val_clean and len(val_clean) < 15:
                         placeholder = "JFTIME"
-                    elif "ref" in val_clean and ("inv" in val_clean or "cust" in val_clean):
+                    
+                    # REF NO detection - RESTRICTIVE matching
+                    # Only match SHORT labels that look like "Ref No:", "Ref.", etc.
+                    # Max length 15 chars to avoid matching addresses or long text
+                    elif len(val_clean) < 15 and (
+                        any(pattern in val_normalized for pattern in ["ref no", "ref num"]) or  # "Ref No", "Ref. No"
+                        val_normalized in ["ref", "reference"] or  # Exact match "Ref" or "Reference"
+                        (val_clean.endswith("ref") and len(val_clean) < 10) or  # "Cust Ref", "Inv Ref"
+                        ("ref" in val_clean and ("inv" in val_clean or "cust" in val_clean))  # "Inv Ref No"
+                    ):
                         placeholder = "JFREF"
                     
                     if placeholder:
-                        # Look for value in next cell (right), or next-next if empty
-                        # We try column + 1 and column + 2
+                        # Look for value in next cell (right)
                         target_cell = None
                         
                         # Try immediate right
                         c1 = ws.cell(row=row, column=col + 1)
                         if not isinstance(c1, MergedCell):
-                             target_cell = c1
+                            target_cell = c1
                         
                         if target_cell:
+                            # Skip if we've already injected here
+                            if target_cell.coordinate in injected_cells:
+                                continue
+                            
+                            # Skip if target already has a JF placeholder
+                            target_value = self._get_cell_value(target_cell)
+                            if target_value and target_value.upper().startswith("JF"):
+                                continue
+                            
                             self.logger.info(f"    Found metadata label '{value}' at {cell.coordinate}. Injecting {placeholder} at {target_cell.coordinate}")
                             target_cell.value = placeholder
+                            injected_cells.add(target_cell.coordinate)
 
     def _find_footer_start(self, ws: Worksheet, search_start_row: int) -> Optional[int]:
         """

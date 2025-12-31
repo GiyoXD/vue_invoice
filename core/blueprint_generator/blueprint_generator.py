@@ -265,43 +265,49 @@ class BlueprintGenerator:
         """
         Generate a clean template from the raw input file.
         
+        Sanitizes the template (strips data rows) but does NOT process images
+        since that was causing file corruption.
+        
         Args:
             template_path: Path to raw Excel file
             analysis: Analysis result
-            output_dir: Directory to save clean template
+            output_dir: Directory to save template
             monitor: Optional pipeline monitor
-            custom_prefix: Optional custom prefix for naming (uses customer_code if not provided)
+            custom_prefix: Optional custom prefix for naming
             
         Returns:
-            Tuple of (Path to saved clean template, layout_metadata)
+            Tuple of (Path to saved template, layout_metadata)
         """
         import openpyxl
         from .excel_sanitizer import ExcelTemplateSanitizer
         
         self.logger.info(f"\n[Step 3] Sanitizing Template...")
         
-        sanitizer = ExcelTemplateSanitizer()
-        
-        # Load raw workbook
-        wb = openpyxl.load_workbook(template_path)
-        
-        # Clean it (updated to return tuple)
-        cleaned_wb, layout_metadata = sanitizer.sanitize_template(wb, analysis)
-        
         # Use custom prefix if provided, otherwise use detected customer code
         effective_prefix = custom_prefix if custom_prefix else analysis.customer_code
         
-        # Save it
+        # Target template file path
         template_file = output_dir / f"{effective_prefix}.xlsx"
+        
+        # Load and sanitize the template
+        sanitizer = ExcelTemplateSanitizer()
+        wb = openpyxl.load_workbook(template_path)
+        
+        # Sanitize (strips data rows, no image handling)
+        cleaned_wb, layout_metadata = sanitizer.sanitize_template(wb, analysis)
+        
+        # Save the cleaned template
         try:
             cleaned_wb.save(template_file)
-            self.logger.info(f"   Cleaned Template: {template_file.name}")
+            self.logger.info(f"   Cleaned Template Saved: {template_file.name}")
         except Exception as e:
-            msg = f"Failed to save cleaned template (likely image stream issue): {e}"
-            self.logger.error(f"   {msg}")
+            self.logger.error(f"   Failed to save cleaned template: {e}")
             if monitor:
-                monitor.log_warning(msg)
-            self.logger.info("   Proceeding to save JSON config anyway.")
+                monitor.log_warning(f"Failed to save template: {e}")
+            # Fallback: copy original file
+            import shutil
+            shutil.copy2(template_path, template_file)
+            self.logger.info(f"   Fallback: Copied original template")
             
         return template_file, layout_metadata
     
