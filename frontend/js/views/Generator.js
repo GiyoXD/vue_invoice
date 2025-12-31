@@ -16,13 +16,63 @@ export default {
                     {{ isUploading ? 'Processing...' : 'Upload & Process' }}
                 </button>
 
-                <div v-if="uploadStatus" :class="['status-box', uploadStatus.type]">
+                <div v-if="uploadStatus && !uploadError" :class="['status-box', uploadStatus.type]">
                     {{ uploadStatus.message }}
+                </div>
+
+                <!-- ERROR PANEL FOR UPLOAD -->
+                <div v-if="uploadError" class="error-panel">
+                    <div class="error-header">
+                        <span class="error-icon">⚠️</span>
+                        <h3>Upload Failed</h3>
+                    </div>
+                    <span v-if="uploadError.step" class="error-step">{{ uploadError.step }}</span>
+                    <div class="error-message">{{ uploadError.message }}</div>
+                    
+                    <div v-if="uploadError.traceback" 
+                         class="traceback-toggle" 
+                         :class="{ open: showUploadTraceback }"
+                         @click="showUploadTraceback = !showUploadTraceback">
+                        <span>📋 View Technical Details</span>
+                        <span class="chevron">▼</span>
+                    </div>
+                    <div class="traceback-content" :class="{ open: showUploadTraceback }">
+                        <pre>{{ uploadError.traceback }}</pre>
+                    </div>
+                    
+                    <div class="error-actions">
+                        <button class="btn-retry" @click="retryUpload">🔄 Try Again</button>
+                        <button class="btn-copy-error" @click="copyError(uploadError)">📋 Copy Error</button>
+                    </div>
                 </div>
             </div>
 
             <div class="card" v-if="processingComplete" style="animation-delay: 0.2s">
                 <h2>2. Invoice Details</h2>
+                
+                <!-- ASSET WARNING PANEL -->
+                <div v-if="assetStatus && !assetStatus.ready" class="asset-warning">
+                    <div class="warning-header">
+                        <span class="warning-icon">📦</span>
+                        <h3>Missing Blueprint Configuration</h3>
+                    </div>
+                    <div class="warning-message">{{ assetStatus.message }}</div>
+                    <div class="warning-details">
+                        <p><strong>Bundled Directory:</strong> <code>{{ assetStatus.bundled_dir }}</code></p>
+                    </div>
+                    <div class="warning-actions">
+                        <button class="btn-create-template" @click="$emit('switch-view', 'extractor')">
+                            ➕ Create New Template
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- ASSET READY STATUS -->
+                <div v-if="assetStatus && assetStatus.ready" class="asset-ready">
+                    <span class="ready-icon">✅</span>
+                    <span class="ready-text">Blueprint found: using <strong>{{ assetConfigName }}</strong></span>
+                </div>
+                
                 <div class="grid-form">
                     <div class="form-group">
                         <label>Invoice Number</label>
@@ -38,17 +88,43 @@ export default {
                     </div>
                 </div>
                 
-                <button class="btn" @click="generateInvoice" :disabled="isGenerating">
-                    {{ isGenerating ? 'Generating...' : 'Generate Invoice' }}
+                <button class="btn" @click="generateInvoice" :disabled="isGenerating || !assetStatus?.ready">
+                    {{ isGenerating ? 'Generating...' : (assetStatus?.ready ? 'Generate Invoice' : 'Blueprint Required') }}
                 </button>
 
-                <div v-if="generationStatus" :class="['status-box', generationStatus.type]">
+                <div v-if="generationStatus && !generationError" :class="['status-box', generationStatus.type]">
                     {{ generationStatus.message }}
+                </div>
+
+                <!-- ERROR PANEL FOR GENERATION -->
+                <div v-if="generationError" class="error-panel">
+                    <div class="error-header">
+                        <span class="error-icon">⚠️</span>
+                        <h3>Generation Failed</h3>
+                    </div>
+                    <span v-if="generationError.step" class="error-step">{{ generationError.step }}</span>
+                    <div class="error-message">{{ generationError.message }}</div>
+                    
+                    <div v-if="generationError.traceback" 
+                         class="traceback-toggle" 
+                         :class="{ open: showGenTraceback }"
+                         @click="showGenTraceback = !showGenTraceback">
+                        <span>📋 View Technical Details</span>
+                        <span class="chevron">▼</span>
+                    </div>
+                    <div class="traceback-content" :class="{ open: showGenTraceback }">
+                        <pre>{{ generationError.traceback }}</pre>
+                    </div>
+                    
+                    <div class="error-actions">
+                        <button class="btn-retry" @click="retryGeneration">🔄 Try Again</button>
+                        <button class="btn-copy-error" @click="copyError(generationError)">📋 Copy Error</button>
+                    </div>
                 </div>
             </div>
 
             <!-- VALIDATION CARD -->
-            <div class="card validation-card" v-if="validationData && !isGenerating" style="animation-delay: 0.1s">
+            <div class="card validation-card" v-if="validationData && !isGenerating && !generationError" style="animation-delay: 0.1s">
                 <div class="validation-header">
                     <h3>✅ Invoice Generated Successfully</h3>
                     <span style="font-size: 0.875rem; opacity: 0.7">{{ validationData.timestamp }}</span>
@@ -95,6 +171,8 @@ export default {
         const selectedFile = ref(null);
         const isUploading = ref(false);
         const uploadStatus = ref(null);
+        const uploadError = ref(null);
+        const showUploadTraceback = ref(false);
 
         const processingComplete = ref(false);
         const identifier = ref('');
@@ -106,21 +184,33 @@ export default {
 
         const isGenerating = ref(false);
         const generationStatus = ref(null);
+        const generationError = ref(null);
+        const showGenTraceback = ref(false);
         const validationData = ref(null); // Validation data from generation
+        const assetStatus = ref(null); // Asset availability status from upload
 
         // --- Generator Actions ---
         const handleFileUpload = (event) => {
             selectedFile.value = event.target.files[0];
             uploadStatus.value = null;
+            uploadError.value = null;
+            showUploadTraceback.value = false;
             processingComplete.value = false;
             validationData.value = null;
+            assetStatus.value = null;
         };
 
+        /**
+         * Uploads the selected file to the API and processes it.
+         * Handles both success and error responses, populating the
+         * appropriate state variables for UI display.
+         */
         const uploadFile = async () => {
             if (!selectedFile.value) return;
 
             isUploading.value = true;
             uploadStatus.value = { type: 'info', message: 'Uploading and processing...' };
+            uploadError.value = null;
             validationData.value = null;
 
             const formData = new FormData();
@@ -135,26 +225,45 @@ export default {
                 const data = await response.json();
 
                 if (response.ok) {
-                    uploadStatus.value = { type: 'success', message: 'File processed & configuration generated!' };
+                    uploadStatus.value = { type: 'success', message: 'File processed successfully!' };
                     identifier.value = data.identifier;
                     jsonPath.value = data.json_path;
-
                     invoiceNo.value = data.default_inv_no || '';
+
+                    // Capture asset status from API response
+                    assetStatus.value = data.asset_status || null;
 
                     processingComplete.value = true;
                 } else {
-                    throw new Error(data.error || 'Upload failed');
+                    // Capture structured error from API
+                    uploadError.value = {
+                        message: data.error || 'Upload failed',
+                        step: data.step || null,
+                        traceback: data.traceback || null
+                    };
+                    uploadStatus.value = null;
                 }
             } catch (error) {
-                uploadStatus.value = { type: 'error', message: error.message };
+                // Network/JS error
+                uploadError.value = {
+                    message: error.message || 'Network error occurred',
+                    step: null,
+                    traceback: null
+                };
+                uploadStatus.value = null;
             } finally {
                 isUploading.value = false;
             }
         };
 
+        /**
+         * Triggers invoice generation with the provided metadata.
+         * Handles both success and error responses.
+         */
         const generateInvoice = async () => {
             isGenerating.value = true;
             generationStatus.value = { type: 'info', message: 'Generating invoice, please wait...' };
+            generationError.value = null;
             validationData.value = null;
 
             try {
@@ -178,12 +287,56 @@ export default {
                         validationData.value = data.metadata;
                     }
                 } else {
-                    throw new Error(data.error || 'Generation failed');
+                    // Capture structured error from API
+                    generationError.value = {
+                        message: data.error || 'Generation failed',
+                        step: data.step || null,
+                        traceback: data.traceback || null
+                    };
+                    generationStatus.value = null;
                 }
             } catch (error) {
-                generationStatus.value = { type: 'error', message: error.message };
+                // Network/JS error
+                generationError.value = {
+                    message: error.message || 'Network error occurred',
+                    step: null,
+                    traceback: null
+                };
+                generationStatus.value = null;
             } finally {
                 isGenerating.value = false;
+            }
+        };
+
+        /**
+         * Retries the upload process after an error.
+         */
+        const retryUpload = () => {
+            uploadError.value = null;
+            showUploadTraceback.value = false;
+            uploadFile();
+        };
+
+        /**
+         * Retries the invoice generation after an error.
+         */
+        const retryGeneration = () => {
+            generationError.value = null;
+            showGenTraceback.value = false;
+            generateInvoice();
+        };
+
+        /**
+         * Copies error details to clipboard for debugging/sharing.
+         * @param {Object} errorObj - The error object containing message and traceback.
+         */
+        const copyError = async (errorObj) => {
+            const errorText = `Error: ${errorObj.message}\n\nStep: ${errorObj.step || 'N/A'}\n\nTraceback:\n${errorObj.traceback || 'No traceback available'}`;
+            try {
+                await navigator.clipboard.writeText(errorText);
+                alert('Error copied to clipboard!');
+            } catch (err) {
+                console.error('Failed to copy error:', err);
             }
         };
 
@@ -202,10 +355,21 @@ export default {
             return { net, gross };
         });
 
+        /**
+         * Computed: Extracts the config filename from the asset status path.
+         */
+        const assetConfigName = computed(() => {
+            if (!assetStatus.value?.config_path) return 'Unknown';
+            const path = assetStatus.value.config_path;
+            return path.split(/[\\/]/).pop() || 'Unknown';
+        });
+
         return {
             selectedFile,
             isUploading,
             uploadStatus,
+            uploadError,
+            showUploadTraceback,
             processingComplete,
             identifier,
             invoiceNo,
@@ -216,9 +380,17 @@ export default {
             isGenerating,
             generateInvoice,
             generationStatus,
+            generationError,
+            showGenTraceback,
             validationData,
             summaryStats,
-            weightStats
+            weightStats,
+            retryUpload,
+            retryGeneration,
+            copyError,
+            assetStatus,
+            assetConfigName
         };
     }
 };
+

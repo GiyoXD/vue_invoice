@@ -214,15 +214,33 @@ def run_invoice_generation(
 
         paths['data'] = input_data_path
 
-        # Validate we exist
+        # Validate we have both config and template
         if 'config' not in paths or 'template' not in paths:
-             # Try fallback to legacy just in case resolver completely failed or weird explicit combo
-             # But resolver handles fallback.
-             if not assets and not (explicit_config_path or explicit_template_path):
-                 raise FileNotFoundError(f"Could not derive template/config paths for {input_data_path.name}")
-             else:
-                 if 'config' not in paths: raise FileNotFoundError("Missing config path")
-                 if 'template' not in paths: raise FileNotFoundError("Missing template path")
+            # Build detailed error message showing where we looked
+            import re
+            stem = input_data_path.stem
+            prefix_match = re.match(r'^([a-zA-Z]+)', stem)
+            prefix = prefix_match.group(1) if prefix_match else stem
+            
+            error_details = [
+                f"Could not derive template/config paths for '{input_data_path.name}'",
+                f"",
+                f"Searched for prefix: '{prefix}' (extracted from '{stem}')",
+                f"Config directory: {config_dir}",
+                f"Template directory: {template_dir}",
+                f"",
+                f"Expected to find:",
+                f"  - Bundled folder: {config_dir / prefix}/",
+                f"    containing: {prefix}_config.json + {prefix}.xlsx",
+                f"",
+                f"Directory exists: {config_dir.exists()}"
+            ]
+            
+            if config_dir.exists():
+                folders = [f.name for f in config_dir.iterdir() if f.is_dir()]
+                error_details.append(f"Available folders: {folders if folders else '(empty)'}")
+            
+            raise FileNotFoundError("\n".join(error_details))
 
         # 2. Load Configuration
         try:

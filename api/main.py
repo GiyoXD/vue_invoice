@@ -58,7 +58,10 @@ async def health_check():
 async def upload_excel(file: UploadFile = File(...)):
     """
     Uploads an Excel file and processes it to JSON.
-    Returns the identifier and json path.
+    Returns the identifier, json path, and asset availability status.
+    
+    The asset_status field tells the frontend whether the required
+    config and template files exist for invoice generation.
     """
     try:
         file_path = UPLOAD_DIR / file.filename
@@ -71,41 +74,61 @@ async def upload_excel(file: UploadFile = File(...)):
 
         json_path, identifier = orchestrator.process_excel_to_json(file_path, json_output_dir)
         
-        # Generate Configuration & Clean Template
-        # Generate Configuration & Clean Template
-        # DISABLE AUTO-GEN: This was causing "Shipping List as Template" issues.
-        # The user should use "Add New Company" to create templates explicitly.
-        # If we auto-gen here, we create a specific bundle for every invoice (e.g. CM25048E_config)
-        # which overrides the general bundle (CM_config) and might be broken (failed cleaning).
-        
-        # try:
-        #     # Resolve config directory (where InvoiceAssetResolver looks)
-        #     project_root = Path(".").resolve()
-        #     bundle_config_dir = project_root / "database" / "blueprints" / "registry"
-        #     bundle_config_dir.mkdir(parents=True, exist_ok=True)
-        #     
-        #     print(f"Generating configuration for {file_path.name}...")
-        #     config_orchestrator.run(str(file_path), options={'output_dir': str(bundle_config_dir)})
-        # except Exception as config_error:
-        #     print(f"Warning: Config generation failed: {config_error}")
-        #     import traceback
-        #     traceback.print_exc()
-
-        
         # Default Invoice No to filename stem
         default_inv_no = Path(file.filename).stem
+        
+        # === CHECK ASSET AVAILABILITY ===
+        # Use the InvoiceAssetResolver to see if we have config/template for this file
+        from core.invoice_generator.resolvers import InvoiceAssetResolver
+        
+        resolver = InvoiceAssetResolver(
+            base_config_dir=sys_config.registry_dir,
+            base_template_dir=sys_config.templates_dir
+        )
+        
+        # Check if assets can be resolved for this input
+        assets = resolver.resolve_assets_for_input_file(str(json_path))
+        
+        asset_status = {
+            "ready": assets is not None,
+            "config_found": False,
+            "template_found": False,
+            "config_path": None,
+            "template_path": None,
+            "bundled_dir": str(sys_config.bundled_dir),
+            "message": ""
+        }
+        
+        if assets:
+            asset_status["config_found"] = True
+            asset_status["template_found"] = True
+            asset_status["config_path"] = str(assets.config_path)
+            asset_status["template_path"] = str(assets.template_path)
+            asset_status["message"] = "Ready to generate invoice."
+        else:
+            # Provide helpful guidance
+            prefix = identifier[:2] if len(identifier) >= 2 else identifier
+            asset_status["message"] = (
+                f"No config/template found for '{identifier}'. "
+                f"Expected: bundled/{prefix}/ folder with {prefix}_config.json and {prefix}.xlsx"
+            )
         
         return {
             "status": "success",
             "file_name": file.filename,
             "identifier": identifier,
             "json_path": str(json_path),
-            "default_inv_no": default_inv_no, # Suggest this to frontend
-            "message": "File processed and configuration generated successfully"
+            "default_inv_no": default_inv_no,
+            "asset_status": asset_status,
+            "message": "File processed successfully"
         }
     except Exception as e:
         import traceback
-        return JSONResponse(status_code=500, content={"error": str(e), "traceback": traceback.format_exc()})
+        return JSONResponse(status_code=500, content={
+            "error": str(e), 
+            "traceback": traceback.format_exc(),
+            "step": "Upload & Parse"
+        })
 
 from core.blueprint_generator.orchestrator import ConfigOrchestrator
 # Initialize Config Orchestrator
@@ -133,9 +156,9 @@ async def generate_invoice(request: GenerateRequest):
         output_path = OUTPUT_DIR / request.identifier
         output_path.mkdir(exist_ok=True)
 
-        # Default Template/Config dirs
-        template_dir = PROJECT_ROOT / "database" / "blueprints" / "template"
-        config_dir = PROJECT_ROOT / "database" / "blueprints" / "registry"
+        # Default Template/Config dirs - use bundled directory from config
+        template_dir = sys_config.bundled_dir
+        config_dir = sys_config.bundled_dir
 
         # Load the existing JSON data
         try:
@@ -187,7 +210,11 @@ async def generate_invoice(request: GenerateRequest):
 
     except Exception as e:
         import traceback
-        return JSONResponse(status_code=500, content={"error": str(e), "traceback": traceback.format_exc()})
+        return JSONResponse(status_code=500, content={
+            "error": str(e), 
+            "traceback": traceback.format_exc(),
+            "step": "Invoice Generation"
+        })
 
 
 @app.get("/api/history")
@@ -369,7 +396,11 @@ async def analyze_template(file: UploadFile = File(...)):
         }
     except Exception as e:
         import traceback
-        return JSONResponse(status_code=500, content={"error": str(e), "traceback": traceback.format_exc()})
+        return JSONResponse(status_code=500, content={
+            "error": str(e), 
+            "traceback": traceback.format_exc(),
+            "step": "Template Analysis"
+        })
 
 @app.post("/api/template/generate")
 async def generate_template(config: TemplateConfig):
@@ -409,7 +440,11 @@ async def generate_template(config: TemplateConfig):
 
     except Exception as e:
         import traceback
-        return JSONResponse(status_code=500, content={"error": str(e), "traceback": traceback.format_exc()})
+        return JSONResponse(status_code=500, content={
+            "error": str(e), 
+            "traceback": traceback.format_exc(),
+            "step": "Template Generation"
+        })
 
 
 

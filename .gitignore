@@ -3,9 +3,9 @@
 database/*.db
 database/*.sqlite
 
-# Ignore Generated Blueprints and Outputs, but keep structure
-database/blueprints/registry/*
-!database/blueprints/registry/.gitkeep
+# Ignore all blueprints subdirectories except mapper
+database/blueprints/*
+!database/blueprints/mapper/
 
 # Ignore Output Directory
 output/
@@ -14,12 +14,14 @@ result.xlsx
 # Ignore Logs
 run_log/
 
+# Ignore Temp Uploads
+temp_uploads/
+
 # Python Cache
 __pycache__/
 *.py[cod]
 
 # Environment
-.env
 .venv
 env/
 venv/

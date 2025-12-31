@@ -79,52 +79,40 @@ class InvoiceAssetResolver:
 
     def _try_resolve_from_registry(self, file_stem: str) -> Optional[InvoiceAssets]:
         """
-        Strategy 1: Look for a dedicated folder for this configuration (Registry).
-        Expected structure: .../registry/{Client}/ or .../registry/{Client}_config/
-        """
-        # We try strict match first, then prefix match
-        candidates = [file_stem]
+        Strategy 1: Look for a bundled folder using PREFIX matching only.
         
-        # Add prefix candidate (e.g. JF25058 -> JF, CT25048E -> CT)
-        # Capture leading naming code (ignoring numbers and subsequent characters)
+        Input: JF25061 → Look for bundled/JF/ (extract letters prefix)
+        Input: CT25048E → Look for bundled/CT/
+        
+        We NEVER check for the full filename (e.g., bundled/JF25061/) because
+        those folders will never exist - only the prefix-based ones do.
+        """
+        # Extract prefix (letters only, e.g., JF25058 -> JF, CT25048E -> CT)
         match = re.match(r'^([a-zA-Z]+)', file_stem)
         prefix = match.group(1) if match else None
         
-        if prefix and prefix != file_stem:
-            candidates.append(prefix)
-
-        for candidate in candidates:
-            # We look for a folder named "{Candidate}_config"
-            # It might be fuzzy, but strict naming is safer. 
-            # Let's try to find a folder that *starts* with the candidate and ends with _config
-            # directly constructing the path is faster and safer than iterating directories.
-            
-            # Common pattern: "{Candidate}_config" or just "{Candidate}"? 
-            # Based on user data: "CT&INV&PL JF25058 FCA_config"
-            
-            # Since the folder name might be complex (e.g. "CT&INV&PL JF25058 FCA_config"),
-            # we might need to search the directory if a direct match fails.
-            
-            # Direct check
-            folder_name = candidate
-            potential_dir = self.config_dir / folder_name
-            
-            if potential_dir.exists() and potential_dir.is_dir():
-                return self._get_assets_from_folder(potential_dir, candidate)
-
-            # Iterative check for partial matches (more expensive but more flexible)
-            # Find any folder STARTING with the candidate (more precise than 'in')
-            
-            # User example: Stem="JF25058", Folder="CT&INV&PL JF25058 FCA_config" -> This case works if candidate is 'CT'?
-            # Wait, if Stem is JF25058, candidate is JF. Folder "CT&INV..." does NOT start with JF.
-            # But the user example "CT25048E" -> "CT" -> Folder "CT_config". THIS works.
-            
-            for folder in self.config_dir.iterdir():
-                if folder.is_dir() and folder.name.startswith(candidate):
-                     assets = self._get_assets_from_folder(folder, candidate)
-                     if assets:
-                         return assets
+        if not prefix:
+            logger.warning(f"Could not extract prefix from '{file_stem}'")
+            return None
         
+        logger.info(f"Looking for bundle using prefix: '{prefix}' (from '{file_stem}')")
+        
+        # Direct check for prefix folder
+        potential_dir = self.config_dir / prefix
+        
+        if potential_dir.exists() and potential_dir.is_dir():
+            return self._get_assets_from_folder(potential_dir, prefix)
+        
+        # Fallback: Check for folders starting with prefix (e.g., JF_config, JF_v2)
+        # Only iterate if the config directory exists
+        if self.config_dir.exists() and self.config_dir.is_dir():
+            for folder in self.config_dir.iterdir():
+                if folder.is_dir() and folder.name.startswith(prefix):
+                    assets = self._get_assets_from_folder(folder, prefix)
+                    if assets:
+                        return assets
+        
+        logger.warning(f"No bundle folder found for prefix '{prefix}' in {self.config_dir}")
         return None
 
     def _get_assets_from_folder(self, folder_path: Path, identifier: str) -> Optional[InvoiceAssets]:
@@ -155,47 +143,45 @@ class InvoiceAssetResolver:
 
     def _try_resolve_flat_files(self, file_stem: str) -> Optional[InvoiceAssets]:
         """
-        Strategy 2: Look for standalone files in the root config directory.
-        Legacy behavior support.
-        """
-        # 1. Look for Config
-        config_path = self.config_dir / f"{file_stem}_bundle_config.json"
-        effective_stem = file_stem
-
-        if not config_path.exists():
-            # Try prefix (JF25058 -> JF)
-            prefix = re.sub(r'[\d_]+$', '', file_stem)
-            if prefix and prefix != file_stem:
-                prefix_config = self.config_dir / f"{prefix}_bundle_config.json"
-                if prefix_config.exists():
-                    config_path = prefix_config
-                    effective_stem = prefix
-
-        if not config_path.exists():
-            # Try simple name
-            config_path = self.config_dir / f"{file_stem}.json"
+        Strategy 2 (Legacy): Look for flat config files using PREFIX only.
         
-        if not config_path.exists():
+        This is a fallback for configs not in bundled folders.
+        Input: JF25061 → Look for JF_bundle_config.json or JF_config.json
+        """
+        # Extract prefix (letters only)
+        match = re.match(r'^([a-zA-Z]+)', file_stem)
+        prefix = match.group(1) if match else None
+        
+        if not prefix:
+            return None
+        
+        # Check for prefix-based config files
+        config_candidates = [
+            self.config_dir / f"{prefix}_bundle_config.json",
+            self.config_dir / f"{prefix}_config.json",
+            self.config_dir / f"{prefix}.json"
+        ]
+        
+        config_path = None
+        for candidate in config_candidates:
+            if candidate.exists():
+                config_path = candidate
+                break
+        
+        if not config_path:
             return None
 
-        # 2. Look for Template (in the template directory, not config directory)
-        # Template name derivation usually relies on config metadata, but here we guess by name first
-        template_path = self.template_dir / f"{effective_stem}.xlsx"
+        # Look for template in same directory (bundled approach)
+        template_path = self.template_dir / f"{prefix}.xlsx"
         
         if not template_path.exists():
-            # Try to read config to find template name?
-            # For simplicity/speed in this step, we check generic fallback or strict name.
-            # If explicit resolving fails, we might miss the metadata-defined template name.
-            # Let's peek into config quickly? 
+            # Try to read config to find template name
             template_path = self._peek_config_for_template_name(config_path)
             
-            if not template_path:
-                 template_path = self.template_dir / "Invoice.xlsx" # Generic fallback
+        if not template_path or not template_path.exists():
+            return None
 
-        if template_path and template_path.exists():
-            return InvoiceAssets(Path(""), config_path, template_path)
-            
-        return None
+        return InvoiceAssets(Path(""), config_path, template_path)
 
     def _peek_config_for_template_name(self, config_path: Path) -> Optional[Path]:
         """Reads the _meta section of a config file to find the linked template name."""

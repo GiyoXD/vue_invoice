@@ -46,17 +46,27 @@ class SystemConfig:
         return self._resolve_path("blueprints_root", "database/blueprints", env_key="BLUEPRINTS_ROOT")
 
     @property
+    def bundled_dir(self) -> Path:
+        """
+        The bundled directory contains customer folders with config + template co-located.
+        Structure: bundled/{CustomerCode}/{CustomerCode}_config.json + {CustomerCode}.xlsx
+        """
+        return self._resolve_path("bundled", "database/blueprints/bundled", env_key="BUNDLED_DIR")
+
+    @property
     def templates_dir(self) -> Path:
-        return self._resolve_path("templates", "database/blueprints/excel_template", env_key="TEMPLATES_DIR")
+        """For backward compatibility - points to bundled_dir since templates are now co-located."""
+        return self.bundled_dir
 
     @property
     def registry_dir(self) -> Path:
-        return self._resolve_path("registry", "database/blueprints/registry", env_key="REGISTRY_DIR")
+        """For backward compatibility - points to bundled_dir since configs are now co-located."""
+        return self.bundled_dir
 
     @property
     def mapping_config_path(self) -> Path:
         # This one is a file path, not directory usually, but logic is same
-        return self._resolve_path("mapping_config", "database/blueprints/config/mapper/mapping_config.json", env_key="MAPPING_CONFIG")
+        return self._resolve_path("mapping_config", "database/blueprints/mapper/mapping_config.json", env_key="MAPPING_CONFIG")
 
     @property
     def output_dir(self) -> Path:

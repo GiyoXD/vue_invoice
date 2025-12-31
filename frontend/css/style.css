@@ -495,3 +495,302 @@ input[type="file"] {
     color: #64748b;
     margin-top: 0.25rem;
 }
+
+/* ============================================
+   ERROR PANEL STYLES
+   Premium error display with collapsible traceback
+   ============================================ */
+
+.error-panel {
+    margin-top: 1.5rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    animation: fadeIn 0.4s ease-out forwards;
+    backdrop-filter: blur(8px);
+}
+
+.error-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.error-icon {
+    font-size: 1.5rem;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.6;
+    }
+}
+
+.error-header h3 {
+    margin: 0;
+    color: #f87171;
+    font-size: 1.125rem;
+    font-weight: 600;
+}
+
+.error-message {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    font-family: 'Inter', sans-serif;
+    color: #fca5a5;
+    font-size: 0.9375rem;
+    line-height: 1.5;
+    border-left: 3px solid #ef4444;
+    margin-bottom: 1rem;
+}
+
+.error-step {
+    display: inline-block;
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 0.75rem;
+}
+
+.traceback-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    margin-top: 0.5rem;
+}
+
+.traceback-toggle:hover {
+    background: rgba(0, 0, 0, 0.3);
+}
+
+.traceback-toggle span {
+    color: #94a3b8;
+    font-size: 0.875rem;
+}
+
+.traceback-toggle .chevron {
+    transition: transform 0.3s ease;
+    color: #64748b;
+}
+
+.traceback-toggle.open .chevron {
+    transform: rotate(180deg);
+}
+
+.traceback-content {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease-out, padding 0.3s ease-out;
+}
+
+.traceback-content.open {
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.traceback-content pre {
+    background: rgba(0, 0, 0, 0.4);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.75rem;
+    color: #cbd5e1;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0.75rem 0 0 0;
+    max-height: 400px;
+    overflow-y: auto;
+    line-height: 1.6;
+}
+
+/* Scrollbar styling for traceback */
+.traceback-content pre::-webkit-scrollbar {
+    width: 6px;
+}
+
+.traceback-content pre::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+.traceback-content pre::-webkit-scrollbar-thumb {
+    background: rgba(239, 68, 68, 0.3);
+    border-radius: 3px;
+}
+
+.traceback-content pre::-webkit-scrollbar-thumb:hover {
+    background: rgba(239, 68, 68, 0.5);
+}
+
+/* Error action buttons */
+.error-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.btn-retry {
+    background: rgba(239, 68, 68, 0.2);
+    color: #fca5a5;
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.btn-retry:hover {
+    background: rgba(239, 68, 68, 0.3);
+    color: #fecaca;
+}
+
+.btn-copy-error {
+    background: rgba(100, 116, 139, 0.2);
+    color: #94a3b8;
+    border: 1px solid rgba(100, 116, 139, 0.3);
+    padding: 0.5rem 1rem;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.btn-copy-error:hover {
+    background: rgba(100, 116, 139, 0.3);
+    color: #cbd5e1;
+}
+
+/* ============================================
+   ASSET WARNING PANEL STYLES
+   Displayed when template/config is missing
+   ============================================ */
+
+.asset-warning {
+    margin-bottom: 1.5rem;
+    background: rgba(234, 179, 8, 0.1);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    animation: fadeIn 0.4s ease-out forwards;
+}
+
+.warning-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.warning-icon {
+    font-size: 1.5rem;
+}
+
+.warning-header h3 {
+    margin: 0;
+    color: #fbbf24;
+    font-size: 1.125rem;
+    font-weight: 600;
+}
+
+.warning-message {
+    background: rgba(0, 0, 0, 0.3);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    font-family: 'Inter', sans-serif;
+    color: #fcd34d;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    border-left: 3px solid #eab308;
+    margin-bottom: 1rem;
+}
+
+.warning-details {
+    font-size: 0.8125rem;
+    color: #94a3b8;
+    margin-bottom: 1rem;
+}
+
+.warning-details p {
+    margin: 0.5rem 0;
+}
+
+.warning-details code {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.75rem;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    color: #fcd34d;
+}
+
+.warning-actions {
+    margin-top: 1rem;
+}
+
+.btn-create-template {
+    background: rgba(234, 179, 8, 0.2);
+    color: #fbbf24;
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    width: 100%;
+}
+
+.btn-create-template:hover {
+    background: rgba(234, 179, 8, 0.3);
+    color: #fde68a;
+    box-shadow: 0 0 15px rgba(234, 179, 8, 0.3);
+}
+
+/* Asset Ready Indicator */
+.asset-ready {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: rgba(34, 197, 94, 0.1);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    border-radius: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.ready-icon {
+    font-size: 1.25rem;
+}
+
+.ready-text {
+    color: #86efac;
+    font-size: 0.875rem;
+}
+
+.ready-text strong {
+    color: #22c55e;
+}
