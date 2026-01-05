@@ -93,4 +93,39 @@ class ConfigValidator:
     def _validate_sheet_config(self, sheet_conf: Dict[str, Any], sheet_name: str, errors: List[Dict[str, str]]):
         """Helper to validate individual sheet configurations (Deprecated/Unused for now but kept for ref)."""
         pass
+
+class BlueprintLogicValidator:
+    """
+    Validates the 'Business Logic' and 'Content' of blueprints during generation.
+    Strictly enforces rules (like known column IDs).
+    """
+    
+    @staticmethod
+    def verify_strict_mode(sheet_analysis) -> None:
+        """
+        Enforce Strict Mode: All column IDs must exist in BlueprintRules.COLUMNS.
+        Raises ValueError if invaid/unknown ID is found.
+        """
+        # Avoid circular imports by importing inside method if necessary, 
+        # but generally safe if structured correctly.
+        from .rules import BlueprintRules
+
+        allowed_ids = set(BlueprintRules.COLUMNS.keys())
+        
+        for col in sheet_analysis.columns:
+            # 1. Verify Parent Column ID
+            if col.id not in allowed_ids:
+                raise ValueError(
+                    f"Blueprint Verification Failed: Column '{col.header}' has Invalid ID '{col.id}'. "
+                    f"It must be one of: {sorted(list(allowed_ids))}. "
+                    "Please update BlueprintRules or fix the input template mapping."
+                )
             
+            # 2. Verify Child Column ID
+            if col.children:
+                for child in col.children:
+                    if child.id not in allowed_ids:
+                        raise ValueError(
+                            f"Blueprint Verification Failed: Child Column '{child.header}' has Invalid ID '{child.id}'. "
+                            f"It must be one of: {sorted(list(allowed_ids))}."
+                        )

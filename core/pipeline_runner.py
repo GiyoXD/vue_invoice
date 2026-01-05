@@ -39,6 +39,31 @@ class PipelineOrchestrator:
         
         self.invoice_metadata_path = self.output_dir / "invoice_generation_metadata.json" # Invoice Gen usually saves to output dir?
 
+    def _resolve_bundle_path(self) -> Optional[Path]:
+        """
+        Attempts to resolve the Bundle Directory based on the input filename prefix.
+        E.g., Input 'JF25057.xlsx' -> matches folder 'JF' -> returns '.../bundled/JF'
+        """
+        from core.system_config import sys_config
+        bundled_dir = sys_config.bundled_dir
+        
+        if not bundled_dir.exists():
+            return None
+
+        # Sort by length descending to match longest prefix first
+        candidates = [d for d in bundled_dir.iterdir() if d.is_dir()]
+        candidates.sort(key=lambda x: len(x.name), reverse=True)
+        
+        input_name_upper = self.input_stem.upper()
+        
+        for folder in candidates:
+             # Check if input starts with folder name (e.g. "JF25057" starts with "JF")
+            if input_name_upper.startswith(folder.name.upper()):
+                 logger.info(f"Resolved Bundle Directory: {folder} (for input {self.input_stem})")
+                 return folder
+        
+        return None
+
     def runs_step(self, step_name: str, func, *args, **kwargs) -> bool:
         """Run a pipeline step directly and verify its metadata."""
         tid = kwargs.pop('trace_id', 'unknown')
@@ -71,61 +96,58 @@ class PipelineOrchestrator:
         if not self.runs_step("Data Parser", run_parser, trace_id=tid):
             return
 
-        # 2. Blueprint Generator
-        # We want to output config to the same base output dir? Or a specific 'configs' dir?
-        # Standard: invoice_generator/src/config_bundled/ OR temp_test_data?
-        # Let's verify generation into the output_dir.
-        def run_blueprint():
-             # Initialize generator
-             gen = BlueprintGenService(output_base_dir=self.output_dir)
-             # Run generation
-             gen.generate(str(self.input_excel))
-
-        if not self.runs_step("Blueprint Generator", run_blueprint, trace_id=tid):
-            return
-
-        # Locate Generated Config
-        # It should be in output_dir/{Something}/{Something}_config.json
-        # We can try to find it.
-        found_configs = list(self.output_dir.rglob("*_config.json"))
-        if not found_configs:
-            logger.error("Could not locate generated config file in output directory.")
-            return
+        # [SKIPPED] 2. Blueprint Generator
+        # Per user request, Blueprint Generation is a separate workflow.
+        # We now look for an EXISTING bundle instead.
         
-        # Pick the most likely one (matching stem?)
-        self.generated_config_path = found_configs[0]
-        # Prefer one that matches input stem if multiple
-        for cfg in found_configs:
-            if self.input_stem in cfg.name:
-                self.generated_config_path = cfg
-                break
+        # 2b. Resolve Existing Bundle
+        bundle_path = self._resolve_bundle_path()
+        if not bundle_path:
+             logger.error(f"No matching Bundle found for input '{self.input_stem}'. Cannot proceed with Invoice Generation.")
+             logger.error("Please ensure a valid Customer Bundle exists in database/blueprints/bundled/")
+             return
+
+        # Derive paths from bundle folder
+        # e.g. bundled/JF/JF_bundle_config.json
+        customer_code = bundle_path.name
         
-        logger.info(f"Using Config: {self.generated_config_path}")
+        # Try finding the config file dynamically
+        possible_config = bundle_path / f"{customer_code}_bundle_config.json"
+        
+        if not possible_config.exists():
+             # Fallback: Search for any *_config.json
+             found_configs = list(bundle_path.glob("*_config.json"))
+             if found_configs:
+                 possible_config = found_configs[0]
+                 logger.info(f"Resolved Config File via wildcard: {possible_config.name}")
+        
+        self.generated_config_path = possible_config
+        
+        # Template is also in the bundle
+        self.generated_template_path = bundle_path / f"{customer_code}.xlsx"
 
-
-        # Look for template file (same stem as config, but .xlsx)
-        self.generated_template_path = self.generated_config_path.with_suffix(".xlsx")
-        # Or search in the dir if name differs slightly?
-        # Standard: {Customer}.xlsx
-        # Config: {Customer}_config.json
-        # So replacing _config.json with .xlsx should work.
+        if not self.generated_config_path.exists():
+             logger.error(f"Bundle Config not found at: {self.generated_config_path}")
+             return
+             
         if not self.generated_template_path.exists():
-            # Try replacing just .json with .xlsx
-             monitor_stem = self.generated_config_path.stem.replace("_config", "")
-             self.generated_template_path = self.generated_config_path.parent / f"{monitor_stem}.xlsx"
-        
-        if self.generated_template_path.exists():
-             logger.info(f"Using Template: {self.generated_template_path}")
-        else:
-             logger.warning(f"Template file not found at expected path: {self.generated_template_path}")
+             logger.warning(f"Bundle Template not found at: {self.generated_template_path}. Invoice Gen might fail if it needs strict templating.")
+             
+        logger.info(f"Using Bundle Config: {self.generated_config_path}")
+        logger.info(f"Using Bundle Template: {self.generated_template_path}")
+
 
         # 3. Invoice Generator
         # generate_invoice.py usage: generate_invoice.py [-o OUTPUT] ... input_data_file
+        
+        # Ensure we target a FILE, not a directory
+        output_file_path = self.output_dir / f"{self.input_stem}.xlsx"
+        
         def run_invoice_gen():
             run_invoice_generation(
                  input_data_path=self.parsed_data_path,
                  explicit_config_path=self.generated_config_path,
-                 output_path=self.output_dir,
+                 output_path=output_file_path,
                  explicit_template_path=self.generated_template_path if self.generated_template_path.exists() else None,
                  template_dir=None, # will use default logic if explicit path not provided
                  config_dir=None # will use default logic

@@ -129,12 +129,15 @@ def find_and_map_smart_headers(sheet: Worksheet) -> Optional[Tuple[int, Dict[str
                     
                     if score == 0:
                         # --- NEW MERCY RULE ---
-                        # If all other checks fail but we did find a header match for a column
-                        # that is allowed to be a string, give it a minimal score.
-                        # This handles cases where the cell below the header is empty (None).
-                        allowed_types = EXPECTED_HEADER_DATA_TYPES.get(canonical_name, [])
-                        if 'string' in allowed_types:
-                            score = 1 # A minimal "mercy" score to prevent it from being ignored
+                        # If data is empty (None or blank), give a minimal score.
+                        # We rely on the Header Keyword Match being strong.
+                        if data_value is None or (isinstance(data_value, str) and not data_value.strip()):
+                            score = 1
+                        else:
+                            # If data exists but failed type/pattern check, allow if string is permitted
+                            allowed_types = EXPECTED_HEADER_DATA_TYPES.get(canonical_name, [])
+                            if 'string' in allowed_types:
+                                score = 1 # A minimal "mercy" score to prevent it from being ignored
 
                     if score > 0:
                         col_scores.append({'score': score, 'name': canonical_name})

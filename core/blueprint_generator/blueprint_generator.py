@@ -379,6 +379,11 @@ The tool will:
         action='store_true',
         help='Convert old config format instead of analyzing template'
     )
+
+    parser.add_argument(
+        '--prefix',
+        help='Custom prefix/customer code to use (overrides detection)'
+    )
     
     args = parser.parse_args()
     
@@ -404,6 +409,11 @@ The tool will:
         log_dir = sys_config.run_log_dir
         log_dir.mkdir(parents=True, exist_ok=True)
         
+        # Enable Snitch Tracing
+        from core.utils.snitch import start_trace
+        tid = start_trace()
+        logging.info(f"Started Snitch Trace: {tid}")
+        
         monitor_path = log_dir / f"{args_template_path.stem}_blueprint.json"
         
         with PipelineMonitor(monitor_path, args=args, step_name="Blueprint Generator") as monitor:
@@ -426,7 +436,8 @@ The tool will:
                     args.template,
                     output_dir=args.output,
                     dry_run=args.dry_run,
-                    monitor=monitor
+                    monitor=monitor,
+                    custom_prefix=args.prefix
                 )
             
             if result:

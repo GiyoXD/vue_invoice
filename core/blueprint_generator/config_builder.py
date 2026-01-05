@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from .excel_scanner import TemplateAnalysisResult, SheetAnalysis, ColumnInfo
 from .rules import BlueprintRules
+from .validator import BlueprintLogicValidator
 from core.utils.snitch import snitch
 
 logger = logging.getLogger(__name__)
@@ -235,6 +236,10 @@ class ConfigBuilder:
     def _build_structure(self, sheet: SheetAnalysis) -> Dict[str, Any]:
         """Build structure section for a sheet."""
         columns = []
+        
+        # [Verification] Strict Mode: Ensure all IDs exist in Mapper Config
+        # Delegated to BlueprintLogicValidator
+        BlueprintLogicValidator.verify_strict_mode(sheet)
         
         for col in sheet.columns:
             col_def = {
