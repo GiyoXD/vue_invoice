@@ -106,6 +106,9 @@ class PipelineMonitor:
 
     def _write_metadata(self):
         """Write the metadata JSON file."""
+        # [DISABLED] Per user request, we do not want these JSON files.
+        return
+
         # Ensure output directory exists
         if not self.output_path.parent.exists():
             try:

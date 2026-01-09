@@ -307,7 +307,7 @@ class ConfigBuilder:
                 
                 # ONLY add "column" if it's different from the field key (which it isn't here)
                 mappings[field_name] = mapping
-                self.logger.info(f"    [Explicit] Mapped {col.id} -> {field_name} (Minimal)")
+                self.logger.debug(f"    [Explicit] Mapped {col.id} -> {field_name} (Minimal)")
 
             elif col.id not in ["col_static", "col_qty_header", "col_no"]:
                 # Create basic mapping for unknown columns
@@ -316,12 +316,7 @@ class ConfigBuilder:
             else:
                  self.logger.debug(f"    [Skipped]  {col.id} (Structural/Static)")
             
-            # [CRITICAL FIX] Inject source_key for aggregation sheets
-            # Data Parser reads rows as lists, so we need the index to find the value.
-            if sheet.data_source in ["aggregation", "DAF_aggregation"] and field_name in mappings:
-                # Excel 1-based -> Python 0-based
-                mappings[field_name]["source_key"] = col.col_index - 1
-                self.logger.info(f"    [Explicit] Injected source_key={mappings[field_name]['source_key']} for {field_name}")
+
         
         return {"mappings": mappings}
     
@@ -360,6 +355,25 @@ class ConfigBuilder:
         if "col_no" in col_ids:
             total_col = "col_no"
         
+        # Default settings
+        total_text = "TOTAL OF:"
+        merge_rules = []
+        
+        # [Smart Feature] Use Dynamic Footer Info if available
+        if sheet.footer_info:
+            self.logger.info(f"  [Smart] Using detected footer info for {sheet.name}")
+            total_col = sheet.footer_info.total_text_col_id
+            total_text = sheet.footer_info.total_text
+            
+            # Create merge rule if colspan > 1
+            if sheet.footer_info.merge_curr_colspan > 1:
+                merge_rules.append({
+                    "start_column_id": total_col,
+                    "colspan": sheet.footer_info.merge_curr_colspan,
+                    "comment": "Auto-detected from template"
+                })
+                self.logger.info(f"    [Smart] Added merge rule: {total_col} spans {sheet.footer_info.merge_curr_colspan} columns")
+        
         # Determine pallet count column  
         pallet_col = "col_desc" if "col_desc" in col_ids else "col_item"
         
@@ -372,10 +386,10 @@ class ConfigBuilder:
         
         footer = {
             "total_text_column_id": total_col,
-            "total_text": "TOTAL OF:",
+            "total_text": total_text,
             "pallet_count_column_id": pallet_col,
             "sum_column_ids": sum_cols,
-            "merge_rules": [],
+            "merge_rules": merge_rules,
             "add_ons": self._build_footer_addons(sheet)
         }
         

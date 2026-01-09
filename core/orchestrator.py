@@ -98,3 +98,50 @@ class Orchestrator:
             import traceback
             tb = traceback.format_exc()
             raise RuntimeError(f"Invoice Generation Failed:\n{tb}") from e
+
+    # --- Blueprint / Template Management ---
+
+    def analyze_template(self, template_path: Path, legacy_format: bool = True) -> str:
+        """
+        Wraps BlueprintGenerator.analyze.
+        Returns the analysis result as a JSON string.
+        """
+        try:
+            from core.blueprint_generator.blueprint_generator import BlueprintGenerator
+            
+            # Re-initialize generator to ensure fresh state
+            generator = BlueprintGenerator(self.project_root)
+            
+            return generator.analyze(str(template_path), legacy_format=legacy_format)
+            
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            raise RuntimeError(f"Template Analysis Failed:\n{tb}") from e
+
+    def generate_blueprint_bundle(self, 
+                                template_path: Path, 
+                                output_dir: Path, 
+                                custom_prefix: str = None) -> Path:
+        """
+        Wraps BlueprintGenerator.generate.
+        Generates the config and clean template bundle.
+        """
+        try:
+            from core.blueprint_generator.blueprint_generator import BlueprintGenerator
+            
+            generator = BlueprintGenerator(self.project_root)
+            
+            result_path = generator.generate(
+                template_path=str(template_path),
+                output_dir=str(output_dir),
+                dry_run=False,
+                custom_prefix=custom_prefix
+            )
+            
+            return result_path
+            
+        except Exception as e:
+            import traceback
+            tb = traceback.format_exc()
+            raise RuntimeError(f"Blueprint Generation Failed:\n{tb}") from e

@@ -5,10 +5,8 @@ from typing import Dict, Any
 
 try:
     from blueprint_generator import BlueprintGenerator
-    from core.workspace import WorkspaceManager
 except ImportError:
     from .blueprint_generator import BlueprintGenerator
-    from .core.workspace import WorkspaceManager
 
 logger = logging.getLogger(__name__)
 
@@ -20,9 +18,6 @@ class ConfigOrchestrator:
 
     def __init__(self, base_dir: Path):
         self.base_dir = base_dir
-        # WorkspaceManager is still useful for managing output directories if needed,
-        # but BlueprintGenerator handles most of it.
-        self.workspace = WorkspaceManager(base_dir / "result")
         self.generator = BlueprintGenerator()
 
     def run(self, excel_file: str, options: Dict[str, Any] = None) -> bool:

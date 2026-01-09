@@ -50,13 +50,6 @@ class BlueprintGenerator:
         self.migrator = LegacyConfigMigrator()
         self.validator = ConfigValidator()
         
-        # Find project root for asset resolution
-        current_dir = Path(__file__).parent
-        # Go up to core/blueprint_generator -> core -> PROJECT_ROOT
-        # Depending on where this is run, __file__ might be relative or absolute.
-        # Ideally we trust the passed output_base_dir or fallback relative to this file.
-        project_root = current_dir.parent.parent.parent
-            
         from core.system_config import sys_config
         
         # Set output directory
@@ -65,7 +58,7 @@ class BlueprintGenerator:
         else:
             self.output_base_dir = sys_config.registry_dir
             
-        # Set Mapping config path (Fixed: Now properly indented)
+        # Set Mapping config path
         self.mapping_config_path = sys_config.mapping_config_path
         
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -91,10 +84,8 @@ class BlueprintGenerator:
         mapping_config = self._load_mapping_config()
         analysis = self.scanner.scan_template(str(template_path), mapping_config=mapping_config)
         
-        if legacy_format:
-            return json.dumps(analysis.to_legacy_dict(), indent=2, ensure_ascii=False)
-        else:
-             return json.dumps(analysis.to_legacy_dict(), indent=2, ensure_ascii=False)
+        # Currently, legacy_format is always assumed or the output format is identical
+        return json.dumps(analysis.to_legacy_dict(), indent=2, ensure_ascii=False)
     
     def convert_old_config(self, config_path: str, output_dir: Optional[str] = None,
                            dry_run: bool = False) -> Optional[Path]:

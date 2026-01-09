@@ -130,14 +130,6 @@ async def upload_excel(file: UploadFile = File(...)):
             "step": "Upload & Parse"
         })
 
-from core.blueprint_generator.orchestrator import ConfigOrchestrator
-# Initialize Config Orchestrator
-# Initialize Config Orchestrator
-# We use the project root's database/blueprints/config/bundled as the target
-config_base_dir = PROJECT_ROOT / "database" / "blueprints" / "registry"
-# ConfigOrchestrator expects a base_dir, usually for finding its own resources or default output
-# We can pass project_root or just let it handle defaults.
-config_orchestrator = ConfigOrchestrator(base_dir=PROJECT_ROOT)
 
 
 
@@ -352,8 +344,6 @@ from core.system_config import sys_config
 TEMP_DIR = sys_config.temp_uploads_dir
 # Note: Template generation now outputs to bundled/{prefix}/ folder via sys_config.bundled_dir
 
-# Import Unified Generator
-from core.blueprint_generator.blueprint_generator import BlueprintGenerator
 
 class TemplateConfig(BaseModel):
     file_prefix: str
@@ -371,12 +361,8 @@ async def analyze_template(file: UploadFile = File(...)):
             
         analysis_output_path = TEMP_DIR / f"{file.filename}_analysis.json"
         
-        # Use BlueprintGenerator directly
-        # Initialize with project root to ensure it finds mapping config
-        generator = BlueprintGenerator(PROJECT_ROOT)
-        
-        # Analyze returns JSON string, we parse it to object for response or save to file
-        json_output = generator.analyze(str(temp_path), legacy_format=True)
+        # Use Orchestrator
+        json_output = orchestrator.analyze_template(temp_path, legacy_format=True)
         
         # Save to analysis_output_path for get_missing_headers to read
         with open(analysis_output_path, 'w', encoding='utf-8') as f:
@@ -422,15 +408,11 @@ async def generate_template(config: TemplateConfig):
         if not temp_path.exists():
             return JSONResponse(status_code=404, content={"error": "Original uploaded file not found. Please re-upload."})
 
-        # 3. Run Generator - it will create bundled/{prefix}/ folder automatically
-        generator = BlueprintGenerator(PROJECT_ROOT)
-        
-        # Pass bundled_dir as output and user's custom prefix for naming
-        result_path = generator.generate(
-            template_path=str(temp_path),  # Use the temp file directly
-            output_dir=str(sys_config.bundled_dir),  # Generator creates {prefix}/ inside this
-            dry_run=False,
-            custom_prefix=config.file_prefix  # Use user's prefix for folder/file naming
+        # 3. Run Generator via Orchestrator
+        result_path = orchestrator.generate_blueprint_bundle(
+            template_path=temp_path,
+            output_dir=sys_config.bundled_dir,
+            custom_prefix=config.file_prefix
         )
         
         if not result_path:
