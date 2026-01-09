@@ -1,11 +1,5 @@
 import { ref, reactive } from 'vue';
 
-const SYSTEM_HEADERS = [
-    "col_po", "col_item", "col_desc", "col_qty_pcs", "col_qty_sf",
-    "col_unit_price", "col_amount", "col_net", "col_gross", "col_cbm",
-    "col_pallet", "col_remarks", "col_static", "col_dc"
-];
-
 export default {
     template: `
         <div class="template-extractor-view fade-in">
@@ -46,23 +40,22 @@ export default {
                 </div>
 
                 <div v-else class="mapping-grid" style="display: grid; gap: 1rem; margin-top: 1rem;">
-                    <div v-for="(header, index) in missingHeaders" :key="index" style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 6px;">
-                        <div style="font-weight: bold; margin-bottom: 0.5rem; color: #fbbf24;">"{{ header.text }}"</div>
+                    <div v-for="(headerText, index) in missingHeaders" :key="index" style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 6px;">
+                        <div style="font-weight: bold; margin-bottom: 0.5rem; color: #fbbf24;">"{{ headerText }}"</div>
                         <div style="display: flex; gap: 0.5rem; align-items: center;">
-                            <select v-model="userMappings[header.text]" class="input-field" style="width: 100%;" :disabled="confirmedHeaders.includes(header.text)">
+                            <select v-model="userMappings[headerText]" class="input-field" style="width: 100%;" :disabled="confirmedHeaders.includes(headerText)">
                                 <option value="" disabled selected>Select a field...</option>
-                                <option v-for="opt in systemHeaders" :value="opt">{{ opt }}</option>
+                                <option v-for="opt in systemOptions" :value="opt.id">
+                                    {{ opt.label }} ({{ opt.id }})
+                                </option>
                             </select>
                             <button 
                                 class="btn-sm" 
-                                :class="confirmedHeaders.includes(header.text) ? 'btn-danger' : 'btn-success'"
-                                @click="toggleMapping(header.text)"
+                                :class="confirmedHeaders.includes(headerText) ? 'btn-danger' : 'btn-success'"
+                                @click="toggleMapping(headerText)"
                                 style="font-size: 0.8rem; padding: 0.3rem 0.6rem; min-width: 60px;">
-                                {{ confirmedHeaders.includes(header.text) ? 'Remove' : 'Add' }}
+                                {{ confirmedHeaders.includes(headerText) ? 'Remove' : 'Add' }}
                             </button>
-                        </div>
-                        <div style="font-size: 0.8rem; opacity: 0.6; margin-top: 4px;">
-                            Suggested: {{ header.suggestion }}
                         </div>
                     </div>
                 </div>
@@ -105,12 +98,27 @@ export default {
         const statusType = ref("info");
 
         // Data
-        const tempFilename = ref("");
+        const fileToken = ref(""); // New Token from backend
         const missingHeaders = ref([]);
         const filePrefix = ref("");
         const userMappings = reactive({});
         const confirmedHeaders = ref([]);
         const bundlePath = ref("");
+
+        const systemOptions = ref([]);
+
+        // Load options on mount
+        const fetchOptions = async () => {
+            try {
+                const res = await fetch('/api/blueprint/options');
+                if (res.ok) {
+                    systemOptions.value = await res.json();
+                }
+            } catch (e) {
+                console.error("Failed to fetch options", e);
+            }
+        };
+        fetchOptions();
 
         const handleFileUpload = (e) => {
             selectedFile.value = e.target.files[0];
@@ -132,31 +140,32 @@ export default {
         const analyzeFile = async () => {
             if (!selectedFile.value) return;
             isProcessing.value = true;
-            statusMessage.value = "Uploading and analyzing structure...";
+            statusMessage.value = "Scanning template structure...";
+            missingHeaders.value = [];
 
             const formData = new FormData();
             formData.append('file', selectedFile.value);
 
             try {
-                const res = await fetch('/api/template/analyze', { method: 'POST', body: formData });
+                // NEW ENDPOINT
+                const res = await fetch('/api/blueprint/scan', { method: 'POST', body: formData });
                 const data = await res.json();
 
                 if (res.ok) {
-                    tempFilename.value = data.temp_filename;
-                    missingHeaders.value = data.missing_headers;
-                    filePrefix.value = data.suggested_prefix;
+                    fileToken.value = data.file_token;
 
-                    // Pre-fill mappings with suggestions or unknown
-                    missingHeaders.value.forEach(h => {
-                        // Default to suggestion if in list, else col_item? No, let user choose.
-                        // Or try to match suggestion.
-                        userMappings[h.text] = SYSTEM_HEADERS.includes(h.suggestion) ? h.suggestion : '';
-                    });
+                    if (data.status === "needs_mapping") {
+                        missingHeaders.value = data.unknown_headers || [];
+                        statusMessage.value = "Unknown headers found.";
+                    } else {
+                        statusMessage.value = "Structure looks clean!";
+                    }
 
+                    // Suggest prefix from filename
+                    filePrefix.value = selectedFile.value.name.split('.')[0];
                     currentStep.value = 2;
-                    statusMessage.value = "";
                 } else {
-                    throw new Error(data.error || "Analysis failed");
+                    throw new Error(data.error || "Scan failed");
                 }
             } catch (e) {
                 statusType.value = "error";
@@ -176,29 +185,29 @@ export default {
             statusType.value = "info";
 
             try {
-
-                // Filter out 'col_unknown' mappings to avoid polluting the config
-                // AND ensure only explicitly confirmed headers are sent
-                const filteredMappings = {};
+                // Collect confirmed mappings
+                const finalMappings = {};
                 for (const [key, value] of Object.entries(userMappings)) {
-                    if (value && value !== 'col_unknown' && confirmedHeaders.value.includes(key)) {
-                        filteredMappings[key] = value;
+                    // Only send if confirmed
+                    if (confirmedHeaders.value.includes(key)) {
+                        finalMappings[key] = value;
                     }
                 }
 
-                const res = await fetch('/api/template/generate', {
+                // NEW ENDPOINT
+                const res = await fetch('/api/blueprint/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        file_prefix: filePrefix.value,
-                        user_mappings: filteredMappings,
-                        temp_filename: tempFilename.value
+                        file_token: fileToken.value,
+                        customer_code: filePrefix.value,
+                        mappings: finalMappings
                     })
                 });
                 const data = await res.json();
 
                 if (res.ok) {
-                    bundlePath.value = data.bundle_path || '';
+                    bundlePath.value = data.config_path || '';
                     currentStep.value = 3;
                 } else {
                     throw new Error(data.error || "Generation failed");
@@ -218,6 +227,12 @@ export default {
             missingHeaders.value = [];
             statusMessage.value = "";
             bundlePath.value = "";
+            userMappings.value = {}; // Reset mappings? Reactive limitation needs check
+            // userMappings is reactive object, clear props
+            for (const prop of Object.getOwnPropertyNames(userMappings)) {
+                delete userMappings[prop];
+            }
+            confirmedHeaders.value = [];
         };
 
         return {
@@ -235,7 +250,7 @@ export default {
             userMappings,
             confirmedHeaders,
             toggleMapping,
-            systemHeaders: SYSTEM_HEADERS,
+            systemOptions,
             bundlePath
         };
     }

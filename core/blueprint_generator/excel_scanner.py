@@ -566,7 +566,14 @@ class ExcelLayoutScanner:
             cell = worksheet.cell(row=row, column=col)
             value = self._get_cell_value(cell)
             if value:
+                # Value is the Child Header text (e.g. "BUFFALO LEATHER")
                 col_id = self._determine_column_id(value, col, mapping_config)
+                
+                # Basic logging to debug mapping failures
+                if not col_id or col_id.startswith("col_unknown"):
+                    # Check if it was in mapping config but missed?
+                    pass
+
                 format_str = self._determine_format(col_id, value)
                 col_letter = get_column_letter(col)
                 width = worksheet.column_dimensions[col_letter].width or 10
@@ -589,13 +596,13 @@ class ExcelLayoutScanner:
         if mapping_config:
             mappings = mapping_config.get('header_text_mappings', {}).get('mappings', {})
             
-            # Exact match
+            # Exact match (stripped)
             if header_text_stripped in mappings:
                 return mappings[header_text_stripped]
                 
-            # Case-insensitive match
+            # Case-insensitive match (and strip keys in mapping)
             for mapped_header, mapped_id in mappings.items():
-                if mapped_header.lower() == header_text_stripped.lower():
+                if mapped_header.strip().lower() == header_text_stripped.lower():
                     return mapped_id
 
         # 2. Use simple rule-based matching (System Defaults)

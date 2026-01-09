@@ -142,10 +142,10 @@ class BlueprintGenerator:
         
         return config_file
     
-    @snitch
     def generate(self, template_path: str, output_dir: Optional[str] = None,
                  dry_run: bool = False, monitor: Optional[PipelineMonitor] = None,
-                 custom_prefix: Optional[str] = None) -> Optional[Path]:
+                 custom_prefix: Optional[str] = None,
+                 runtime_mappings: Optional[Dict[str, str]] = None) -> Optional[Path]:
         """
         Generate bundle config from template.
         
@@ -155,6 +155,7 @@ class BlueprintGenerator:
             dry_run: If True, print config but don't save
             monitor: Optional pipeline monitor for logging
             custom_prefix: Optional custom prefix to use instead of auto-detected customer code
+            runtime_mappings: Optional dict of {header_text: col_id} to override/add to global mappings
             
         Returns:
             Path to generated config file, or None if dry_run
@@ -173,6 +174,31 @@ class BlueprintGenerator:
         # Step 1: Analyze template
         self.logger.info("\n[Step 1] Scanning template structure...")
         mapping_config = self._load_mapping_config()
+        
+        # Inject Runtime Mappings (from API/User)
+        if runtime_mappings:
+            self.logger.info(f"   Using {len(runtime_mappings)} runtime column mappings: {runtime_mappings}")
+            if "header_text_mappings" not in mapping_config:
+                mapping_config["header_text_mappings"] = {"mappings": {}}
+            if "mappings" not in mapping_config["header_text_mappings"]:
+                 mapping_config["header_text_mappings"]["mappings"] = {}
+            
+            # Update the config used for scanning
+            mapping_config["header_text_mappings"]["mappings"].update(runtime_mappings)
+            
+            # [Smart Feature] "One-Shot Learning": Save new mappings globally
+            try:
+                # We need to reload the FILE first to avoid race conditions/overwrites? 
+                # For now single-user simple overwrite of mappings section is acceptable.
+                # Actually, self._load_mapping_config() loaded it from file/memory.
+                
+                config_path = sys_config.mapping_config_path
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(mapping_config, f, indent=4)
+                self.logger.info(f"   [Learning] Saved {len(runtime_mappings)} new mappings to global config.")
+            except Exception as e:
+                self.logger.warning(f"   [Learning Failed] Could not save mappings to disk: {e}")
+
         analysis = self.scanner.scan_template(str(template_path), mapping_config=mapping_config)
         
         self._print_analysis_summary(analysis)

@@ -34,6 +34,10 @@ app = FastAPI()
 app.mount("/frontend", StaticFiles(directory=str(sys_config.frontend_dir), html=True), name="frontend")
 app.mount("/static", StaticFiles(directory=str(sys_config.frontend_dir), html=True), name="static")
 
+# Include Routers
+from api.routers import blueprint
+app.include_router(blueprint.router)
+
 
 orchestrator = Orchestrator()
 
