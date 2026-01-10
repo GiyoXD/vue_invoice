@@ -206,6 +206,8 @@ class MultiTableProcessor(SheetProcessor):
         is_last_table = (index == total_tables - 1)
         logger.info(f"Processing table '{table_key}' ({index+1}/{total_tables})")
         
+        show_grand_total_addons = (total_tables == 1)
+        
         resolver = BuilderConfigResolver(
             config_loader=self.config_loader,
             sheet_name=self.sheet_name,
@@ -216,7 +218,11 @@ class MultiTableProcessor(SheetProcessor):
         )
         
         style_config = resolver.get_style_bundle()
-        context_config = resolver.get_context_bundle(enable_text_replacement=False)
+        context_config = resolver.get_context_bundle(
+            enable_text_replacement=False, 
+            is_last_table=is_last_table,
+            show_grand_total_addons=show_grand_total_addons
+        )
         layout_config = resolver.get_layout_bundle()
         
         # Resolve table data

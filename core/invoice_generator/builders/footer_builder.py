@@ -314,6 +314,11 @@ class FooterBuilder(BundleAccessor):
         self._build_footer_common(current_footer_row, default_total_text, footer_type="regular")
         logger.debug(f"[FooterBuilder._build_regular_footer] Complete")
 
+    @property
+    def show_grand_total_addons(self) -> bool:
+        """Show grand total add-ons flag from context config."""
+        return self.context_config.get('show_grand_total_addons', False)
+
     def _process_footer_addons(self, start_row: int, add_ons: dict, footer_type: str = "regular") -> int:
         """Process all footer add-ons in order.
         
@@ -332,30 +337,33 @@ class FooterBuilder(BundleAccessor):
         # Weight Summary Add-on
         weight_summary_config = add_ons.get("weight_summary", {})
         if weight_summary_config.get("enabled"):
-            try:
-                logger.debug(f"Building weight_summary add-on at row {current_row}")
-                current_row = self._build_weight_summary_addon(current_row, weight_summary_config)
-            except Exception as e:
-                logger.error(f"Error building weight_summary add-on: {e}")
-                raise
+            # Only show if explicitly enabled for single tables OR if this is the Grand Total row
+            if self.show_grand_total_addons or footer_type == "grand_total":
+                try:
+                    logger.debug(f"Building weight_summary add-on at row {current_row}")
+                    current_row = self._build_weight_summary_addon(current_row, weight_summary_config)
+                except Exception as e:
+                    logger.error(f"Error building weight_summary add-on: {e}")
+                    raise
         
-        # Leather Summary Add-on - only for grand_total footers
+        # Leather Summary Add-on - only for grand_total footers or single tables (not last table of multi-set)
         leather_summary_config = add_ons.get("leather_summary", {})
         logger.debug(f"[_process_footer_addons] leather_summary config: {leather_summary_config}")
         logger.debug(f"[_process_footer_addons] footer_type: {footer_type}")
-        if leather_summary_config.get("enabled") and footer_type == "grand_total":
-            try:
-                logger.debug(f"Building leather_summary add-on at row {current_row}")
-                current_row = self._build_leather_summary_add_on(current_row, leather_summary_config)
-                logger.debug(f"leather_summary add-on returned row {current_row}")
-            except Exception as e:
-                logger.error(f"Error building leather_summary add-on: {e}")
-                raise
-        else:
-            if leather_summary_config.get("enabled"):
-                logger.debug(f"[_process_footer_addons] Skipping leather_summary for {footer_type} footer (only for grand_total)")
+        if leather_summary_config.get("enabled"):
+            # Only show if explicitly enabled for single tables OR if this is the Grand Total row
+            if self.show_grand_total_addons or footer_type == "grand_total":
+                try:
+                    logger.debug(f"Building leather_summary add-on at row {current_row}")
+                    current_row = self._build_leather_summary_add_on(current_row, leather_summary_config)
+                    logger.debug(f"leather_summary add-on returned row {current_row}")
+                except Exception as e:
+                    logger.error(f"Error building leather_summary add-on: {e}")
+                    raise
             else:
-                logger.debug(f"[_process_footer_addons] leather_summary NOT enabled")
+                logger.debug(f"[_process_footer_addons] Skipping leather_summary for {footer_type} footer (not single table or grand_total)")
+        else:
+            logger.debug(f"[_process_footer_addons] leather_summary NOT enabled")
         
         return current_row
 

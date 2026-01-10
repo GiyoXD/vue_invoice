@@ -86,6 +86,8 @@ class LayoutBuilder:
         self.final_grand_total_pallets = context_config.get('final_grand_total_pallets', 0)
         self.total_net_weight = context_config.get('total_net_weight')
         self.total_gross_weight = context_config.get('total_gross_weight')
+        self.is_last_table = context_config.get('is_last_table', False)
+        self.show_grand_total_addons = context_config.get('show_grand_total_addons', False)
         
         # Unpack Layout Bundle
         self.sheet_config = layout_config.get('sheet_config', {})
@@ -530,7 +532,9 @@ class LayoutBuilder:
                 'sheet_name': self.sheet_name,
                 # Pass through weight totals from processor context (if available)
                 'total_net_weight': self.total_net_weight,
-                'total_gross_weight': self.total_gross_weight
+                'total_gross_weight': self.total_gross_weight,
+                'is_last_table': self.is_last_table,
+                'show_grand_total_addons': self.show_grand_total_addons
             }
             
             footer_builder_data_config = {
