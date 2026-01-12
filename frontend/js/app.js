@@ -2,12 +2,14 @@ import { createApp, ref } from 'vue';
 import GeneratorView from './views/Generator.js';
 import InspectorView from './views/Inspector.js';
 import TemplateExtractorView from './views/TemplateExtractor.js?v=2';
+import TemplateInspectorView from './views/TemplateInspector.js';
 
 const App = {
     components: {
         GeneratorView,
         InspectorView,
-        TemplateExtractorView
+        TemplateExtractorView,
+        TemplateInspectorView
     },
     template: `
         <div class="container fade-in">
@@ -15,6 +17,7 @@ const App = {
             <div class="nav-bar">
                 <button class="nav-btn" :class="{ active: currentView === 'home' }" @click="currentView = 'home'">Generator</button>
                 <button class="nav-btn" :class="{ active: currentView === 'inspector' }" @click="currentView = 'inspector'">Data Inspector</button>
+                <button class="nav-btn" :class="{ active: currentView === 'template_inspector' }" @click="currentView = 'template_inspector'">Inspect Template</button>
                 <button class="nav-btn" :class="{ active: currentView === 'extractor' }" @click="currentView = 'extractor'">New Template</button>
             </div>
 
@@ -31,6 +34,11 @@ const App = {
             <!-- EXTRACTOR VIEW -->
             <div v-show="currentView === 'extractor'">
                 <template-extractor-view></template-extractor-view>
+            </div>
+
+            <!-- TEMPLATE INSPECTOR VIEW -->
+            <div v-show="currentView === 'template_inspector'">
+                <template-inspector-view></template-inspector-view>
             </div>
 
         </div>

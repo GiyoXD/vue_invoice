@@ -794,3 +794,55 @@ input[type="file"] {
 .ready-text strong {
     color: #22c55e;
 }
+
+/* --- Template Inspector Styles --- */
+.template-viewer {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.excel-grid-container {
+    background: #e2e8f0;
+    padding: 1px;
+    /* Border effect */
+}
+
+.excel-grid {
+    display: grid;
+    /* Grid columns will be auto-generated or fixed sizing */
+    /* If we use fixed pixel widths, we might need dynamic inline styles for template cols */
+    background: #fff;
+    position: relative;
+    user-select: text;
+}
+
+.excel-cell {
+    /* Styles are mostly inline, but defaults here */
+    background: #fff;
+    overflow: hidden;
+    box-sizing: border-box;
+    /* transition: background 0.1s; */
+}
+
+.excel-cell:hover {
+    outline: 2px solid #3b82f6;
+    z-index: 10;
+}
+
+.sheet-tabs {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+}
+
+.btn-primary {
+    background: #3b82f6;
+    color: white;
+    border-color: #2563eb;
+}
+
+.btn-primary:hover {
+    background: #2563eb;
+}

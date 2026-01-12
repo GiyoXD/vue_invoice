@@ -441,3 +441,64 @@ async def generate_template(config: TemplateConfig):
 
 
 
+
+# --- Template Inspector API ---
+
+@app.get("/api/templates")
+async def list_templates():
+    """
+    List all available template bundles that have a generated JSON template.
+    """
+    bundled_dir = sys_config.bundled_dir
+    templates = []
+    
+    if bundled_dir.exists():
+        for item in bundled_dir.iterdir():
+            if item.is_dir():
+                # Check for {DirectoryName}_template.json
+                template_json_path = item / f"{item.name}_template.json"
+                if template_json_path.exists():
+                     # Get creation time
+                    try:
+                        stats = template_json_path.stat()
+                        # read fingerprint for source file
+                        source_file = "Unknown"
+                        try:
+                            with open(template_json_path, 'r', encoding='utf-8') as f:
+                                # Read first few lines or parse partly to avoid loading huge file? 
+                                # Actually json.load is fast enough for metadata if file isn't massive.
+                                # But let's just use json.load for now.
+                                data = json.load(f)
+                                source_file = data.get("fingerprint", {}).get("source_file", "Unknown")
+                        except Exception:
+                            pass
+
+                        templates.append({
+                            "name": item.name,
+                            "path": str(template_json_path),
+                            "modified": datetime.datetime.fromtimestamp(stats.st_mtime).isoformat(),
+                            "source_file": source_file
+                        })
+                    except Exception:
+                        pass
+                        
+    return templates
+
+@app.get("/api/template/view")
+async def view_template(name: str):
+    """
+    Get the content of a specific template JSON.
+    """
+    bundled_dir = sys_config.bundled_dir
+    # Sanitize name to prevent traversal
+    safe_name = Path(name).name
+    template_path = bundled_dir / safe_name / f"{safe_name}_template.json"
+    
+    if not template_path.exists():
+        return JSONResponse(status_code=404, content={"error": "Template JSON not found"})
+        
+    try:
+        with open(template_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Failed to read template: {str(e)}"})
