@@ -2,7 +2,7 @@ import { createApp, ref } from 'vue';
 import GeneratorView from './views/Generator.js';
 import InspectorView from './views/Inspector.js';
 import TemplateExtractorView from './views/TemplateExtractor.js?v=2';
-import TemplateInspectorView from './views/TemplateInspector.js';
+import TemplateInspectorView from './views/TemplateInspector.js?v=revert_spill';
 
 const App = {
     components: {

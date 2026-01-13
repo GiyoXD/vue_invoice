@@ -45,6 +45,20 @@ export default {
                             </button>
                         </div>
                         
+                        <!-- Zoom & View Controls -->
+                        <div class="zoom-controls" style="margin-bottom: 0.5rem; display: flex; gap: 0.5rem; align-items: center;">
+                            <button class="btn-small" @click="zoomOut" title="Zoom Out">-</button>
+                            <span style="font-size: 0.875rem; min-width: 3rem; text-align: center;">{{ zoomPercentage }}%</span>
+                            <button class="btn-small" @click="zoomIn" title="Zoom In">+</button>
+                            <button class="btn-small" @click="resetZoom" title="Reset Zoom">Reset</button>
+
+                            <div style="width: 1px; height: 1.5rem; background: #cbd5e1; margin: 0 0.5rem;"></div>
+
+                            <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; cursor: pointer; user-select: none;">
+                                <input type="checkbox" v-model="showFullText"> Wrap Text
+                            </label>
+                        </div>
+                        
                         <!-- Excel Grid -->
                         <div class="excel-grid-container" style="overflow: auto; border: 1px solid #e2e8f0; max-height: 600px;">
                             <div class="excel-grid" :style="gridStyle">
@@ -52,7 +66,7 @@ export default {
                                 <div v-for="cell in gridCells" :key="cell.id"
                                      class="excel-cell"
                                      :style="cell.style"
-                                     :title="cell.address">
+                                     :title="'[' + cell.address + '] ' + cell.content">
                                      <span v-if="cell.isFormula" style="color: blue; font-style: italic;">{{ cell.content }}</span>
                                      <span v-else>{{ cell.content }}</span>
                                 </div>
@@ -68,6 +82,18 @@ export default {
         const selectedTemplateName = ref(null);
         const currentTemplate = ref(null);
         const currentSheetName = ref(null);
+        const zoomLevel = ref(1.0);
+        const showFullText = ref(false);
+
+        const zoomIn = () => {
+            zoomLevel.value = Math.min(zoomLevel.value + 0.1, 3.0);
+        };
+        const zoomOut = () => {
+            zoomLevel.value = Math.max(zoomLevel.value - 0.1, 0.2);
+        };
+        const resetZoom = () => {
+            zoomLevel.value = 1.0;
+        };
 
         // Fetch list
         const fetchTemplates = async () => {
@@ -99,6 +125,8 @@ export default {
         const currentTemplateName = computed(() => selectedTemplateName.value);
         const currentTemplateFingerprint = computed(() => currentTemplate.value?.fingerprint);
         const templateLayout = computed(() => currentTemplate.value?.template_layout || {});
+
+        const zoomPercentage = computed(() => Math.round(zoomLevel.value * 100));
 
         const currentSheetData = computed(() => {
             if (!currentSheetName.value || !templateLayout.value) return null;
@@ -214,8 +242,12 @@ export default {
                         textAlign: cellStyle.alignment?.horizontal || 'left',
                         verticalAlign: cellStyle.alignment?.vertical || 'bottom',
                         backgroundColor: '#fff',
-                        whiteSpace: cellStyle.alignment?.wrap_text ? 'normal' : 'nowrap',
-                        overflow: 'hidden',
+
+                        // Layout Logic
+                        whiteSpace: (showFullText.value || cellStyle.alignment?.wrap_text) ? 'normal' : 'nowrap',
+                        overflow: showFullText.value ? 'visible' : 'hidden',
+                        wordBreak: showFullText.value ? 'break-word' : 'normal',
+
                         color: '#000'
                     };
 
@@ -239,7 +271,10 @@ export default {
                 // Use repeat(auto-fill, minmax(...)) or just a large grid
                 // Better to set specific row heights if available
                 gap: '0',
-                backgroundColor: '#f1f5f9'
+                backgroundColor: '#f1f5f9',
+                transform: `scale(${zoomLevel.value})`,
+                transformOrigin: 'top left',
+                width: 'fit-content' // Ensure grid doesn't stretch weirdly when zoomed out
             };
         });
 
@@ -261,6 +296,12 @@ export default {
             currentTemplateFingerprint,
             templateLayout,
             currentSheetName,
+            zoomLevel,
+            zoomPercentage,
+            showFullText,
+            zoomIn,
+            zoomOut,
+            resetZoom,
             gridCells,
             gridStyle,
             fetchTemplates,
