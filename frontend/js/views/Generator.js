@@ -145,7 +145,7 @@ export default {
                     </div>
                 </div>
 
-                 <div v-if="weightStats" class="stat-grid">
+                <div v-if="weightStats" class="stat-grid">
                     <div class="stat-item">
                         <span class="stat-label">Net Weight</span>
                         <span class="stat-value">{{ weightStats.net?.toLocaleString() }} kg</span>
@@ -153,6 +153,10 @@ export default {
                     <div class="stat-item">
                         <span class="stat-label">Gross Weight</span>
                         <span class="stat-value">{{ weightStats.gross?.toLocaleString() }} kg</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Total CBM</span>
+                        <span class="stat-value">{{ weightStats.cbm?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 3}) }} m³</span>
                     </div>
                 </div>
 
@@ -347,12 +351,13 @@ export default {
         const weightStats = computed(() => {
             if (!validationData.value?.database_export?.packing_list_items) return null;
             const items = validationData.value.database_export.packing_list_items;
-            let net = 0; let gross = 0;
+            let net = 0; let gross = 0; let cbm = 0;
             items.forEach(item => {
                 try { net += parseFloat(item.net) || 0; } catch { }
                 try { gross += parseFloat(item.gross) || 0; } catch { }
+                try { cbm += parseFloat(item.cbm) || 0; } catch { }
             });
-            return { net, gross };
+            return { net, gross, cbm };
         });
 
         /**

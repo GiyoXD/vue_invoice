@@ -59,7 +59,7 @@ export default {
                                         <th>PCS</th>
                                         <th>SQFT</th>
                                         <th>Pallets</th>
-                                        <th>Net/Gross</th>
+                                        <th>Net/Gross/CBM</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -71,7 +71,7 @@ export default {
                                         <td contenteditable="true" spellcheck="false">{{ row.pcs }}</td>
                                         <td contenteditable="true" spellcheck="false">{{ row.sqft }}</td>
                                         <td contenteditable="true" spellcheck="false">{{ row.pallet_count }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.net }} / {{ row.gross }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.net }} / {{ row.gross }} / {{ row.cbm }}</td>
                                     </tr>
                                 </tbody>
                             </table>
