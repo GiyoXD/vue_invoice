@@ -161,7 +161,8 @@ class ExcelLayoutScanner:
         for row in range(1, min(worksheet.max_row + 1, max_rows)):
             cells = []
             max_col_idx = 0
-            for col in range(1, worksheet.max_column + 1):
+            # Cap structural scan at 50 columns
+            for col in range(1, min(worksheet.max_column + 1, 50)):
                 cell = worksheet.cell(row=row, column=col)
                 if cell.value is not None and str(cell.value).strip():
                     cells.append(cell)
@@ -211,7 +212,8 @@ class ExcelLayoutScanner:
             header_cells = []
             
             has_content = False
-            for col in range(1, worksheet.max_column + 1):
+            # Cap header scan at 25 (Col Y)
+            for col in range(1, min(worksheet.max_column + 1, 26)):
                 cell = worksheet.cell(row=row, column=col)
                 value = self._get_cell_value(cell)
                 if value:
@@ -283,9 +285,9 @@ class ExcelLayoutScanner:
              if fallback_row:
                  self.logger.info(f"Header detection (Fallback): Found structural header at row {fallback_row}.")
                  best_row = fallback_row
-                 # Re-extract cells
+                 # Re-extract cells with CAP
                  best_header_cells = []
-                 for col in range(1, worksheet.max_column + 1):
+                 for col in range(1, min(worksheet.max_column + 1, 50)):
                      cell = worksheet.cell(row=fallback_row, column=col)
                      val = self._get_cell_value(cell)
                      if val:
@@ -296,13 +298,15 @@ class ExcelLayoutScanner:
         return best_row, best_header_cells
     
     @snitch
-    def scan_template(self, template_path: str, mapping_config: Optional[Dict[str, Any]] = None) -> TemplateAnalysisResult:
+    def scan_template(self, template_path: str, mapping_config: Optional[Dict[str, Any]] = None, 
+                      workbook: Optional[openpyxl.Workbook] = None) -> TemplateAnalysisResult:
         """
         Analyze an Excel template file and extract structure.
         
         Args:
             template_path: Path to the Excel template file
             mapping_config: Optional configuration for header mappings
+            workbook: Optional pre-loaded openpyxl Workbook object (for performance)
             
         Returns:
             TemplateAnalysisResult with complete analysis
@@ -316,7 +320,11 @@ class ExcelLayoutScanner:
         
         self.logger.info(f"Scanning template: {path.name} (customer: {customer_code})")
         
-        workbook = openpyxl.load_workbook(template_path, data_only=False)
+        if workbook is None:
+             self.logger.debug("Loading workbook from disk...")
+             workbook = openpyxl.load_workbook(template_path, data_only=False)
+        else:
+             self.logger.debug("Using pre-loaded workbook.")
         
         sheets = []
         for sheet_name in workbook.sheetnames:
@@ -352,11 +360,11 @@ class ExcelLayoutScanner:
             # Analyze columns
             columns = self._analyze_columns(worksheet, header_row, header_cells, mapping_config)
             self.logger.info(f"    Found {len(columns)} columns")
-            # DETAILED DEBUG LOGGING
-            self.logger.info(f"    --- Column Analysis for {sheet_name} ---")
-            for col in columns:
-                self.logger.info(f"      [Col {col.col_index}] ID={col.id} Header='{col.header}' Width={col.width:.1f} Format='{col.format}'")
-            self.logger.info(f"    ----------------------------------------")
+            # DETAILED DEBUG LOGGING (Commented out for speed)
+            # self.logger.info(f"    --- Column Analysis for {sheet_name} ---")
+            # for col in columns:
+            #     self.logger.info(f"      [Col {col.col_index}] ID={col.id} Header='{col.header}' Width={col.width:.1f} Format='{col.format}'")
+            # self.logger.info(f"    ----------------------------------------")
             
             # Determine data source type
             data_source = self._determine_data_source(sheet_name, columns, mapping_config)
@@ -423,7 +431,10 @@ class ExcelLayoutScanner:
             if merged.min_row <= header_row <= merged.max_row:
                 merged_ranges.append(merged)
         
-        for col in range(1, worksheet.max_column + 1):
+        # Cap column analysis at 25 (Col Y)
+        safe_max = min(worksheet.max_column + 1, 26)
+        
+        for col in range(1, safe_max):
             if col in processed_cols:
                 continue
             

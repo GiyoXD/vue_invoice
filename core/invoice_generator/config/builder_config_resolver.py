@@ -163,14 +163,17 @@ class BuilderConfigResolver:
                 # Aggregate pallets
                 if 'pallet_summary_total' in footer_data:
                     total_pallets += int(footer_data['pallet_summary_total'])
-                elif 'pallet_count' in table_data:
+                else:
                     # Fallback if summary missing
-                    for p in table_data['pallet_count']:
-                        if p is not None:
-                            try:
-                                total_pallets += int(float(p))
-                            except (ValueError, TypeError):
-                                pass
+                    # Check both 'pallet_count' and 'col_pallet_count' keys
+                    p_array = table_data.get('col_pallet_count') or table_data.get('pallet_count')
+                    if p_array:
+                        for p in p_array:
+                            if p is not None:
+                                try:
+                                    total_pallets += int(float(p))
+                                except (ValueError, TypeError):
+                                    pass
 
             summaries = {
                 'total_net_weight': total_net,

@@ -30,7 +30,7 @@ class ConfigBuilder:
             "col_po": {},
             "col_item": {},
             "col_unit_price": {},
-            "col_desc": {"fallback_on_none": "LEATHER", "fallback_on_DAF": "LEATHER"},
+            "col_desc": {"fallback_on_none": "COW LEATHER", "fallback_on_DAF": "COW LEATHER"},
             "col_qty_sf": {},
             "col_amount": {"formula": "{col_qty_sf} * {col_unit_price}"},
         },
@@ -38,7 +38,7 @@ class ConfigBuilder:
         "processed_tables_multi": {
             "col_po": {},
             "col_item": {},
-            "col_desc": {"fallback_on_none": "LEATHER", "fallback_on_DAF": "LEATHER"},
+            "col_desc": {"fallback_on_none": "COW LEATHER", "fallback_on_DAF": "COW LEATHER"},
             "col_qty_pcs": {},
             "col_qty_sf": {},
             "col_net": {},
@@ -301,6 +301,10 @@ class ConfigBuilder:
                 if col.id == "col_desc" and sheet.static_content_hints:
                      dynamic_fallback = sheet.static_content_hints.get("description_fallback")
                      if dynamic_fallback:
+                         # [Refinement] Upgrade generic "LEATHER" to "COW LEATHER" per user request
+                         if dynamic_fallback == "LEATHER":
+                             dynamic_fallback = "COW LEATHER"
+                             
                          mapping["fallback_on_none"] = dynamic_fallback
                          mapping["fallback_on_DAF"] = dynamic_fallback
                          self.logger.info(f"    [Smart]    Updated col_desc fallback to '{dynamic_fallback}'")
@@ -354,6 +358,12 @@ class ConfigBuilder:
         total_col = "col_po"
         if "col_no" in col_ids:
             total_col = "col_no"
+        
+        # Determine pallet count column
+        if "col_pallet_count" in col_ids:
+            pallet_col = "col_pallet_count" 
+        else:
+            pallet_col = "col_desc" if "col_desc" in col_ids else "col_item"
         
         # Default settings
         total_text = "TOTAL OF:"

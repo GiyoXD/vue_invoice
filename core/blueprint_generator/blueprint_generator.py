@@ -15,6 +15,8 @@ import argparse
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 from datetime import datetime
+import openpyxl
+
 
 from .excel_scanner import ExcelLayoutScanner, TemplateAnalysisResult
 from .config_builder import ConfigBuilder
@@ -171,6 +173,14 @@ class BlueprintGenerator:
         self.logger.info(f"Template: {template_path}")
         
         
+        # Step 0: Load Workbook ONCE (Optimization)
+        import openpyxl
+        self.logger.info("\n[Step 0] Loading workbook...")
+        try:
+            wb = openpyxl.load_workbook(template_path, data_only=False)
+        except Exception as e:
+            self.logger.error(f"Failed to load workbook: {e}")
+            raise e
         # Step 1: Analyze template
         self.logger.info("\n[Step 1] Scanning template structure...")
         mapping_config = self._load_mapping_config()
@@ -199,7 +209,7 @@ class BlueprintGenerator:
             except Exception as e:
                 self.logger.warning(f"   [Learning Failed] Could not save mappings to disk: {e}")
 
-        analysis = self.scanner.scan_template(str(template_path), mapping_config=mapping_config)
+        analysis = self.scanner.scan_template(str(template_path), mapping_config=mapping_config, workbook=wb)
         
         self._print_analysis_summary(analysis)
         
@@ -252,15 +262,24 @@ class BlueprintGenerator:
         # Step 3: Generate Clean Template
         if not dry_run:
             template_path_res, layout_metadata = self._generate_clean_template(
-                template_path, analysis, config_dir, monitor, effective_prefix
+                template_path, analysis, config_dir, monitor, effective_prefix, workbook=wb
             )
             
             # SAVE SEPARATE TEMPLATE CONFIG
             template_config_file = config_dir / f"{effective_prefix}_template.json"
             
+            # [Fingerprint]
+            fingerprint = {
+                "source_file": template_path.name,
+                "created_at": datetime.now().isoformat()
+            }
+            
             self.logger.info(f"   Saving Template Config: {template_config_file.name}")
             with open(template_config_file, 'w', encoding='utf-8') as f:
-                json.dump({"template_layout": layout_metadata}, f, indent=2, ensure_ascii=False)
+                json.dump({
+                    "fingerprint": fingerprint,
+                    "template_layout": layout_metadata
+                }, f, indent=2, ensure_ascii=False)
                 
             # Note: We do NOT inject it into the main bundle config anymore.
         
@@ -278,7 +297,8 @@ class BlueprintGenerator:
 
     def _generate_clean_template(self, template_path: Path, analysis: TemplateAnalysisResult, 
                                  output_dir: Path, monitor: Optional[PipelineMonitor] = None,
-                                 custom_prefix: Optional[str] = None) -> Tuple[Path, Dict[str, Any]]:
+                                 custom_prefix: Optional[str] = None,
+                                 workbook: Optional[openpyxl.Workbook] = None) -> Tuple[Path, Dict[str, Any]]:
         """
         Generate a clean template from the raw input file.
         
@@ -291,6 +311,7 @@ class BlueprintGenerator:
             output_dir: Directory to save template
             monitor: Optional pipeline monitor
             custom_prefix: Optional custom prefix for naming
+            workbook: Optional pre-loaded workbook (optimization)
             
         Returns:
             Tuple of (Path to saved template, layout_metadata)
@@ -308,7 +329,17 @@ class BlueprintGenerator:
         
         # Load and sanitize the template
         sanitizer = ExcelTemplateSanitizer()
-        wb = openpyxl.load_workbook(template_path)
+        
+        if workbook:
+             # Use shared workbook object (Optimization)
+             # NOTE: We must be careful if sanitizer modifies it in place.
+             # Sanitizer DOES delete rows. If we need original state later, we might have issues.
+             # But here, 'generate' is the end of the line. We don't need the original state after this.
+             self.logger.info("   Using pre-loaded workbook for cleaning.")
+             wb = workbook
+        else:
+             self.logger.info("   Loading workbook from disk...")
+             wb = openpyxl.load_workbook(template_path)
         
         # Sanitize (strips data rows, no image handling)
         cleaned_wb, layout_metadata = sanitizer.sanitize_template(wb, analysis)

@@ -89,9 +89,35 @@ class ExcelTemplateSanitizer:
             "footer_images": []
         }
         
+        
+        # Determine strict max column based on actual analysis result
+        # We only care about the columns that were detected as part of the table
+        if analysis.columns:
+            # Calculate max column index used by any column (handling colspans)
+            # col_index is 1-based
+            table_cur_max = 0
+            for col in analysis.columns:
+                end_col = col.col_index + (col.colspan - 1)
+                if end_col > table_cur_max:
+                    table_cur_max = end_col
+            
+            # Add small buffer +1 just in case, but cap at 25 globally
+            # If table is 5 cols, we scan 6. If table is 30 cols (unlikely), we scan 25?
+            # Actually, if table is 30 cols, we SHOULD scan 30.
+            # But earlier we found "max scanning" at 25 in Scanner. So analysis won't return > 26 cols anyway.
+            # So this is safe.
+            dynamic_limit = table_cur_max + 1
+            safe_max_column = min(ws.max_column, 25, dynamic_limit)
+        else:
+            # Fallback if no columns found (shouldn't happen for valid sheets)
+            safe_max_column = min(ws.max_column, 25)
+            
+        self.logger.info(f"    Dynamic Column Scan Limit: {safe_max_column} (Table Max: {table_cur_max if analysis.columns else '?'})")
+        
+        
         # --- CAPTURE GLOBAL LAYOUT (Column Widths) ---
         from openpyxl.utils import get_column_letter
-        for c in range(1, ws.max_column + 1):
+        for c in range(1, safe_max_column + 1):
             letter = get_column_letter(c)
             if letter in ws.column_dimensions:
                 w = ws.column_dimensions[letter].width
@@ -117,19 +143,20 @@ class ExcelTemplateSanitizer:
                     preserved_layout["header_row_heights"][str(r)] = h
                     
         # 3. Header Content & Styles
-        for r in range(1, analysis.header_row):
-            for c in range(1, ws.max_column + 1):
-                cell = ws.cell(row=r, column=c)
-                coord = cell.coordinate
-                
-                # Content
-                if cell.value is not None:
-                    preserved_layout["header_content"][coord] = str(cell.value)
+        # Use iter_rows for speed
+        if analysis.header_row > 1:
+            for row in ws.iter_rows(min_row=1, max_row=analysis.header_row-1, min_col=1, max_col=safe_max_column):
+                for cell in row:
+                    coord = cell.coordinate
                     
-                # Style (capture for all cells in range, to get borders/fills even if empty)
-                # But to save space, maybe only if it has 'interesting' properties? 
-                # For now, capture all to ensure fidelity.
-                preserved_layout["header_styles"][coord] = self._capture_cell_style(cell)
+                    # Content
+                    if cell.value is not None:
+                         preserved_layout["header_content"][coord] = str(cell.value)
+                    
+                    # Style
+                    style_data = self._capture_cell_style(cell, is_empty=(cell.value is None))
+                    if style_data:
+                        preserved_layout["header_styles"][coord] = style_data
         
         # 1. Find Footer (Total Row) FIRST, before messing with indices?
         # Actually indices are stable if we haven't deleted yet.
@@ -204,19 +231,27 @@ class ExcelTemplateSanitizer:
                     if h is not None:
                         footer_heights_to_restore.append((r, h))
                         
-                # 2. Capture Content & Styles
-                shifted_r = r - rows_to_delete
-                if shifted_r < 1: continue 
-                
-                for c in range(1, ws.max_column + 1):
-                    cell = ws.cell(row=r, column=c)
-                    new_coord = f"{get_column_letter(c)}{shifted_r}"
-                    
-                    if cell.value is not None:
-                         footer_content_dist[new_coord] = str(cell.value)
-                    
-                    # Capture Style mapped to NEW coordinate
-                    footer_styles_dist[new_coord] = self._capture_cell_style(cell)
+            # 2. Capture Content & Styles
+            # Use iter_rows for speed
+            if (current_max_row >= end_delete + 1):
+                for row_cells in ws.iter_rows(min_row=end_delete + 1, max_row=current_max_row, min_col=1, max_col=safe_max_column):
+                    for cell in row_cells:
+                        r = cell.row
+                        c = cell.column
+                        
+                        shifted_r = r - rows_to_delete
+                        if shifted_r < 1: continue 
+                        
+                        from openpyxl.utils import get_column_letter
+                        new_coord = f"{get_column_letter(c)}{shifted_r}"
+                        
+                        if cell.value is not None:
+                                footer_content_dist[new_coord] = str(cell.value)
+                        
+                        # Capture Style mapped to NEW coordinate
+                        style_data = self._capture_cell_style(cell, is_empty=(cell.value is None))
+                        if style_data:
+                            footer_styles_dist[new_coord] = style_data
                         
             # Save captured content to metadata immediately (calculated for post-shift)
             preserved_layout["footer_content"] = footer_content_dist
@@ -384,48 +419,114 @@ class ExcelTemplateSanitizer:
             return None
         return str(cell.value)
 
-    def _capture_cell_style(self, cell: Cell) -> Dict[str, Any]:
-        """Capture font, alignment, border, and fill styles from a cell."""
+        return style
+    
+    def _is_default_style(self, style: Dict[str, Any]) -> bool:
+        """Check if a style dict represents standard/default Excel formatting."""
+        if not style: return True
+        
+        # Check Font (Calibri 11 is default, or internal theme default)
+        # We'll consider it default if it has no meaningful override (no bold, no specific color, standard size)
+        font = style.get('font', {})
+        if font.get('bold') or font.get('italic') or font.get('color'):
+             return False
+        # Ignore font name/size changes for "default" check if they are standard (Calibri/Arial 10-12)
+        # Actually, let's just say if there's NO font dict, it's default.
+        # But openpyxl always gives a font object. 
+        # Strategy: If it returns a dict, it's "significant".
+        # We need to filter INSIDE _capture_cell_style to return None if it's boring.
+        return False
+
+    def _capture_cell_style(self, cell: Cell, is_empty: bool = False) -> Optional[Dict[str, Any]]:
+        """
+        Capture font, alignment, border, and fill styles from a cell.
+        Returns None if strict mode is on and the cell has effectively default style.
+        
+        Args:
+            cell: The cell to analyze.
+            is_empty: If True, we ignore "setup" styles like Font Name/Size and only capture 
+                      visible modifiers like Borders, Fills, Bold, etc.
+        """
         style = {}
+        has_significant_style = False
         
         # 1. Font
         if cell.font:
-            style["font"] = {
-                "name": cell.font.name,
-                "size": cell.font.size,
-                "bold": cell.font.bold,
-                "italic": cell.font.italic,
-                "color": self._serialize_color(cell.font.color)
-            }
+            # Filter out default font props to save space
+            font_data = {}
+            
+            # If cell is empty, we DON'T care about Font Name/Size (User preference)
+            # We only care if it's explicitly styled (Bold, Italic, Color)
+            if not is_empty:
+                if cell.font.name and cell.font.name not in ["Calibri", "Arial"]: # Capture non-standard fonts
+                    font_data["name"] = cell.font.name
+                if cell.font.size and cell.font.size not in [11.0, 11, 10.0, 10]: # Capture non-standard sizes
+                    font_data["size"] = cell.font.size
+            
+            if cell.font.bold: font_data["bold"] = True
+            if cell.font.italic: font_data["italic"] = True
+            if cell.font.color and hasattr(cell.font.color, "rgb"): # Capture colors
+                 color_val = self._serialize_color(cell.font.color)
+                 if color_val and color_val != "00000000": # Skip black/auto
+                     font_data["color"] = color_val
+
+            if font_data:
+                style["font"] = font_data
+                has_significant_style = True
             
         # 2. Alignment
         if cell.alignment:
-            style["alignment"] = {
-                "horizontal": cell.alignment.horizontal,
-                "vertical": cell.alignment.vertical,
-                "wrap_text": cell.alignment.wrap_text
-            }
+            align_data = {}
+            # Only capture if NOT default (general/bottom)
+            if cell.alignment.horizontal and cell.alignment.horizontal != 'general':
+                align_data["horizontal"] = cell.alignment.horizontal
+            if cell.alignment.vertical and cell.alignment.vertical != 'bottom': # bottom is default in Excel? usually.
+                align_data["vertical"] = cell.alignment.vertical
+            if cell.alignment.wrap_text:
+                align_data["wrap_text"] = True
+                
+            if align_data:
+                style["alignment"] = align_data
+                has_significant_style = True
             
         # 3. Fill (Background)
         if cell.fill and hasattr(cell.fill, "start_color"):
-             style["fill"] = {
-                 "type": cell.fill.fill_type,
-                 "color": self._serialize_color(cell.fill.start_color)
-             }
+             color_val = self._serialize_color(cell.fill.start_color)
+             # Skip default "none" or white fills
+             if color_val and color_val not in ["00000000", "FFFFFFFF", None]:
+                 style["fill"] = {
+                     "type": cell.fill.fill_type,
+                     "color": color_val
+                 }
+                 has_significant_style = True
              
-        # 4. Border (Simplified - only capturing style presence for now)
+        # 4. Border
         if cell.border:
-             style["border"] = {
-                 "left": cell.border.left.style if cell.border.left else None,
-                 "right": cell.border.right.style if cell.border.right else None,
-                 "top": cell.border.top.style if cell.border.top else None,
-                 "bottom": cell.border.bottom.style if cell.border.bottom else None
-             }
+             border_data = {}
+             # Only capture if there is an actual border style
+             if cell.border.left and cell.border.left.style: border_data["left"] = cell.border.left.style
+             if cell.border.right and cell.border.right.style: border_data["right"] = cell.border.right.style
+             if cell.border.top and cell.border.top.style: border_data["top"] = cell.border.top.style
+             if cell.border.bottom and cell.border.bottom.style: border_data["bottom"] = cell.border.bottom.style
+             
+             if border_data:
+                 style["border"] = border_data
+                 has_significant_style = True
              
         # 5. Number Format
-        style["number_format"] = cell.number_format
+        # Only relevant if content exists, usually? 
+        # Actually user might pre-format a column for dates. 
+        # But for "Pure Empty Junk" check, maybe skip? 
+        # User said "modify more property like border or change width and height". 
+        # Number format is invisible until data is typed.
+        # Let's keep strictness: If empty, ignore number format too?
+        # Safe bet: Capture it. It's rare to have Custom Num Format on junk cells.
+        if cell.number_format and cell.number_format != "General":
+            style["number_format"] = cell.number_format
+            has_significant_style = True
         
-        return style
+        # If nothing significant was captured, return None to save massive JSON space
+        return style if has_significant_style else None
 
     def _serialize_color(self, color) -> Optional[str]:
         """Try to extract RGB hex string from Color object."""

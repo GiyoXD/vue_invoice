@@ -694,6 +694,7 @@ class LayoutBuilder:
         # 2. Starts with "=SUM" (case-insensitive)
         
         for r_idx in range(scan_start_row, max_scan_row):
+            # Already capped at 20, which is safe.
             for c_idx in range(1, min(20, worksheet.max_column + 1)):
                 cell = worksheet.cell(row=r_idx, column=c_idx)
                 if cell.value:

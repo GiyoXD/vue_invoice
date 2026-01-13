@@ -264,6 +264,14 @@ def prepare_data_rows(
         
         logger.debug(f"Preparing {num_data_rows_from_source} rows from Column-Oriented source")
 
+        # Extract Pallet Counts (Try 'col_pallet_count' first as it matches parser output, then 'pallet_count')
+        raw_pallet_counts = data_source.get('col_pallet_count') 
+        if raw_pallet_counts and isinstance(raw_pallet_counts, list):
+            pallet_counts_for_rows = raw_pallet_counts
+        else:
+            logger.warning(f"[DataPreparer] ⚠️ Pallet count missing in data source (checked 'col_pallet_count' and 'pallet_count'). defaulting to None for {num_data_rows_from_source} rows.")
+            pallet_counts_for_rows = [None] * num_data_rows_from_source
+
         for i in range(num_data_rows_from_source):
             row_dict = {}
             for source_key, rule in dynamic_mapping_rules.items():
@@ -298,6 +306,10 @@ def prepare_data_rows(
         logger.debug(f"Preparing {num_data_rows_from_source} rows from Row-Oriented source")
         
         for row_data in data_source:
+            # Extract Pallet Count
+            p_count = row_data.get('col_pallet_count') or row_data.get('pallet_count')
+            pallet_counts_for_rows.append(p_count)
+
             row_dict = {}
             for source_key, rule in dynamic_mapping_rules.items():
                 if not isinstance(rule, dict): continue

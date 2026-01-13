@@ -304,7 +304,7 @@ def run_invoice_generation(
             if isinstance(processed_tables, dict):
                 final_grand_total_pallets = sum(
                     int(c) for t in processed_tables.values() 
-                    for c in t.get("pallet_count", []) 
+                    for c in (t.get("col_pallet_count") or t.get("pallet_count") or [])
                     if str(c).isdigit()
                 )
 

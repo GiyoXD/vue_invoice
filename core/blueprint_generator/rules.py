@@ -111,10 +111,16 @@ class BlueprintRules:
             keywords=["no", "no."], 
             excel_format="@"
         ),
-        "col_pallet": ColumnDefinition(
-            id="col_pallet", 
-            keywords=["pallet", "plt"], 
+        "col_pallet_count": ColumnDefinition(
+            id="col_pallet_count", 
+            keywords=["pallet", "plt", "pallet no", "pallet no.", "plt no", "plt no.", "pallet #", "pallet number"], 
             excel_format="@"
+        ),
+        "col_dc": ColumnDefinition(
+            id="col_dc",
+            keywords=["dc", "dc no", "dc #"],
+            excel_format="@",
+            width=12.0
         ),
     }
 
