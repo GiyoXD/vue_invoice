@@ -31,6 +31,8 @@ from core.invoice_generator.builders.workbook_builder import WorkbookBuilder
 from core.invoice_generator.processors.single_table_processor import SingleTableProcessor
 from core.invoice_generator.processors.multi_table_processor import MultiTableProcessor
 from core.invoice_generator.processors.placeholder_processor import PlaceholderProcessor
+
+from core.invoice_generator.utils.print_area_config import configure_print_area
 from core.invoice_generator.utils.monitor import GenerationMonitor
 from core.invoice_generator.resolvers import InvoiceAssetResolver
 
@@ -389,6 +391,17 @@ def run_invoice_generation(
                     # But the monitor allows us to choose. Let's re-raise to be safe for now 
                     # unless we want "partial_success".
                     raise e 
+
+            # ---------------------------------------------------------
+            # 7. Apply Print Area Configuration (Last Step before Save)
+            # ---------------------------------------------------------
+            logger.info("Applying Print Area & Page Setup...")
+            for sheet_name in output_workbook.sheetnames:
+                worksheet = output_workbook[sheet_name]
+                try:
+                    configure_print_area(worksheet)
+                except Exception as e:
+                    logger.error(f"Failed to configure print settings for sheet '{sheet_name}': {e}")
 
             # Step 8: Save
             logger.info(f"Saving workbook to {output_path}")

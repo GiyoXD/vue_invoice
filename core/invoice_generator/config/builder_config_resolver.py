@@ -668,7 +668,12 @@ class BuilderConfigResolver:
             'processed_tables': 'processed_tables_data',
         }
         
-        data_key = type_mapping.get(data_source_type, 'standard_aggregation_results')
+        if data_source_type == 'aggregation' and self.args and getattr(self.args, 'custom', False):
+            logger.info(f"Custom mode active: Switching data source from 'aggregation' to 'custom_aggregation'")
+            data_key = 'custom_aggregation_results'
+        else:
+            data_key = type_mapping.get(data_source_type, 'standard_aggregation_results')
+            
         return self.invoice_data.get(data_key, {})
     
     def get_all_sheet_configs(self) -> Dict[str, Any]:

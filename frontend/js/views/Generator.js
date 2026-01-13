@@ -87,6 +87,24 @@ export default {
                         <input type="text" v-model="invoiceRef" class="input-field" />
                     </div>
                 </div>
+
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label>Generation Options</label>
+                    <div style="display: flex; gap: 1.5rem; margin-top: 0.5rem; flex-wrap: wrap;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" v-model="includeStandard" accent-color="#2563eb" /> 
+                            <span>Standard Invoice</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" v-model="includeCustom" accent-color="#2563eb" /> 
+                            <span>Custom Mode</span>
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" v-model="includeDAF" accent-color="#2563eb" /> 
+                            <span>DAF Mode</span>
+                        </label>
+                    </div>
+                </div>
                 
                 <button class="btn" @click="generateInvoice" :disabled="isGenerating || !assetStatus?.ready">
                     {{ isGenerating ? 'Generating...' : (assetStatus?.ready ? 'Generate Invoice' : 'Blueprint Required') }}
@@ -186,6 +204,11 @@ export default {
         const invoiceDate = ref(new Date().toISOString().split('T')[0]);
         const invoiceRef = ref('');
 
+        // Options
+        const includeStandard = ref(true);
+        const includeCustom = ref(false);
+        const includeDAF = ref(false);
+
         const isGenerating = ref(false);
         const generationStatus = ref(null);
         const generationError = ref(null);
@@ -279,7 +302,12 @@ export default {
                         json_path: jsonPath.value,
                         invoice_no: invoiceNo.value,
                         invoice_date: invoiceDate.value,
-                        invoice_ref: invoiceRef.value
+                        invoice_no: invoiceNo.value,
+                        invoice_date: invoiceDate.value,
+                        invoice_ref: invoiceRef.value,
+                        generate_standard: includeStandard.value,
+                        generate_custom: includeCustom.value,
+                        generate_daf: includeDAF.value
                     })
                 });
 
@@ -380,6 +408,9 @@ export default {
             invoiceNo,
             invoiceDate,
             invoiceRef,
+            includeStandard,
+            includeCustom,
+            includeDAF,
             handleFileUpload,
             uploadFile,
             isGenerating,

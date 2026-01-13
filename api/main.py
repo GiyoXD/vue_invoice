@@ -53,6 +53,9 @@ class GenerateRequest(BaseModel):
     invoice_no: str
     invoice_date: str
     invoice_ref: Optional[str] = ""
+    generate_standard: bool = True
+    generate_custom: bool = False
+    generate_daf: bool = False
 
 @app.get("/api/health")
 async def health_check():
@@ -141,6 +144,7 @@ async def upload_excel(file: UploadFile = File(...)):
 async def generate_invoice(request: GenerateRequest):
     """
     Trigger invoice generation with metadata overrides.
+    Supports generating multiple variations (Standard, Custom, DAF).
     """
     try:
         # Resolve paths
@@ -148,9 +152,9 @@ async def generate_invoice(request: GenerateRequest):
         if not json_path_obj.exists():
              return JSONResponse(status_code=404, content={"error": "JSON file not found. Please upload again."})
 
-        # Define output path
-        output_path = OUTPUT_DIR / request.identifier
-        output_path.mkdir(exist_ok=True)
+        # Define base output directory
+        base_output_dir = OUTPUT_DIR / request.identifier
+        base_output_dir.mkdir(exist_ok=True)
 
         # Default Template/Config dirs - use bundled directory from config
         template_dir = sys_config.bundled_dir
@@ -171,36 +175,91 @@ async def generate_invoice(request: GenerateRequest):
         full_data["invoice_info"]["col_inv_date"] = request.invoice_date
         full_data["invoice_info"]["col_inv_ref"] = request.invoice_ref
         
-        # Pass FULL modified data to orchestrator
-        result_path = orchestrator.generate_invoice(
-            json_path=json_path_obj,
-            output_path=output_path / f"{request.identifier}_Invoice.xlsx",
-            template_dir=template_dir,
-            config_dir=config_dir,
-            input_data_dict=full_data 
-        )
-        
-        # Open file explorer to the output directory
-        try:
-             os.startfile(result_path.parent)
-        except Exception:
-             pass # Ignore if fails (e.g. headless)
+        results = []
+        errors = []
+        primary_metadata = {}
+        processed_any = False
 
-        # Read the generated metadata to send back validation info
-        metadata_content = {}
-        try:
-            meta_path = result_path.parent / f"{result_path.stem}_metadata.json"
-            if meta_path.exists():
-                with open(meta_path, 'r', encoding='utf-8') as f:
-                    metadata_content = json.load(f)
-        except Exception:
-            pass
+        # Define tasks to run
+        tasks = []
+        if request.generate_standard:
+            tasks.append({
+                "suffix": "", 
+                "flags": [],
+                "name": "Standard Invoice"
+            })
+        if request.generate_custom:
+            tasks.append({
+                "suffix": "_Custom", 
+                "flags": ["--custom"],
+                "name": "Custom Invoice"
+            })
+        if request.generate_daf:
+            tasks.append({
+                "suffix": "_DAF", 
+                "flags": ["--DAF"],
+                "name": "DAF Invoice"
+            })
+
+        if not tasks:
+             return JSONResponse(status_code=400, content={"error": "No invoice type selected."})
+
+        for task in tasks:
+            try:
+                # Construct specific output name
+                # e.g. IDENTIFIER_Invoice.xlsx or IDENTIFIER_Invoice_Custom.xlsx
+                filename = f"{request.identifier}_Invoice{task['suffix']}.xlsx"
+                output_path = base_output_dir / filename
+
+                # Generate
+                result_path = orchestrator.generate_invoice(
+                    json_path=json_path_obj,
+                    output_path=output_path,
+                    template_dir=template_dir,
+                    config_dir=config_dir,
+                    input_data_dict=full_data,
+                    flags=task['flags']
+                )
+                
+                results.append(str(result_path))
+                processed_any = True
+
+                # Capture metadata if it's the standard invoice or if it's the first one we ran
+                if not primary_metadata or task['suffix'] == "":
+                    try:
+                        meta_path = result_path.parent / f"{result_path.stem}_metadata.json"
+                        if meta_path.exists():
+                            with open(meta_path, 'r', encoding='utf-8') as f:
+                                primary_metadata = json.load(f)
+                    except Exception:
+                        pass
+
+            except Exception as e:
+                import traceback
+                error_msg = f"Failed to generate {task['name']}: {str(e)}"
+                print(traceback.format_exc()) # Log it
+                errors.append(error_msg)
+
+        # Open file explorer to the output directory (just once)
+        if processed_any:
+            try:
+                 os.startfile(base_output_dir)
+            except Exception:
+                 pass 
+
+        if not processed_any and errors:
+             # All failed
+             return JSONResponse(status_code=500, content={
+                "error": "All generation tasks failed.", 
+                "details": errors
+            })
 
         return {
             "status": "completed",
-            "output_path": str(result_path),
-            "message": f"Invoice generated at {result_path}",
-            "metadata": metadata_content
+            "output_paths": results,
+            "message": f"Generated {len(results)} invoices.",
+            "metadata": primary_metadata,
+            "errors": errors if errors else None
         }
 
 

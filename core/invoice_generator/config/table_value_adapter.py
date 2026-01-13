@@ -70,6 +70,7 @@ class TableDataAdapter:
         mapping_rules: Dict[str, Any],
         header_info: Dict[str, Any],
         DAF_mode: bool = False,
+        custom_mode: bool = False,
         table_key: Optional[str] = None,
         static_content: Optional[Dict[str, Any]] = None
     ):
@@ -83,6 +84,7 @@ class TableDataAdapter:
             mapping_rules: Mapping rules from config (how data maps to columns)
             header_info: Header information with column_map and column_id_map
             DAF_mode: Whether DAF mode is active
+            custom_mode: Whether Custom mode is active
             table_key: Optional table key for multi-table data sources
             static_content: Static content from layout_bundle (e.g., col_static values)
         """
@@ -91,6 +93,7 @@ class TableDataAdapter:
         self.mapping_rules = mapping_rules
         self.header_info = header_info
         self.DAF_mode = DAF_mode
+        self.custom_mode = custom_mode
         self.table_key = table_key
         self.static_content = static_content or {}
         
@@ -132,7 +135,8 @@ class TableDataAdapter:
             desc_col_idx=self._get_desc_col_idx(),
             num_static_labels=parsed['num_static_labels'],
             static_value_map=parsed['static_value_map'],
-            DAF_mode=self.DAF_mode
+            DAF_mode=self.DAF_mode,
+            custom_mode=self.custom_mode
         )
         
         # Merge static content with data rows (not prepend as separate rows)
@@ -264,9 +268,10 @@ class TableDataAdapter:
         Returns:
             TableDataAdapter instance
         """
-        # Determine DAF mode
+        # Determine DAF mode and Custom mode
         args = context_config.get('args')
         DAF_mode = args.DAF if args and hasattr(args, 'DAF') else False
+        custom_mode = args.custom if args and hasattr(args, 'custom') else False
         
         # Extract static_content from layout_config if provided
         static_content = {}
@@ -279,6 +284,7 @@ class TableDataAdapter:
             mapping_rules=data_config.get('mapping_rules', {}),
             header_info=data_config.get('header_info', {}),
             DAF_mode=DAF_mode,
+            custom_mode=custom_mode,
             table_key=data_config.get('table_key'),
             static_content=static_content
         )
