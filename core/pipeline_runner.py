@@ -144,13 +144,22 @@ class PipelineOrchestrator:
         output_file_path = self.output_dir / f"{self.input_stem}.xlsx"
         
         def run_invoice_gen():
+            # Load the parsed data dictionary to pass to the generator
+            try:
+                with open(self.parsed_data_path, 'r', encoding='utf-8') as f:
+                    data_dict = json.load(f)
+            except Exception as e:
+                logger.error(f"Failed to load user input data from {self.parsed_data_path}: {e}")
+                raise e
+
             run_invoice_generation(
                  input_data_path=self.parsed_data_path,
                  explicit_config_path=self.generated_config_path,
                  output_path=output_file_path,
                  explicit_template_path=self.generated_template_path if self.generated_template_path.exists() else None,
                  template_dir=None, # will use default logic if explicit path not provided
-                 config_dir=None # will use default logic
+                 config_dir=None, # will use default logic
+                 input_data_dict=data_dict
             )
         
         # Metadata for invoice generator? 

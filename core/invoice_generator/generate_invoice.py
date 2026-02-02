@@ -14,20 +14,11 @@ import openpyxl
 import re
 import ast
 
-if __name__ == "__main__":
-    import sys
-    from pathlib import Path
-    try:
-        # Resolve project root (assuming core/invoice_generator/generate_invoice.py structure)
-        root_path = Path(__file__).resolve().parents[2]
-        if str(root_path) not in sys.path:
-            sys.path.insert(0, str(root_path))
-    except IndexError:
-        pass
 
 # Keep your existing imports
 from core.invoice_generator.config.config_loader import BundledConfigLoader
 from core.invoice_generator.builders.workbook_builder import WorkbookBuilder
+from core.invoice_generator.builders.deep_sheet_builder import DeepSheetBuilder
 from core.invoice_generator.processors.single_table_processor import SingleTableProcessor
 from core.invoice_generator.processors.multi_table_processor import MultiTableProcessor
 from core.invoice_generator.processors.placeholder_processor import PlaceholderProcessor
@@ -38,16 +29,7 @@ from core.invoice_generator.resolvers import InvoiceAssetResolver
 
 logger = logging.getLogger(__name__)
 
-# --- Global Exception Hook ---
-def global_exception_handler(exc_type, exc_value, exc_traceback):
-    """
-    Catch uncaught exceptions (e.g., SyntaxError, ImportError) that happen
-    before the GenerationMonitor context is entered.
-    """
-    logger.critical("Uncaught exception (Pre-Monitor)", exc_info=(exc_type, exc_value, exc_traceback))
-    # Optionally write a "crash.json" here if needed, but logger is usually enough for pre-start crashes
 
-sys.excepthook = global_exception_handler
 
 # --- Constants for Blueprints ---
 from core.system_config import sys_config
@@ -57,150 +39,13 @@ DEFAULT_CONFIG_DIR = sys_config.registry_dir
 
 
 # --- Helper Functions ---
-def derive_paths(input_data_path: str, template_dir: str, config_dir: str) -> Optional[Dict[str, Path]]:
-    """
-    Derive paths for config and template based on input data filename.
-    """
-    input_path = Path(input_data_path)
-    stem = input_path.stem
-    
-    # Prioritize bundle config to avoid picking up data file as config
-    config_path = Path(config_dir) / f"{stem}_bundle_config.json"
-    
-    # Heuristic: If exact match not found, try stripping trailing numbers/underscores (e.g., JF25057 -> JF)
-    effective_stem = stem
-    if not config_path.exists():
-        prefix = re.sub(r'[\d_]+$', '', stem)
-        if prefix and prefix != stem:
-            prefix_config = Path(config_dir) / f"{prefix}_bundle_config.json"
-            if prefix_config.exists():
-                config_path = prefix_config
-                effective_stem = prefix # Use the prefix for template lookup too
-                logger.info(f"Found config using prefix match: '{stem}' -> '{prefix}'")
 
-    if not config_path.exists():
-        config_path = Path(config_dir) / f"{stem}.json"
-    
-    # Fallback to default config if specific not found
-    if not config_path.exists():
-        default_config = Path(config_dir) / "default.json"
-        if default_config.exists():
-             config_path = default_config
-        else:
-             # If no config found, we can't proceed unless we have a strategy
-             pass
 
-    # Template path - ideally derived from config, but we need config first.
-    # Strategy: Load config, check for template name. If not, use stem.
-    template_path = None
-    if config_path.exists():
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                cfg = json.load(f)
-                # Check if template is specified in meta or processing
-                template_name = cfg.get('_meta', {}).get('template_name')
-                if template_name:
-                    template_path = Path(template_dir) / template_name
-        except:
-            pass
-    
-    if not template_path:
-        # Try effective stem first (e.g. JF.xlsx)
-        template_path = Path(template_dir) / f"{effective_stem}.xlsx"
-        if not template_path.exists() and effective_stem != stem:
-             # Try original stem if effective stem failed (e.g. JF25057.xlsx)
-             template_path = Path(template_dir) / f"{stem}.xlsx"
 
-        if not template_path.exists():
-             # Fallback to generic Invoice.xlsx or configured default (JF.xlsx)
-             fallback = Path(template_dir) / sys_config.default_template_name
-             if fallback.exists():
-                 template_path = fallback
 
-    if config_path.exists() and template_path and template_path.exists():
-        return {
-            'data': input_path,
-            'config': config_path,
-            'template': template_path
-        }
-    
-    logger.error(f"Could not derive paths. Config: {config_path} (Exists: {config_path.exists()}), Template: {template_path} (Exists: {template_path and template_path.exists()})")
-    return None
 
-def load_data(path: Path) -> Dict[str, Any]:
-    """Load invoice data from JSON."""
-    try:
-        with open(path, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Failed to load data from {path}: {e}")
-        return {}
 
-def inject_deep_sheet(workbook: openpyxl.Workbook, invoice_data: Dict[str, Any]):
-    """
-    Injects a hidden 'DeepSheet' containing metadata for stable referencing.
-    
-    Structure:
-    - Row 1: labels (col_invoice_no, col_ref_no, col_date)
-    - Row 2: values (from processed_tables_multi['1'] or invoice_info)
-    """
-    SHEET_NAME = "DeepSheet"
-    
-    # Create or get sheet
-    if SHEET_NAME in workbook.sheetnames:
-        ws = workbook[SHEET_NAME]
-    else:
-        ws = workbook.create_sheet(SHEET_NAME)
-    
-    # Set to hidden
-    ws.sheet_state = 'veryHidden'
-    
-    # Headers (User requested labels)
-    headers = ["col_invoice_no", "col_ref_no", "col_date"]
-    
-    # Metadata extraction logic (Try multiple sources)
-    inv_no = ""
-    ref_no = ""
-    inv_date = ""
-    
-    # source 1: invoice_info (Created by some parsers)
-    if 'invoice_info' in invoice_data:
-        info = invoice_data['invoice_info']
-        inv_no = info.get('col_inv_no', "") or info.get('inv_no', "")
-        ref_no = info.get('col_inv_ref', "") or info.get('inv_ref', "")
-        inv_date = info.get('col_inv_date', "") or info.get('inv_date', "")
-    
-    # source 2: processed_tables_multi['1'] (Standard parser output)
-    # If values are still empty, try to find them here
-    if not (inv_no and ref_no and inv_date):
-        tables = invoice_data.get('processed_tables_multi', {})
-        # Look at table '1' specifically as it's usually the main invoice table
-        table_1 = tables.get('1', {})
-        
-        # Helper to get first non-empty value from a column list
-        def get_first_val(key):
-            vals = table_1.get(key, [])
-            if isinstance(vals, list):
-                for v in vals:
-                    if v: return str(v)
-            return ""
 
-        if not inv_no: inv_no = get_first_val('col_inv_no')
-        if not ref_no: ref_no = get_first_val('col_inv_ref')
-        if not inv_date: inv_date = get_first_val('col_inv_date')
-
-    # Write Headers (Row 1)
-    for col_idx, header in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col_idx, value=header)
-        # Optional: Make headers bold for readability if user unhides
-        # cell.font = openpyxl.styles.Font(bold=True) 
-
-    # Write Values (Row 2)
-    ws.cell(row=2, column=1, value=inv_no)
-    ws.cell(row=2, column=2, value=ref_no)
-    ws.cell(row=2, column=3, value=inv_date)
-    
-    logger.info(f"Injected hidden '{SHEET_NAME}' with metadata: Inv={inv_no}, Ref={ref_no}, Date={inv_date}")
 
 
 def run_invoice_generation(
@@ -218,11 +63,266 @@ def run_invoice_generation(
     Library entry point for invoice generation. 
     Uses GenerationMonitor context manager to ensure robust error handling and metadata generation.
     """
-    # Ensure paths are Path objects
+    # 1. Resolve Paths
+    input_data_path, output_path, template_dir, config_dir = _resolve_generation_paths(
+        input_data_path, output_path, template_dir, config_dir
+    )
+
+    # 2. Initialize Context
+    ctx = _initialize_context(
+        input_data_path, output_path, template_dir, config_dir,
+        daf_mode, custom_mode, explicit_config_path, explicit_template_path, input_data_dict
+    )
+
+    # === CORE GENERATION LOGIC WITH MONITOR ===
+    # Using 'meta_args' compatible dict for monitor (removing argparse dep)
+    monitor_args = {
+        "DAF": daf_mode,
+        "custom": custom_mode,
+        "input_data_file": str(input_data_path),
+        "configdir": str(config_dir)
+    }
+
+    with GenerationMonitor(output_path, args=monitor_args, input_data=ctx.invoice_data) as monitor:
+        logger.info("=== Starting Invoice Generation (Orchestrated) ===")
+        
+        # 3. Execution Pipeline
+        _load_resources(ctx)
+        monitor_paths = {
+            'template': str(ctx.paths.get('template', 'unknown')),
+            'config': str(ctx.paths.get('config', 'unknown'))
+        }
+        monitor.update_logs(header_info={"resolved_paths": monitor_paths})
+
+        _prepare_workbooks(ctx)
+        
+        _process_sheets(ctx, monitor)
+        
+        _finalize(ctx)
+
+    return output_path
+
+
+# --- Internal Pipeline Structures ---
+
+class GeneratorContext:
+    """Holds state for the invoice generation pipeline."""
+    def __init__(self, input_path: Path, output_path: Path, invoice_data: Dict):
+        self.input_path = input_path
+        self.output_path = output_path
+        self.invoice_data = invoice_data
+        
+        # Paths
+        self.template_dir: Optional[Path] = None
+        self.config_dir: Optional[Path] = None
+        self.paths: Dict[str, Path] = {}
+        
+        # Config & Resources
+        self.config_loader: Optional[BundledConfigLoader] = None
+        self.template_workbook: Optional[openpyxl.Workbook] = None
+        self.output_workbook: Optional[openpyxl.Workbook] = None
+        
+        # Flags
+        self.daf_mode = False
+        self.custom_mode = False
+        
+        # Derived
+        self.final_grand_total_pallets = 0
+
+
+def _initialize_context(
+    input_path: Path, output_path: Path, 
+    template_dir: Path, config_dir: Path,
+    daf_mode: bool, custom_mode: bool,
+    manual_config: Optional[Path], manual_template: Optional[Path],
+    data_dict: Optional[Dict]
+) -> GeneratorContext:
+    invoice_data = data_dict or {}
+    if not invoice_data:
+        logger.warning("No input data dictionary provided.")
+
+    ctx = GeneratorContext(input_path, output_path, invoice_data)
+    ctx.template_dir = template_dir
+    ctx.config_dir = config_dir
+    ctx.daf_mode = daf_mode
+    ctx.custom_mode = custom_mode
+    
+    # Pre-resolve known manual paths
+    if manual_config: ctx.paths['config'] = manual_config.resolve()
+    if manual_template: ctx.paths['template'] = manual_template.resolve()
+    
+    return ctx
+
+
+def _load_resources(ctx: GeneratorContext):
+    """Stage 1: Resolve assets and load configuration."""
+    # A. Resolve Paths
+    resolver = InvoiceAssetResolver(base_config_dir=ctx.config_dir, base_template_dir=ctx.template_dir)
+    assets = resolver.resolve_assets_for_input_file(str(ctx.input_path))
+    
+    if assets:
+        if 'config' not in ctx.paths:
+            ctx.paths['config'] = assets.config_path
+            logger.info(f"Using resolved config: {ctx.paths['config']}")
+        if 'template' not in ctx.paths:
+            ctx.paths['template'] = assets.template_path
+            logger.info(f"Using resolved template: {ctx.paths['template']}")
+            
+    ctx.paths['data'] = ctx.input_path
+
+    # Validation
+    if 'config' not in ctx.paths or 'template' not in ctx.paths:
+         raise FileNotFoundError(f"Could not resolve config/template for '{ctx.input_path.name}'")
+
+    # B. Load Config
+    try:
+        ctx.config_loader = BundledConfigLoader(ctx.paths['config'])
+    except Exception as e:
+        raise RuntimeError(f"Failed to load configuration: {e}") from e
+
+    # C. Calculate Grand Totals (Legacy)
+    processed_tables = ctx.invoice_data.get('processed_tables_data', {})
+    if isinstance(processed_tables, dict):
+        ctx.final_grand_total_pallets = sum(
+            int(c) for t in processed_tables.values() 
+            for c in (t.get("col_pallet_count") or t.get("pallet_count") or [])
+            if str(c).isdigit()
+        )
+
+
+def _prepare_workbooks(ctx: GeneratorContext):
+    """Stage 2: Load Template and Build Output Workbook."""
+    ctx.output_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    logger.info(f"Loading template from: {ctx.paths['template']}")
+    try:
+        ctx.template_workbook = openpyxl.load_workbook(ctx.paths['template'], read_only=False)
+    except Exception as e:
+        # Fallback: JSON reconstruction
+        json_config = ctx.config_loader.get_template_json_config()
+        if json_config:
+            logger.warning(f"Template load failed ({e}). Reconstructing from JSON.")
+            ctx.template_workbook = openpyxl.Workbook()
+            default_ws = ctx.template_workbook.active
+            if default_ws: ctx.template_workbook.remove(default_ws)
+            for sheet in json_config.keys():
+                ctx.template_workbook.create_sheet(sheet)
+        else:
+            raise e
+
+    # Build Output
+    builder = WorkbookBuilder(sheet_names=ctx.template_workbook.sheetnames)
+    ctx.output_workbook = builder.build()
+
+    # Deep Sheet Injection
+    try:
+        DeepSheetBuilder.build(ctx.output_workbook, ctx.invoice_data)
+    except Exception as e:
+        logger.warning(f"DeepSheet injection skipped: {e}")
+
+
+def _process_sheets(ctx: GeneratorContext, monitor: GenerationMonitor):
+    """Stage 3: Iterate and process each configured sheet."""
+    sheets_config = ctx.config_loader.get_sheets_to_process()
+    sheets_to_process = [s for s in sheets_config if s in ctx.output_workbook.sheetnames]
+    
+    if not sheets_to_process:
+        raise ValueError("No valid sheets found to process.")
+
+    # Mock args for processors (removing argparse dependency logic)
+    # Processors expect an object with .DAF and .custom flags
+    class ProcessorFlags:
+        def __init__(self, daf, custom):
+            self.DAF = daf
+            self.custom = custom
+    
+    proc_args = ProcessorFlags(ctx.daf_mode, ctx.custom_mode)
+
+    for sheet_name in sheets_to_process:
+        logger.info(f"Processing sheet '{sheet_name}'")
+        try:
+            tmpl_ws = ctx.template_workbook[sheet_name]
+            out_ws = ctx.output_workbook[sheet_name]
+            sheet_conf = ctx.config_loader.get_sheet_config(sheet_name)
+            ds_type = ctx.config_loader.get_data_source_type(sheet_name)
+            
+            if not ds_type:
+                continue
+
+            processor = _get_processor(
+                ds_type, tmpl_ws, out_ws, sheet_name, sheet_conf, 
+                ctx.config_loader, ctx.invoice_data, proc_args, ctx.final_grand_total_pallets,
+                ctx.template_workbook, ctx.output_workbook 
+            )
+
+            if processor and processor.process():
+                 monitor.log_success(sheet_name)
+                 if hasattr(processor, 'replacements_log'):
+                     monitor.update_logs(replacements=processor.replacements_log)
+                 if hasattr(processor, 'header_info'):
+                     monitor.update_logs(header_info=processor.header_info)
+            else:
+                 monitor.log_failure(sheet_name, error=RuntimeError("Processor returned False"))
+
+        except Exception as e:
+            monitor.log_failure(sheet_name, error=e)
+            raise e
+
+
+def _get_processor(ds_type, tmpl_ws, out_ws, name, conf, loader, data, args, pallets, tmpl_wb, out_wb):
+    """Factory method for processors."""
+    # Common kwargs
+    kwargs = {
+        "template_worksheet": tmpl_ws,
+        "output_worksheet": out_ws,
+        "sheet_name": name,
+        "sheet_config": conf,
+        "config_loader": loader,
+        "data_source_indicator": ds_type,
+        "invoice_data": data,
+        "cli_args": args,
+        "final_grand_total_pallets": pallets,
+        "template_workbook": tmpl_wb,
+        "output_workbook": out_wb
+    }
+
+    if ds_type in ["processed_tables_multi", "processed_tables"]:
+        return MultiTableProcessor(**kwargs)
+    elif ds_type == "placeholder":
+        return PlaceholderProcessor(**kwargs)
+    else:
+        return SingleTableProcessor(**kwargs)
+
+
+def _finalize(ctx: GeneratorContext):
+    """Stage 4: Apply print settings and save."""
+    logger.info("Applying Print Area & Page Setup...")
+    for sheet in ctx.output_workbook.sheetnames:
+        try:
+            configure_print_area(ctx.output_workbook[sheet])
+        except Exception as e:
+            logger.error(f"Print setup failed for '{sheet}': {e}")
+
+    logger.info(f"Saving workbook to {ctx.output_path}")
+    ctx.output_workbook.save(ctx.output_path)
+    
+    # Cleanup
+    if ctx.template_workbook: ctx.template_workbook.close()
+    if ctx.output_workbook: ctx.output_workbook.close()
+
+
+def _resolve_generation_paths(
+    input_data_path: Path, 
+    output_path: Path, 
+    template_dir: Optional[Path] = None, 
+    config_dir: Optional[Path] = None
+) -> tuple[Path, Path, Path, Path]:
+    """Resolves all paths and applies default directories if necessary."""
+    # Ensure inputs are Path objects
     input_data_path = Path(input_data_path).resolve()
     output_path = Path(output_path).resolve()
 
-    # Use defaults if not provided
+    # Apply defaults for blueprint directories
     if template_dir is None:
         template_dir = DEFAULT_TEMPLATE_DIR
         logger.info(f"Using default blueprint template directory: {template_dir}")
@@ -233,259 +333,8 @@ def run_invoice_generation(
     template_dir = Path(template_dir).resolve()
     config_dir = Path(config_dir).resolve()
 
-    # Mock CLI args for metadata generation
-    meta_args = argparse.Namespace(
-        DAF=daf_mode, 
-        custom=custom_mode, 
-        input_data_file=str(input_data_path), 
-        configdir=str(config_dir)
-    )
+    return input_data_path, output_path, template_dir, config_dir
 
-    # Pre-load data to pass to monitor (for input metadata)
-    invoice_data = {}
-    if input_data_dict:
-        invoice_data = input_data_dict
-    else:
-        # Attempt minimal load for metadata if possible, otherwise monitor will handle empty
-        try:
-             with open(input_data_path, 'r', encoding='utf-8') as f:
-                invoice_data = json.load(f)
-        except:
-            pass
-
-    # === CORE GENERATION LOGIC WITH MONITOR ===
-    with GenerationMonitor(output_path, args=meta_args, input_data=invoice_data) as monitor:
-        
-        logger.info("=== Starting Invoice Generation (Library Call) ===")
-        logger.debug(f"Input: {input_data_path}, Output: {output_path}")
-
-        # 1. Derive Paths (Using Resolver)
-        resolver = InvoiceAssetResolver(base_config_dir=config_dir, base_template_dir=template_dir)
-        assets = resolver.resolve_assets_for_input_file(str(input_data_path))
-        
-        # Determine actual paths to use
-        paths = {}
-        
-        # Priority: Explicit -> Resolved -> Error
-        if explicit_config_path:
-            paths['config'] = explicit_config_path.resolve()
-            logger.info(f"Using explicit config path: {paths['config']}")
-        elif assets:
-            paths['config'] = assets.config_path
-            logger.info(f"Using resolved config path: {paths['config']}")
-            
-        if explicit_template_path:
-            paths['template'] = explicit_template_path.resolve()
-            logger.info(f"Using explicit template path: {paths['template']}")
-        elif assets:
-            paths['template'] = assets.template_path
-            logger.info(f"Using resolved template path: {paths['template']}")
-
-        paths['data'] = input_data_path
-
-        # Validate we have both config and template
-        if 'config' not in paths or 'template' not in paths:
-            # Build detailed error message showing where we looked
-            import re
-            stem = input_data_path.stem
-            prefix_match = re.match(r'^([a-zA-Z]+)', stem)
-            prefix = prefix_match.group(1) if prefix_match else stem
-            
-            error_details = [
-                f"Could not derive template/config paths for '{input_data_path.name}'",
-                f"",
-                f"Searched for prefix: '{prefix}' (extracted from '{stem}')",
-                f"Config directory: {config_dir}",
-                f"Template directory: {template_dir}",
-                f"",
-                f"Expected to find:",
-                f"  - Bundled folder: {config_dir / prefix}/",
-                f"    containing: {prefix}_config.json + {prefix}.xlsx",
-                f"",
-                f"Directory exists: {config_dir.exists()}"
-            ]
-            
-            if config_dir.exists():
-                folders = [f.name for f in config_dir.iterdir() if f.is_dir()]
-                error_details.append(f"Available folders: {folders if folders else '(empty)'}")
-            
-            raise FileNotFoundError("\n".join(error_details))
-
-        # 2. Load Configuration
-        try:
-            config_loader = BundledConfigLoader(paths['config'])
-        except Exception as e:
-            raise RuntimeError(f"Failed to load configuration: {e}") from e
-        
-        # 3. Load/Verify Data (Already loaded for monitor, but let's ensure it's valid for processing)
-        if not invoice_data:
-             # Retry load properly using the helper which logs errors
-             invoice_data = load_data(paths['data'])
-             
-        if not invoice_data:
-            raise RuntimeError("No invoice data available or failed to load data")
-
-        # 4. Prepare Output Directory
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        template_workbook = None
-        output_workbook = None
-        
-        try:
-            # Step 5: Load Template & Create Workbook
-            logger.info(f"Loading template from: {paths['template']}")
-            try:
-                template_workbook = openpyxl.load_workbook(paths['template'], read_only=False)
-            except Exception as e:
-                # Fallback: Check if we have JSON config to reconstruct from scratch
-                json_config = config_loader.get_template_json_config()
-                if json_config:
-                    logger.warning(f"Failed to load Excel template ({e}). Found template JSON, proceeding with reconstruction.")
-                    template_workbook = openpyxl.Workbook()
-                    # Remove default sheet
-                    default_ws = template_workbook.active
-                    if default_ws:
-                        template_workbook.remove(default_ws)
-                    
-                    # Create empty sheets based on JSON keys (Processors don't need content in template_worksheet for JSON path)
-                    for sheet_name in json_config.keys():
-                        template_workbook.create_sheet(sheet_name)
-                    logger.info(f"Created dummy template workbook with sheets: {template_workbook.sheetnames}")
-                else:
-                    logger.error(f"Failed to load template and no sibling JSON config found: {e}")
-                    raise e
-            
-            workbook_builder = WorkbookBuilder(sheet_names=template_workbook.sheetnames)
-            output_workbook = workbook_builder.build()
-            
-            # Step 6: Determine Sheets to Process
-            sheets_to_process_config = config_loader.get_sheets_to_process()
-            sheets_to_process = [s for s in sheets_to_process_config if s in output_workbook.sheetnames]
-
-            if not sheets_to_process:
-                logger.error(f"DEBUG: Config Sheets: {sheets_to_process_config}")
-                logger.error(f"DEBUG: Workbook Sheets: {list(output_workbook.sheetnames) if output_workbook else 'None'}")
-                raise ValueError("No valid sheets found to process in configuration.")
-
-            # --- DEEP SHEET INJECTION (New Feature) ---
-            try:
-                inject_deep_sheet(output_workbook, invoice_data)
-            except Exception as e:
-                logger.warning(f"Failed to inject DeepSheet: {e}")
-            # ------------------------------------------
-
-            # Global calculation (legacy support)
-            final_grand_total_pallets = 0
-            processed_tables = invoice_data.get('processed_tables_data', {})
-            if isinstance(processed_tables, dict):
-                final_grand_total_pallets = sum(
-                    int(c) for t in processed_tables.values() 
-                    for c in (t.get("col_pallet_count") or t.get("pallet_count") or [])
-                    if str(c).isdigit()
-                )
-
-            # Step 7: Processing Loop
-            for sheet_name in sheets_to_process:
-                logger.info(f"Processing sheet '{sheet_name}'")
-                
-                # Try/Except per sheet to allow partial success if desired (or just fail fast)
-                try: 
-                    template_worksheet = template_workbook[sheet_name]
-                    output_worksheet = output_workbook[sheet_name]
-                    
-                    sheet_config = config_loader.get_sheet_config(sheet_name)
-                    data_source_indicator = config_loader.get_data_source_type(sheet_name)
-
-                    if not data_source_indicator:
-                        logger.warning(f"Skipping '{sheet_name}': No data source configured.")
-                        continue
-
-                    # Instantiate Processor
-                    mock_args = argparse.Namespace(DAF=daf_mode, custom=custom_mode)
-
-                    processor = None
-                    if data_source_indicator in ["processed_tables_multi", "processed_tables"]:
-                        processor = MultiTableProcessor(
-                            template_workbook=template_workbook,
-                            output_workbook=output_workbook,
-                            template_worksheet=template_worksheet,
-                            output_worksheet=output_worksheet,
-                            sheet_name=sheet_name,
-                            sheet_config=sheet_config,
-                            config_loader=config_loader,
-                            data_source_indicator=data_source_indicator,
-                            invoice_data=invoice_data,
-                            cli_args=mock_args, 
-                            final_grand_total_pallets=final_grand_total_pallets
-                        )
-                    elif data_source_indicator == "placeholder":
-                        processor = PlaceholderProcessor(
-                            template_workbook=template_workbook,
-                            output_workbook=output_workbook,
-                            template_worksheet=template_worksheet,
-                            output_worksheet=output_worksheet,
-                            sheet_name=sheet_name,
-                            sheet_config=sheet_config,
-                            config_loader=config_loader,
-                            data_source_indicator=data_source_indicator,
-                            invoice_data=invoice_data,
-                            cli_args=mock_args, 
-                            final_grand_total_pallets=final_grand_total_pallets
-                        )
-                    else:
-                        processor = SingleTableProcessor(
-                            template_workbook=template_workbook,
-                            output_workbook=output_workbook,
-                            template_worksheet=template_worksheet,
-                            output_worksheet=output_worksheet,
-                            sheet_name=sheet_name,
-                            sheet_config=sheet_config,
-                            config_loader=config_loader,
-                            data_source_indicator=data_source_indicator,
-                            invoice_data=invoice_data,
-                            cli_args=mock_args, 
-                            final_grand_total_pallets=final_grand_total_pallets
-                        )
-
-                    if processor:
-                        if processor.process():
-                            monitor.log_success(sheet_name)
-                            # Collect logs
-                            if hasattr(processor, 'replacements_log'):
-                                monitor.update_logs(replacements=processor.replacements_log)
-                            if hasattr(processor, 'header_info'):
-                                monitor.update_logs(header_info=processor.header_info)
-                        else:
-                            monitor.log_failure(sheet_name, error=RuntimeError("Processor returned False"))
-                
-                except Exception as e:
-                    monitor.log_failure(sheet_name, error=e)
-                    # We continue to next sheet? Or raise?
-                    # Generally for invoices, if one sheet blocks, it might be safer to fail?
-                    # But the monitor allows us to choose. Let's re-raise to be safe for now 
-                    # unless we want "partial_success".
-                    raise e 
-
-            # ---------------------------------------------------------
-            # 7. Apply Print Area Configuration (Last Step before Save)
-            # ---------------------------------------------------------
-            logger.info("Applying Print Area & Page Setup...")
-            for sheet_name in output_workbook.sheetnames:
-                worksheet = output_workbook[sheet_name]
-                try:
-                    configure_print_area(worksheet)
-                except Exception as e:
-                    logger.error(f"Failed to configure print settings for sheet '{sheet_name}': {e}")
-
-            # Step 8: Save
-            logger.info(f"Saving workbook to {output_path}")
-            output_workbook.save(output_path)
-            
-        finally:
-            if template_workbook: template_workbook.close()
-            if output_workbook: output_workbook.close()
-
-    return output_path
 
 def main():
     """CLI Entry point for backward compatibility."""
@@ -518,6 +367,15 @@ def main():
         output_path.parent.mkdir(parents=True, exist_ok=True)
     
     try:
+        # Load data for CLI usage
+        cli_data = {}
+        try:
+            with open(args.input_data_file, 'r', encoding='utf-8') as f:
+                cli_data = json.load(f)
+        except Exception as e:
+            print(f"Failed to load input data file: {e}")
+            sys.exit(1)
+
         run_invoice_generation(
             input_data_path=Path(args.input_data_file),
             output_path=output_path,
@@ -526,7 +384,8 @@ def main():
             daf_mode=args.DAF,
             custom_mode=args.custom,
             explicit_config_path=Path(args.config) if args.config else None,
-            explicit_template_path=Path(args.template) if args.template else None
+            explicit_template_path=Path(args.template) if args.template else None,
+            input_data_dict=cli_data
         )
         print(f"Successfully generated: {args.output}")
     except Exception as e:

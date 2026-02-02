@@ -214,15 +214,11 @@ def prepare_data_rows(
         """
         possible_keys = []
         
-        # 1. Configured source value/key has highest priority
-        if 'source_value' in rule: possible_keys.append(rule['source_value'])
-        if 'source_key' in rule: possible_keys.append(rule['source_key'])
-        
-        # 2. Target Column ID (strict mapping)
+        # 1. Target Column ID (strict mapping)
         target_id = rule.get("column") or rule.get("id")
         if target_id: possible_keys.append(target_id)
         
-        # 3. Rule Key (the name in the mappings dict, often 'po', 'item')
+        # 2. Rule Key (the name in the mappings dict, often 'po', 'item')
         if rule_key: possible_keys.append(rule_key)
 
         found_value = None
@@ -249,12 +245,6 @@ def prepare_data_rows(
                     found_value = source_container[key]
                     found = True
                     break
-                # Handle tuple keys if the key is an integer index (e.g. source_key: 0)
-                elif isinstance(source_container, tuple) and isinstance(key, int):
-                     if 0 <= key < len(source_container):
-                         found_value = source_container[key]
-                         found = True
-                         break
         
         if not found:
             return None

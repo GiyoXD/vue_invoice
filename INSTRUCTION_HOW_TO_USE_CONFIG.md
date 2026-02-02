@@ -40,7 +40,11 @@ The file is divided into 5 main sections:
     ],
     "data_sources": {
         "Invoice": "aggregation",              // Uses SingleTableProcessor
-        "Packing List": "processed_tables_multi" // Uses MultiTableProcessor
+        "Packing List": "processed_tables_multi", // Uses MultiTableProcessor
+        // NEW FEATURE (v2.2): Direct Data Lookup & Auto-Switching
+        // 1. Simple: "Shipping": "shipping_data" (Exact Match)
+        // 2. Advanced: If you enable DAF mode, the system auto-lookups "shipping_data_DAF".
+        //    Just create both keys in your parser, and the config handles the switch!
     }
 }
 ```

@@ -15,7 +15,7 @@ class GenerationMonitor:
     Context manager to monitor invoice generation, track state, and GUARANTEE 
     metadata file generation upon exit (success or failure).
     """
-    def __init__(self, output_path: Path, args: argparse.Namespace = None, input_data: Dict = None):
+    def __init__(self, output_path: Path, args: Any = None, input_data: Dict = None):
         self.output_path = Path(output_path)
         self.args = args
         self.input_data = input_data or {}
@@ -98,13 +98,16 @@ class GenerationMonitor:
 
         # 2. Config Info
         if self.args:
+            # Flexible access whether it's argparse.Namespace or dict
+            get_arg = lambda k, d=None: self.args.get(k, d) if isinstance(self.args, dict) else getattr(self.args, k, d)
+            
             metadata["config_info"] = {
-                "daf_mode": getattr(self.args, 'DAF', False),
-                "custom_mode": getattr(self.args, 'custom', False),
+                "daf_mode": get_arg('DAF', False),
+                "custom_mode": get_arg('custom', False),
                 # Handle case where input_data_file might be a Path or string
-                "input_file": str(Path(self.args.input_data_file).name) if hasattr(self.args, 'input_data_file') and self.args.input_data_file else "unknown",
-                "config_dir": getattr(self.args, 'configdir', "./configs"),
-                "generation_args": vars(self.args)
+                "input_file": str(Path(get_arg('input_data_file')).name) if get_arg('input_data_file') else "unknown",
+                "config_dir": get_arg('configdir', "./configs"),
+                "generation_args": self.args if isinstance(self.args, dict) else vars(self.args)
             }
         
         # 3. Database Export (Packing List Items)

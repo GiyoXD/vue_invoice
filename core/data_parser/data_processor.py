@@ -15,6 +15,8 @@ CBM_DECIMAL_PLACES = decimal.Decimal('0.0001')
 # Define default precision for other distributions (e.g., 4 decimal places)
 DEFAULT_DIST_PRECISION = decimal.Decimal('0.0001')
 
+## TODO: make sure all the aggregation DAF mode has price support 10 floating point
+
 
 class ProcessingError(Exception):
     """Custom exception for data processing errors."""

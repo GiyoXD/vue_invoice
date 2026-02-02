@@ -17,7 +17,8 @@ import json
 import re
 import logging
 from pathlib import Path
-from typing import Optional, Dict, NamedTuple
+from typing import Optional, Dict, NamedTuple, Any
+from core.system_config import sys_config
 
 logger = logging.getLogger(__name__)
 
@@ -194,3 +195,75 @@ class InvoiceAssetResolver:
         except Exception:
             pass
         return None
+
+# --- Legacy Helper Function ---
+def derive_paths(input_data_path: str, template_dir: str, config_dir: str) -> Optional[Dict[str, Path]]:
+    """
+    Derive paths for config and template based on input data filename.
+    Moved from generate_invoice.py.
+    """
+    input_path = Path(input_data_path)
+    stem = input_path.stem
+    
+    # Prioritize bundle config to avoid picking up data file as config
+    config_path = Path(config_dir) / f"{stem}_bundle_config.json"
+    
+    # Heuristic: If exact match not found, try stripping trailing numbers/underscores (e.g., JF25057 -> JF)
+    effective_stem = stem
+    if not config_path.exists():
+        prefix = re.sub(r'[\d_]+$', '', stem)
+        if prefix and prefix != stem:
+            prefix_config = Path(config_dir) / f"{prefix}_bundle_config.json"
+            if prefix_config.exists():
+                config_path = prefix_config
+                effective_stem = prefix # Use the prefix for template lookup too
+                logger.info(f"Found config using prefix match: '{stem}' -> '{prefix}'")
+
+    if not config_path.exists():
+        config_path = Path(config_dir) / f"{stem}.json"
+    
+    # Fallback to default config if specific not found
+    if not config_path.exists():
+        default_config = Path(config_dir) / "default.json"
+        if default_config.exists():
+             config_path = default_config
+        else:
+             # If no config found, we can't proceed unless we have a strategy
+             pass
+
+    # Template path - ideally derived from config, but we need config first.
+    # Strategy: Load config, check for template name. If not, use stem.
+    template_path = None
+    if config_path.exists():
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                cfg = json.load(f)
+                # Check if template is specified in meta or processing
+                template_name = cfg.get('_meta', {}).get('template_name')
+                if template_name:
+                    template_path = Path(template_dir) / template_name
+        except:
+            pass
+    
+    if not template_path:
+        # Try effective stem first (e.g. JF.xlsx)
+        template_path = Path(template_dir) / f"{effective_stem}.xlsx"
+        if not template_path.exists() and effective_stem != stem:
+             # Try original stem if effective stem failed (e.g. JF25057.xlsx)
+             template_path = Path(template_dir) / f"{stem}.xlsx"
+
+        if not template_path.exists():
+             # Fallback to generic Invoice.xlsx or configured default (JF.xlsx)
+             fallback = Path(template_dir) / sys_config.default_template_name
+             if fallback.exists():
+                 template_path = fallback
+
+    if config_path.exists() and template_path and template_path.exists():
+        return {
+            'data': input_path,
+            'config': config_path,
+            'template': template_path
+        }
+    
+    logger.error(f"Could not derive paths. Config: {config_path} (Exists: {config_path.exists()}), Template: {template_path} (Exists: {template_path and template_path.exists()})")
+    return None

@@ -56,8 +56,8 @@ InitialAggregationResults = Union[
 # Type alias for the DAF compounding result structure
 DAFCompoundingResult = Dict[str, Union[str, decimal.Decimal]]
 
-# Type alias for the final DAF result (ALWAYS a split dict, but structure varies)
-FinalDAFResultType = Dict[str, DAFCompoundingResult]
+# Type alias for the final DAF result (ALWAYS a list of dicts now)
+FinalDAFResultType = List[DAFCompoundingResult]
 
 
 # *** DAF Compounding Function with Chunking ***
@@ -97,10 +97,10 @@ def perform_DAF_compounding(
     # Handle empty input consistently -> returns default BUFFALO split dict
     if not initial_results:
         logging.warning(f"{prefix} Input aggregation results map is empty. Returning default empty DAF groups.")
-        return {
-            "1": default_group_result(), # Buffalo group
-            "2": default_group_result()  # Non-Buffalo group
-        }
+        return [
+            default_group_result(), # Buffalo group
+            default_group_result()  # Non-Buffalo group
+        ]
 
     # --- Check if any description data exists ---
     any_description_present = False
@@ -220,11 +220,11 @@ def perform_DAF_compounding(
             'col_qty_sf': non_buffalo_sqft,
             'col_amount': non_buffalo_amount
         }
-        # Construct Final Result Dictionary for BUFFALO Split Case
-        final_buffalo_split_result: FinalDAFResultType = {
-            "1": buffalo_result,
-            "2": non_buffalo_result
-        }
+        # Construct Final Result LIST for BUFFALO Split Case
+        final_buffalo_split_result: FinalDAFResultType = [
+            buffalo_result,
+            non_buffalo_result
+        ]
         logging.info(f"{prefix} BUFFALO split DAF Compounding complete.")
         return final_buffalo_split_result
         # --- End Path 1 (BUFFALO Split) --- #
@@ -276,7 +276,7 @@ def perform_DAF_compounding(
         sorted_pos = sorted(list(po_data_aggregation.keys()))
 
         # Step 3: Iterate through POs in conceptual groups of 8 for total calculation
-        final_po_count_split_result: FinalDAFResultType = {}
+        final_po_count_split_result: FinalDAFResultType = []
         # Calculate number of output chunks based on the total grouping size
         num_conceptual_chunks = (len(sorted_pos) + PO_GROUPING_FOR_TOTALS - 1) // PO_GROUPING_FOR_TOTALS
 
@@ -320,7 +320,7 @@ def perform_DAF_compounding(
                 'col_amount': chunk_amount_total   # Use CHUNK total (calculated based on group of 8)
             }
             chunk_index_str = str(i + 1)
-            final_po_count_split_result[chunk_index_str] = chunk_result
+            final_po_count_split_result.append(chunk_result)
             logging.debug(f"{prefix} Created output chunk {chunk_index_str}: {len(conceptual_po_chunk)} POs contributed totals, SQFT={chunk_sqft_total}, Amount={chunk_amount_total}")
 
         logging.info(f"{prefix} PO count split DAF Compounding complete ({len(final_po_count_split_result)} chunks created).")
@@ -585,11 +585,11 @@ def run_invoice_automation(
 
         # --- Log Final DAF Compounded Result (INFO Level) - Simplified to expect split result --- #
         logging.info(f"--- Final DAF Compounded Result (Workbook: '{input_filename}', Based on '{aggregation_mode_used.upper()}' Input) ---")
-        if global_DAF_compounded_result is not None and isinstance(global_DAF_compounded_result, dict) and "1" in global_DAF_compounded_result:
-            # Assume it's the BUFFALO split result ("1" and "2")
-            logging.info(f"DAF result is split into BUFFALO (1) and NON-BUFFALO (2) groups.")
-            for chunk_index, chunk_data in sorted(global_DAF_compounded_result.items()):
-                logging.info(f"--- DAF Group {chunk_index} --- ")
+        if global_DAF_compounded_result is not None and isinstance(global_DAF_compounded_result, list):
+            # Assume it's the BUFFALO split result or PO split result
+            logging.info(f"DAF result is a list with {len(global_DAF_compounded_result)} groups.")
+            for chunk_index, chunk_data in enumerate(global_DAF_compounded_result):
+                logging.info(f"--- DAF Group {chunk_index + 1} --- ")
                 if chunk_data and isinstance(chunk_data, dict):
                     po_string_value = chunk_data.get('col_po', '<Not Found>')
                     item_string_value = chunk_data.get('col_item', '<Not Found>')
@@ -603,7 +603,7 @@ def run_invoice_automation(
                     logging.info(f"  Total SQFT: {total_sqft_value} (Type: {type(total_sqft_value)})")
                     logging.info(f"  Total Amount: {total_amount_value} (Type: {type(total_amount_value)})")
                 else:
-                    logging.info(f"  Group {chunk_index} data not found or invalid.")
+                    logging.info(f"  Group {chunk_index + 1} data not found or invalid.")
             logging.info("-" * 30)
 
         elif global_DAF_compounded_result is None:
@@ -663,8 +663,9 @@ def run_invoice_automation(
                     "DAF_inter_separator": DAF_INTER_CHUNK_SEPARATOR.encode('unicode_escape').decode('utf-8'), # Encode escapes for JSON clarity
                     "timestamp": datetime.datetime.now() # Add generation timestamp
                 },
-                 # Include processed table data (potentially large)
-                 "processed_tables_data": make_json_serializable(processed_tables),
+                # Include processed table data (potentially large)
+                 # RENAME: processed_tables_data -> processed_tables_multi (Matches Config)
+                 "processed_tables_multi": make_json_serializable(processed_tables),
                  
                  # Include Footer Data - both per-table and grand total
                  "footer_data": {
@@ -676,14 +677,18 @@ def run_invoice_automation(
                  },
 
                 # Include BOTH aggregation results explicitly (formatted as lists)
-                "standard_aggregation_results": data_processor.format_aggregation_as_list(global_standard_aggregation_results, mode='standard'),
-                "custom_aggregation_results": data_processor.format_aggregation_as_list(global_custom_aggregation_results, mode='custom'),
+                # RENAME: standard_aggregation_results -> aggregation (Matches Config)
+                "aggregation": data_processor.format_aggregation_as_list(global_standard_aggregation_results, mode='standard'),
+                # RENAME: custom_aggregation_results -> aggregation_custom (Matches Suffix Rule)
+                "aggregation_custom": data_processor.format_aggregation_as_list(global_custom_aggregation_results, mode='custom'),
                 
                 # Normal aggregate per PO with pallets (group by PO + price)
-                "normal_aggregate_per_po_with_pallets": make_json_serializable(normal_aggregate_per_po),
+                # RENAME: normal_aggregate_per_po_with_pallets -> manifest_by_pallet_per_po (User Request)
+                "manifest_by_pallet_per_po": make_json_serializable(normal_aggregate_per_po),
 
                 # Include the final compounded result (derived from one of the above, based on mode)
-                "final_DAF_compounded_result": make_json_serializable(global_DAF_compounded_result)
+                # RENAME: final_DAF_compounded_result -> aggregation_DAF (Matches Suffix Rule)
+                "aggregation_DAF": make_json_serializable(global_DAF_compounded_result)
             }
 
              # Convert the structure to a JSON string (pretty-printed)

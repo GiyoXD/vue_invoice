@@ -67,7 +67,7 @@ class SingleTableProcessor(SheetProcessor):
             enable_text_replacement=False  # Already done at main level
         )
         layout_config = resolver.get_layout_bundle()
-        layout_config['enable_text_replacement'] = False
+        layout_config['enable_text_replacement'] = True
         layout_config['skip_data_table_builder'] = False  # IMPORTANT: Enable data table builder to use resolver
         
         logger.debug(f"layout_config keys: {list(layout_config.keys())}")

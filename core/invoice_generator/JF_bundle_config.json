@@ -326,16 +326,13 @@
       "data_flow": {
         "mappings": {
           "po": {
-            "column": "col_po",
-            "source_key": 0
+            "column": "col_po"
           },
           "item": {
-            "column": "col_item",
-            "source_key": 1
+            "column": "col_item"
           },
           "description": {
             "column": "col_desc",
-            "source_key": 3,
             "fallback_on_none": "LEATHER",
             "fallback_on_DAF": "LEATHER"
           },
@@ -344,12 +341,10 @@
             "source_value": "sqft_sum"
           },
           "unit_price": {
-            "column": "col_unit_price",
-            "source_key": 2
+            "column": "col_unit_price"
           },
           "amount": {
-            "column": "col_amount",
-            "formula": "{col_qty_sf} * {col_unit_price}"
+            "column": "col_amount"
           }
         }
       },
@@ -434,16 +429,13 @@
       "data_flow": {
         "mappings": {
           "po": {
-            "column": "col_po",
-            "source_key": 0
+            "column": "col_po"
           },
           "item": {
-            "column": "col_item",
-            "source_key": 1
+            "column": "col_item"
           },
           "desc": {
             "column": "col_desc",
-            "source_key": 3,
             "fallback_on_none": "LEATHER",
             "fallback_on_DAF": "LEATHER"
           },
@@ -452,12 +444,10 @@
             "source_value": "sqft_sum"
           },
           "unit_price": {
-            "column": "col_unit_price",
-            "source_key": 2
+            "column": "col_unit_price"
           },
           "amount": {
-            "column": "col_amount",
-            "formula": "{col_qty_sf} * {col_unit_price}"
+            "column": "col_amount"
           }
         }
       },

@@ -469,6 +469,7 @@ class BuilderConfigResolver:
             'sum_ranges': sum_ranges or [],
             'footer_config': self._sheet_config.get('layout_config', {}).get('footer', {}),
             'DAF_mode': self.args.DAF if self.args else False,
+            'custom_mode': self.args.custom if self.args and hasattr(self.args, 'custom') else False,
         })
         
         return style_config, context_config, data_config
@@ -650,23 +651,54 @@ class BuilderConfigResolver:
         """
         Extract the appropriate data source from invoice_data based on type.
         
-        Args:
-            data_source_type: Type of data source (aggregation, DAF_aggregation, etc.)
-        
-        Returns:
-            The appropriate data source from invoice_data
+        Refactored Logic (v2.2):
+        1. STRICT LOOKUP: Checks if 'data_source_type' exists as a direct key in invoice_data.
+        2. LEGACY FALLBACK: Checks the hardcoded 'type_mapping' for backward compatibility.
         """
         if not self.invoice_data:
             return {}
         
-        # Map data source types to invoice_data keys
+        # --- PATH 1: FLAG-AWARE STRICT LOOKUP (The "New Way") ---
+        # 1. Flag Checks: If DAF/Custom mode is on, look for suffixed keys first.
+        #    e.g. Config="shipping" + DAF=True -> Look for "shipping_DAF"
+        if self.args:
+            if getattr(self.args, 'DAF', False):
+                daf_key = f"{data_source_type}_DAF"
+                if daf_key in self.invoice_data:
+                    logger.debug(f"Smart Resolver: DAF Mode ON. Found variant '{daf_key}'")
+                    return self.invoice_data[daf_key]
+            
+            if getattr(self.args, 'custom', False):
+                custom_key = f"{data_source_type}_custom"
+                if custom_key in self.invoice_data:
+                    logger.debug(f"Smart Resolver: Custom Mode ON. Found variant '{custom_key}'")
+                    return self.invoice_data[custom_key]
+
+        # 2. Base Lookup: If no flag match (or flags off), use exact key.
+        if data_source_type in self.invoice_data:
+            logger.debug(f"Smart Resolver: Found strict match for data_source '{data_source_type}'")
+            return self.invoice_data[data_source_type]
+
+        # --- PATH 2: LEGACY MAPPING (The "Old Way") ---
+        # Map data source types to invoice_data keys (Backwards Compatibility)
         type_mapping = {
             'aggregation': 'standard_aggregation_results',
-            'DAF_aggregation': 'standard_aggregation_results',  # DAF uses same data structure
+            # 'DAF_aggregation' is not standard in config, but if used, map to DAF result
+            'DAF_aggregation': 'final_DAF_compounded_result', 
             'custom_aggregation': 'custom_aggregation_results',
             'processed_tables_multi': 'processed_tables_data',
             'processed_tables': 'processed_tables_data',
         }
+        
+        # SPECIAL HANDLING FOR DAF MODE ON SINGLE TABLE (aggregation)
+        # If DAF mode is on AND we are asking for 'aggregation' (Invoice/Contract),
+        # we want to use the DAF compounded results.
+        if self.args and getattr(self.args, 'DAF', False):
+            if data_source_type == 'aggregation' or data_source_type == 'DAF_aggregation':
+                if 'final_DAF_compounded_result' in self.invoice_data:
+                    logger.info(f"DAF mode active: Switching data source to 'final_DAF_compounded_result'")
+                    return self.invoice_data['final_DAF_compounded_result']
+
         
         if data_source_type == 'aggregation' and self.args and getattr(self.args, 'custom', False):
             logger.info(f"Custom mode active: Switching data source from 'aggregation' to 'custom_aggregation'")
@@ -674,7 +706,12 @@ class BuilderConfigResolver:
         else:
             data_key = type_mapping.get(data_source_type, 'standard_aggregation_results')
             
-        return self.invoice_data.get(data_key, {})
+        data = self.invoice_data.get(data_key, {})
+        
+        if not data and data_source_type not in type_mapping:
+             logger.warning(f"Resolver: Data source '{data_source_type}' not found via Strict Lookup or Legacy Mapping.")
+             
+        return data
     
     def get_all_sheet_configs(self) -> Dict[str, Any]:
         """
