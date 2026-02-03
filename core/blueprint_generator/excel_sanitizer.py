@@ -36,6 +36,9 @@ class ExcelTemplateSanitizer:
 
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
+        # Excel default dimensions (used to filter out empty cells with default size)
+        self.DEFAULT_ROW_HEIGHT = 15.0  # Excel default row height in points
+        self.DEFAULT_COL_WIDTH = 8.43   # Excel default column width in characters
 
     def sanitize_template(self, workbook: openpyxl.Workbook, analysis: TemplateAnalysisResult) -> Tuple[openpyxl.Workbook, Dict[str, Any]]:
         """
@@ -59,15 +62,19 @@ class ExcelTemplateSanitizer:
                 layout_metadata[sheet_analysis.name] = sheet_layout
         
         # === FIX FOR CORRUPTION ===
-        # Clear all images from sheets before returning.
+        # Clear images ONLY from cleaned sheets.
         # Images in openpyxl can cause corruption when the workbook is saved
         # after row deletions. We've already captured image data to metadata.
+        # Unknown sheets (not in analysis) are untouched, so they can keep their images.
+        analyzed_sheet_names = {sheet.name for sheet in analysis.sheets}
+        
         for sheet in workbook.worksheets:
-            if hasattr(sheet, '_images'):
-                sheet._images = []
-            # Also clear drawings which can cause issues
-            if hasattr(sheet, '_charts'):
-                sheet._charts = []
+            if sheet.title in analyzed_sheet_names:
+                if hasattr(sheet, '_images'):
+                    sheet._images = []
+                # Also clear drawings which can cause issues
+                if hasattr(sheet, '_charts'):
+                    sheet._charts = []
                 
         return workbook, layout_metadata
 
@@ -148,13 +155,17 @@ class ExcelTemplateSanitizer:
             for row in ws.iter_rows(min_row=1, max_row=analysis.header_row-1, min_col=1, max_col=safe_max_column):
                 for cell in row:
                     coord = cell.coordinate
+                    is_empty = (cell.value is None)
                     
                     # Content
-                    if cell.value is not None:
+                    if not is_empty:
                          preserved_layout["header_content"][coord] = str(cell.value)
                     
-                    # Style
-                    style_data = self._capture_cell_style(cell, is_empty=(cell.value is None))
+                    # Style - skip empty cells with default dimensions
+                    if is_empty and not self._should_record_empty_cell(ws, cell.row, cell.column):
+                        continue
+                        
+                    style_data = self._capture_cell_style(cell, is_empty=is_empty)
                     if style_data:
                         preserved_layout["header_styles"][coord] = style_data
         
@@ -244,12 +255,16 @@ class ExcelTemplateSanitizer:
                         
                         from openpyxl.utils import get_column_letter
                         new_coord = f"{get_column_letter(c)}{shifted_r}"
+                        is_empty = (cell.value is None)
                         
-                        if cell.value is not None:
+                        if not is_empty:
                                 footer_content_dist[new_coord] = str(cell.value)
                         
-                        # Capture Style mapped to NEW coordinate
-                        style_data = self._capture_cell_style(cell, is_empty=(cell.value is None))
+                        # Style - skip empty cells with default dimensions
+                        if is_empty and not self._should_record_empty_cell(ws, r, c):
+                            continue
+                            
+                        style_data = self._capture_cell_style(cell, is_empty=is_empty)
                         if style_data:
                             footer_styles_dist[new_coord] = style_data
                         
@@ -419,7 +434,32 @@ class ExcelTemplateSanitizer:
             return None
         return str(cell.value)
 
-        return style
+    def _should_record_empty_cell(self, ws: Worksheet, row: int, col: int) -> bool:
+        """
+        Check if an empty cell should be recorded based on non-default dimensions.
+        
+        An empty cell is worth recording if:
+        - Its row has a height different from Excel's default (15.0 pt)
+        - Its column has a width different from Excel's default (8.43 chars)
+        
+        This prevents recording thousands of empty cells with only default styling.
+        """
+        from openpyxl.utils import get_column_letter
+        
+        # Check row height
+        if row in ws.row_dimensions:
+            height = ws.row_dimensions[row].height
+            if height is not None and height != self.DEFAULT_ROW_HEIGHT:
+                return True
+        
+        # Check column width
+        col_letter = get_column_letter(col)
+        if col_letter in ws.column_dimensions:
+            width = ws.column_dimensions[col_letter].width
+            if width is not None and width != self.DEFAULT_COL_WIDTH:
+                return True
+        
+        return False
     
     def _is_default_style(self, style: Dict[str, Any]) -> bool:
         """Check if a style dict represents standard/default Excel formatting."""
