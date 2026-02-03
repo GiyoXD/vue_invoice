@@ -211,8 +211,10 @@ def _prepare_workbooks(ctx: GeneratorContext):
             raise e
 
     # Build Output
-    builder = WorkbookBuilder(sheet_names=ctx.template_workbook.sheetnames)
-    ctx.output_workbook = builder.build()
+    # We use the template workbook directly as the base.
+    # This allows us to preserve "unknown sheets" (which are present in the XLSX but skipped in JSON)
+    # intact in the final output. The Sanitizer has already cleaned the "Known Sheets".
+    ctx.output_workbook = ctx.template_workbook
 
     # Deep Sheet Injection
     try:
