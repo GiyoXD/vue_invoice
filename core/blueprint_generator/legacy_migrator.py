@@ -347,7 +347,10 @@ def main():
     
     args = parser.parse_args()
     
-    logging.basicConfig(level=logging.INFO, format='%(message)s')
+    # Use centralized logging
+    from core.logger_config import setup_logging
+    from core.system_config import sys_config
+    setup_logging(log_dir=sys_config.run_log_dir)
     
     converter = LegacyConfigMigrator()
     bundle = converter.convert(args.config_path, args.customer)

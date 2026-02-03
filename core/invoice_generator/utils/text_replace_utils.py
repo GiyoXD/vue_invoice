@@ -9,7 +9,7 @@ from typing import Dict, Any
 from .text import find_and_replace
 import logging
 
-logging.basicConfig(level=logging.INFO)
+# Use centralized logger - no basicConfig here
 logger = logging.getLogger(__name__)
 
 def run_invoice_header_replacement_task(workbook: openpyxl.Workbook, invoice_data: Dict[str, Any]):

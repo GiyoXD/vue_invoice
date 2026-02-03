@@ -24,7 +24,7 @@ from core.invoice_generator.processors.multi_table_processor import MultiTablePr
 from core.invoice_generator.processors.placeholder_processor import PlaceholderProcessor
 
 from core.invoice_generator.utils.print_area_config import configure_print_area
-from core.invoice_generator.utils.monitor import GenerationMonitor
+from core.invoice_generator.utils.generation_session import GenerationSession
 from core.invoice_generator.resolvers import InvoiceAssetResolver
 
 logger = logging.getLogger(__name__)
@@ -61,7 +61,7 @@ def run_invoice_generation(
 ) -> Path:
     """
     Library entry point for invoice generation. 
-    Uses GenerationMonitor context manager to ensure robust error handling and metadata generation.
+    Uses GenerationSession context manager to ensure robust error handling.
     """
     # 1. Resolve Paths
     input_data_path, output_path, template_dir, config_dir = _resolve_generation_paths(
@@ -83,7 +83,7 @@ def run_invoice_generation(
         "configdir": str(config_dir)
     }
 
-    with GenerationMonitor(output_path, args=monitor_args, input_data=ctx.invoice_data) as monitor:
+    with GenerationSession(output_path, args=monitor_args, input_data=ctx.invoice_data) as session:
         logger.info("=== Starting Invoice Generation (Orchestrated) ===")
         
         # 3. Execution Pipeline
@@ -92,11 +92,11 @@ def run_invoice_generation(
             'template': str(ctx.paths.get('template', 'unknown')),
             'config': str(ctx.paths.get('config', 'unknown'))
         }
-        monitor.update_logs(header_info={"resolved_paths": monitor_paths})
+        session.update_logs(header_info={"resolved_paths": monitor_paths})
 
         _prepare_workbooks(ctx)
         
-        _process_sheets(ctx, monitor)
+        _process_sheets(ctx, session)
         
         _finalize(ctx)
 
@@ -221,7 +221,7 @@ def _prepare_workbooks(ctx: GeneratorContext):
         logger.warning(f"DeepSheet injection skipped: {e}")
 
 
-def _process_sheets(ctx: GeneratorContext, monitor: GenerationMonitor):
+def _process_sheets(ctx: GeneratorContext, session: GenerationSession):
     """Stage 3: Iterate and process each configured sheet."""
     sheets_config = ctx.config_loader.get_sheets_to_process()
     sheets_to_process = [s for s in sheets_config if s in ctx.output_workbook.sheetnames]
@@ -256,16 +256,16 @@ def _process_sheets(ctx: GeneratorContext, monitor: GenerationMonitor):
             )
 
             if processor and processor.process():
-                 monitor.log_success(sheet_name)
+                 session.log_success(sheet_name)
                  if hasattr(processor, 'replacements_log'):
-                     monitor.update_logs(replacements=processor.replacements_log)
+                     session.update_logs(replacements=processor.replacements_log)
                  if hasattr(processor, 'header_info'):
-                     monitor.update_logs(header_info=processor.header_info)
+                     session.update_logs(header_info=processor.header_info)
             else:
-                 monitor.log_failure(sheet_name, error=RuntimeError("Processor returned False"))
+                 session.log_failure(sheet_name, error=RuntimeError("Processor returned False"))
 
         except Exception as e:
-            monitor.log_failure(sheet_name, error=e)
+            session.log_failure(sheet_name, error=e)
             raise e
 
 
@@ -351,9 +351,10 @@ def main():
     
     args = parser.parse_args()
     
-    # Configure Logging for CLI
+    # Configure Logging for CLI using centralized logger
+    from core.logger_config import setup_logging
     level = logging.DEBUG if args.debug else logging.INFO
-    logging.basicConfig(level=level, format='%(levelname)s: %(message)s')
+    setup_logging(log_dir=sys_config.run_log_dir, level=level)
     
     # Determine Output Path
     if args.output:

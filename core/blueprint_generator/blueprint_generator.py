@@ -435,7 +435,10 @@ The tool will:
     
     args = parser.parse_args()
     
-    # Configure logging
+    # Configure logging using centralized logger
+    from core.logger_config import setup_logging
+    from core.system_config import sys_config
+    
     if args.verbose:
         log_level = logging.DEBUG
     elif args.quiet:
@@ -443,10 +446,7 @@ The tool will:
     else:
         log_level = logging.INFO
     
-    logging.basicConfig(
-        level=log_level,
-        format='%(message)s'
-    )
+    setup_logging(log_dir=sys_config.run_log_dir, level=log_level)
     
     try:
         # Determine paths for Monitor

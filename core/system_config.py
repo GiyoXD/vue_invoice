@@ -2,22 +2,34 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, List
 
-# Define Project Root (Assuming this file is in core/system_config.py)
 # Define Project Root (Assuming this file is in core/system_config.py)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 logger = logging.getLogger(__name__)
 
+
+class ConfigurationError(Exception):
+    """Raised when required configuration is missing or invalid."""
+    pass
+
+
 class SystemConfig:
     _instance = None
-    # Removed _config dictionary as we no longer use system_config.json
+    
+    # Required environment variables - app will fail loudly if these are missing
+    REQUIRED_ENV_VARS: List[str] = [
+        "BLUEPRINTS_ROOT",
+        "BUNDLED_DIR",
+        "OUTPUT_DIR",
+    ]
 
     def __new__(cls):
         if cls._instance is None:
             cls._instance = super(SystemConfig, cls).__new__(cls)
-            cls._instance._load_env_file() # Load .env variables
+            cls._instance._load_env_file()  # Load .env variables
+            cls._instance._validate_required_vars()  # Fail fast if missing
         return cls._instance
 
     def _load_env_file(self):
@@ -40,6 +52,23 @@ class SystemConfig:
                 logger.info("Loaded .env file for environment configuration.")
             except Exception as e:
                 logger.warning(f"Failed to parse .env file: {e}")
+
+    def _validate_required_vars(self):
+        """
+        Validates that all required environment variables are set.
+        Raises ConfigurationError if any are missing - no silent fallbacks.
+        """
+        missing = []
+        for var in self.REQUIRED_ENV_VARS:
+            if not os.getenv(var):
+                missing.append(var)
+        
+        if missing:
+            raise ConfigurationError(
+                f"Missing required environment variables: {', '.join(missing)}. "
+                f"Please ensure your .env file contains: {', '.join(self.REQUIRED_ENV_VARS)}"
+            )
+        logger.info(f"Configuration validated: all {len(self.REQUIRED_ENV_VARS)} required env vars present.")
 
     @property
     def blueprints_root(self) -> Path:
@@ -91,20 +120,41 @@ class SystemConfig:
             return env_val
         return "JF.xlsx"
 
-    def _resolve_path(self, key: str, default_relative: str, env_key: str = None) -> Path:
-        # 1. Check Environmental Variable (Preferred)
-        # Use env_key if provided, else uppercase key
+    def _resolve_path(self, key: str, default_relative: str, env_key: str = None, required: bool = False) -> Path:
+        """
+        Resolves a path from environment variable or falls back to default.
+        
+        Args:
+            key: Internal key name for logging
+            default_relative: Fallback path relative to PROJECT_ROOT
+            env_key: Environment variable name to check
+            required: If True, raises ConfigurationError when env var is missing
+        
+        Returns:
+            Resolved absolute Path
+        
+        Raises:
+            ConfigurationError: If required=True and env var is not set
+        """
         check_env = env_key if env_key else key.upper()
         env_val = os.getenv(check_env)
         
         if env_val:
-             # Env paths are usually absolute, but if relative, assume from cwd/root
+            # Env paths are usually absolute, but if relative, assume from PROJECT_ROOT
             path_obj = Path(env_val)
             if path_obj.is_absolute():
                 return path_obj.resolve()
             return (PROJECT_ROOT / path_obj).resolve()
 
-        # 2. Use Fallback Default (Hardcoded in property)
+        # If required and missing, fail loudly
+        if required:
+            raise ConfigurationError(
+                f"Required configuration '{check_env}' is not set. "
+                f"Please add it to your .env file."
+            )
+
+        # Use Fallback Default (only for optional paths)
+        logger.debug(f"Using fallback for '{key}': {default_relative}")
         return (PROJECT_ROOT / default_relative).resolve()
 
 # Singleton instance

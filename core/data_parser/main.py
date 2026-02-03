@@ -36,8 +36,9 @@ from .excel_handler import ExcelHandler
 from . import sheet_parser
 from . import data_processor # Includes all processing functions
 
-# Configure logging (Set level as needed, DEBUG is useful)
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s')
+# Use centralized logger - no basicConfig here
+# Logging is configured by core.logger_config.setup_logging() at app startup
+logger = logging.getLogger(__name__)
 
 # --- Constants for Log Truncation ---
 MAX_LOG_DICT_LEN = 3000 # Max length for printing large dicts in logs (for DEBUG)

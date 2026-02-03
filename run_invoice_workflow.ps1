@@ -9,7 +9,7 @@ Write-Host ""
 # Run the pipeline runner module
 # Target: JF.xlsx
 # Output: output/generated_invoices
-python -m core.pipeline_runner "temp_uploads\JF25057.xlsx" --output "output/generated_invoices"
+python -m core.invoice_workflow "temp_uploads\JF25057.xlsx" --output "output/generated_invoices"
 
 Write-Host ""
 Write-Host "=========================================" -ForegroundColor Cyan

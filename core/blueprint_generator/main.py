@@ -15,8 +15,7 @@ except ImportError:
     # Fallback/Alternative for different run contexts
     from core.blueprint_generator.orchestrator import ConfigOrchestrator
 
-# Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Use centralized logger - no basicConfig here
 logger = logging.getLogger(__name__)
 
 def main():

@@ -14,7 +14,8 @@ from . import sheet_parser
 from .config import SHEET_NAME, STOP_EXTRACTION_ON_EMPTY_COLUMN
 from .util.converters import DataConverter
 
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+# Use centralized logger - no basicConfig here
+logger = logging.getLogger(__name__)
 
 def extract_all_tables(sheet):
     """

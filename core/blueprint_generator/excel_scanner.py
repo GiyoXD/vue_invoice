@@ -809,7 +809,9 @@ class ExcelLayoutScanner:
 
 if __name__ == "__main__":
     import sys
-    logging.basicConfig(level=logging.INFO)
+    from core.logger_config import setup_logging
+    from core.system_config import sys_config
+    setup_logging(log_dir=sys_config.run_log_dir)
     
     if len(sys.argv) < 2:
         print("Usage: python excel_scanner.py <template.xlsx>")

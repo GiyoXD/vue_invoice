@@ -7,8 +7,8 @@ from .excel_handler import ExcelHandler
 from . import sheet_parser
 from .config import INPUT_EXCEL_FILE, SHEET_NAME, HEADER_IDENTIFICATION_PATTERN, HEADER_SEARCH_ROW_RANGE, HEADER_SEARCH_COL_RANGE
 
-# Set up basic logging to see the output from the modules
-logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+# Use centralized logger - no basicConfig here
+logger = logging.getLogger(__name__)
 
 def run_simple_extraction_and_sum():
     """

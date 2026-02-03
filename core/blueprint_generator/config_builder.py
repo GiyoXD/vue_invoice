@@ -458,7 +458,9 @@ if __name__ == "__main__":
     import json
     from .excel_scanner import ExcelLayoutScanner
     
-    logging.basicConfig(level=logging.INFO)
+    from core.logger_config import setup_logging
+    from core.system_config import sys_config
+    setup_logging(log_dir=sys_config.run_log_dir)
     
     if len(sys.argv) < 2:
         print("Usage: python config_builder.py <template.xlsx>")
