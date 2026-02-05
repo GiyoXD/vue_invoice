@@ -103,14 +103,25 @@ class JsonTemplateStateBuilder:
         
         # Determine footer start row
         # In JSON, footer keys are absolute (e.g., "A50"). We need to find the Min row in footer keys.
-        if footer_content or footer_styles:
+        if footer_content or footer_styles or self.footer_merged_cells:
             all_keys = list(footer_content.keys()) + list(footer_styles.keys())
             min_r = float('inf')
+            
+            # Check content and styles
             for k in all_keys:
                 try:
                     _, r = coordinate_from_string(k)
                     if r < min_r: min_r = r
                 except: pass
+                
+            # Check merged cells (CRITICAL: Merges might start above content)
+            from openpyxl.utils.cell import range_boundaries
+            for merge in self.footer_merged_cells:
+                try:
+                    _, min_row, _, _ = range_boundaries(merge)
+                    if min_row < min_r: min_r = min_row
+                except: pass
+                
             self.template_footer_start_row = min_r if min_r != float('inf') else -1
         
         # Load footer row heights
