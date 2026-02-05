@@ -315,6 +315,12 @@ class JsonTemplateStateBuilder:
             
         offset = footer_start_row - self.template_footer_start_row
         
+        logger.info(f"--- RESTORE FOOTER MERGES DEBUG ---")
+        logger.info(f"Target Footer Start: {footer_start_row}")
+        logger.info(f"Template Footer Start: {self.template_footer_start_row}")
+        logger.info(f"Calculated Offset: {offset}")
+        logger.info(f"Merge Count: {len(self.footer_merged_cells)}")
+        
         for row_idx, row_data in enumerate(self.footer_state):
             actual_row = self.template_footer_start_row + row_idx + offset
             
@@ -329,6 +335,7 @@ class JsonTemplateStateBuilder:
 
         # Restore footer merges
         for merge_str in self.footer_merged_cells:
+             logger.info(f"Applying footer merge: {merge_str} with offset {offset}")
              self._apply_merge(target_worksheet, merge_str, offset=offset)
              
         # Restore footer heights
