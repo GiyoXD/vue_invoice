@@ -39,9 +39,15 @@ class PrintAreaConfig:
             worksheet: The openpyxl worksheet to configure
         """
         try:
+            # Guard against None worksheet
+            if worksheet is None:
+                logger.warning("configure_print_settings called with None worksheet - skipping")
+                return
+            
             # Skip hidden sheets
             if worksheet.sheet_state != 'visible':
                 return
+
 
             # Set paper size to A4
             self._set_paper_size(worksheet)

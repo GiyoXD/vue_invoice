@@ -7,7 +7,7 @@ from ..styling.models import StylingConfigModel, FooterData
 from ..data.table_calculator import TableCalculator
 from .header_builder import HeaderBuilderStyler as HeaderBuilder
 from .data_table_builder import DataTableBuilderStyler as DataTableBuilder
-from .footer_builder import FooterBuilder as FooterBuilder
+from .footer_builder import TableFooterBuilder
 from .text_replacement_builder import TextReplacementBuilder
 from .template_state_builder import TemplateStateBuilder
 from .json_template_builder import JsonTemplateStateBuilder
@@ -405,7 +405,7 @@ class LayoutBuilder:
                     return False
 
                 # Inject global weights if local weights are zero (for aggregation sheets like Invoice)
-                # This ensures FooterBuilder receives the correct totals calculated by GlobalSummaryCalculator
+                # This ensures TableFooterBuilder receives the correct totals calculated by GlobalSummaryCalculator
                 if (self.footer_data.weight_summary['net'] == 0 and 
                     self.footer_data.weight_summary['gross'] == 0):
                     
@@ -434,7 +434,7 @@ class LayoutBuilder:
                 else:
                     logger.info("LayoutBuilder: Skipping data table build as requested.")
 
-                # --- 6. Build Footer (FooterBuilder) ---
+                # --- 6. Build Footer (TableFooterBuilder) ---
                 # MOVED: Footer building is now handled explicitly after the data table block
                 # to ensure strict separation of concerns and avoid duplication.
                 
@@ -500,7 +500,7 @@ class LayoutBuilder:
             data_source_type = None
         
         # 6. Footer Builder (proper Director pattern - called explicitly by LayoutBuilder) (unless skipped)
-        logger.debug(f"Checking FooterBuilder - skip_footer_builder={self.skip_footer_builder}")
+        logger.debug(f"Checking TableFooterBuilder - skip_footer_builder={self.skip_footer_builder}")
         if not self.skip_footer_builder:
             # Prepare footer parameters
             # Use local_chunk_pallets from data if available, otherwise use grand total
@@ -521,7 +521,7 @@ class LayoutBuilder:
             if data_start_row > 0 and data_end_row >= data_start_row:
                 data_range_to_sum = [(data_start_row, data_end_row)]
 
-            # Bundle configs for FooterBuilder
+            # Bundle configs for TableFooterBuilder
             footer_builder_style_config = {
                 'styling_config': styling_model
             }
@@ -546,12 +546,12 @@ class LayoutBuilder:
                 'leather_summary': self.footer_data.leather_summary if self.footer_data else None
             }
 
-            logger.debug(f"Creating FooterBuilder at row {footer_row_position}")
-            logger.debug(f"FooterBuilder input - footer_type: {footer_config.get('type', 'regular')}, add_blank_before: {footer_config.get('add_blank_before', False)}, pallet_count: {pallet_count}")
+            logger.debug(f"Creating TableFooterBuilder at row {footer_row_position}")
+            logger.debug(f"TableFooterBuilder input - footer_type: {footer_config.get('type', 'regular')}, add_blank_before: {footer_config.get('add_blank_before', False)}, pallet_count: {pallet_count}")
             try:
                 # 4. Build Footer
-                # Use FooterBuilder (renamed from FooterBuilderStyler)
-                footer_builder = FooterBuilder(
+                # Use TableFooterBuilder (builds table data footer - TOTAL: row)
+                footer_builder = TableFooterBuilder(
                     worksheet=self.worksheet,
                     footer_data=self.footer_data,
                     style_config=footer_builder_style_config,
@@ -559,22 +559,22 @@ class LayoutBuilder:
                     data_config=footer_builder_data_config
                 )
                 
-                logger.debug(f"Calling FooterBuilder.build() with footer_row_position={footer_row_position}")
+                logger.debug(f"Calling TableFooterBuilder.build() with footer_row_position={footer_row_position}")
                 footer_start = footer_row_position
                 self.next_row_after_footer = footer_builder.build()
                 
                 # Validate footer builder result
                 if self.next_row_after_footer is None or self.next_row_after_footer <= 0:
-                    logger.error(f"FooterBuilder failed for sheet '{self.sheet_name}'")
+                    logger.error(f"TableFooterBuilder failed for sheet '{self.sheet_name}'")
                     logger.error(f"Invalid next_row_after_footer={self.next_row_after_footer} - HALTING EXECUTION")
                     logger.error(f"footer_row_position={footer_row_position}, sum_ranges={data_range_to_sum}")
                     logger.error(f"footer_config: {footer_config}")
                     return False
                 
                 footer_rows_written = self.next_row_after_footer - footer_start
-                logger.debug(f"FooterBuilder completed - rows {footer_start}-{self.next_row_after_footer - 1} ({footer_rows_written} rows), next available: {self.next_row_after_footer}")
+                logger.debug(f"TableFooterBuilder completed - rows {footer_start}-{self.next_row_after_footer - 1} ({footer_rows_written} rows), next available: {self.next_row_after_footer}")
             except Exception as e:
-                logger.error(f"FooterBuilder crashed for sheet '{self.sheet_name}'")
+                logger.error(f"TableFooterBuilder crashed for sheet '{self.sheet_name}'")
                 logger.error(f"Error: {e}", exc_info=True)
                 logger.error(f"footer_row_position={footer_row_position}, pallet_count={pallet_count}")
                 logger.error(f"footer_config: {footer_config}")
@@ -593,50 +593,13 @@ class LayoutBuilder:
             # No footer, so next row is right after data (or header if no data)
             self.next_row_after_footer = footer_row_position
         
-        # 7. Template Footer Restoration (unless skipped)
-        # Restore the template footer (static content like "Manufacture:", etc.) AFTER the dynamic footer
-        # This places the template footer below the data footer
-        if not self.skip_template_footer_restoration:
-            write_pointer_row = self.next_row_after_footer  # Next available row after dynamic footer
-            
-            # Validate that we have a valid row position before attempting restoration
-            if write_pointer_row is None or write_pointer_row <= 0:
-                logger.error(f"Cannot restore template footer - invalid write_pointer_row={write_pointer_row}")
-                logger.error(f"This indicates a previous builder failed - HALTING EXECUTION")
-                return False
-            
-            template_footer_rows = self.template_state_builder.max_row - self.template_state_builder.template_footer_start_row + 1
-            logger.info(f"Restoring template footer after row {write_pointer_row}")
-            logger.debug(f"Template footer restoration - Source rows: {self.template_state_builder.template_footer_start_row}-{self.template_state_builder.max_row} ({template_footer_rows} rows), Target start: {write_pointer_row}")
-            
-            # Calculate actual number of columns from bundled config
-            actual_num_cols = None
-            if self.sheet_config and 'structure' in self.sheet_config:
-                bundled_columns = self.sheet_config['structure'].get('columns', [])
-                if bundled_columns:
-                    actual_num_cols = len(bundled_columns)
-                    logger.debug(f"Using actual column count from config: {actual_num_cols}")
-            
-            # Set column mapping if columns were filtered
-            if column_mapping:
-                self.template_state_builder.set_column_mapping(column_mapping)
-                logger.info(f"Applied column mapping to template state for footer restoration")
-            
-            try:
-                self.template_state_builder.restore_footer_only(
-                    target_worksheet=self.worksheet,  # Write to output worksheet
-                    footer_start_row=write_pointer_row,
-                    actual_num_cols=actual_num_cols
-                )
-                logger.debug(f"Template footer restored successfully - rows {write_pointer_row}-{write_pointer_row + template_footer_rows - 1}")
-            except Exception as e:
-                logger.error(f"Failed to restore footer from template for sheet '{self.sheet_name}'")
-                logger.error(f"Error: {e}", exc_info=True)
-                logger.error(f"Attempted to restore footer at row {write_pointer_row}")
-                logger.error(f"Template footer range: {self.template_state_builder.template_footer_start_row}-{self.template_state_builder.max_row}")
-                return False
-        else:
-            logger.debug(f"Skipping template footer restoration (skip_template_footer_restoration=True)")
+        # 7. Template Footer Restoration - DISABLED
+        # NOTE: Legacy restore_template_footer has been removed.
+        # Footer content is now constructed directly by TableFooterBuilder using config/JSON templates.
+        # The old approach of capturing and restoring footer from Excel templates caused issues
+        # with merged cells and was redundant with the new JSON-based footer construction.
+        logger.debug("Template footer restoration: DISABLED (footer is now built from config/JSON)")
+
         
         logger.info(f"Layout built successfully for sheet '{self.sheet_name}'")
         

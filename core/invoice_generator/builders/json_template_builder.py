@@ -121,8 +121,17 @@ class JsonTemplateStateBuilder:
         # Update max_col
         if self.column_widths:
             self.max_col = max(self.column_widths.keys())
+        
+        # CRITICAL FIX: Update max_row to reflect the actual last row in the template
+        # This is used by layout_builder.py line 608 to calculate footer row count:
+        #   template_footer_rows = self.template_state_builder.max_row - self.template_state_builder.template_footer_start_row + 1
+        # Without this, max_row stays at default value of 1, causing wrong footer placement
+        if self.template_footer_end_row > 0:
+            self.max_row = self.template_footer_end_row
+        elif self.header_end_row > 0:
+            self.max_row = self.header_end_row
             
-        logger.info(f"JSON Parse Complete: Header Ends Row {self.header_end_row}, Footer Starts Row {self.template_footer_start_row}")
+        logger.info(f"JSON Parse Complete: Header Ends Row {self.header_end_row}, Footer Starts Row {self.template_footer_start_row}, Max Row {self.max_row}")
 
     def _build_state_grid(self, content_map: Dict, style_map: Dict, is_header: bool) -> tuple:
         """
@@ -288,7 +297,7 @@ class JsonTemplateStateBuilder:
         for c_idx, w in self.column_widths.items():
             target_worksheet.column_dimensions[get_column_letter(c_idx)].width = w
 
-    def restore_footer_only(self, target_worksheet: Worksheet, footer_start_row: int, actual_num_cols: int = None):
+    def restore_template_footer(self, target_worksheet: Worksheet, footer_start_row: int, actual_num_cols: int = None):
         """Restores ONLY the footer to the new worksheet."""
         if self.debug:
             logger.debug(f"Restoring footer from JSON state at row {footer_start_row}")

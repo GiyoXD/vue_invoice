@@ -301,9 +301,14 @@ def _finalize(ctx: GeneratorContext):
     logger.info("Applying Print Area & Page Setup...")
     for sheet in ctx.output_workbook.sheetnames:
         try:
-            configure_print_area(ctx.output_workbook[sheet])
+            ws = ctx.output_workbook[sheet]
+            if ws is None:
+                logger.warning(f"Sheet '{sheet}' is in sheetnames but returned None - skipping print setup")
+                continue
+            configure_print_area(ws)
         except Exception as e:
             logger.error(f"Print setup failed for '{sheet}': {e}")
+
 
     logger.info(f"Saving workbook to {ctx.output_path}")
     ctx.output_workbook.save(ctx.output_path)

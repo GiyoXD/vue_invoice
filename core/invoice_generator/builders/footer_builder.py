@@ -15,7 +15,7 @@ from ..styling.style_registry import StyleRegistry
 from ..styling.cell_styler import CellStyler
 from .bundle_accessor import BundleAccessor
 
-class FooterBuilder(BundleAccessor):
+class TableFooterBuilder(BundleAccessor):
     """
     Builds and styles footer sections using pure bundle architecture.
     
@@ -225,12 +225,14 @@ class FooterBuilder(BundleAccessor):
         logger.debug(f"[FooterBuilder] footer_config keys: {list(self.footer_config.keys()) if self.footer_config else 'None'}")
         
         if not self.footer_config or self.footer_row_num <= 0:
-            logger.error(f"[FooterBuilder] CANNOT BUILD FOOTER - Invalid config or row_num!")
-            logger.error(f"   footer_config exists: {bool(self.footer_config)}")
-            logger.error(f"   footer_row_num: {self.footer_row_num}")
-            if self.footer_config:
-                logger.error(f"   footer_config content: {self.footer_config}")
-            return -1
+            error_msg = (
+                f"[FooterBuilder] CANNOT BUILD FOOTER - Invalid config or row_num!\n"
+                f"   footer_config exists: {bool(self.footer_config)}\n"
+                f"   footer_row_num: {self.footer_row_num}\n"
+                f"   footer_config content: {self.footer_config if self.footer_config else 'None'}"
+            )
+            logger.error(error_msg)
+            raise ValueError(error_msg)
 
         try:
             current_footer_row = self.footer_row_num

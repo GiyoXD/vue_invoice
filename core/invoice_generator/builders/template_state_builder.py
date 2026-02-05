@@ -624,7 +624,7 @@ class TemplateStateBuilder:
         if self.debug:
             logger.debug(f"Header restoration complete")
 
-    def restore_footer_only(self, target_worksheet: Worksheet, footer_start_row: int, actual_num_cols: int = None, restore_footer_merges: bool = True):
+    def restore_template_footer(self, target_worksheet: Worksheet, footer_start_row: int, actual_num_cols: int = None, restore_footer_merges: bool = True):
         """
         Restores ONLY the footer (structure, values, merges, formatting) to the new worksheet.
         This places the template footer (static content) AFTER the dynamically created data footer.
@@ -637,7 +637,7 @@ class TemplateStateBuilder:
             actual_num_cols: If provided, stretch footer to this many columns (for dynamic column scenarios)
             restore_footer_merges: Whether to restore footer merged cells (default True)
         """
-        logger.debug(f"restore_footer_only called with:")
+        logger.debug(f"restore_template_footer called with:")
         logger.debug(f"footer_start_row parameter: {footer_start_row}")
         logger.debug(f"self.template_footer_start_row: {self.template_footer_start_row}")
         logger.debug(f"self.template_footer_end_row: {self.template_footer_end_row}")
@@ -831,7 +831,7 @@ class TemplateStateBuilder:
             target_worksheet: The worksheet to restore state to
             data_start_row: Starting row of data
             data_table_end_row: Ending row of data table
-            restore_footer_merges: Whether to restore footer merges (False when FooterBuilder creates its own merges)
+            restore_footer_merges: Whether to restore footer merges (False when TableFooterBuilder creates its own merges)
         """
         if self.debug:
             logger.debug(f"Restoring formatting (merges, heights, widths):")
@@ -921,7 +921,7 @@ class TemplateStateBuilder:
                         logger.warning(f"Could not merge {merged_cell_range_str}: {e}")
         else:
             if self.debug:
-                logger.debug(f"Skipping footer merge restoration (FooterBuilder creates its own merges)")
+                logger.debug(f"Skipping footer merge restoration (TableFooterBuilder creates its own merges)")
 
         # Restore row heights for header
         if self.debug:

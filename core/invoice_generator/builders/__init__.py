@@ -6,7 +6,7 @@ from .text_replacement_builder import TextReplacementBuilder
 from .layout_builder import LayoutBuilder
 from .header_builder import HeaderBuilderStyler
 from .data_table_builder import DataTableBuilderStyler
-from .footer_builder import FooterBuilder
+from .footer_builder import TableFooterBuilder
 
 __all__ = [
     'BundleAccessor',
@@ -16,5 +16,5 @@ __all__ = [
     'LayoutBuilder',
     'HeaderBuilderStyler',
     'DataTableBuilderStyler',
-    'FooterBuilder',
+    'TableFooterBuilder',
 ]

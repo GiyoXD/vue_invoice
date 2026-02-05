@@ -9,7 +9,7 @@ from openpyxl.utils import get_column_letter
 
 from .base_processor import SheetProcessor
 from ..builders.layout_builder import LayoutBuilder
-from ..builders.footer_builder import FooterBuilder
+from ..builders.footer_builder import TableFooterBuilder
 from ..styling.models import StylingConfigModel, FooterData
 from ..config.builder_config_resolver import BuilderConfigResolver
 from ..builders.template_state_builder import TemplateStateBuilder
@@ -334,7 +334,7 @@ class MultiTableProcessor(SheetProcessor):
             weight_summary={'net': 0.0, 'gross': 0.0}  # Will be auto-filled with global weights by resolver
         )
         
-        footer_builder = FooterBuilder(
+        footer_builder = TableFooterBuilder(
             worksheet=self.output_worksheet,
             footer_data=footer_data,
             style_config={'styling_config': styling_model},
@@ -360,30 +360,13 @@ class MultiTableProcessor(SheetProcessor):
         return footer_builder.build()
 
     def _restore_template_footer(self, template_state_builder, current_row, table_keys):
-        """Restores the template footer at the end."""
-        logger.info(f"[MultiTableProcessor] Restoring template footer after row {current_row}")
+        """
+        Template footer restoration - DISABLED.
         
-        actual_num_cols = None
-        if table_keys:
-            first_resolver = BuilderConfigResolver(
-                config_loader=self.config_loader,
-                sheet_name=self.sheet_name,
-                worksheet=self.output_worksheet,
-                args=self.args,
-                invoice_data=self.invoice_data
-            )
-            _, _, first_layout_cfg = first_resolver.get_layout_bundles_with_data(table_key=table_keys[0])
-            if first_layout_cfg and 'sheet_config' in first_layout_cfg:
-                bundled_columns = first_layout_cfg['sheet_config'].get('structure', {}).get('columns', [])
-                if bundled_columns:
-                    actual_num_cols = len(bundled_columns)
-        
-        try:
-            template_state_builder.restore_footer_only(
-                target_worksheet=self.output_worksheet,
-                footer_start_row=current_row,
-                actual_num_cols=actual_num_cols
-            )
-        except Exception as e:
-            logger.error(f"❌ Failed to restore template footer: {e}")
-            logger.error(traceback.format_exc())
+        Table footer content is now constructed directly by TableFooterBuilder using config/JSON templates.
+        The old approach of capturing and restoring footer from Excel templates caused issues
+        with merged cells and was redundant with the new JSON-based footer construction.
+        """
+        logger.debug("Template footer restoration: DISABLED (footer is now built from config/JSON)")
+        # No-op: Table footer is now handled by TableFooterBuilder, not by restore_template_footer
+

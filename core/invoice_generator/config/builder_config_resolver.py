@@ -45,7 +45,7 @@ class BuilderConfigResolver:
         # Get bundles for DataTableBuilder
         datatable_bundles = resolver.get_datatable_bundles(table_key="table_1")
         
-        # Get bundles for FooterBuilder
+        # Get bundles for TableFooterBuilder
         footer_bundles = resolver.get_footer_bundles(sum_ranges=ranges, pallet_count=31)
     """
     
@@ -442,7 +442,7 @@ class BuilderConfigResolver:
         dynamic_desc_used: bool = False
     ) -> Tuple[Dict, Dict, Dict]:
         """
-        Get all bundles needed for FooterBuilder.
+        Get all bundles needed for TableFooterBuilder.
         
         Args:
             sum_ranges: Cell ranges to sum in footer formulas
@@ -515,7 +515,7 @@ class BuilderConfigResolver:
             
         # 2. If weights are zero, try to use global calculated weights
         # This handles cases like "Invoice" sheet where weights come from global context
-        # but need to be passed to FooterBuilder via FooterData
+        # but need to be passed to TableFooterBuilder via FooterData
         if final_weight_summary['net'] == 0 and final_weight_summary['gross'] == 0:
             # Ensure global summaries are calculated
             context = self.get_context_bundle()

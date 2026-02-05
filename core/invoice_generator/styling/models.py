@@ -38,7 +38,7 @@ class StylingConfigModel(BaseModel):
 
 class FooterData(BaseModel):
     """
-    Data object passed from DataTableBuilder to FooterBuilder.
+    Data object passed from DataTableBuilder to TableFooterBuilder.
     Contains all necessary information to render the footer without further calculation.
     """
     footer_row_start_idx: int

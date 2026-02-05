@@ -10,13 +10,17 @@ import uuid
 from typing import List, Optional
 import datetime
 
+# Initialize logging FIRST before any other core imports
+from core.system_config import sys_config
+from core.logger_config import setup_logging
+setup_logging(log_dir=sys_config.run_log_dir)
+
 # Import core orchestrator
 from core.orchestrator import Orchestrator
 import subprocess
 import sys
 
 # Define Project Root
-from core.system_config import sys_config
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 CONFIG_GEN_DIR = PROJECT_ROOT / "core" / "blueprint_generator"
