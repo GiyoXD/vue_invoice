@@ -12,7 +12,7 @@ from ..builders.layout_builder import LayoutBuilder
 from ..builders.footer_builder import TableFooterBuilder
 from ..styling.models import StylingConfigModel, FooterData
 from ..config.builder_config_resolver import BuilderConfigResolver
-from ..builders.template_state_builder import TemplateStateBuilder
+
 from ..utils.text_replacement_rules import build_replacement_rules
 from ..extractors.header_extractor import HeaderExtractor
 
@@ -125,12 +125,11 @@ class MultiTableProcessor(SheetProcessor):
 
     def _capture_template_state(self):
         """Captures template state (header/footer) for reuse."""
-        from ..builders.template_state_builder import TemplateStateBuilder
         from ..builders.json_template_builder import JsonTemplateStateBuilder
         
         logger.info(f"[MultiTableProcessor] Capturing template state for reuse")
         
-        # Check for JSON config first
+        # Check for JSON config - this is now REQUIRED
         json_config = self.config_loader.get_template_json_config()
         if json_config and self.sheet_name in json_config:
             logger.info(f"Using JSON-based template state")
@@ -156,49 +155,9 @@ class MultiTableProcessor(SheetProcessor):
                 logger.critical(f"CRITICAL: JsonTemplateStateBuilder failed: {e}", exc_info=True)
                 return None
 
-        # Fallback to Legacy Excel Scan
-        layout_config = self.sheet_config.get('layout_config', {}) if self.sheet_config else {}
-        structure_config = layout_config.get('structure', {})
-        
-        if 'header_row' not in structure_config:
-            logger.critical(f"CRITICAL: 'header_row' not found in sheet_config['layout_config']['structure'] for '{self.sheet_name}'. Cannot capture template state.")
-            return None
-        
-        table_header_row = structure_config['header_row']
-        template_header_end_row = table_header_row - 1
-        template_footer_start_row = structure_config.get('footer_row', table_header_row + 1)
-        num_header_cols = 20  # Conservative estimate
-        
-        try:
-            template_state_builder = TemplateStateBuilder(
-                worksheet=self.template_worksheet,
-                num_header_cols=num_header_cols,
-                header_end_row=template_header_end_row,
-                footer_start_row=template_footer_start_row,
-                debug=getattr(self.args, 'debug', False)
-            )
-            
-            # Apply text replacements
-            if self.args and self.invoice_data:
-                try:
-                    replacement_rules = build_replacement_rules(self.args)
-                    template_state_builder.apply_text_replacements(
-                        replacement_rules=replacement_rules,
-                        invoice_data=self.invoice_data
-                    )
-                    # Capture replacements log
-                    self.replacements_log = template_state_builder.replacements_log
-                    
-                    # Extract Header Info
-                    self.header_info = HeaderExtractor.extract(template_state_builder.header_state)
-                    
-                except Exception as e:
-                    logger.error(f"Failed to apply text replacements or extract header: {e}")
-            
-            return template_state_builder
-        except Exception as e:
-            logger.critical(f"CRITICAL: Failed to capture template state: {e}")
-            return None
+        # JSON template is required - XLSX scanning has been removed
+        logger.critical(f"CRITICAL: No JSON template found for sheet '{self.sheet_name}'. XLSX scanning has been removed.")
+        return None
 
     def _process_single_table(self, table_key, index, total_tables, current_row, all_tables_data, template_state_builder):
         """Processes a single table iteration."""

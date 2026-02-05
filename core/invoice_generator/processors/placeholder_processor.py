@@ -6,8 +6,6 @@ from .base_processor import SheetProcessor
 
 logger = logging.getLogger(__name__)
 
-from copy import copy
-
 class PlaceholderProcessor(SheetProcessor):
     """
     A lightweight processor that performs simple text replacement in an Excel sheet.
@@ -47,34 +45,17 @@ class PlaceholderProcessor(SheetProcessor):
         """
         Executes the placeholder replacement logic.
         Returns True if successful, False otherwise.
+        
+        NOTE: This processor expects the output_worksheet to already be populated
+        by the JSON template restoration system. It only performs placeholder
+        text replacements - it does NOT copy from XLSX template.
         """
         try:
             logger.info(f"Starting Placeholder Processing for sheet: {self.sheet_name}")
             
-            # 0. Copy content from template to output
-            # Since WorkbookBuilder creates a blank sheet, we must copy the template content first.
-            for row in self.template_worksheet.iter_rows():
-                for cell in row:
-                    new_cell = self.output_worksheet.cell(row=cell.row, column=cell.column, value=cell.value)
-                    if cell.has_style:
-                        new_cell.font = copy(cell.font)
-                        new_cell.border = copy(cell.border)
-                        new_cell.fill = copy(cell.fill)
-                        new_cell.number_format = copy(cell.number_format)
-                        new_cell.protection = copy(cell.protection)
-                        new_cell.alignment = copy(cell.alignment)
-            
-            # Copy column dimensions
-            for col_dim in self.template_worksheet.column_dimensions.values():
-                self.output_worksheet.column_dimensions[col_dim.index] = copy(col_dim)
-                
-            # Copy row dimensions
-            for row_dim in self.template_worksheet.row_dimensions.values():
-                self.output_worksheet.row_dimensions[row_dim.index] = copy(row_dim)
-                
-            # Copy merges
-            for merge_range in self.template_worksheet.merged_cells.ranges:
-                self.output_worksheet.merge_cells(str(merge_range))
+            # REMOVED: Legacy XLSX direct copy code has been removed.
+            # The output worksheet should already be populated by JSON template restoration
+            # before this processor runs. If not, the sheet will be empty.
             
             # 1. Flatten the invoice data for easier lookup
             # We assume the data might be nested, but for placeholders we usually want flat keys.

@@ -9,7 +9,6 @@ from .header_builder import HeaderBuilderStyler as HeaderBuilder
 from .data_table_builder import DataTableBuilderStyler as DataTableBuilder
 from .footer_builder import TableFooterBuilder
 from .text_replacement_builder import TextReplacementBuilder
-from .template_state_builder import TemplateStateBuilder
 from .json_template_builder import JsonTemplateStateBuilder
 from ..utils.text_replacement_rules import build_replacement_rules
 
@@ -56,7 +55,7 @@ class LayoutBuilder:
         style_config: Dict[str, Any],
         context_config: Dict[str, Any],
         layout_config: Dict[str, Any],
-        template_state_builder: Optional[TemplateStateBuilder] = None,
+        template_state_builder: Optional[JsonTemplateStateBuilder] = None,
         template_json_config: Optional[Dict[str, Any]] = None
     ):
         """
@@ -191,31 +190,9 @@ class LayoutBuilder:
                 logger.critical(f"CRITICAL: JsonTemplateStateBuilder failed for '{self.sheet_name}': {e}", exc_info=True)
                 return False
         else:
-            # === LEGACY EXCEL SCANNING PATH ===
-            logger.info(f"Capturing template state from template worksheet (LEGACY SCAN)")
-            
-            # Calculate scanning boundaries only needed for legacy path
-            try:
-                template_footer_start_row = self._detect_template_footer_start(self.template_worksheet, table_header_row)
-            except ValueError as e:
-                 # If detection fails, we can't proceed with scanning
-                 logger.error(f"Legacy footer detection failed: {e}")
-                 return False
-
-            try:
-                # Enable debug mode if args has debug flag
-                debug_mode = getattr(self.args, 'debug', False) if self.args else False
-                
-                self.template_state_builder = TemplateStateBuilder(
-                    worksheet=self.template_worksheet,  # Read from template
-                    num_header_cols=num_header_cols,
-                    header_end_row=template_header_end_row,  # Use template position
-                    footer_start_row=template_footer_start_row,  # Use template position
-                    debug=debug_mode
-                )
-            except Exception as e:
-                logger.critical(f"CRITICAL: TemplateStateBuilder initialization failed: {e}", exc_info=True)
-                return False
+            # JSON template required - XLSX scanning has been removed
+            logger.critical(f"CRITICAL: No JSON template found for sheet '{self.sheet_name}'. XLSX scanning has been removed.")
+            return False
             
         # Common: Apply text replacements to captured/loaded state
         if self.args and self.invoice_data and self.template_state_builder:
