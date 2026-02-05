@@ -570,12 +570,25 @@ class LayoutBuilder:
             # No footer, so next row is right after data (or header if no data)
             self.next_row_after_footer = footer_row_position
         
-        # 7. Template Footer Restoration - DISABLED
-        # NOTE: Legacy restore_template_footer has been removed.
-        # Footer content is now constructed directly by TableFooterBuilder using config/JSON templates.
-        # The old approach of capturing and restoring footer from Excel templates caused issues
-        # with merged cells and was redundant with the new JSON-based footer construction.
-        logger.debug("Template footer restoration: DISABLED (footer is now built from config/JSON)")
+        # 7. Template Footer Restoration
+        # This restores the static content (signatures, etc.) from the JSON template
+        # that appears AFTER the dynamic table footer.
+        if self.template_state_builder:
+            try:
+                # Get actual column count if not already set
+                actual_num_cols = self.header_info.get('num_columns', None)
+                
+                logger.debug(f"Restoring template footer starting at row {self.next_row_after_footer}")
+                self.template_state_builder.restore_template_footer(
+                    target_worksheet=self.worksheet,
+                    footer_start_row=self.next_row_after_footer,
+                    actual_num_cols=actual_num_cols
+                )
+                logger.info(f"Template footer restored successfully")
+            except Exception as e:
+                logger.error(f"Failed to restore template footer: {e}", exc_info=True)
+        else:
+            logger.debug("Skipping template footer restoration (no template_state_builder)")
 
         
         logger.info(f"Layout built successfully for sheet '{self.sheet_name}'")
