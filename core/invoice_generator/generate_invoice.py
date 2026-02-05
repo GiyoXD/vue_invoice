@@ -194,27 +194,29 @@ def _prepare_workbooks(ctx: GeneratorContext):
     """Stage 2: Load Template and Build Output Workbook."""
     ctx.output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    logger.info(f"Loading template from: {ctx.paths['template']}")
-    try:
-        ctx.template_workbook = openpyxl.load_workbook(ctx.paths['template'], read_only=False)
-    except Exception as e:
-        # Fallback: JSON reconstruction
-        json_config = ctx.config_loader.get_template_json_config()
-        if json_config:
-            logger.warning(f"Template load failed ({e}). Reconstructing from JSON.")
-            ctx.template_workbook = openpyxl.Workbook()
-            default_ws = ctx.template_workbook.active
-            if default_ws: ctx.template_workbook.remove(default_ws)
-            for sheet in json_config.keys():
-                ctx.template_workbook.create_sheet(sheet)
-        else:
-            raise e
+    logger.info(f"Initializing clean output workbook (JSON-only mode)")
+    
+    # REQUIRED: Load JSON template config
+    json_config = ctx.config_loader.get_template_json_config()
+    if not json_config:
+        error_msg = f"CRITICAL: No JSON template found for client/config. JSON templates are now REQUIRED. (Missing *_template.json?)"
+        logger.critical(error_msg)
+        raise ValueError(error_msg)
 
-    # Build Output
-    # We use the template workbook directly as the base.
-    # This allows us to preserve "unknown sheets" (which are present in the XLSX but skipped in JSON)
-    # intact in the final output. The Sanitizer has already cleaned the "Known Sheets".
-    ctx.output_workbook = ctx.template_workbook
+    # Initialize clean workbook
+    ctx.output_workbook = openpyxl.Workbook()
+    default_ws = ctx.output_workbook.active
+    if default_ws: ctx.output_workbook.remove(default_ws)
+    
+    # Create sheets defined in JSON config
+    for sheet_name in json_config.keys():
+        ctx.output_workbook.create_sheet(sheet_name)
+        logger.info(f"Created sheet '{sheet_name}' from JSON template")
+        
+    # Set template_workbook to refer to output_workbook 
+    # (since we are creating from scratch, they are effectively the same object in this new flow)
+    # This satisfies processors that expect a template_workbook object, although they should rely on JSON.
+    ctx.template_workbook = ctx.output_workbook
 
     # Deep Sheet Injection
     try:
