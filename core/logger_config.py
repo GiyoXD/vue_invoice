@@ -68,6 +68,7 @@ def setup_logging(
     # File Handler (rotating to prevent disk bloat)
     file_handler = RotatingFileHandler(
         log_file,
+        mode='w',  # Overwrite mode: effectively clears log on startup
         maxBytes=max_bytes,
         backupCount=backup_count,
         encoding='utf-8'

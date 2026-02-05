@@ -578,7 +578,11 @@ class LayoutBuilder:
                 # Get actual column count if not already set
                 actual_num_cols = self.header_info.get('num_columns', None)
                 
-                logger.debug(f"Restoring template footer starting at row {self.next_row_after_footer}")
+                logger.info(f"--- LAYOUT BUILDER FOOTER DEBUG ---")
+                logger.info(f"next_row_after_footer: {self.next_row_after_footer}")
+                logger.info(f"footer_builder used? {not self.skip_footer_builder}")
+                logger.info(f"Calling restore_template_footer...")
+                
                 self.template_state_builder.restore_template_footer(
                     target_worksheet=self.worksheet,
                     footer_start_row=self.next_row_after_footer,
