@@ -846,3 +846,175 @@ input[type="file"] {
 .btn-primary:hover {
     background: #2563eb;
 }
+
+/* ============================================
+   LOG VIEWER STYLES
+   Terminal-style log display
+   ============================================ */
+
+.log-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.log-toolbar:hover {
+    transform: none;
+}
+
+.log-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex: 1;
+    min-width: 200px;
+}
+
+.log-toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.log-search-input {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    color: #f8fafc;
+    font-size: 0.875rem;
+    font-family: 'Consolas', 'Monaco', monospace;
+    width: 250px;
+    transition: border-color 0.2s;
+}
+
+.log-search-input::placeholder {
+    color: #64748b;
+}
+
+.log-search-input:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+}
+
+.log-line-count {
+    color: #64748b;
+    font-size: 0.8125rem;
+    font-family: 'Consolas', 'Monaco', monospace;
+    white-space: nowrap;
+}
+
+.log-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    color: #94a3b8;
+    font-size: 0.8125rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.log-toggle input[type="checkbox"] {
+    accent-color: #3b82f6;
+    width: auto;
+    margin: 0;
+    padding: 0;
+}
+
+.log-btn-refresh {
+    background: rgba(59, 130, 246, 0.15);
+    color: #60a5fa;
+    border: 1px solid rgba(59, 130, 246, 0.25);
+}
+
+.log-btn-clear {
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.log-btn-clear:hover {
+    background: rgba(239, 68, 68, 0.25);
+    color: #fca5a5;
+}
+
+/* Log Container - Terminal Look */
+.log-container {
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 0.75rem;
+    padding: 1rem 1.25rem;
+    max-height: 70vh;
+    overflow-y: auto;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.8125rem;
+    line-height: 1.6;
+}
+
+.log-container:hover {
+    transform: none;
+}
+
+.log-empty {
+    text-align: center;
+    color: #475569;
+    padding: 3rem 1rem;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.9375rem;
+}
+
+.log-line {
+    color: #cbd5e1;
+    padding: 1px 0;
+    word-break: break-all;
+    white-space: pre-wrap;
+    border-left: 2px solid transparent;
+    padding-left: 0.5rem;
+    transition: background 0.1s;
+}
+
+.log-line:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+/* Log Level Colors */
+.log-line.log-error {
+    color: #fca5a5;
+    border-left-color: #ef4444;
+    background: rgba(239, 68, 68, 0.06);
+}
+
+.log-line.log-warning {
+    color: #fcd34d;
+    border-left-color: #eab308;
+    background: rgba(234, 179, 8, 0.04);
+}
+
+.log-line.log-debug {
+    color: #475569;
+}
+
+/* Custom Scrollbar for Log Container */
+.log-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.log-container::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 3px;
+}
+
+.log-container::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.3);
+    border-radius: 3px;
+}
+
+.log-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.5);
+}

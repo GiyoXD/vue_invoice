@@ -65,16 +65,26 @@ def setup_logging(
     console_handler.setFormatter(formatter)
     console_handler.setLevel(level)
     
-    # File Handler (rotating to prevent disk bloat)
-    file_handler = RotatingFileHandler(
+    # Handler 1: Rolling History Log (Keeps everything, rotates)
+    history_handler = RotatingFileHandler(
         log_file,
-        mode='w',  # Overwrite mode: effectively clears log on startup
+        mode='a',
         maxBytes=max_bytes,
         backupCount=backup_count,
         encoding='utf-8'
     )
-    file_handler.setFormatter(formatter)
-    file_handler.setLevel(logging.DEBUG)  # File captures everything
+    history_handler.setFormatter(formatter)
+    history_handler.setLevel(logging.DEBUG)
+
+    # Handler 2: Current Session Log (Wiped on every start)
+    session_log_file = log_dir / "current_session.log"
+    session_handler = logging.FileHandler(
+        session_log_file,
+        mode='w',  # Overwrite mode: Clean log for debugging current run
+        encoding='utf-8'
+    )
+    session_handler.setFormatter(formatter)
+    session_handler.setLevel(logging.DEBUG)
     
     # Configure Root Logger
     root_logger = logging.getLogger()
@@ -84,10 +94,40 @@ def setup_logging(
     root_logger.handlers.clear()
     
     root_logger.addHandler(console_handler)
-    root_logger.addHandler(file_handler)
+    root_logger.addHandler(history_handler)
+    root_logger.addHandler(session_handler)
     
     _logging_initialized = True
-    logging.info(f"Logging initialized. File: {log_file}")
+    logging.info(f"Logging initialized.")
+    logging.info(f"  History Log: {log_file}")
+    logging.info(f"  Session Log: {session_log_file}")
+
+
+def clear_session_log():
+    """
+    Manually clear the contents of current_session.log.
+    Useful for persistent processes (like API servers) where setup_logging 
+    only runs once, but we want a fresh log for each task run.
+    """
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers:
+        # Check if it's a FileHandler and looks like our session log
+        if isinstance(handler, logging.FileHandler) and "current_session.log" in str(handler.baseFilename):
+            try:
+                # SAFER METHOD FOR WINDOWS:
+                # Use the existing open stream to truncate, rather than opening a new handle
+                # which can cause "binary" glitches or locking errors.
+                if handler.stream and not handler.stream.closed:
+                    handler.acquire()  # Thread-safe lock
+                    try:
+                        handler.stream.seek(0)
+                        handler.stream.truncate(0)
+                        handler.stream.flush()
+                    finally:
+                        handler.release()
+            except Exception as e:
+                print(f"Warning: Failed to clear session log: {e}")
+            return
 
 
 def get_logger(name: str) -> logging.Logger:

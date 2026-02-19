@@ -66,7 +66,7 @@ async def health_check():
     return {"status": "ok"}
 
 @app.post("/api/upload")
-async def upload_excel(file: UploadFile = File(...)):
+def upload_excel(file: UploadFile = File(...)):
     """
     Uploads an Excel file and processes it to JSON.
     Returns the identifier, json path, and asset availability status.
@@ -75,6 +75,7 @@ async def upload_excel(file: UploadFile = File(...)):
     config and template files exist for invoice generation.
     """
     try:
+        print(f"DEBUG: Received upload request for {file.filename}") # Direct console log
         file_path = UPLOAD_DIR / file.filename
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
@@ -145,7 +146,7 @@ async def upload_excel(file: UploadFile = File(...)):
 
 
 @app.post("/api/generate")
-async def generate_invoice(request: GenerateRequest):
+def generate_invoice(request: GenerateRequest):
     """
     Trigger invoice generation with metadata overrides.
     Supports generating multiple variations (Standard, Custom, DAF).
@@ -418,7 +419,7 @@ class TemplateConfig(BaseModel):
     temp_filename: str
 
 @app.post("/api/template/analyze")
-async def analyze_template(file: UploadFile = File(...)):
+def analyze_template(file: UploadFile = File(...)):
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
     temp_path = TEMP_DIR / file.filename
     
@@ -455,7 +456,7 @@ async def analyze_template(file: UploadFile = File(...)):
         })
 
 @app.post("/api/template/generate")
-async def generate_template(config: TemplateConfig):
+def generate_template(config: TemplateConfig):
     """
     Generate a template bundle for a new customer.
     
@@ -565,3 +566,42 @@ async def view_template(name: str):
             return json.load(f)
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"Failed to read template: {str(e)}"})
+
+
+# --- Log Viewer API ---
+from core.logger_config import clear_session_log
+
+@app.get("/api/logs/current")
+async def get_current_log():
+    """
+    Read and return the contents of current_session.log.
+
+    Returns:
+        JSON with 'content' (log text) and 'lines' (line count).
+    """
+    log_file = sys_config.run_log_dir / "current_session.log"
+
+    if not log_file.exists():
+        return {"content": "", "lines": 0}
+
+    try:
+        with open(log_file, 'r', encoding='utf-8', errors='replace') as f:
+            content = f.read()
+        line_count = content.count('\n')
+        return {"content": content, "lines": line_count}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Failed to read log: {str(e)}"})
+
+
+@app.post("/api/logs/clear")
+async def clear_current_log():
+    """
+    Clear the current session log file.
+
+    Uses the existing clear_session_log() utility from logger_config.
+    """
+    try:
+        clear_session_log()
+        return {"status": "ok", "message": "Session log cleared."}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Failed to clear log: {str(e)}"})

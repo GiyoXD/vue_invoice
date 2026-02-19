@@ -40,11 +40,20 @@ Write-Host "  Press Ctrl+C to stop the server" -ForegroundColor DarkGray
 Write-Host "  ─────────────────────────────────────────────────" -ForegroundColor DarkGray
 Write-Host ""
 
+# Clean Python bytecode cache to force fresh imports
+Write-Host "  🧹 Clearing Python cache (__pycache__)..." -ForegroundColor DarkGray
+Get-ChildItem -Path . -Recurse -Directory -Filter "__pycache__" -ErrorAction SilentlyContinue | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+Write-Host "  [OK] Python cache cleared" -ForegroundColor Green
+
+# Generate a cache-bust token for the browser URL
+$cacheBust = Get-Date -Format "HHmmss"
+Write-Host "  🧹 Browser cache-bust token: $cacheBust (hard-refresh with Ctrl+Shift+R)" -ForegroundColor DarkGray
+
 # Open browser after a short delay (unless disabled)
 if (-not $NoBrowser) {
     Start-Job -ScriptBlock {
         Start-Sleep -Seconds 2
-        Start-Process "http://localhost:$using:Port/frontend/"
+        Start-Process "http://localhost:$using:Port/frontend/?v=$using:cacheBust"
     } | Out-Null
 }
 

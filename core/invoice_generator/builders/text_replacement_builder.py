@@ -29,8 +29,7 @@ class TextReplacementBuilder:
             {"find": "JFINV", "data_path": ["processed_tables_data", "1", "col_inv_no", 0], "match_mode": "exact"},
             {"find": "JFTIME", "data_path": ["processed_tables_data", "1", "col_inv_date", 0], "is_date": True, "match_mode": "exact"},
             {"find": "JFREF", "data_path": ["processed_tables_data", "1", "col_inv_ref", 0], "match_mode": "exact"},
-            {"find": "[[CUSTOMER_NAME]]", "data_path": ["customer_info", "name"], "match_mode": "exact"},
-            {"find": "[[CUSTOMER_ADDRESS]]", "data_path": ["customer_info", "address"], "match_mode": "exact"}
+
         ]
         find_and_replace(
             workbook=self.workbook,

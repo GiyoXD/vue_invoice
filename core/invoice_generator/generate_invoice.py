@@ -26,6 +26,7 @@ from core.invoice_generator.processors.placeholder_processor import PlaceholderP
 from core.invoice_generator.utils.print_area_config import configure_print_area
 from core.invoice_generator.utils.generation_session import GenerationSession
 from core.invoice_generator.resolvers import InvoiceAssetResolver
+from core.utils.file_lock import ensure_file_unlocked
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,13 @@ def run_invoice_generation(
     Library entry point for invoice generation. 
     Uses GenerationSession context manager to ensure robust error handling.
     """
+    # 0. FORCE CLEAR SESSION LOG (Per User Request)
+    try:
+        from core.logger_config import clear_session_log
+        clear_session_log()
+    except Exception:
+        pass
+
     # 1. Resolve Paths
     input_data_path, output_path, template_dir, config_dir = _resolve_generation_paths(
         input_data_path, output_path, template_dir, config_dir
@@ -313,6 +321,15 @@ def _finalize(ctx: GeneratorContext):
 
 
     logger.info(f"Saving workbook to {ctx.output_path}")
+    
+    # Check for file locks and attempting to kill Excel if needed
+    try:
+        ensure_file_unlocked(ctx.output_path)
+    except Exception as e:
+        logger.error(f"File Lock Error: {e}")
+        # We raise here because if we can't write, we can't save.
+        raise e
+        
     ctx.output_workbook.save(ctx.output_path)
     
     # Cleanup

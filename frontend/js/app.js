@@ -3,13 +3,15 @@ import GeneratorView from './views/Generator.js';
 import InspectorView from './views/Inspector.js';
 import TemplateExtractorView from './views/TemplateExtractor.js?v=2';
 import TemplateInspectorView from './views/TemplateInspector.js?v=revert_spill';
+import LogViewerView from './views/LogViewer.js?v=1';
 
 const App = {
     components: {
         GeneratorView,
         InspectorView,
         TemplateExtractorView,
-        TemplateInspectorView
+        TemplateInspectorView,
+        LogViewerView
     },
     template: `
         <div class="container fade-in">
@@ -19,6 +21,7 @@ const App = {
                 <button class="nav-btn" :class="{ active: currentView === 'inspector' }" @click="currentView = 'inspector'">Data Inspector</button>
                 <button class="nav-btn" :class="{ active: currentView === 'template_inspector' }" @click="currentView = 'template_inspector'">Inspect Template</button>
                 <button class="nav-btn" :class="{ active: currentView === 'extractor' }" @click="currentView = 'extractor'">New Template</button>
+                <button class="nav-btn" :class="{ active: currentView === 'logs' }" @click="currentView = 'logs'">Logs</button>
             </div>
 
             <!-- HOME VIEW: Generator -->
@@ -39,6 +42,11 @@ const App = {
             <!-- TEMPLATE INSPECTOR VIEW -->
             <div v-show="currentView === 'template_inspector'">
                 <template-inspector-view></template-inspector-view>
+            </div>
+
+            <!-- LOG VIEWER -->
+            <div v-show="currentView === 'logs'">
+                <log-viewer-view></log-viewer-view>
             </div>
 
         </div>

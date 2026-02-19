@@ -44,16 +44,7 @@ def build_replacement_rules(args: Optional[Any] = None) -> List[Dict[str, Any]]:
             "fallback_path": ["processed_tables_data", "1", "col_inv_ref", 0],
             "match_mode": "exact"
         },
-        {
-            "find": "[[CUSTOMER_NAME]]",
-            "data_path": ["customer_info", "name"],
-            "match_mode": "exact"
-        },
-        {
-            "find": "[[CUSTOMER_ADDRESS]]",
-            "data_path": ["customer_info", "address"],
-            "match_mode": "exact"
-        }
+
     ])
     
     # DAF-specific rules (hardcoded replacements)

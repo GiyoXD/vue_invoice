@@ -57,7 +57,9 @@ class SingleTableProcessor(SheetProcessor):
             pallets=self.final_grand_total_pallets,
             final_grand_total_pallets=self.final_grand_total_pallets,  # Context override
             total_net_weight=float(total_net_weight),  # Add weight totals to context
-            total_gross_weight=float(total_gross_weight)
+
+            total_gross_weight=float(total_gross_weight),
+            is_last_table=True  # Single-table sheets are always the last table
         )
         
         # Get the bundles needed for LayoutBuilder

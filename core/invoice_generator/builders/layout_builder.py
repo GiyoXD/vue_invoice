@@ -578,16 +578,20 @@ class LayoutBuilder:
                 # Get actual column count if not already set
                 actual_num_cols = self.header_info.get('num_columns', None)
                 
-                logger.info(f"--- LAYOUT BUILDER FOOTER DEBUG ---")
-                logger.info(f"next_row_after_footer: {self.next_row_after_footer}")
-                logger.info(f"footer_builder used? {not self.skip_footer_builder}")
-                logger.info(f"Calling restore_template_footer...")
-                
-                self.template_state_builder.restore_template_footer(
-                    target_worksheet=self.worksheet,
-                    footer_start_row=self.next_row_after_footer,
-                    actual_num_cols=actual_num_cols
-                )
+                # CRITICAL FIX: Only restore template footer if this is the LAST table on the sheet.
+                # Otherwise, the static footer content (signatures, etc.) will be printed in the middle
+                # of the sheet, distorting subsequent tables.
+                if self.is_last_table:
+                    logger.info(f"--- RESTORING TEMPLATE FOOTER (Last Table) ---")
+                    logger.info(f"next_row_after_footer: {self.next_row_after_footer}")
+                    
+                    self.template_state_builder.restore_template_footer(
+                        target_worksheet=self.worksheet,
+                        footer_start_row=self.next_row_after_footer,
+                        actual_num_cols=actual_num_cols
+                    )
+                else:
+                    logger.info(f"Skipping template footer restoration (Not last table)")
                 logger.info(f"Template footer restored successfully")
             except Exception as e:
                 logger.error(f"Failed to restore template footer: {e}", exc_info=True)
