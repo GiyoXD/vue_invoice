@@ -286,20 +286,20 @@ class LegacyConfigMigrator:
         
         # Default footer configuration
         footer = {
-            "total_text_column_id": footer_config.get("total_text_column_id", "col_po"),
-            "total_text": footer_config.get("total_text", "TOTAL OF:"),
-            "pallet_count_column_id": footer_config.get("pallet_count_column_id", "col_desc"),
-            "sum_column_ids": footer_config.get("sum_column_ids", []),
+            "label_col": footer_config.get("label_col", "col_po"),
+            "label_text": footer_config.get("label_text", "TOTAL:"),
+            "count_col": footer_config.get("count_col", "col_desc"),
+            "sum_cols": footer_config.get("sum_cols", ["col_qty_sf", "col_amount"]),
             "merge_rules": [],
             "add_ons": {}
         }
         
         # Set default sum columns based on data source
-        if not footer["sum_column_ids"]:
+        if not footer["sum_cols"]:
             if data_source == "processed_tables_data":
-                footer["sum_column_ids"] = ["col_qty_pcs", "col_qty_sf", "col_net", "col_gross", "col_cbm"]
+                footer["sum_cols"] = ["col_qty_pcs", "col_qty_sf", "col_net", "col_gross", "col_cbm"]
             else:
-                footer["sum_column_ids"] = ["col_qty_sf", "col_amount"]
+                footer["sum_cols"] = ["col_qty_sf", "col_amount"]
         
         # Add-ons
         static_before = sheet_data.get("static_content_before_footer", {})

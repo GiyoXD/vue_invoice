@@ -68,9 +68,8 @@ def parse_mapping_rules(
                 logger.warning(f"Warning: Initial static rows column with ID '{static_column_id}' not found.")
             continue
 
-        # For all other rules, get the target column index using the RELIABLE ID
-        # Support both legacy 'id' and bundled 'column' keys
-        target_id = rule_value.get("id") or rule_value.get("column")
+        # For all other rules, strictly use the rule_key as the target ID
+        target_id = rule_key
         if target_id:
             covered_col_ids.add(target_id)
         target_col_idx = column_id_map.get(target_id)
@@ -214,11 +213,7 @@ def prepare_data_rows(
         """
         possible_keys = []
         
-        # 1. Target Column ID (strict mapping)
-        target_id = rule.get("column") or rule.get("id")
-        if target_id: possible_keys.append(target_id)
-        
-        # 2. Rule Key (the name in the mappings dict, often 'po', 'item')
+        # 1. Strict mapping using rule_key (the name in the mappings dict, often 'col_po', 'col_item')
         if rule_key: possible_keys.append(rule_key)
 
         found_value = None
@@ -275,7 +270,7 @@ def prepare_data_rows(
             for source_key, rule in dynamic_mapping_rules.items():
                 if not isinstance(rule, dict): continue
                 
-                target_id = rule.get("column") or rule.get("id")
+                target_id = source_key
                 if not target_id: continue
                 target_col_idx = column_id_map.get(target_id)
                 if not target_col_idx: continue
@@ -358,7 +353,7 @@ def prepare_data_rows(
             for source_key, rule in dynamic_mapping_rules.items():
                 if not isinstance(rule, dict): continue
                 
-                target_id = rule.get("column") or rule.get("id")
+                target_id = source_key
                 if not target_id: continue
                 target_col_idx = column_id_map.get(target_id)
                 if not target_col_idx: continue

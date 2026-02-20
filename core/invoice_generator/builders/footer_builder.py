@@ -499,7 +499,10 @@ class TableFooterBuilder(BundleAccessor):
 
         # Write total text
         total_text = self.override_total_text if self.override_total_text is not None else default_total_text
-        total_text_col_id = self.footer_config.get("total_text_column_id")
+        # In case the override or default wasn't provided, pull from 'label_text' or fallback to 'total_text'
+        if total_text == default_total_text:
+            total_text = self.footer_config.get("label_text", default_total_text)
+        total_text_col_id = self.footer_config.get("label_col")
         total_text_col_idx = self._resolve_column_index(total_text_col_id, column_map_by_id)
         
         logger.info(f"[FooterBuilder._build_footer_common] TOTAL TEXT DEBUG:")
@@ -513,13 +516,13 @@ class TableFooterBuilder(BundleAccessor):
             self._apply_footer_cell_style(cell, total_text_col_id, apply_border=(footer_type != "grand_total"))
             logger.info(f"[FooterBuilder._build_footer_common] WROTE TOTAL TEXT to {cell.coordinate} value='{cell.value}'")
         else:
-            logger.error(f"[FooterBuilder._build_footer_common] MISSING total_text_column_id in footer config!")
+            logger.error(f"[FooterBuilder._build_footer_common] MISSING label_col in footer config!")
             logger.error(f"   footer_config keys: {list(self.footer_config.keys())}")
-            logger.error(f"   total_text_column_id value: {total_text_col_id}")
+            logger.error(f"   label_col value: {total_text_col_id}")
             logger.error(f"   This footer will have NO total text label!")
 
         # Write pallet count
-        pallet_col_id = self.footer_config.get("pallet_count_column_id")
+        pallet_col_id = self.footer_config.get("count_col")
         pallet_col_idx = self._resolve_column_index(pallet_col_id, column_map_by_id)
         
         logger.debug(f"[FooterBuilder._build_footer_common] Pallet count: {self.pallet_count} at col_id={pallet_col_id}, col_idx={pallet_col_idx}")
@@ -531,9 +534,9 @@ class TableFooterBuilder(BundleAccessor):
             logger.debug(f"[FooterBuilder._build_footer_common] Wrote pallet text to {cell.coordinate}")
 
         # Write sum formulas
-        sum_column_ids = self.footer_config.get("sum_column_ids", [])
+        sum_column_ids = self.footer_config.get("sum_cols", [])
         logger.debug(f"[FooterBuilder._build_footer_common] Sum columns: {sum_column_ids}, sum_ranges: {self.sum_ranges}")
-        
+
         if self.sum_ranges:
             for col_id in sum_column_ids:
                 col_idx = column_map_by_id.get(col_id)
@@ -618,7 +621,7 @@ class TableFooterBuilder(BundleAccessor):
             column_id_map = self.header_info.get('column_id_map', {})
             
             # Get column IDs for placement
-            total_text_col_id = self.footer_config.get("total_text_column_id", "col_desc")
+            total_text_col_id = self.footer_config.get("label_col", "col_desc")
             total_text_col_idx = column_id_map.get(total_text_col_id)
             
             # Fallback if total_text_col_idx is missing
@@ -651,7 +654,7 @@ class TableFooterBuilder(BundleAccessor):
                 pallet_count = int(summary_data.get('pallet_count', 0))
                 
                 # Check sum values
-                sum_column_ids = self.footer_config.get("sum_column_ids", [])
+                sum_column_ids = self.footer_config.get("sum_cols", [])
                 has_sum_value = False
                 for col_id in sum_column_ids:
                     if col_id in summary_data:
@@ -668,10 +671,10 @@ class TableFooterBuilder(BundleAccessor):
                     logger.debug(f"Skipping {leather_type} summary row - no content")
                     continue
 
-                # Write Label to total_text_column_id
-                total_text = self.footer_config.get("total_text", "TOTAL OF:")
+                # Write Label to label_col
+                total_text_fallback = self.footer_config.get("label_text", "TOTAL OF:")
                 cell = self.worksheet.cell(row=current_row, column=total_text_col_idx)
-                cell.value = total_text
+                cell.value = total_text_fallback
                 apply_summary_style(cell, total_text_col_id)
                 
                 # Write Leather Type to the NEXT column
@@ -688,8 +691,8 @@ class TableFooterBuilder(BundleAccessor):
                     type_cell.value = type_text
                     apply_summary_style(type_cell, next_col_id)
                 
-                # Write pallet count to pallet_count_column_id (like regular footer)
-                pallet_col_id = self.footer_config.get("pallet_count_column_id")
+                # Write pallet count to count_col (like regular footer)
+                pallet_col_id = self.footer_config.get("count_col")
                 pallet_col_idx = column_id_map.get(pallet_col_id)
                 
                 if pallet_col_idx and pallet_count > 0:
@@ -699,7 +702,7 @@ class TableFooterBuilder(BundleAccessor):
                     apply_summary_style(pallet_cell, pallet_col_id)
                     logger.debug(f"Wrote {leather_type} pallet count '{pallet_text}' to {pallet_cell.coordinate}")
                 
-                # Write sum totals to sum_column_ids (like regular footer)
+                # Write sum totals to sum_cols (like regular footer)
                 for col_id in sum_column_ids:
                     if col_id in summary_data:
                         col_idx = column_id_map.get(col_id)

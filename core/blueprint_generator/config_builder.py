@@ -395,10 +395,10 @@ class ConfigBuilder:
                 sum_cols.append(col_id)
         
         footer = {
-            "total_text_column_id": total_col,
-            "total_text": total_text,
-            "pallet_count_column_id": pallet_col,
-            "sum_column_ids": sum_cols,
+            "label_col": total_col,
+            "label_text": total_text,
+            "count_col": pallet_col,
+            "sum_cols": sum_cols,
             "merge_rules": merge_rules,
             "add_ons": self._build_footer_addons(sheet)
         }

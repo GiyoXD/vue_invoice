@@ -384,50 +384,81 @@ class ExcelTemplateSanitizer:
 
     def _find_footer_start(self, ws: Worksheet, search_start_row: int) -> Optional[int]:
         """
-        Find the start of the footer by looking broadly for the 'Total' row.
+        Find the footer row by scanning for =SUM formula adjacency.
+
         Algorithm:
-        - Iterate backwards from max_row.
-        - STRICT MATCH: 'total' + '=SUM' formula.
-        - RELAXED MATCH (Fallback): 'total' + numeric/currency content.
+            1. Scan bottom-up from max_row to search_start_row.
+            2. For each row, collect column indices where cell value starts with '=SUM'.
+               Skip any cell not starting with '=' for speed.
+            3. If 2+ adjacent (consecutive) column indices have =SUM, mark row as candidate.
+            4. Return the LAST (highest row number) candidate found.
+            5. Fallback: if no adjacency match, try 'TOTAL' keyword detection.
+
+        Args:
+            ws: The worksheet to scan.
+            search_start_row: The row to start scanning from (header_row + 1).
+
+        Returns:
+            The 1-based row number of the footer, or None if not found.
         """
-        # Scan backwards
-        best_candidate = None
-        
-        for row in range(ws.max_row, search_start_row, -1):
-            has_total_keyword = False
-            has_sum_formula = False
-            has_value = False
-            
-            for col in range(1, min(20, ws.max_column + 1)): # Scan first 20 cols
+        end_scan = min(ws.max_row, search_start_row + 500)
+        max_col = min(ws.max_column + 1, 20)
+        last_candidate = None  # Highest row with 2+ adjacent =SUM cells
+
+        for row in range(search_start_row, end_scan + 1):
+            sum_cols = []  # Column indices with =SUM in this row
+
+            for col in range(1, max_col):
                 cell = ws.cell(row=row, column=col)
                 value = self._get_cell_value(cell)
-                
-                if value:
-                    val_lower = value.lower()
-                    if "total" in val_lower:
-                        has_total_keyword = True
-                        
-                    if val_lower.startswith("=sum"):
-                        has_sum_formula = True
-                    
-                    # Check for simple numeric/currency values often found in total rows
-                    if any(c in val_lower for c in ['$', '€', '£']) or value.replace('.','',1).isdigit():
-                        has_value = True
-                        
-            # STRICT MATCH
-            if has_total_keyword and has_sum_formula:
-                return row
-            
-            # Record Candidate for Fallback (First one from bottom up is likely the grand total)
-            if has_total_keyword and best_candidate is None:
-                 best_candidate = row
-                 
-        # If strict match failed, return best candidate (just "Total" keyword)
-        if best_candidate:
-            self.logger.warning(f"    Strict footer detection failed (Total + Formula). Using relaxed match at row {best_candidate}.")
-            return best_candidate
-            
-        return None
+
+                if not value:
+                    continue
+                # Fast skip: only care about formulas
+                if not value.startswith("="):
+                    continue
+                if value.upper().startswith("=SUM"):
+                    sum_cols.append(col)
+
+            # Check adjacency: need 2+ consecutive column indices
+            if len(sum_cols) >= 2 and self._has_adjacent_pair(sum_cols):
+                last_candidate = row
+
+        if last_candidate:
+            self.logger.info(f"    Footer detected via =SUM adjacency at row {last_candidate}")
+            return last_candidate
+
+        # --- FALLBACK: Original 'TOTAL' keyword scan (bottom-up) ---
+        self.logger.info("    =SUM adjacency scan found nothing. Falling back to TOTAL keyword scan.")
+        fallback_candidate = None
+        for row in range(ws.max_row, search_start_row, -1):
+            for col in range(1, max_col):
+                cell = ws.cell(row=row, column=col)
+                value = self._get_cell_value(cell)
+                if value and "total" in value.lower():
+                    fallback_candidate = row
+                    break
+            if fallback_candidate:
+                break
+
+        if fallback_candidate:
+            self.logger.warning(f"    Using TOTAL keyword fallback at row {fallback_candidate}.")
+        return fallback_candidate
+
+    def _has_adjacent_pair(self, sorted_cols: list) -> bool:
+        """
+        Check if a sorted list of column indices contains at least one adjacent pair.
+
+        Args:
+            sorted_cols: List of 1-based column indices (already in order from left-to-right scan).
+
+        Returns:
+            True if any two consecutive entries differ by exactly 1.
+        """
+        for i in range(len(sorted_cols) - 1):
+            if sorted_cols[i + 1] - sorted_cols[i] == 1:
+                return True
+        return False
 
     def _get_cell_value(self, cell) -> Optional[str]:
         if isinstance(cell, MergedCell) or cell.value is None:
