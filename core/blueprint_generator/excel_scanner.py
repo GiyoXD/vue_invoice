@@ -348,6 +348,26 @@ class ExcelLayoutScanner:
         """Analyze a single worksheet."""
         try:
             self.logger.info(f"  Analyzing sheet: {sheet_name}")
+            # Filter out unsupported sheets before scanning
+            normalized_name = sheet_name.lower()
+            if mapping_config:
+                sheet_mappings = mapping_config.get('sheet_name_mappings', {}).get('mappings', {})
+                for mapped_from, mapped_to in sheet_mappings.items():
+                    if mapped_from.lower() == normalized_name:
+                        normalized_name = mapped_to.lower()
+                        break
+
+            import re
+            is_supported = False
+            for s in BlueprintRules.ALLOWED_SEARCH_SHEETS:
+                # Use word boundaries so "pl" doesn't match "template" or "sample"
+                if re.search(r'\b' + re.escape(s) + r'\b', normalized_name):
+                    is_supported = True
+                    break
+                    
+            if not is_supported:
+                self.logger.info(f"    Skipping sheet '{sheet_name}': Not in allowed search list.")
+                return None
             
             # Find header row
             header_row, header_cells = self._find_header_row(worksheet, mapping_config)

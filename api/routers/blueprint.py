@@ -154,3 +154,51 @@ async def get_mapping_options():
         })
         
     return options
+
+@router.get("/mappings")
+async def get_mappings():
+    """
+    Get the global header_text_mappings
+    """
+    try:
+        from core.system_config import sys_config
+        with open(sys_config.mapping_config_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            # return the mappings dictionary
+            return data.get("header_text_mappings", {}).get("mappings", {})
+    except Exception as e:
+        logger.error(f"Failed to get mappings: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+class MappingsUpdateRequest(BaseModel):
+    mappings: Dict[str, str]
+
+@router.post("/mappings")
+async def update_mappings(request: MappingsUpdateRequest):
+    """
+    Overwrite the global header_text_mappings
+    """
+    try:
+        from core.system_config import sys_config
+        config_path = sys_config.mapping_config_path
+        
+        # Load existing config
+        data = {}
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+        
+        # Update or create header_text_mappings block
+        if "header_text_mappings" not in data:
+            data["header_text_mappings"] = {"mappings": {}}
+            
+        data["header_text_mappings"]["mappings"] = request.mappings
+        
+        # Save back
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+            
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Failed to update mappings: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})

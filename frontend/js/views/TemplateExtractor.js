@@ -1,4 +1,4 @@
-import { ref, reactive } from 'vue';
+import { ref, reactive, computed } from 'vue';
 
 export default {
     template: `
@@ -89,6 +89,63 @@ export default {
                 <button class="btn" @click="resetFlow">Process Another</button>
             </div>
         </div>
+
+            <!-- GLOBAL MAPPINGS -->
+            <div class="card" style="margin-top: 2rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" @click="showMappings = !showMappings">
+                    <h2>Manage Global Mappings</h2>
+                    <span>{{ showMappings ? '▲ Collapse' : '▼ Expand' }}</span>
+                </div>
+                
+                <div v-if="showMappings" style="margin-top: 1rem;">
+                    <p style="color: #94a3b8; margin-bottom: 1rem;">
+                        View and edit the globally recognized header mappings. These are used to automatically match headers in new templates.
+                    </p>
+                    
+                    <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+                        <input type="text" v-model="mappingSearch" class="input-field" placeholder="Search headers..." style="flex: 1;" />
+                    </div>
+
+                    <div style="max-height: 400px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 0.5rem;">
+                        <div class="mapping-grid" style="display: grid; gap: 0.5rem;">
+                            <!-- Header Row -->
+                            <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; font-weight: bold; padding: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
+                                <div>Header Text (Excel)</div>
+                                <div>System Field</div>
+                                <div style="width: 70px; text-align: center;">Action</div>
+                            </div>
+                            
+                            <!-- Data Rows -->
+                            <div v-for="(colId, headerText) in filteredMappings" :key="headerText" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: center; background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 4px;">
+                                <input type="text" :value="headerText" @change="updateMappingHeader(headerText, $event.target.value)" class="input-field" style="padding: 0.3rem;" />
+                                
+                                <select :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="input-field" style="padding: 0.3rem;">
+                                    <option v-for="opt in systemOptions" :value="opt.id">
+                                        {{ opt.label }} ({{ opt.id }})
+                                    </option>
+                                    <option v-if="!systemOptions.find(o => o.id === colId)" :value="colId">{{ colId }} (Unknown)</option>
+                                </select>
+                                
+                                <button class="btn-sm" @click="deleteMapping(headerText)" style="padding: 0.3rem; min-width: 70px; background-color: #ef4444; color: white; border: none; border-radius: 4px; cursor: pointer;">Delete</button>
+                            </div>
+                            <div v-if="Object.keys(filteredMappings).length === 0" style="padding: 1rem; text-align: center; color: #94a3b8;">
+                                No mappings found matching your search.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 1rem; display: flex; justify-content: flex-end;">
+                        <button class="btn" @click="saveMappings" :disabled="isSavingMappings" style="background-color: #22c55e;">
+                            {{ isSavingMappings ? 'Saving...' : 'Save Mappings' }}
+                        </button>
+                    </div>
+                    
+                    <div v-if="mappingStatusMessage" :class="['status-box', mappingStatusType]" style="margin-top: 1rem;">
+                        {{ mappingStatusMessage }}
+                    </div>
+                </div>
+            </div>
+        </div>
     `,
     setup() {
         const currentStep = ref(1);
@@ -96,6 +153,13 @@ export default {
         const isProcessing = ref(false);
         const statusMessage = ref("");
         const statusType = ref("info");
+
+        const showMappings = ref(false);
+        const globalMappings = ref({});
+        const mappingSearch = ref("");
+        const isSavingMappings = ref(false);
+        const mappingStatusMessage = ref("");
+        const mappingStatusType = ref("info");
 
         // Data
         const fileToken = ref(""); // New Token from backend
@@ -119,6 +183,77 @@ export default {
             }
         };
         fetchOptions();
+
+        const fetchMappings = async () => {
+            try {
+                const res = await fetch('/api/blueprint/mappings');
+                if (res.ok) {
+                    globalMappings.value = await res.json();
+                }
+            } catch (e) {
+                console.error("Failed to fetch mappings", e);
+            }
+        };
+        fetchMappings();
+
+        const filteredMappings = computed(() => {
+            if (!mappingSearch.value) return globalMappings.value;
+            const term = mappingSearch.value.toLowerCase();
+            const result = {};
+            for (const [key, val] of Object.entries(globalMappings.value)) {
+                if (key.toLowerCase().includes(term) || val.toLowerCase().includes(term)) {
+                    result[key] = val;
+                }
+            }
+            return result;
+        });
+
+        const updateMappingHeader = (oldKey, newKey) => {
+            const trimmed = newKey.trim();
+            if (oldKey === trimmed || !trimmed) return;
+            if (globalMappings.value[trimmed]) {
+                alert("Header mapping already exists.");
+                return;
+            }
+            globalMappings.value[trimmed] = globalMappings.value[oldKey];
+            delete globalMappings.value[oldKey];
+        };
+
+        const updateMappingColId = (key, newColId) => {
+            globalMappings.value[key] = newColId;
+        };
+
+        const deleteMapping = (key) => {
+            if (confirm(`Are you sure you want to delete the mapping for "${key}"?`)) {
+                delete globalMappings.value[key];
+            }
+        };
+
+        const saveMappings = async () => {
+            isSavingMappings.value = true;
+            mappingStatusMessage.value = "Saving mappings...";
+            mappingStatusType.value = "info";
+            try {
+                const res = await fetch('/api/blueprint/mappings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mappings: globalMappings.value })
+                });
+                if (res.ok) {
+                    mappingStatusMessage.value = "Mappings saved successfully!";
+                    mappingStatusType.value = "success";
+                    setTimeout(() => { mappingStatusMessage.value = ""; }, 3000);
+                } else {
+                    const data = await res.json();
+                    throw new Error(data.error || "Save failed");
+                }
+            } catch (e) {
+                mappingStatusType.value = "error";
+                mappingStatusMessage.value = e.message;
+            } finally {
+                isSavingMappings.value = false;
+            }
+        };
 
         const handleFileUpload = (e) => {
             selectedFile.value = e.target.files[0];
@@ -251,7 +386,18 @@ export default {
             confirmedHeaders,
             toggleMapping,
             systemOptions,
-            bundlePath
+            bundlePath,
+            showMappings,
+            globalMappings,
+            mappingSearch,
+            isSavingMappings,
+            mappingStatusMessage,
+            mappingStatusType,
+            filteredMappings,
+            updateMappingHeader,
+            updateMappingColId,
+            deleteMapping,
+            saveMappings
         };
     }
 };

@@ -198,14 +198,15 @@ class BlueprintGenerator:
             
             # [Smart Feature] "One-Shot Learning": Save new mappings globally
             try:
-                # We need to reload the FILE first to avoid race conditions/overwrites? 
-                # For now single-user simple overwrite of mappings section is acceptable.
-                # Actually, self._load_mapping_config() loaded it from file/memory.
-                
+                from core.system_config import sys_config
                 config_path = sys_config.mapping_config_path
+                
+                # Ensure directory exists
+                config_path.parent.mkdir(parents=True, exist_ok=True)
+                
                 with open(config_path, 'w', encoding='utf-8') as f:
                     json.dump(mapping_config, f, indent=4)
-                self.logger.info(f"   [Learning] Saved {len(runtime_mappings)} new mappings to global config.")
+                self.logger.info(f"   [Learning] Saved {len(runtime_mappings)} new mappings to global config at {config_path}.")
             except Exception as e:
                 self.logger.warning(f"   [Learning Failed] Could not save mappings to disk: {e}")
 

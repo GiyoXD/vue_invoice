@@ -28,6 +28,8 @@ class BlueprintRules:
     AGGREGATION_SHEETS: Set[str] = {"invoice", "contract", "inv", "commercial", "shipping", "bill"}
     # Processed Tables: Multiple tables or line items (Packing List, Details)
     PROCESSED_TABLES_SHEETS: Set[str] = {"packing list", "packing", "pl", "detail", "content", "weight"}
+    # Allowed search sheets: Union of all recognized sheet types that should be scanned
+    ALLOWED_SEARCH_SHEETS: Set[str] = AGGREGATION_SHEETS | PROCESSED_TABLES_SHEETS
 
     # 2. Column Definitions
     # These replace the hardcoded HEADER_MAPPINGS in excel_scanner.py
@@ -113,7 +115,7 @@ class BlueprintRules:
         ),
         "col_pallet_count": ColumnDefinition(
             id="col_pallet_count", 
-            keywords=["pallet", "plt", "pallet no", "pallet no.", "plt no", "plt no.", "pallet #", "pallet number"], 
+            keywords=["pallet", "plt", "pallet no", "pallet no.", "plt no", "plt no.", "pallet #", "pallet number", "pallet no.#", "pallet no. #"], 
             excel_format="@"
         ),
         "col_dc": ColumnDefinition(
@@ -121,6 +123,12 @@ class BlueprintRules:
             keywords=["dc", "dc no", "dc #"],
             excel_format="@",
             width=12.0
+        ),
+        "col_remark": ColumnDefinition(
+            id="col_remark",
+            keywords=["remark", "remarks", "note", "notes", "comment", "comments"],
+            excel_format="@",
+            width=20.0
         ),
     }
 

@@ -114,7 +114,7 @@ class BlueprintLogicValidator:
         
         for col in sheet_analysis.columns:
             # 1. Verify Parent Column ID
-            if col.id not in allowed_ids:
+            if col.id not in allowed_ids and not str(col.id or "").startswith("col_unknown_"):
                 raise ValueError(
                     f"Blueprint Verification Failed: Column '{col.header}' has Invalid ID '{col.id}'. "
                     f"It must be one of: {sorted(list(allowed_ids))}. "
@@ -124,7 +124,7 @@ class BlueprintLogicValidator:
             # 2. Verify Child Column ID
             if col.children:
                 for child in col.children:
-                    if child.id not in allowed_ids:
+                    if child.id not in allowed_ids and not str(child.id or "").startswith("col_unknown_"):
                         raise ValueError(
                             f"Blueprint Verification Failed: Child Column '{child.header}' has Invalid ID '{child.id}'. "
                             f"It must be one of: {sorted(list(allowed_ids))}."
