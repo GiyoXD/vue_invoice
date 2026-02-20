@@ -665,8 +665,8 @@ def run_invoice_automation(
                     "timestamp": datetime.datetime.now() # Add generation timestamp
                 },
                 # Include processed table data (potentially large)
-                 # RENAME: processed_tables_data -> processed_tables_multi (Matches Config)
-                 "processed_tables_multi": make_json_serializable(processed_tables),
+                 # RENAME: processed_tables_data -> multi_table
+                 "multi_table": make_json_serializable(processed_tables),
                  
                  # Include Footer Data - both per-table and grand total
                  "footer_data": {
@@ -677,19 +677,22 @@ def run_invoice_automation(
                      }
                  },
 
-                # Include BOTH aggregation results explicitly (formatted as lists)
-                # RENAME: standard_aggregation_results -> aggregation (Matches Config)
-                "aggregation": data_processor.format_aggregation_as_list(global_standard_aggregation_results, mode='standard'),
-                # RENAME: custom_aggregation_results -> aggregation_custom (Matches Suffix Rule)
-                "aggregation_custom": data_processor.format_aggregation_as_list(global_custom_aggregation_results, mode='custom'),
-                
-                # Normal aggregate per PO with pallets (group by PO + price)
-                # RENAME: normal_aggregate_per_po_with_pallets -> manifest_by_pallet_per_po (User Request)
-                "manifest_by_pallet_per_po": make_json_serializable(normal_aggregate_per_po),
+                # Group all unified aggregation outputs under single_table
+                "single_table": {
+                    # Include BOTH aggregation results explicitly (formatted as lists)
+                    # RENAME: standard_aggregation_results -> aggregation (Matches Config)
+                    "aggregation": data_processor.format_aggregation_as_list(global_standard_aggregation_results, mode='standard'),
+                    # RENAME: custom_aggregation_results -> aggregation_custom (Matches Suffix Rule)
+                    "aggregation_custom": data_processor.format_aggregation_as_list(global_custom_aggregation_results, mode='custom'),
+                    
+                    # Normal aggregate per PO with pallets (group by PO + price)
+                    # RENAME: normal_aggregate_per_po_with_pallets -> manifest_by_pallet_per_po (User Request)
+                    "manifest_by_pallet_per_po": make_json_serializable(normal_aggregate_per_po),
 
-                # Include the final compounded result (derived from one of the above, based on mode)
-                # RENAME: final_DAF_compounded_result -> aggregation_DAF (Matches Suffix Rule)
-                "aggregation_DAF": make_json_serializable(global_DAF_compounded_result)
+                    # Include the final compounded result (derived from one of the above, based on mode)
+                    # RENAME: final_DAF_compounded_result -> aggregation_DAF (Matches Suffix Rule)
+                    "aggregation_DAF": make_json_serializable(global_DAF_compounded_result)
+                }
             }
 
              # Convert the structure to a JSON string (pretty-printed)

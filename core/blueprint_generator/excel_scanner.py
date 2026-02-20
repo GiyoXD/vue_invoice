@@ -349,19 +349,29 @@ class ExcelLayoutScanner:
         try:
             self.logger.info(f"  Analyzing sheet: {sheet_name}")
             # Filter out unsupported sheets before scanning
-            normalized_name = sheet_name.lower()
-            if mapping_config:
+            normalized_name = sheet_name.lower().strip()
+            
+            # Fast mapping resolution using nested structure
+            if mapping_config and isinstance(mapping_config, dict):
                 sheet_mappings = mapping_config.get('sheet_name_mappings', {}).get('mappings', {})
-                for mapped_from, mapped_to in sheet_mappings.items():
-                    if mapped_from.lower() == normalized_name:
-                        normalized_name = mapped_to.lower()
-                        break
+                if isinstance(sheet_mappings, dict):
+                    # Fast case-insensitive exact matching
+                    lower_mappings = {k.lower().strip(): v for k, v in sheet_mappings.items()}
+                    if normalized_name in lower_mappings:
+                        normalized_name = lower_mappings[normalized_name].lower().strip()
 
-            import re
             is_supported = False
-            for s in BlueprintRules.ALLOWED_SEARCH_SHEETS:
-                # Use word boundaries so "pl" doesn't match "template" or "sample"
-                if re.search(r'\b' + re.escape(s) + r'\b', normalized_name):
+            
+            # Create a set of variants for matching (with/without underscores/spaces)
+            variants_to_check = {
+                normalized_name,
+                normalized_name.replace(' ', '_'),
+                normalized_name.replace('_', ' ')
+            }
+            
+            # 1. Exact match check (important for mapped system names like "summary_packing_list")
+            for variant in variants_to_check:
+                if variant in BlueprintRules.ALLOWED_SEARCH_SHEETS:
                     is_supported = True
                     break
                     
@@ -652,30 +662,27 @@ class ExcelLayoutScanner:
         return BlueprintRules.get_format_for_id(col_id)
     
     def _determine_data_source(self, sheet_name: str, columns: List[ColumnInfo], mapping_config: Optional[Dict[str, Any]] = None) -> str:
-        """Determine what data source this sheet uses."""
-        normalized_name = sheet_name.lower()
+        """
+        Determine if this sheet is 'aggregation' (single table) 
+        or 'processed_tables_multi' (repeating tables).
+        """
+        normalized_name = sheet_name.lower().strip()
         
-        # 1. Apply User Mappings from JSON
         if mapping_config:
             sheet_mappings = mapping_config.get('sheet_name_mappings', {}).get('mappings', {})
-            # Exact match (case insensitive)
-            for mapped_from, mapped_to in sheet_mappings.items():
-                if mapped_from.lower() == normalized_name:
-                    normalized_name = mapped_to.lower()
-                    break
-                    
-        # 2. Check Rules against Normalized Name
-        if any(s in normalized_name for s in BlueprintRules.AGGREGATION_SHEETS):
+            # Case-insensitive resolution
+            lower_mappings = {k.lower().strip(): v for k, v in sheet_mappings.items()}
+            if normalized_name in lower_mappings:
+                normalized_name = lower_mappings[normalized_name].lower()
+                
+        # 1. Exact match check against BlueprintRules definitions
+        if normalized_name in BlueprintRules.AGGREGATION_SHEETS:
             return "aggregation"
-        elif any(s in normalized_name for s in BlueprintRules.PROCESSED_TABLES_SHEETS):
+        elif normalized_name in BlueprintRules.PROCESSED_TABLES_SHEETS:
             return "processed_tables_multi"
-        
-        # Heuristic: if sheet has pcs/net/gross columns, it's likely packing list
-        col_ids = {c.id for c in columns}
-        if "col_qty_pcs" in col_ids or "col_net" in col_ids:
-            return "processed_tables_multi"
-        
-        return "aggregation"
+            
+        # Fallback (Should not be reached if ALLOWED_SEARCH_SHEETS is strict)
+        return "aggregation" # default   
     
     def _extract_font_info(self, worksheet: Worksheet, row: int, col: int) -> Dict[str, Any]:
         """Extract font information from a cell."""
@@ -709,17 +716,16 @@ class ExcelLayoutScanner:
                  
             # 3. Failure
             # Per user request: "if fail just increase it too 1000 px lol" 
-            # We raise error to ensure they "go and fix" the template.
-            raise ValueError(f"Row {row_idx} has no explicit height and default is generic. Please set row height in template.")
+            # We will use a safe default of 20.0 instead of a fatal crash, 
+            # but log it so the user knows to fix the template eventually.
+            self.logger.warning(f"Row {row_idx} has no explicit height. Defaulting to 20.0")
+            return 20.0
 
         try:
             header_height = get_height(header_row, "header")
         except ValueError as e:
              self.logger.warning(f"Header Row {header_row} height detection failed: {e}")
-             # SOFT FAIL per "1000 px" joke? No, hard fail preferred for "no fallback".
-             raise e
-
-        header_height = get_height(header_row, "header")
+             header_height = 20.0
             
         # Scan next 10 rows for data height (Median)
         heights = []

@@ -652,53 +652,92 @@ class BuilderConfigResolver:
         Extract the appropriate data source from invoice_data based on type.
         
         Refactored Logic (v2.2):
-        1. STRICT LOOKUP: Checks if 'data_source_type' exists as a direct key in invoice_data.
-        2. LEGACY FALLBACK: Checks the hardcoded 'type_mapping' for backward compatibility.
+        1. STRUCTURED LOOKUP: Checks `single_table` for aggregation types or `multi_table` for granular ones.
+        2. STRICT LOOKUP: Checks if 'data_source_type' exists as a direct key in invoice_data.
+        3. LEGACY FALLBACK: Checks the hardcoded 'type_mapping' for backward compatibility.
         """
         if not self.invoice_data:
             return {}
         
-        # --- PATH 1: FLAG-AWARE STRICT LOOKUP (The "New Way") ---
-        # 1. Flag Checks: If DAF/Custom mode is on, look for suffixed keys first.
-        #    e.g. Config="shipping" + DAF=True -> Look for "shipping_DAF"
+        # --- PATH 0: STRUCTURED LOOKUP (The "Newest Way" - v2.3) ---
+        single_table_group = self.invoice_data.get('single_table', {})
+        multi_table_group = self.invoice_data.get('multi_table', {})
+        
+        # Determine if we should look in single_table or multi_table
+        if data_source_type in ['processed_tables_multi', 'processed_tables', 'detail_packing_list']:
+            if multi_table_group:
+                logger.debug(f"Smart Resolver: Found multi_table data for '{data_source_type}'")
+                return multi_table_group
+        else:
+            # Single table types (aggregation, DAF_aggregation, custom_aggregation, summary_packing_list)
+            # 1. Flag Checks: If DAF/Custom mode is on, look for suffixed keys first inside `single_table`.
+            if self.args:
+                if getattr(self.args, 'DAF', False):
+                    daf_key = f"{data_source_type}_DAF"
+                    if daf_key in single_table_group:
+                        logger.debug(f"Smart Resolver: DAF Mode ON. Found variant '{daf_key}' in single_table")
+                        return single_table_group[daf_key]
+                
+                if getattr(self.args, 'custom', False):
+                    custom_key = f"{data_source_type}_custom"
+                    if custom_key in single_table_group:
+                        logger.debug(f"Smart Resolver: Custom Mode ON. Found variant '{custom_key}' in single_table")
+                        return single_table_group[custom_key]
+                        
+            # 2. Base Lookup in single_table: If no flag match (or flags off), use exact key.
+            if data_source_type in single_table_group:
+                logger.debug(f"Smart Resolver: Found strict match for data_source '{data_source_type}' in single_table")
+                return single_table_group[data_source_type]
+            
+            # 3. Handle Special Fallbacks strictly within single_table
+            if data_source_type == 'summary_packing_list':
+                if 'manifest_by_pallet_per_po' in single_table_group:
+                    logger.info("Summary packing list requested: Using 'manifest_by_pallet_per_po' from single_table group")
+                    return single_table_group['manifest_by_pallet_per_po']
+                    
+            if data_source_type == 'aggregation' and self.args and getattr(self.args, 'custom', False):
+                if 'aggregation_custom' in single_table_group:
+                    logger.info("Custom mode active: Using 'aggregation_custom' from single_table group")
+                    return single_table_group['aggregation_custom']
+                    
+            if data_source_type in ['aggregation', 'DAF_aggregation'] and self.args and getattr(self.args, 'DAF', False):
+                if 'aggregation_DAF' in single_table_group:
+                    logger.info("DAF mode active: Using 'aggregation_DAF' from single_table group")
+                    return single_table_group['aggregation_DAF']
+
+        # --- PATH 1: FLAG-AWARE STRICT LOOKUP AT ROOT (Fallback for un-nested objects) ---
         if self.args:
             if getattr(self.args, 'DAF', False):
                 daf_key = f"{data_source_type}_DAF"
                 if daf_key in self.invoice_data:
-                    logger.debug(f"Smart Resolver: DAF Mode ON. Found variant '{daf_key}'")
+                    logger.debug(f"Smart Resolver: DAF Mode ON. Found variant '{daf_key}' at root")
                     return self.invoice_data[daf_key]
             
             if getattr(self.args, 'custom', False):
                 custom_key = f"{data_source_type}_custom"
                 if custom_key in self.invoice_data:
-                    logger.debug(f"Smart Resolver: Custom Mode ON. Found variant '{custom_key}'")
+                    logger.debug(f"Smart Resolver: Custom Mode ON. Found variant '{custom_key}' at root")
                     return self.invoice_data[custom_key]
 
-        # 2. Base Lookup: If no flag match (or flags off), use exact key.
         if data_source_type in self.invoice_data:
-            logger.debug(f"Smart Resolver: Found strict match for data_source '{data_source_type}'")
+            logger.debug(f"Smart Resolver: Found strict match for data_source '{data_source_type}' at root")
             return self.invoice_data[data_source_type]
 
         # --- PATH 2: LEGACY MAPPING (The "Old Way") ---
-        # Map data source types to invoice_data keys (Backwards Compatibility)
         type_mapping = {
             'aggregation': 'standard_aggregation_results',
-            # 'DAF_aggregation' is not standard in config, but if used, map to DAF result
             'DAF_aggregation': 'final_DAF_compounded_result', 
             'custom_aggregation': 'custom_aggregation_results',
             'processed_tables_multi': 'processed_tables_data',
             'processed_tables': 'processed_tables_data',
+            'detail_packing_list': 'processed_tables_data'
         }
         
-        # SPECIAL HANDLING FOR DAF MODE ON SINGLE TABLE (aggregation)
-        # If DAF mode is on AND we are asking for 'aggregation' (Invoice/Contract),
-        # we want to use the DAF compounded results.
         if self.args and getattr(self.args, 'DAF', False):
             if data_source_type == 'aggregation' or data_source_type == 'DAF_aggregation':
                 if 'final_DAF_compounded_result' in self.invoice_data:
                     logger.info(f"DAF mode active: Switching data source to 'final_DAF_compounded_result'")
                     return self.invoice_data['final_DAF_compounded_result']
-
         
         if data_source_type == 'aggregation' and self.args and getattr(self.args, 'custom', False):
             logger.info(f"Custom mode active: Switching data source from 'aggregation' to 'custom_aggregation'")

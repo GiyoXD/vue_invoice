@@ -24,10 +24,10 @@ class BlueprintRules:
 
     # 1. Sheet Classification Rules
     # 1. Sheet Classification Rules
-    # Aggregation: Single table, usually financials (Invoice, Contract)
-    AGGREGATION_SHEETS: Set[str] = {"invoice", "contract", "inv", "commercial", "shipping", "bill"}
+    # Aggregation: Single table, usually financials (Invoice, Contract, Summary Packing List)
+    AGGREGATION_SHEETS: Set[str] = {"invoice", "contract", "inv", "commercial", "shipping", "bill", "summary_packing_list"}
     # Processed Tables: Multiple tables or line items (Packing List, Details)
-    PROCESSED_TABLES_SHEETS: Set[str] = {"packing list", "packing", "pl", "detail", "content", "weight"}
+    PROCESSED_TABLES_SHEETS: Set[str] = {"packing list", "packing", "pl", "detail", "content", "weight", "detail_packing_list"}
     # Allowed search sheets: Union of all recognized sheet types that should be scanned
     ALLOWED_SEARCH_SHEETS: Set[str] = AGGREGATION_SHEETS | PROCESSED_TABLES_SHEETS
 

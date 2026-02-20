@@ -298,11 +298,15 @@ def _get_processor(ds_type, tmpl_ws, out_ws, name, conf, loader, data, args, pal
         "output_workbook": out_wb
     }
 
-    if ds_type in ["processed_tables_multi", "processed_tables"]:
+    if ds_type in ["processed_tables_multi", "processed_tables", "detail_packing_list"]:
         return MultiTableProcessor(**kwargs)
     elif ds_type == "placeholder":
         return PlaceholderProcessor(**kwargs)
+    elif "aggregation" in ds_type or ds_type in ["DAF_aggregation", "summary_packing_list"]:
+        # Fallback to aggregation for unknown/custom types that have 'aggregation' in the name
+        return SingleTableProcessor(**kwargs)
     else:
+        logger.warning(f"Unknown data source type '{ds_type}', falling back to SingleTableProcessor")
         return SingleTableProcessor(**kwargs)
 
 
@@ -379,6 +383,7 @@ def main():
     
     # Configure Logging for CLI using centralized logger
     from core.logger_config import setup_logging
+    from core.system_config import sys_config
     level = logging.DEBUG if args.debug else logging.INFO
     setup_logging(log_dir=sys_config.run_log_dir, level=level)
     
@@ -386,7 +391,6 @@ def main():
     if args.output:
         output_path = Path(args.output)
     else:
-        from core.system_config import sys_config
         # Derive from input stem
         input_stem = Path(args.input_data_file).stem
         output_path = sys_config.output_dir / f"{input_stem}.xlsx"
