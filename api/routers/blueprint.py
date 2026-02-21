@@ -156,27 +156,29 @@ async def get_mapping_options():
     return options
 
 @router.get("/mappings")
-async def get_mappings():
+async def get_mappings(mapping_type: str = "header_text_mappings"):
     """
-    Get the global header_text_mappings
+    Get the global mapping dictionary of the specified type.
+    Options: header_text_mappings, sheet_name_mappings, shipping_list_header_map
     """
     try:
         from core.system_config import sys_config
         with open(sys_config.mapping_config_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            # return the mappings dictionary
-            return data.get("header_text_mappings", {}).get("mappings", {})
+            # return the mappings dictionary for the specific type
+            return data.get(mapping_type, {}).get("mappings", {})
     except Exception as e:
         logger.error(f"Failed to get mappings: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 class MappingsUpdateRequest(BaseModel):
+    mapping_type: str = "header_text_mappings"
     mappings: Dict[str, str]
 
 @router.post("/mappings")
 async def update_mappings(request: MappingsUpdateRequest):
     """
-    Overwrite the global header_text_mappings
+    Overwrite the specified global mapping dictionary
     """
     try:
         from core.system_config import sys_config
@@ -188,11 +190,11 @@ async def update_mappings(request: MappingsUpdateRequest):
             with open(config_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
         
-        # Update or create header_text_mappings block
-        if "header_text_mappings" not in data:
-            data["header_text_mappings"] = {"mappings": {}}
+        # Update or create mapping block
+        if request.mapping_type not in data:
+            data[request.mapping_type] = {"mappings": {}}
             
-        data["header_text_mappings"]["mappings"] = request.mappings
+        data[request.mapping_type]["mappings"] = request.mappings
         
         # Save back
         with open(config_path, 'w', encoding='utf-8') as f:

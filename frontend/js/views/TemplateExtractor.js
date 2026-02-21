@@ -99,27 +99,46 @@ export default {
                 
                 <div v-if="showMappings" style="margin-top: 1rem;">
                     <p style="color: #94a3b8; margin-bottom: 1rem;">
-                        View and edit the globally recognized header mappings. These are used to automatically match headers in new templates.
+                        View and edit the globally recognized mappings. These are used to automatically match headers and sheets in templates.
                     </p>
                     
                     <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-                        <input type="text" v-model="mappingSearch" class="input-field" placeholder="Search headers..." style="flex: 1;" />
+                        <select v-model="activeMappingType" @change="switchMappingType($event.target.value)" class="input-field" style="width: 280px; font-weight: bold;">
+                            <option value="header_text_mappings">Header Mappings (Standard)</option>
+                            <option value="shipping_list_header_map">Header Mappings (Shipping)</option>
+                            <option value="sheet_name_mappings">Sheet Name Mappings</option>
+                        </select>
+                        <input type="text" v-model="mappingSearch" class="input-field" placeholder="Search..." style="flex: 1;" />
+                    </div>
+
+                    <!-- Add New Mapping Row -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; margin-bottom: 1rem; padding: 0.5rem; background: rgba(34, 197, 94, 0.05); border: 1px dashed #22c55e; border-radius: 6px; align-items: center;">
+                        <input type="text" v-model="newMappingKey" class="input-field" placeholder="New Input Text (e.g. 'Qty(SF)')" style="padding: 0.5rem;" />
+                        
+                        <input v-if="activeMappingType === 'sheet_name_mappings'" type="text" v-model="newMappingVal" class="input-field" placeholder="Target Name (e.g. 'Packing list')" style="padding: 0.5rem;" />
+                        <select v-else v-model="newMappingVal" class="input-field" style="padding: 0.5rem;">
+                            <option value="" disabled selected>Select system field...</option>
+                            <option v-for="opt in systemOptions" :value="opt.id">{{ opt.label }} ({{ opt.id }})</option>
+                        </select>
+                        
+                        <button class="btn" @click.prevent="addNewMapping" style="margin: 0; min-width: 80px;" :disabled="!newMappingKey || !newMappingVal">Add</button>
                     </div>
 
                     <div style="max-height: 400px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 0.5rem;">
                         <div class="mapping-grid" style="display: grid; gap: 0.5rem;">
                             <!-- Header Row -->
                             <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; font-weight: bold; padding: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                                <div>Header Text (Excel)</div>
-                                <div>System Field</div>
+                                <div>Original Text (Excel)</div>
+                                <div>Mapped Target (System)</div>
                                 <div style="width: 70px; text-align: center;">Action</div>
                             </div>
                             
-                            <!-- Data Rows -->
                             <div v-for="(colId, headerText) in filteredMappings" :key="headerText" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: center; background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 4px;">
                                 <input type="text" :value="headerText" @change="updateMappingHeader(headerText, $event.target.value)" class="input-field" style="padding: 0.3rem;" />
                                 
-                                <select :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="input-field" style="padding: 0.3rem;">
+                                <input v-if="activeMappingType === 'sheet_name_mappings'" type="text" :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="input-field" style="padding: 0.3rem;" />
+                                
+                                <select v-else :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="input-field" style="padding: 0.3rem;">
                                     <option v-for="opt in systemOptions" :value="opt.id">
                                         {{ opt.label }} ({{ opt.id }})
                                     </option>
@@ -160,6 +179,9 @@ export default {
         const isSavingMappings = ref(false);
         const mappingStatusMessage = ref("");
         const mappingStatusType = ref("info");
+        const activeMappingType = ref("header_text_mappings");
+        const newMappingKey = ref("");
+        const newMappingVal = ref("");
 
         // Data
         const fileToken = ref(""); // New Token from backend
@@ -186,7 +208,7 @@ export default {
 
         const fetchMappings = async () => {
             try {
-                const res = await fetch('/api/blueprint/mappings');
+                const res = await fetch(`/api/blueprint/mappings?mapping_type=${activeMappingType.value}`);
                 if (res.ok) {
                     globalMappings.value = await res.json();
                 }
@@ -215,18 +237,42 @@ export default {
                 alert("Header mapping already exists.");
                 return;
             }
-            globalMappings.value[trimmed] = globalMappings.value[oldKey];
-            delete globalMappings.value[oldKey];
+
+            const newMappings = { ...globalMappings.value };
+            newMappings[trimmed] = newMappings[oldKey];
+            delete newMappings[oldKey];
+            globalMappings.value = newMappings;
         };
 
         const updateMappingColId = (key, newColId) => {
-            globalMappings.value[key] = newColId;
+            globalMappings.value = { ...globalMappings.value, [key]: newColId };
         };
 
         const deleteMapping = (key) => {
             if (confirm(`Are you sure you want to delete the mapping for "${key}"?`)) {
-                delete globalMappings.value[key];
+                const newMappings = { ...globalMappings.value };
+                delete newMappings[key];
+                globalMappings.value = newMappings;
             }
+        };
+
+        const addNewMapping = () => {
+            if (newMappingKey.value && newMappingVal.value) {
+                globalMappings.value = {
+                    ...globalMappings.value,
+                    [newMappingKey.value]: newMappingVal.value
+                };
+                newMappingKey.value = "";
+                newMappingVal.value = "";
+            }
+        };
+
+        const switchMappingType = async (type) => {
+            activeMappingType.value = type;
+            await fetchMappings();
+            mappingStatusMessage.value = "";
+            newMappingKey.value = "";
+            newMappingVal.value = "";
         };
 
         const saveMappings = async () => {
@@ -237,7 +283,10 @@ export default {
                 const res = await fetch('/api/blueprint/mappings', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mappings: globalMappings.value })
+                    body: JSON.stringify({
+                        mapping_type: activeMappingType.value,
+                        mappings: globalMappings.value
+                    })
                 });
                 if (res.ok) {
                     mappingStatusMessage.value = "Mappings saved successfully!";
@@ -397,7 +446,12 @@ export default {
             updateMappingHeader,
             updateMappingColId,
             deleteMapping,
-            saveMappings
+            saveMappings,
+            activeMappingType,
+            switchMappingType,
+            newMappingKey,
+            newMappingVal,
+            addNewMapping
         };
     }
 };
