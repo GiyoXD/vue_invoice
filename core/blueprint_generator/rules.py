@@ -37,7 +37,7 @@ class BlueprintRules:
     COLUMNS: Dict[str, ColumnDefinition] = {
         "col_static": ColumnDefinition(
             id="col_static", 
-            keywords=["mark", "mark & n", "mark & no", "mark & nº", "mark and no"], 
+            keywords=["mark & n", "mark & no", "mark & nº", "mark and no"], 
             excel_format="@",
             width=24.71
         ),
@@ -55,14 +55,14 @@ class BlueprintRules:
         ),
         "col_desc": ColumnDefinition(
             id="col_desc", 
-            keywords=["description", "desc"], 
+            keywords=["description"], 
             excel_format="@",
             width=26.0
         ),
         # Quantity Headers
         "col_qty_header": ColumnDefinition(
             id="col_qty_header", 
-            keywords=["quantity", "qty"], 
+            keywords=["quantity"], 
             excel_format="@",
             width=15.0
         ),
@@ -74,14 +74,14 @@ class BlueprintRules:
         ),
         "col_qty_sf": ColumnDefinition(
             id="col_qty_sf", 
-            keywords=["sf", "sqft", "ft2", "quantity(sf)"], 
+            keywords=["sf", "sqft", "quantity(sf)"], 
             excel_format="#,##0.00",
             width=15.0
         ),
         # Financials
         "col_unit_price": ColumnDefinition(
             id="col_unit_price", 
-            keywords=["unit price", "unit", "price", "unit price (usd)", "unit price(usd)"], 
+            keywords=["unit price", "price", "unit price (usd)", "unit price(usd)"], 
             excel_format="#,##0.00",
             width=15.0
         ),
@@ -166,7 +166,7 @@ class BlueprintRules:
     # 3. Default Footer Sums
     # Defines which columns should be summed in the footer by default
     DEFAULT_FOOTER_SUMS: Dict[str, List[str]] = {
-        "aggregation": ["col_qty_sf", "col_amount"],
+        "aggregation": ["col_qty_pcs", "col_qty_sf", "col_amount", "col_net", "col_gross", "col_cbm"],
         "processed_tables_multi": ["col_qty_pcs", "col_qty_sf", "col_net", "col_gross", "col_cbm"]
     }
 

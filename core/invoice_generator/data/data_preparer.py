@@ -1,4 +1,4 @@
-from typing import Any, Union, Dict, List, Tuple
+from typing import Any, Union, Dict, List, Tuple, Optional
 from decimal import Decimal
 import logging
 logger = logging.getLogger(__name__)
@@ -167,6 +167,36 @@ def _apply_fallback(
     if val is not None:
         row_dict[target_col_idx] = val
 
+import re
+
+def _parse_formula_def(formula_def: Union[str, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """
+    Normalizes a formula definition into a dictionary with 'template' and 'inputs'.
+    Supports both legacy dict format: {"template": "{col_a} * {col_b}", "inputs": ["col_a", "col_b"]}
+    and modern string format: "{col_a} * {col_b}" (auto-extracts inputs via regex).
+    """
+    if isinstance(formula_def, dict) and 'template' in formula_def:
+        return formula_def
+        
+    if isinstance(formula_def, str) and formula_def.strip():
+        # Auto-extract inputs encased in curly brackets {like_this}
+        inputs = re.findall(r'\{([^}]+)\}', formula_def)
+        # Filter out special non-column placeholders like {row}
+        filtered_inputs = [inp for inp in inputs if inp != 'row']
+        
+        # Rewrite the template to use {col_ref_0}, {col_ref_1}, etc. format
+        # This is strictly required by the data_table_builder.py engine
+        processed_template = formula_def
+        for i, input_col in enumerate(filtered_inputs):
+            processed_template = processed_template.replace(f'{{{input_col}}}', f'{{col_ref_{i}}}')
+            
+        return {
+            'template': processed_template,
+            'inputs': filtered_inputs
+        }
+        
+    return None
+
 def prepare_data_rows(
     data_source_type: str,
     data_source: Union[Dict, List],
@@ -275,62 +305,63 @@ def prepare_data_rows(
                 target_col_idx = column_id_map.get(target_id)
                 if not target_col_idx: continue
                 
-                # --- CHECK FOR MODE-SPECIFIC FORMULAS FIRST ---
-                # Check for Custom Mode Formula
-                if custom_mode and 'formula_on_custom' in rule:
-                    formula_def = rule['formula_on_custom']
-                    if isinstance(formula_def, dict) and 'template' in formula_def:
-                         row_dict[target_col_idx] = {
-                             'type': 'formula',
-                             'template': formula_def.get('template'),
-                             'inputs': formula_def.get('inputs', [])
-                         }
-                         continue # Skip fetching value from source
-                
-                # Check for DAF Mode Formula
-                if DAF_mode and 'formula_on_DAF' in rule:
-                    formula_def = rule['formula_on_DAF']
-                    if isinstance(formula_def, dict) and 'template' in formula_def:
-                         row_dict[target_col_idx] = {
-                             'type': 'formula',
-                             'template': formula_def.get('template'),
-                             'inputs': formula_def.get('inputs', [])
-                         }
-                         continue # Skip fetching value from source
-                
-                # Check for Standard Mode Formula (Explicit)
-                if not custom_mode and not DAF_mode and 'formula_on_standard' in rule:
-                    formula_def = rule['formula_on_standard']
-                    if isinstance(formula_def, dict) and 'template' in formula_def:
-                         row_dict[target_col_idx] = {
-                             'type': 'formula',
-                             'template': formula_def.get('template'),
-                             'inputs': formula_def.get('inputs', [])
-                         }
-                         continue # Skip fetching value from source
-
-                # Check for Generic/Standard Formula (Default)
-                if 'formula' in rule:
-                    formula_def = rule['formula']
-                    if isinstance(formula_def, dict) and 'template' in formula_def:
-                         row_dict[target_col_idx] = {
-                             'type': 'formula',
-                             'template': formula_def.get('template'),
-                             'inputs': formula_def.get('inputs', [])
-                         }
-                         continue # Skip fetching value from source
-                # ----------------------------------------------
-                
                 # Fetch value using smart lookup (passing main dict and row index)
                 val = get_value_from_row_or_cols(data_source, rule, source_key, row_idx=i)
-                
                 if val is not None:
                     row_dict[target_col_idx] = val
                 
-                # Apply Fallback
+                # If value is empty or missing, try Formula Fallback, then Text Fallback
                 current_val = row_dict.get(target_col_idx)
                 if current_val in [None, ""]:
-                    _apply_fallback(row_dict, target_col_idx, rule, DAF_mode, custom_mode)
+                    formula_applied = False
+                    
+                    # Check for Custom Mode Formula
+                    if custom_mode and 'formula_on_custom' in rule:
+                        parsed_formula = _parse_formula_def(rule['formula_on_custom'])
+                        if parsed_formula:
+                             row_dict[target_col_idx] = {
+                                 'type': 'formula',
+                                 'template': parsed_formula['template'],
+                                 'inputs': parsed_formula.get('inputs', [])
+                             }
+                             formula_applied = True
+                    
+                    # Check for DAF Mode Formula
+                    elif DAF_mode and 'formula_on_DAF' in rule:
+                        parsed_formula = _parse_formula_def(rule['formula_on_DAF'])
+                        if parsed_formula:
+                             row_dict[target_col_idx] = {
+                                 'type': 'formula',
+                                 'template': parsed_formula['template'],
+                                 'inputs': parsed_formula.get('inputs', [])
+                             }
+                             formula_applied = True
+                    
+                    # Check for Standard Mode Formula (Explicit)
+                    elif not custom_mode and not DAF_mode and 'formula_on_standard' in rule:
+                        parsed_formula = _parse_formula_def(rule['formula_on_standard'])
+                        if parsed_formula:
+                             row_dict[target_col_idx] = {
+                                 'type': 'formula',
+                                 'template': parsed_formula['template'],
+                                 'inputs': parsed_formula.get('inputs', [])
+                             }
+                             formula_applied = True
+
+                    # Check for Generic/Standard Formula (Default)
+                    elif 'formula' in rule:
+                        parsed_formula = _parse_formula_def(rule['formula'])
+                        if parsed_formula:
+                             row_dict[target_col_idx] = {
+                                 'type': 'formula',
+                                 'template': parsed_formula['template'],
+                                 'inputs': parsed_formula.get('inputs', [])
+                             }
+                             formula_applied = True
+                             
+                    # Apply Text Fallback if no formula was applied
+                    if not formula_applied:
+                        _apply_fallback(row_dict, target_col_idx, rule, DAF_mode, custom_mode)
             
             # Apply static values
             for col_idx, static_val in static_value_map.items():
@@ -358,68 +389,70 @@ def prepare_data_rows(
                 target_col_idx = column_id_map.get(target_id)
                 if not target_col_idx: continue
                 
-                # --- CHECK FOR MODE-SPECIFIC FORMULAS FIRST ---
-                # Check for Custom Mode Formula
-                if custom_mode and 'formula_on_custom' in rule:
-                    formula_def = rule['formula_on_custom']
-                    if isinstance(formula_def, dict) and 'template' in formula_def:
-                         row_dict[target_col_idx] = {
-                             'type': 'formula',
-                             'template': formula_def.get('template'),
-                             'inputs': formula_def.get('inputs', [])
-                         }
-                         continue # Skip fetching value from source
-                
-                # Check for DAF Mode Formula
-                if DAF_mode and 'formula_on_DAF' in rule:
-                    formula_def = rule['formula_on_DAF']
-                    if isinstance(formula_def, dict) and 'template' in formula_def:
-                         row_dict[target_col_idx] = {
-                             'type': 'formula',
-                             'template': formula_def.get('template'),
-                             'inputs': formula_def.get('inputs', [])
-                         }
-                         continue # Skip fetching value from source
-                
-                # Check for Standard Mode Formula (Explicit)
-                if not custom_mode and not DAF_mode and 'formula_on_standard' in rule:
-                    formula_def = rule['formula_on_standard']
-                    if isinstance(formula_def, dict) and 'template' in formula_def:
-                         row_dict[target_col_idx] = {
-                             'type': 'formula',
-                             'template': formula_def.get('template'),
-                             'inputs': formula_def.get('inputs', [])
-                         }
-                         continue # Skip fetching value from source
-
-                # Check for Generic/Standard Formula (Default)
-                if 'formula' in rule:
-                    formula_def = rule['formula']
-                    if isinstance(formula_def, dict) and 'template' in formula_def:
-                         row_dict[target_col_idx] = {
-                             'type': 'formula',
-                             'template': formula_def.get('template'),
-                             'inputs': formula_def.get('inputs', [])
-                         }
-                         continue # Skip fetching value from source
-                # ----------------------------------------------
-                
                 # Fetch value using smart lookup (passing row object, no row index)
                 val = get_value_from_row_or_cols(row_data, rule, source_key, row_idx=None)
-                
                 if val is not None:
                     row_dict[target_col_idx] = val
 
-                # Apply Fallback
+                # If value is empty or missing, try Formula Fallback, then Text Fallback
                 current_val = row_dict.get(target_col_idx)
                 if current_val in [None, ""]:
-                    _apply_fallback(row_dict, target_col_idx, rule, DAF_mode, custom_mode)
+                    formula_applied = False
+                    
+                    # Check for Custom Mode Formula
+                    if custom_mode and 'formula_on_custom' in rule:
+                        parsed_formula = _parse_formula_def(rule['formula_on_custom'])
+                        if parsed_formula:
+                             row_dict[target_col_idx] = {
+                                 'type': 'formula',
+                                 'template': parsed_formula['template'],
+                                 'inputs': parsed_formula.get('inputs', [])
+                             }
+                             formula_applied = True
+                    
+                    # Check for DAF Mode Formula
+                    elif DAF_mode and 'formula_on_DAF' in rule:
+                        parsed_formula = _parse_formula_def(rule['formula_on_DAF'])
+                        if parsed_formula:
+                             row_dict[target_col_idx] = {
+                                 'type': 'formula',
+                                 'template': parsed_formula['template'],
+                                 'inputs': parsed_formula.get('inputs', [])
+                             }
+                             formula_applied = True
+                             
+                    # Check for Standard Mode Formula (Explicit)
+                    elif not custom_mode and not DAF_mode and 'formula_on_standard' in rule:
+                        parsed_formula = _parse_formula_def(rule['formula_on_standard'])
+                        if parsed_formula:
+                             row_dict[target_col_idx] = {
+                                 'type': 'formula',
+                                 'template': parsed_formula['template'],
+                                 'inputs': parsed_formula.get('inputs', [])
+                             }
+                             formula_applied = True
+
+                    # Check for Generic/Standard Formula (Default)
+                    elif 'formula' in rule:
+                        parsed_formula = _parse_formula_def(rule['formula'])
+                        if parsed_formula:
+                             row_dict[target_col_idx] = {
+                                 'type': 'formula',
+                                 'template': parsed_formula['template'],
+                                 'inputs': parsed_formula.get('inputs', [])
+                             }
+                             formula_applied = True
+                             
+                    # Apply Text Fallback if no formula was applied
+                    if not formula_applied:
+                        _apply_fallback(row_dict, target_col_idx, rule, DAF_mode, custom_mode)
             
             # Apply static values
             for col_idx, static_val in static_value_map.items():
                 if col_idx not in row_dict:
                     row_dict[col_idx] = static_val
             
+            logger.debug(f"[DEBUG-ROW] Source keys: {list(row_data.keys())} - target row dict for row {len(data_rows_prepared)}: {row_dict}")
             data_rows_prepared.append(row_dict)
     
     else:

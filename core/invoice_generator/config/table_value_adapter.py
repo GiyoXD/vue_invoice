@@ -139,6 +139,11 @@ class TableDataAdapter:
             custom_mode=self.custom_mode
         )
         
+        logger.debug(f"[DEBUG-RESOLVE] Parsed Rules: {parsed['dynamic_mapping_rules'].keys()}")
+        logger.debug(f"[DEBUG-RESOLVE] column_id_map: {self.column_id_map}")
+        logger.debug(f"[DEBUG-RESOLVE] idx_to_header: {self.idx_to_header_map}")
+        logger.debug(f"[DEBUG-RESOLVE] Returned row 0 (if any): {data_rows[0] if data_rows else 'EMPTY'}")
+        
         # Merge static content with data rows (not prepend as separate rows)
         # Static content from layout_bundle.content.static should be merged into the first N data rows
         if self.static_content and 'col_static' in self.static_content:

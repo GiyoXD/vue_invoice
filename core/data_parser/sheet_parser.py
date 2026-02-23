@@ -204,19 +204,20 @@ def map_columns_to_headers(sheet, header_row: int, col_range: int) -> Dict[str, 
     pass
 
 
-def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[str, str]) -> Dict[int, Dict[str, List[Any]]]:
+def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[str, str]) -> List[List[Dict[str, Any]]]:
     """
     Extracts data for multiple tables defined by header_rows using the validated column_mapping.
+    Returns a list of tables. Each table is a list of row dictionaries.
     """
     if not header_rows or not column_mapping:
         logging.warning("[extract_multiple_tables] No header rows or column mapping provided.")
-        return {}
+        return []
 
-    all_tables_data: Dict[int, Dict[str, List[Any]]] = {}
+    all_tables_data: List[List[Dict[str, Any]]] = []
     stop_col_letter = column_mapping.get(STOP_EXTRACTION_ON_EMPTY_COLUMN)
     prefix = "[extract_multiple_tables]"
 
-    logging.info(f"{prefix} Starting extraction for {len(header_rows)} tables: {header_rows}")
+    logging.info(f"{prefix} Starting extraction for {len(header_rows)} tables: {header_rows} (Row List Format)")
 
     for i, header_row in enumerate(header_rows):
         table_index = i + 1
@@ -231,11 +232,11 @@ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[
         end_data_row = min(max_possible_end_row, scan_limit_row)
 
         if start_data_row >= end_data_row:
-            all_tables_data[table_index] = {key: [] for key in column_mapping.keys()}
+            all_tables_data.append([])
             continue
 
         logging.info(f"{prefix} Table {table_index}: Extracting Data Rows {start_data_row} to {end_data_row - 1}")
-        current_table_data: Dict[str, List[Any]] = {key: [] for key in column_mapping.keys()}
+        current_table_data: List[Dict[str, Any]] = []
         
         for current_row in range(start_data_row, end_data_row):
             if stop_col_letter:
@@ -245,13 +246,18 @@ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[
                     break
 
             col_letter_to_canonical = {v: k for k, v in column_mapping.items()}
+            row_dict: Dict[str, Any] = {}
             for col_letter, canonical_name in col_letter_to_canonical.items():
                 cell_value = sheet[f"{col_letter}{current_row}"].value
                 processed_value = cell_value.strip() if isinstance(cell_value, str) else cell_value
-                current_table_data[canonical_name].append(processed_value)
+                row_dict[canonical_name] = processed_value
+            
+            # Additional logic to skip completely empty rows (optional but good practice)
+            if any(v is not None and (not isinstance(v, str) or v.strip() != "") for v in row_dict.values()):
+                current_table_data.append(row_dict)
 
-        all_tables_data[table_index] = current_table_data
-        logging.info(f"{prefix} Successfully stored {len(current_table_data.get('col_po',[]))} rows for Table Index {table_index}.")
+        all_tables_data.append(current_table_data)
+        logging.info(f"{prefix} Successfully stored {len(current_table_data)} rows for Table Index {table_index}.")
         
     return all_tables_data
 

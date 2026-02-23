@@ -675,11 +675,18 @@ class ExcelLayoutScanner:
             if normalized_name in lower_mappings:
                 normalized_name = lower_mappings[normalized_name].lower()
                 
+        variants_to_check = {
+            normalized_name,
+            normalized_name.replace(' ', '_'),
+            normalized_name.replace('_', ' ')
+        }
+        
         # 1. Exact match check against BlueprintRules definitions
-        if normalized_name in BlueprintRules.AGGREGATION_SHEETS:
-            return "aggregation"
-        elif normalized_name in BlueprintRules.PROCESSED_TABLES_SHEETS:
-            return "processed_tables_multi"
+        for variant in variants_to_check:
+            if variant in BlueprintRules.AGGREGATION_SHEETS:
+                return "aggregation"
+            elif variant in BlueprintRules.PROCESSED_TABLES_SHEETS:
+                return "processed_tables_multi"
             
         # Fallback (Should not be reached if ALLOWED_SEARCH_SHEETS is strict)
         return "aggregation" # default   

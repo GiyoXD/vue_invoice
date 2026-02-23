@@ -432,8 +432,9 @@ def run_invoice_automation(
         
         # ... [Rest of logic continues largely unchanged but inside this block] ...
         
-        processed_tables: Dict[int, Dict[str, Any]] = {}
-        all_tables_data: Dict[int, Dict[str, List[Any]]] = {}
+        # CHANGED: processed_tables is now a list of tables, where each table is a list of row dicts
+        processed_tables: List[List[Dict[str, Any]]] = []
+        all_tables_data: List[List[Dict[str, Any]]] = []
 
         # Global definitions
         global_standard_aggregation_results: Dict[Tuple[Any, Any, Optional[decimal.Decimal], Optional[str]], Dict[str, decimal.Decimal]] = {}
@@ -494,16 +495,13 @@ def run_invoice_automation(
             # --- 5. Process Each Table (Instrumented) ---
             logging.info(f"--- Starting Data Processing Loop for {len(all_tables_data)} Extracted Table(s) ---")
             
-            for table_index, raw_data_dict in all_tables_data.items():
-                table_id_str = f"Table {table_index}"
-                current_table_data = all_tables_data.get(table_index)
+            for table_index, current_table_data in enumerate(all_tables_data):
+                table_id_str = f"Table {table_index + 1}"
                 
-                if current_table_data is None: continue
-                
-                # Check for empty/invalid data
-                if not isinstance(current_table_data, dict) or not current_table_data or not any(isinstance(v, list) and v for v in current_table_data.values()):
+                # Check for empty/invalid data (must be a non-empty list of dicts)
+                if not isinstance(current_table_data, list) or not current_table_data:
                      monitor.log_warning(f"{table_id_str} is empty or invalid. Skipping.")
-                     processed_tables[table_index] = current_table_data
+                     processed_tables.append([])
                      continue
                 
                 try:
@@ -513,12 +511,12 @@ def run_invoice_automation(
                     # 5b. Distribute
                     try:
                         data_after_distribution = data_processor.distribute_values(data_after_cbm, cfg.COLUMNS_TO_DISTRIBUTE, cfg.DISTRIBUTION_BASIS_COLUMN)
-                        processed_tables[table_index] = data_after_distribution
+                        processed_tables.append(data_after_distribution)
                         data_for_aggregation = data_after_distribution
                     except Exception as distrib_e:
                         # Log but continue with fallback
                         monitor.log_warning(f"{table_id_str}: Distribution failed ({distrib_e}). Using raw/CBM data.")
-                        processed_tables[table_index] = data_after_cbm
+                        processed_tables.append(data_after_cbm)
                         data_for_aggregation = data_after_cbm
                     
                     # 5c. Initial Aggregation
@@ -530,6 +528,8 @@ def run_invoice_automation(
                 except Exception as table_e:
                     # Log failure for this specific table but continue loop
                     monitor.log_process_item(table_id_str, status="error", error=table_e)
+                    processed_tables.append([]) # Append empty to preserve indexing if needed
+
 
             # --- 6. DAF Compounding (Instrumented) ---
             try:
@@ -556,24 +556,24 @@ def run_invoice_automation(
         logging.info(f"Primary aggregation mode used for DAF Compounding: {aggregation_mode_used.upper()}")
 
         # --- Convert pallet_count to int ---
-        for table_index, table_data in processed_tables.items():
-            if 'pallet_count' in table_data and isinstance(table_data['pallet_count'], list):
-                logging.info(f"Converting pallet_count in table {table_index}")
-                for i, value in enumerate(table_data['pallet_count']):
-                    if value is not None:
+        for table_index, table_data in enumerate(processed_tables):
+            if isinstance(table_data, list):
+                logging.info(f"Converting pallet_count in table {table_index + 1}")
+                for i, row in enumerate(table_data):
+                    val = row.get('col_pallet_count')
+                    if val is not None:
                         try:
-                            original_value = value
-                            converted_value = int(float(value))
-                            table_data['pallet_count'][i] = converted_value
-                            logging.info(f"Converted pallet_count[{i}] from '{original_value}' to {converted_value}")
+                            converted_value = int(float(val))
+                            row['col_pallet_count'] = converted_value
                         except (ValueError, TypeError):
-                            logging.warning(f"Could not convert pallet_count value '{value}' to int in table {table_index}, row {i}")
-                            table_data['pallet_count'][i] = value  # Keep original value if conversion fails
+                            logging.warning(f"Could not convert pallet_count value '{val}' to int in table {table_index + 1}, row {i}")
 
         # Log the converted pallet_count
-        for table_index, table_data in processed_tables.items():
-            if 'pallet_count' in table_data:
-                logging.info(f"Final pallet_count in table {table_index}: {table_data['pallet_count']} (types: {[type(v) for v in table_data['pallet_count']]})")
+        for table_index, table_data in enumerate(processed_tables):
+            if isinstance(table_data, list):
+                counts = [row.get('col_pallet_count') for row in table_data if 'col_pallet_count' in row]
+                if counts:
+                    logging.info(f"Final pallet_count in table {table_index + 1}: {counts} (types: {[type(v) for v in counts]})")
             # Log Standard Results
             log_str_std = pprint.pformat(global_standard_aggregation_results)
             if len(log_str_std) > MAX_LOG_DICT_LEN: log_str_std = log_str_std[:MAX_LOG_DICT_LEN] + "\n... (output truncated)"
@@ -620,20 +620,17 @@ def run_invoice_automation(
         
         # Calculate per-table totals
         table_footer_data = {}
-        for table_id, table_data in processed_tables.items():
-            table_footer_data[table_id] = data_processor.calculate_footer_totals(table_data)
-            logging.info(f"Table {table_id} Footer: {table_footer_data[table_id]}")
+        for table_index, table_data in enumerate(processed_tables):
+            table_id = str(table_index + 1)
+            if isinstance(table_data, list):
+                table_footer_data[table_id] = data_processor.calculate_footer_totals(table_data)
+                logging.info(f"Table {table_id} Footer: {table_footer_data[table_id]}")
         
         # Calculate grand total (merged across all tables)
-        merged_processed_data = {
-            "col_qty_pcs": [], "col_qty_sf": [], "col_net": [], "col_gross": [], "col_cbm": [], "col_amount": [], "col_pallet_count": [],
-            "col_desc": [],  # Include both description field names for leather_summary calculation
-            "col_po": [], "col_item": [], "col_unit_price": []  # Include fields for aggregate_per_po_with_pallets
-        }
-        for table_data in processed_tables.values():
-            for key in merged_processed_data:
-                if key in table_data:
-                    merged_processed_data[key].extend(table_data[key])
+        merged_processed_data: List[Dict[str, Any]] = []
+        for table_data in processed_tables:
+            if isinstance(table_data, list):
+                merged_processed_data.extend(table_data)
         
         grand_total_footer = data_processor.calculate_footer_totals(merged_processed_data)
         logging.info(f"Grand Total Footer: {grand_total_footer}")

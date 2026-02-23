@@ -199,7 +199,7 @@ class DataTableBuilderStyler:
                 
                 for col_idx in missing_columns:
                     col_id = self.idx_to_id_map.get(col_idx)
-                    if col_id and 'no' in col_id.lower():  # Auto-number columns like 'col_no'
+                    if col_id == 'col_no':  # Auto-number columns like 'col_no'
                         cell = self.worksheet.cell(row=current_row_idx, column=col_idx)
                         if not isinstance(cell, MergedCell):
                             # Auto-number: row number starting from 1
@@ -276,7 +276,7 @@ class DataTableBuilderStyler:
             col_idx = self.col_id_map.get(input_id)
             if col_idx:
                 col_letter = get_column_letter(col_idx)
-                formula = formula.replace(f'{{col_ref_{i}}}', col_letter)
+                formula = formula.replace(f'{{col_ref_{i}}}', f'{col_letter}{{row}}')
         
         # Replace {row} with actual row number
         formula = formula.replace('{row}', str(row_num))

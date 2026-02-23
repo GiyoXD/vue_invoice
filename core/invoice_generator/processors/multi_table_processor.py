@@ -103,7 +103,7 @@ class MultiTableProcessor(SheetProcessor):
         logger.info(f"Successfully processed {len(table_keys)} tables for sheet '{self.sheet_name}'.")
         return True
 
-    def _resolve_all_tables_data(self) -> Tuple[Optional[Dict], List]:
+    def _resolve_all_tables_data(self) -> Tuple[Optional[List], List]:
         """Resolves all tables data using BuilderConfigResolver."""
         initial_resolver = BuilderConfigResolver(
             config_loader=self.config_loader,
@@ -115,12 +115,12 @@ class MultiTableProcessor(SheetProcessor):
         )
         
         all_tables_data = initial_resolver._get_data_source_for_type('processed_tables_multi')
-        if not all_tables_data or not isinstance(all_tables_data, dict):
-            logger.warning(f"'processed_tables_data' not found/valid. Skipping '{self.sheet_name}'")
+        if not all_tables_data or not isinstance(all_tables_data, list):
+            logger.warning(f"'processed_tables_data' not found/valid or is not a list. Skipping '{self.sheet_name}'")
             return None, []
 
-        table_keys = sorted(all_tables_data.keys(), key=lambda x: int(x) if str(x).isdigit() else float('inf'))
-        logger.info(f"Found {len(table_keys)} tables to process: {table_keys}")
+        table_keys = [str(i) for i in range(len(all_tables_data))]
+        logger.info(f"Found {len(table_keys)} tables to process")
         return all_tables_data, table_keys
 
     def _capture_template_state(self):

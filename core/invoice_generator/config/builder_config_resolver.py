@@ -308,11 +308,16 @@ class BuilderConfigResolver:
         
         # For multi-table processing, extract the specific table's data
         # IMPORTANT: Only extract if data_source contains multiple tables (not pre-filtered)
-        # Check if we have all_tables_data vs single_table_data:
-        # - If data_source has keys like '1', '2', '3', extract the specific table
-        # - If data_source is already a single table dict with keys like 'po', 'item', skip extraction
-        if table_key and isinstance(data_source, dict):
-            # Check if this looks like multi-table data (has numeric string keys)
+        if table_key and isinstance(data_source, list):
+            try:
+                # Convert the incoming string table_key (e.g. "0", "1") to an integer index
+                idx = int(table_key)
+                if 0 <= idx < len(data_source):
+                    data_source = data_source[idx]
+            except ValueError:
+                logger.warning(f"Resolver: Invalid table_key '{table_key}' for list data source.")
+        elif table_key and isinstance(data_source, dict):
+            # Fallback for older dictionary-based multi-table data (if any remains)
             has_table_keys = any(str(k).isdigit() for k in data_source.keys())
             
             if has_table_keys:
@@ -658,6 +663,14 @@ class BuilderConfigResolver:
         """
         if not self.invoice_data:
             return {}
+            
+        # --- PATH -1: Override generic aggregation for Summary Packing List ---
+        # If the blueprint generator marked the sheet as generic "aggregation" but it is a
+        # Summary Packing List, explicitly upgrade it so it routes to manifest_by_pallet_per_po.
+        normalized_sheet = self.sheet_name.strip().lower()
+        if data_source_type == 'aggregation' and normalized_sheet == 'summary packing list':
+            logger.info("Auto-upgrading data_source_type from 'aggregation' to 'summary_packing_list' based on sheet name")
+            data_source_type = 'summary_packing_list'
         
         # --- PATH 0: STRUCTURED LOOKUP (The "Newest Way" - v2.3) ---
         single_table_group = self.invoice_data.get('single_table', {})
@@ -705,52 +718,9 @@ class BuilderConfigResolver:
                     logger.info("DAF mode active: Using 'aggregation_DAF' from single_table group")
                     return single_table_group['aggregation_DAF']
 
-        # --- PATH 1: FLAG-AWARE STRICT LOOKUP AT ROOT (Fallback for un-nested objects) ---
-        if self.args:
-            if getattr(self.args, 'DAF', False):
-                daf_key = f"{data_source_type}_DAF"
-                if daf_key in self.invoice_data:
-                    logger.debug(f"Smart Resolver: DAF Mode ON. Found variant '{daf_key}' at root")
-                    return self.invoice_data[daf_key]
-            
-            if getattr(self.args, 'custom', False):
-                custom_key = f"{data_source_type}_custom"
-                if custom_key in self.invoice_data:
-                    logger.debug(f"Smart Resolver: Custom Mode ON. Found variant '{custom_key}' at root")
-                    return self.invoice_data[custom_key]
-
-        if data_source_type in self.invoice_data:
-            logger.debug(f"Smart Resolver: Found strict match for data_source '{data_source_type}' at root")
-            return self.invoice_data[data_source_type]
-
-        # --- PATH 2: LEGACY MAPPING (The "Old Way") ---
-        type_mapping = {
-            'aggregation': 'standard_aggregation_results',
-            'DAF_aggregation': 'final_DAF_compounded_result', 
-            'custom_aggregation': 'custom_aggregation_results',
-            'processed_tables_multi': 'processed_tables_data',
-            'processed_tables': 'processed_tables_data',
-            'detail_packing_list': 'processed_tables_data'
-        }
-        
-        if self.args and getattr(self.args, 'DAF', False):
-            if data_source_type == 'aggregation' or data_source_type == 'DAF_aggregation':
-                if 'final_DAF_compounded_result' in self.invoice_data:
-                    logger.info(f"DAF mode active: Switching data source to 'final_DAF_compounded_result'")
-                    return self.invoice_data['final_DAF_compounded_result']
-        
-        if data_source_type == 'aggregation' and self.args and getattr(self.args, 'custom', False):
-            logger.info(f"Custom mode active: Switching data source from 'aggregation' to 'custom_aggregation'")
-            data_key = 'custom_aggregation_results'
-        else:
-            data_key = type_mapping.get(data_source_type, 'standard_aggregation_results')
-            
-        data = self.invoice_data.get(data_key, {})
-        
-        if not data and data_source_type not in type_mapping:
-             logger.warning(f"Resolver: Data source '{data_source_type}' not found via Strict Lookup or Legacy Mapping.")
-             
-        return data
+        # --- If not found in structured paths, return empty ---
+        logger.warning(f"Resolver: Data source '{data_source_type}' not found in structured single_table or multi_table groups.")
+        return {}
     
     def get_all_sheet_configs(self) -> Dict[str, Any]:
         """
