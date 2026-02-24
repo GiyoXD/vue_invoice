@@ -984,6 +984,7 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
             aggregation_map[key] = {
                 'items': set(),
                 'descs': set(),
+                'col_qty_pcs': 0,
                 'col_qty_sf': decimal.Decimal(0),
                 'col_amount': decimal.Decimal(0),
                 'col_pallet_count': 0,
@@ -1043,6 +1044,13 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
              converted = _convert_to_decimal(cbm_val)
              if converted:
                  aggregation_map[key]['col_cbm'] += converted
+
+        # Sum pcs
+        pcs_val = row.get('col_qty_pcs')
+        if pcs_val is not None:
+             try:
+                 aggregation_map[key]['col_qty_pcs'] += int(float(pcs_val))
+             except (ValueError, TypeError): pass
     
     # Convert to list of dicts
     result = []
@@ -1052,6 +1060,7 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
             'col_item': ', '.join(sorted(data['items'])),
             'col_desc': ', '.join(sorted(data['descs'])),
             'col_unit_price': price,
+            'col_qty_pcs': data['col_qty_pcs'],
             'col_qty_sf': data['col_qty_sf'],
             'col_amount': data['col_amount'],
             'col_pallet_count': data['col_pallet_count'],

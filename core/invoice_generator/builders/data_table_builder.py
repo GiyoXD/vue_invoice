@@ -193,25 +193,35 @@ class DataTableBuilderStyler:
                                 logger.debug(f"Applied row height {row_height} to row {current_row_idx}")
                             self._rows_with_height_applied.add(current_row_idx)
                 
-                # Handle columns defined in header but missing from row_data (auto-number columns)
+                # Handle columns defined in header but missing from row_data
+                # Apply styling (borders) to ALL empty cells, not just col_no
                 all_column_indices = set(self.col_id_map.values())
                 missing_columns = all_column_indices - columns_with_data
                 
                 for col_idx in missing_columns:
                     col_id = self.idx_to_id_map.get(col_idx)
-                    if col_id == 'col_no':  # Auto-number columns like 'col_no'
-                        cell = self.worksheet.cell(row=current_row_idx, column=col_idx)
-                        if not isinstance(cell, MergedCell):
-                            # Auto-number: row number starting from 1
-                            cell.value = i + 1
-                            
-                            # Apply styling
-                            if not self.style_registry:
-                                logger.error(f"❌ CRITICAL: StyleRegistry not initialized for auto-number column {col_id}")
-                                continue
-                            
-                            style = self.style_registry.get_style(col_id, context='data')
-                            self.cell_styler.apply(cell, style)
+                    cell = self.worksheet.cell(row=current_row_idx, column=col_idx)
+                    if isinstance(cell, MergedCell):
+                        continue
+                    
+                    # Auto-number for col_no
+                    if col_id == 'col_no':
+                        cell.value = i + 1
+                    
+                    # Apply styling (borders, alignment, format) to ALL empty cells
+                    if not self.style_registry:
+                        logger.error(f"❌ CRITICAL: StyleRegistry not initialized for column {col_id}")
+                        continue
+                    
+                    style = self.style_registry.get_style(col_id, context='data')
+                    
+                    # For col_static column, apply side borders only
+                    if col_id == 'col_static':
+                        from copy import deepcopy
+                        style = deepcopy(style)
+                        style['border_style'] = 'sides_only'
+                    
+                    self.cell_styler.apply(cell, style)
 
             # --- Apply Horizontal Merges (based on colspan from header structure) ---
             if self.column_colspan:
@@ -235,6 +245,11 @@ class DataTableBuilderStyler:
             if self.vertical_merge_columns and actual_rows_to_process > 0:
                 logger.debug(f"Applying vertical merges to columns: {self.vertical_merge_columns}")
                 for col_id in self.vertical_merge_columns:
+                    # Skip col_desc merge when dynamic descriptions are used (not fallback)
+                    if col_id == 'col_desc' and self.dynamic_desc_used:
+                        logger.debug(f"  Skipping vertical merge for '{col_id}' (dynamic descriptions used)")
+                        continue
+                    
                     col_idx = self.col_id_map.get(col_id)
                     if col_idx:
                         logger.debug(f"  Merging contiguous cells in column '{col_id}' (index {col_idx}) from row {data_start_row} to {data_end_row}")

@@ -799,7 +799,9 @@ class ExcelLayoutScanner:
                 cell = worksheet.cell(row=row, column=col)
                 val = str(cell.value).strip().upper() if cell.value else ""
                 
-                if "TOTAL" in val:
+                # Check for exact or near-exact match, not just 'in val' to avoid false positives
+                # like "Total Net Weight" or "Warning: total items"
+                if val in ["TOTAL", "TOTAL:", "TOTAL OF:", "TOTAL OF", "TOTAL："] or val.startswith("TOTAL OF"):
                     found_cell = cell
                     break
             if found_cell:

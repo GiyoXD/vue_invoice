@@ -32,6 +32,7 @@ class ConfigBuilder:
             "col_unit_price": {},
             "col_desc": {"fallback_on_none": "COW LEATHER", "fallback_on_DAF": "COW LEATHER"},
             "col_qty_sf": {},
+            "col_unit_sf": {"fallback": "SF"},
             "col_amount": {"formula": "{col_qty_sf} * {col_unit_price}"},
         },
         # Processed tables (Packing list)
@@ -41,6 +42,7 @@ class ConfigBuilder:
             "col_desc": {"fallback_on_none": "COW LEATHER", "fallback_on_DAF": "COW LEATHER"},
             "col_qty_pcs": {},
             "col_qty_sf": {},
+            "col_unit_sf": {"fallback": "SF"},
             "col_net": {},
             "col_gross": {},
             "col_cbm": {},

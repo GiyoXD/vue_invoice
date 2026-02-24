@@ -245,11 +245,15 @@ def apply_horizontal_merge(worksheet: Worksheet, row_num: int, num_cols: int, me
 
 def merge_vertical_cells_in_range(worksheet: Worksheet, scan_col: int, start_row: int, end_row: int):
     """
-    Merges all cells in a column range if ALL values are identical.
-    If any value differs, no merging occurs at all.
+    Merges contiguous groups of identical values in a column range.
     
-    This is an all-or-nothing merge - ensures visual consistency by only
-    merging when the entire column has the same value (e.g., all "LEATHER").
+    Walks top-to-bottom through the column, identifying runs of identical
+    adjacent values and merging each group individually.
+    
+    Example: "1-25", "2-25", "2-25", "3-25", "3-25", "3-25"
+    → Group 1: row 1 (standalone "1-25")
+    → Group 2: rows 2-3 merged ("2-25")
+    → Group 3: rows 4-6 merged ("3-25")
 
     Args:
         worksheet: The openpyxl Worksheet object.
@@ -260,34 +264,47 @@ def merge_vertical_cells_in_range(worksheet: Worksheet, scan_col: int, start_row
     if not all(isinstance(i, int) and i > 0 for i in [scan_col, start_row, end_row]) or start_row >= end_row:
         return
 
-    # First pass: Check if ALL values in the range are identical
-    first_cell = worksheet.cell(row=start_row, column=scan_col)
-    first_value = first_cell.value
-    
-    # Skip if first value is None/empty
-    if first_value is None:
-        return
-    
-    # Check all remaining cells in range
+    # Verifier: Check if there's any value different from the starting row's value
+    buffer_value = worksheet.cell(row=start_row, column=scan_col).value
     for row_idx in range(start_row + 1, end_row + 1):
-        cell = worksheet.cell(row=row_idx, column=scan_col)
-        if cell.value != first_value:
-            # Found a different value - don't merge at all
+        if worksheet.cell(row=row_idx, column=scan_col).value != buffer_value:
+            # Found at least 1 different value; end the function early
             return
+
+    # Walk through the column, tracking contiguous groups
+    group_start = start_row
+    group_value = worksheet.cell(row=start_row, column=scan_col).value
     
-    # All values are identical - merge the entire range
-    try:
-        worksheet.merge_cells(
-            start_row=start_row,
-            start_column=scan_col,
-            end_row=end_row,
-            end_column=scan_col
-        )
-        # Apply center alignment to the merged cell
-        first_cell.alignment = center_alignment
-        logger.debug(f"  Merged column {scan_col} rows {start_row}-{end_row} (all values = '{first_value}')")
-    except Exception as e:
-        logger.warning(f"  Failed to merge column {scan_col} rows {start_row}-{end_row}: {e}")
+    for row_idx in range(start_row + 1, end_row + 2):  # +2 to flush the last group
+        if row_idx <= end_row:
+            current_value = worksheet.cell(row=row_idx, column=scan_col).value
+        else:
+            current_value = None  # Sentinel to flush last group
+        
+        if current_value == group_value and row_idx <= end_row:
+            # Same value, extend the group
+            continue
+        else:
+            # Value changed or end of range — merge the previous group if 2+ rows
+            group_end = row_idx - 1
+            if group_end > group_start and group_value is not None:
+                try:
+                    worksheet.merge_cells(
+                        start_row=group_start,
+                        start_column=scan_col,
+                        end_row=group_end,
+                        end_column=scan_col
+                    )
+                    # Apply center alignment to the merged cell
+                    anchor_cell = worksheet.cell(row=group_start, column=scan_col)
+                    anchor_cell.alignment = center_alignment
+                    logger.debug(f"  Merged column {scan_col} rows {group_start}-{group_end} (value = '{group_value}')")
+                except Exception as e:
+                    logger.warning(f"  Failed to merge column {scan_col} rows {group_start}-{group_end}: {e}")
+            
+            # Start new group
+            group_start = row_idx
+            group_value = current_value
 
 
 def apply_horizontal_merge_by_id(

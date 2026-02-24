@@ -42,6 +42,8 @@ EXPECTED_HEADER_DATA_TYPES = {
     'col_inv_no': ['string'],
     'col_inv_date': ['string', 'numeric', 'date'], # Invoice date can be a string or numeric date
     'col_inv_ref': ['string'],
+    'col_container_no': ['string'],
+    'col_unit_sf': ['numeric']
 }
 
 # --- Column Mapping Configuration ---
@@ -69,6 +71,8 @@ TARGET_HEADERS_MAP = {
 
     "col_remarks": ["cbm", "材积", "CBM", "remarks", "备注", "Remark", 'remark', '低', "REMARKS", "REMARK"],          # Primary English: 'remarks', Primary Chinese: '备注'
     # --- Other Found Headers ---
+    "col_container_no": ["container no", "集装箱号", "Container No", "CONTAINER NO", "container no", "CONTAINER NO", "container no", "CONTAINER NO", "container"],
+    "col_unit_sf": ["unit/sf", "unit sf", "unit(sf)", "UNIT/SF", "Unit/SF"],
     "col_dc": ["批次号", "DC", "dc"],
     "col_batch_no": ["batch number", "批次号"],  # Primary English: 'batch number', Primary Chinese: '批次号'
     "col_line_no": ["line no", "行号"],           # Primary English: 'line no', Primary Chinese: '行号'

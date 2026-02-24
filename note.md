@@ -1,1 +1,2 @@
 - sheet extractor miss the summary packing list sheet
+- fix the verticle merge on description col where it dynamic it>till use merge verticle which we dont want 

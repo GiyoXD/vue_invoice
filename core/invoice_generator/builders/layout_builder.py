@@ -402,7 +402,7 @@ class LayoutBuilder:
                         header_info=self.header_info,
                         resolved_data=dtb_data_config,
                         sheet_styling_config=styling_model,
-                        vertical_merge_columns=['col_desc']
+                        vertical_merge_columns=['col_desc', 'col_pallet_count']
                     )
                     result = data_builder.build()
                     if not result:

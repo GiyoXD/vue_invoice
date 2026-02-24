@@ -78,6 +78,12 @@ class BlueprintRules:
             excel_format="#,##0.00",
             width=15.0
         ),
+        "col_unit_sf": ColumnDefinition(
+            id="col_unit_sf",
+            keywords=["unit/sf", "unit sf", "unit(sf)"],
+            excel_format="#,##0.00",
+            width=15.0
+        ),
         # Financials
         "col_unit_price": ColumnDefinition(
             id="col_unit_price", 
@@ -123,6 +129,12 @@ class BlueprintRules:
             keywords=["dc", "dc no", "dc #"],
             excel_format="@",
             width=12.0
+        ),
+        "col_container_no": ColumnDefinition(
+            id="col_container_no",
+            keywords=["container no", "container no.", "container #"],
+            excel_format="@",
+            width=18.0
         ),
         "col_remark": ColumnDefinition(
             id="col_remark",

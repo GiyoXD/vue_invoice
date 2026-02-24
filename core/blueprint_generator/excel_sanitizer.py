@@ -173,7 +173,7 @@ class ExcelTemplateSanitizer:
         # Actually indices are stable if we haven't deleted yet.
         # Scan bottom-up for "Total" + "=SUM"
         # We search from header_row + 1
-        footer_start_row = self._find_footer_start(ws, analysis.header_row + 1)
+        footer_start_row = self._find_footer_start(ws, analysis.header_row + 1, analysis)
         
         if not footer_start_row:
              self.logger.warning(f"    Footer not detected in {analysis.name}. Assuming this is a Form/Static sheet (no dynamic table body).")
@@ -382,31 +382,33 @@ class ExcelTemplateSanitizer:
                             target_cell.value = placeholder
                             injected_cells.add(target_cell.coordinate)
 
-    def _find_footer_start(self, ws: Worksheet, search_start_row: int) -> Optional[int]:
+    def _find_footer_start(self, ws: Worksheet, search_start_row: int, analysis: Optional[SheetAnalysis] = None) -> Optional[int]:
         """
-        Find the footer row by scanning for =SUM formula adjacency.
+        Find the footer row by scanning for =SUM or =SUBTOTAL formula adjacency.
 
         Algorithm:
             1. Scan bottom-up from max_row to search_start_row.
-            2. For each row, collect column indices where cell value starts with '=SUM'.
+            2. For each row, collect column indices where cell value starts with '=SUM' or '=SUBTOTAL'.
                Skip any cell not starting with '=' for speed.
-            3. If 2+ adjacent (consecutive) column indices have =SUM, mark row as candidate.
+            3. If 2+ adjacent (consecutive) column indices have =SUM/=SUBTOTAL, mark row as candidate.
             4. Return the LAST (highest row number) candidate found.
-            5. Fallback: if no adjacency match, try 'TOTAL' keyword detection.
+            5. Fallback 1: Use the top-down scanner detection from SheetAnalysis if available.
+            6. Fallback 2: if no adjacency match, try strict 'TOTAL OF:' keyword detection bottom-up.
 
         Args:
             ws: The worksheet to scan.
             search_start_row: The row to start scanning from (header_row + 1).
+            analysis: The SheetAnalysis from the scanner (optional).
 
         Returns:
             The 1-based row number of the footer, or None if not found.
         """
         end_scan = min(ws.max_row, search_start_row + 500)
         max_col = min(ws.max_column + 1, 20)
-        last_candidate = None  # Highest row with 2+ adjacent =SUM cells
+        last_candidate = None  # Highest row with 2+ adjacent formula cells
 
         for row in range(search_start_row, end_scan + 1):
-            sum_cols = []  # Column indices with =SUM in this row
+            formula_cols = []  # Column indices with =SUM or =SUBTOTAL in this row
 
             for col in range(1, max_col):
                 cell = ws.cell(row=row, column=col)
@@ -417,32 +419,41 @@ class ExcelTemplateSanitizer:
                 # Fast skip: only care about formulas
                 if not value.startswith("="):
                     continue
-                if value.upper().startswith("=SUM"):
-                    sum_cols.append(col)
+                upper_val = value.upper()
+                if upper_val.startswith("=SUM(") or upper_val.startswith("=SUBTOTAL("):
+                    formula_cols.append(col)
 
             # Check adjacency: need 2+ consecutive column indices
-            if len(sum_cols) >= 2 and self._has_adjacent_pair(sum_cols):
+            if len(formula_cols) >= 2 and self._has_adjacent_pair(formula_cols):
                 last_candidate = row
 
         if last_candidate:
-            self.logger.info(f"    Footer detected via =SUM adjacency at row {last_candidate}")
+            self.logger.info(f"    Footer detected via formula adjacency at row {last_candidate}")
             return last_candidate
 
-        # --- FALLBACK: Original 'TOTAL' keyword scan (bottom-up) ---
-        self.logger.info("    =SUM adjacency scan found nothing. Falling back to TOTAL keyword scan.")
+        # --- FALLBACK 1: Scanner's Top-Down Footer Detection ---
+        if analysis and analysis.footer_info and analysis.footer_info.row_num:
+            self.logger.info(f"    Formula adjacency scan found nothing. Falling back to scanner footer info at row {analysis.footer_info.row_num}.")
+            return analysis.footer_info.row_num
+
+        # --- FALLBACK 2: Original 'TOTAL' keyword scan (bottom-up), but strict ---
+        self.logger.info("    Formula adjacency scan and scanner info found nothing. Falling back to strict TOTAL keyword scan.")
         fallback_candidate = None
         for row in range(ws.max_row, search_start_row, -1):
             for col in range(1, max_col):
                 cell = ws.cell(row=row, column=col)
                 value = self._get_cell_value(cell)
-                if value and "total" in value.lower():
-                    fallback_candidate = row
-                    break
+                if value:
+                    val_upper = value.upper().strip()
+                    # Use exact/near-exact match to prevent picking up random sentence "Total Net Weight"
+                    if val_upper in ["TOTAL", "TOTAL:", "TOTAL OF:", "TOTAL OF", "TOTAL："] or val_upper.startswith("TOTAL OF"):
+                        fallback_candidate = row
+                        break
             if fallback_candidate:
                 break
 
         if fallback_candidate:
-            self.logger.warning(f"    Using TOTAL keyword fallback at row {fallback_candidate}.")
+            self.logger.warning(f"    Using strict TOTAL keyword fallback at row {fallback_candidate}.")
         return fallback_candidate
 
     def _has_adjacent_pair(self, sorted_cols: list) -> bool:
