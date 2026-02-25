@@ -60,7 +60,6 @@ class DataTableBuilderStyler:
         self.static_info = resolved_data.get('static_info', {})
         self.formula_rules = resolved_data.get('formula_rules', {})
         self.pallet_counts = resolved_data.get('pallet_counts', [])
-        self.dynamic_desc_used = resolved_data.get('dynamic_desc_used', False)
         
         self.col_id_map = header_info.get('column_id_map', {})
         self.idx_to_id_map = {v: k for k, v in self.col_id_map.items()}
@@ -245,11 +244,6 @@ class DataTableBuilderStyler:
             if self.vertical_merge_columns and actual_rows_to_process > 0:
                 logger.debug(f"Applying vertical merges to columns: {self.vertical_merge_columns}")
                 for col_id in self.vertical_merge_columns:
-                    # Skip col_desc merge when dynamic descriptions are used (not fallback)
-                    if col_id == 'col_desc' and self.dynamic_desc_used:
-                        logger.debug(f"  Skipping vertical merge for '{col_id}' (dynamic descriptions used)")
-                        continue
-                    
                     col_idx = self.col_id_map.get(col_id)
                     if col_idx:
                         logger.debug(f"  Merging contiguous cells in column '{col_id}' (index {col_idx}) from row {data_start_row} to {data_end_row}")
@@ -257,7 +251,8 @@ class DataTableBuilderStyler:
                             worksheet=self.worksheet,
                             scan_col=col_idx,
                             start_row=data_start_row,
-                            end_row=data_end_row
+                            end_row=data_end_row,
+                            col_id=col_id
                         )
                     else:
                         logger.warning(f"warning!!  Vertical merge requested for column '{col_id}' but column not found in column_id_map")

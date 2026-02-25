@@ -151,6 +151,17 @@ class BuilderConfigResolver:
             total_pallets = 0
             
             for table_data in self.invoice_data['processed_tables_data'].values():
+                # Extract table_index if possible, else default to 0
+                table_idx = 0
+                try:
+                    if str(table_key).isdigit():
+                        # table_key is typically '1', '2' etc., so list index is int(table_key) - 1
+                        idx_val = int(table_key)
+                        if idx_val > 0:
+                            table_idx = idx_val - 1
+                except (ValueError, TypeError):
+                    pass
+                
                 # Check for footer_data first
                 footer_data = table_data.get('footer_data', table_data)
 
@@ -160,10 +171,28 @@ class BuilderConfigResolver:
                     total_net += float(ws.get('net', 0.0))
                     total_gross += float(ws.get('gross', 0.0))
                 
-                # Aggregate pallets
-                if 'pallet_summary_total' in footer_data:
+                # Aggregate pallets - Look first at the global grand_total or the new table_totals list structure
+                pallet_count_added = False
+                
+                if 'table_totals' in footer_data:
+                    table_totals = footer_data['table_totals']
+                    if isinstance(table_totals, list) and table_idx < len(table_totals):
+                        tbl_footer = table_totals[table_idx]
+                        if 'col_pallet_count' in tbl_footer:
+                            total_pallets += int(tbl_footer['col_pallet_count'])
+                            pallet_count_added = True
+                    elif isinstance(table_totals, dict) and str(table_key) in table_totals:
+                        # Fallback for old {"1": {...}} format
+                        tbl_footer = table_totals[str(table_key)]
+                        if 'col_pallet_count' in tbl_footer:
+                            total_pallets += int(tbl_footer['col_pallet_count'])
+                            pallet_count_added = True
+
+                if not pallet_count_added and 'pallet_summary_total' in footer_data:
                     total_pallets += int(footer_data['pallet_summary_total'])
-                else:
+                    pallet_count_added = True
+                    
+                if not pallet_count_added:
                     # Fallback if summary missing
                     # Check both 'pallet_count' and 'col_pallet_count' keys
                     p_array = table_data.get('col_pallet_count') or table_data.get('pallet_count')
@@ -443,8 +472,7 @@ class BuilderConfigResolver:
         self,
         sum_ranges: Optional[list] = None,
         pallet_count: Optional[int] = None,
-        is_last_table: bool = False,
-        dynamic_desc_used: bool = False
+        is_last_table: bool = False
     ) -> Tuple[Dict, Dict, Dict]:
         """
         Get all bundles needed for TableFooterBuilder.
@@ -453,7 +481,6 @@ class BuilderConfigResolver:
             sum_ranges: Cell ranges to sum in footer formulas
             pallet_count: Pallet count for this footer
             is_last_table: Whether this is the last table in multi-table mode
-            dynamic_desc_used: Whether dynamic description was used
         
         Returns:
             (style_config, context_config, data_config) tuple
@@ -463,8 +490,7 @@ class BuilderConfigResolver:
         # Add footer-specific context
         context_config = self.get_context_bundle(
             pallet_count=pallet_count if pallet_count is not None else self.pallets,
-            is_last_table=is_last_table,
-            dynamic_desc_used=dynamic_desc_used
+            is_last_table=is_last_table
         )
         
         data_config = self.get_data_bundle()

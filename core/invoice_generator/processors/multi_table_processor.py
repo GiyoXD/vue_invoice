@@ -46,7 +46,6 @@ class MultiTableProcessor(SheetProcessor):
         all_data_ranges = []
         grand_total_pallets = 0
         last_header_info = None
-        dynamic_desc_used = False
         
         # Use defaultdict for safer aggregation
         aggregated_leather_summary = defaultdict(lambda: defaultdict(float))
@@ -66,8 +65,7 @@ class MultiTableProcessor(SheetProcessor):
                 return False
             
             # Unpack result
-            (next_row, table_pallets, data_range, header_info, 
-             table_dynamic_desc, table_leather_summary) = result
+            (next_row, table_pallets, data_range, header_info, table_leather_summary) = result
             
             # Update tracking
             current_row = next_row
@@ -75,8 +73,6 @@ class MultiTableProcessor(SheetProcessor):
             if data_range:
                 all_data_ranges.append(data_range)
             last_header_info = header_info
-            if table_dynamic_desc:
-                dynamic_desc_used = True
             
             # Aggregate leather summary
             if table_leather_summary:
@@ -93,8 +89,7 @@ class MultiTableProcessor(SheetProcessor):
                 last_header_info=last_header_info,
                 all_tables_data=all_tables_data,
                 table_keys=table_keys,
-                aggregated_leather_summary=aggregated_leather_summary,
-                dynamic_desc_used=dynamic_desc_used
+                aggregated_leather_summary=aggregated_leather_summary
             )
 
         # 6. Restore Template Footer
@@ -233,12 +228,11 @@ class MultiTableProcessor(SheetProcessor):
             table_pallets,
             data_range,
             layout_builder.header_info,
-            resolved_data.get('dynamic_desc_used', False),
             getattr(layout_builder, 'leather_summary', None)
         )
 
     def _build_grand_total_row(self, current_row, grand_total_pallets, all_data_ranges, last_header_info, 
-                             all_tables_data, table_keys, aggregated_leather_summary, dynamic_desc_used):
+                             all_tables_data, table_keys, aggregated_leather_summary):
         """Builds the Grand Total row after all tables."""
         logger.info("Adding Grand Total Row")
         
@@ -301,8 +295,7 @@ class MultiTableProcessor(SheetProcessor):
                 'header_info': last_header_info,
                 'pallet_count': grand_total_pallets,
                 'sheet_name': self.sheet_name,
-                'is_last_table': True,
-                'dynamic_desc_used': dynamic_desc_used
+                'is_last_table': True
             },
             data_config={
                 'sum_ranges': all_data_ranges,

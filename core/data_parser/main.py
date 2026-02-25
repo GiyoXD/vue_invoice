@@ -600,12 +600,13 @@ def run_invoice_automation(
         logging.info("--- Calculating Footer Data ---")
         
         # Calculate per-table totals
-        table_footer_data = {}
+        table_footer_data = []
         for table_index, table_data in enumerate(processed_tables):
             table_id = str(table_index + 1)
             if isinstance(table_data, list):
-                table_footer_data[table_id] = data_processor.calculate_footer_totals(table_data)
-                logging.info(f"Table {table_id} Footer: {table_footer_data[table_id]}")
+                footer_totals = data_processor.calculate_footer_totals(table_data)
+                table_footer_data.append(footer_totals)
+                logging.info(f"Table {table_id} Footer: {footer_totals}")
         
         # Calculate grand total (merged across all tables)
         merged_processed_data: List[Dict[str, Any]] = []

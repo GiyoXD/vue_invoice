@@ -243,7 +243,7 @@ def apply_horizontal_merge(worksheet: Worksheet, row_num: int, num_cols: int, me
             continue
 
 
-def merge_vertical_cells_in_range(worksheet: Worksheet, scan_col: int, start_row: int, end_row: int):
+def merge_vertical_cells_in_range(worksheet: Worksheet, scan_col: int, start_row: int, end_row: int, col_id):
     """
     Merges contiguous groups of identical values in a column range.
     
@@ -265,11 +265,13 @@ def merge_vertical_cells_in_range(worksheet: Worksheet, scan_col: int, start_row
         return
 
     # Verifier: Check if there's any value different from the starting row's value
-    buffer_value = worksheet.cell(row=start_row, column=scan_col).value
-    for row_idx in range(start_row + 1, end_row + 1):
-        if worksheet.cell(row=row_idx, column=scan_col).value != buffer_value:
-            # Found at least 1 different value; end the function early
-            return
+
+    if col_id == "col_desc":
+        buffer_value = worksheet.cell(row=start_row, column=scan_col).value
+        for row_idx in range(start_row + 1, end_row + 1):
+            if worksheet.cell(row=row_idx, column=scan_col).value != buffer_value:
+                # Found at least 1 different value; end the function early
+                return
 
     # Walk through the column, tracking contiguous groups
     group_start = start_row

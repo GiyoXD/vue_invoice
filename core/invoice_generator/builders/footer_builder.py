@@ -40,9 +40,7 @@ class TableFooterBuilder(BundleAccessor):
         Args:
             worksheet: The worksheet to build in
             footer_row_num: The row number where footer should be placed
-            style_config: Bundle containing styling_config
-            context_config: Bundle containing header_info, pallet_count, sheet_name, is_last_table, dynamic_desc_used
-            data_config: Bundle containing sum_ranges, footer_config, all_tables_data, table_keys, mapping_rules, DAF_mode, override_total_text
+            context_config: Bundle containing header_info, pallet_count, sheet_name, is_last_table
         """
         # Initialize base class with common bundles
         super().__init__(
@@ -128,11 +126,6 @@ class TableFooterBuilder(BundleAccessor):
     def is_last_table(self) -> bool:
         """Is last table flag from context config."""
         return self.context_config.get('is_last_table', False)
-    
-    @property
-    def dynamic_desc_used(self) -> bool:
-        """Dynamic description used flag from context config."""
-        return self.context_config.get('dynamic_desc_used', False)
 
     def _apply_footer_cell_style(self, cell, col_id, row_context='footer', apply_border=True):
         """

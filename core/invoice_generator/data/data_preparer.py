@@ -196,7 +196,7 @@ def prepare_data_rows(
     static_value_map: Dict[int, Any],
     DAF_mode: bool,
     custom_mode: bool = False,
-) -> Tuple[List[Dict[int, Any]], List[int], bool, int]:
+) -> Tuple[List[Dict[int, Any]], List[int], int]:
     """
     Prepares data rows by applying mapping rules to the data source.
     Supports both Column-Oriented (Dict of Lists) and Row-Oriented (List of Dicts) sources.
@@ -218,7 +218,6 @@ def prepare_data_rows(
     data_rows_prepared = []
     pallet_counts_for_rows = []
     num_data_rows_from_source = 0
-    dynamic_desc_used = False
     
     def get_value_from_row_or_cols(source_container: Any, rule: Dict, rule_key: str, row_idx: int = None) -> Any:
         """
@@ -449,5 +448,4 @@ def prepare_data_rows(
     # Pad with empty rows if static labels demand it
     if num_static_labels > len(data_rows_prepared):
         data_rows_prepared.extend([{}] * (num_static_labels - len(data_rows_prepared)))
-    
-    return data_rows_prepared, pallet_counts_for_rows, dynamic_desc_used, num_data_rows_from_source
+    return data_rows_prepared, pallet_counts_for_rows, num_data_rows_from_source

@@ -58,7 +58,6 @@ class TableDataAdapter:
         # Returns: {
         #     'data_rows': List[Dict[int, Any]],  # Ready-to-write rows
         #     'pallet_counts': List[int],          # Pallet count per row
-        #     'dynamic_desc_used': bool,           # Whether dynamic descriptions were used
         #     'num_data_rows': int                 # Total rows from source
         # }
     """
@@ -114,8 +113,6 @@ class TableDataAdapter:
         Returns:
             Dictionary containing:
             - data_rows: List of row dictionaries (col_index → value)
-            - pallet_counts: List of pallet counts per row (if applicable)
-            - dynamic_desc_used: Whether dynamic descriptions were used
             - num_data_rows: Number of data rows from source
             - static_info: Static configuration (col1_index, num_static_labels, etc.)
         """
@@ -126,7 +123,7 @@ class TableDataAdapter:
         table_data_source = self._extract_table_data()
         
         # Prepare data rows using the existing data_preparer logic
-        data_rows, pallet_counts, dynamic_desc_used, num_data_rows = prepare_data_rows(
+        data_rows, pallet_counts, num_data_rows = prepare_data_rows(
             data_source_type=self.data_source_type,
             data_source=table_data_source,
             dynamic_mapping_rules=parsed['dynamic_mapping_rules'],
@@ -186,12 +183,38 @@ class TableDataAdapter:
         if isinstance(self.data_source, dict):
             leather_summary = self.data_source.get('leather_summary')
             weight_summary = self.data_source.get('weight_summary')
-            pallet_summary_total = self.data_source.get('pallet_summary_total')
+            
+            # Check for pallet count in footer_data -> table_totals if available
+            footer_data = self.data_source.get('footer_data', {})
+            if footer_data and 'table_totals' in footer_data:
+                table_totals = footer_data['table_totals']
+                if isinstance(table_totals, list) and len(table_totals) > 0:
+                    # Map table_key (e.g., '1', '2') to a zero-based list index
+                    # Fallback to index 0 if conversion fails or it's out of bounds
+                    tbl_idx = 0
+                    if self.table_key and str(self.table_key).isdigit():
+                        parsed_idx = int(self.table_key)
+                        if parsed_idx > 0:
+                            tbl_idx = parsed_idx - 1
+                    
+                    if tbl_idx >= len(table_totals):
+                        tbl_idx = 0  # Safe fallback
+                        
+                    tbl_footer = table_totals[tbl_idx]
+                    if 'col_pallet_count' in tbl_footer:
+                        pallet_summary_total = tbl_footer['col_pallet_count']
+                elif isinstance(table_totals, dict):
+                    # Fallback for old {"1": {...}} format, we just grab first value
+                    first_val = next(iter(table_totals.values()), {})
+                    if 'col_pallet_count' in first_val:
+                        pallet_summary_total = first_val['col_pallet_count']
+                        
+            if pallet_summary_total is None:
+                pallet_summary_total = self.data_source.get('pallet_summary_total')
 
         return {
             'data_rows': data_rows,
             'pallet_counts': pallet_counts,
-            'dynamic_desc_used': dynamic_desc_used,
             'num_data_rows': num_data_rows,
             'static_info': {
                 'col1_index': parsed['col1_index'],

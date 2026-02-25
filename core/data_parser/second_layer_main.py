@@ -127,9 +127,9 @@ def calculate_footer_data(all_tables_data):
     from . import data_processor
     
     # Calculate per-table totals
-    table_totals = {}
+    table_totals = []
     for table_id, table_data in all_tables_data.items():
-        table_totals[table_id] = data_processor.calculate_footer_totals(table_data)
+        table_totals.append(data_processor.calculate_footer_totals(table_data))
     
     # Merge all table data for grand total calculation
     merged_data = {

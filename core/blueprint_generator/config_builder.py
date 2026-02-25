@@ -418,7 +418,7 @@ class ConfigBuilder:
             add_ons["before_footer"] = {
                 "enabled": True,
                 "column_id": "col_po",
-                "text": "LEATHER (HS.CODE: 4107.12.00)",
+                "text": "HS.CODE: 4107.12.00",
                 "merge": 2
             }
         else:
