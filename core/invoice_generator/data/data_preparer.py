@@ -134,38 +134,26 @@ def _apply_fallback(
     """
     Applies a fallback value to the row_dict based on the DAF_mode and custom_mode.
     
-    Supports multiple fallback formats:
-    1. Bundled config with mode-specific fallbacks:
-       "fallback_on_none": "LEATHER", "fallback_on_DAF": "LEATHER", "fallback_on_custom": "..."
-    2. Bundled config with single fallback (same for both modes):
-       "fallback": "LEATHER"
-    3. Legacy format (same as #1)
+    Supports:
+    1. Modern nested format: "fallback": {"standard": "X", "daf": "Y", "custom": "Z"}
+    2. Legacy flat formats: "fallback_on_none", "fallback_on_DAF", etc.
     """
-    # Priority 1: Check for mode-specific fallback keys
-    if DAF_mode:
-        if 'fallback_on_DAF' in mapping_rule:
-            row_dict[target_col_idx] = mapping_rule['fallback_on_DAF']
+    # Priority 1: Check Modern Nested Dictionary Structure
+    fallback_config = mapping_rule.get('fallback')
+    if isinstance(fallback_config, dict):
+        if DAF_mode and 'daf' in fallback_config:
+            row_dict[target_col_idx] = fallback_config['daf']
             return
-    elif custom_mode:
-        if 'fallback_on_custom' in mapping_rule:
-            row_dict[target_col_idx] = mapping_rule['fallback_on_custom']
+        elif custom_mode and 'custom' in fallback_config:
+            row_dict[target_col_idx] = fallback_config['custom']
             return
-    else:
-        if 'fallback_on_none' in mapping_rule:
-            row_dict[target_col_idx] = mapping_rule['fallback_on_none']
+        elif 'standard' in fallback_config:
+            row_dict[target_col_idx] = fallback_config['standard']
             return
-    
-    # Priority 2: Try single 'fallback' key (same value for all modes)
-    if 'fallback' in mapping_rule:
-        row_dict[target_col_idx] = mapping_rule['fallback']
+    elif fallback_config is not None:
+        # Priority 2: Try single 'fallback' string key (same value for all modes)
+        row_dict[target_col_idx] = fallback_config
         return
-    
-    # Priority 3: Fallback to fallback_on_none if nothing else found (and not handled above)
-    # This covers the case where DAF_mode or custom_mode is active but no specific fallback was found,
-    # and we want to default to the standard fallback if available.
-    val = mapping_rule.get("fallback_on_none")
-    if val is not None:
-        row_dict[target_col_idx] = val
 
 import re
 
@@ -223,9 +211,9 @@ def prepare_data_rows(
             break
     
     if desc_mapping:
-        has_fallback = any(key in desc_mapping for key in ['fallback_on_none', 'fallback_on_DAF', 'fallback_on_custom', 'fallback'])
+        has_fallback = 'fallback' in desc_mapping or any(key in desc_mapping for key in ['fallback_on_none', 'fallback_on_DAF', 'fallback_on_custom'])
         if not has_fallback:
-            logger.warning(f"Description field missing fallback configuration. Recommended: 'fallback_on_none': 'LEATHER'.")
+            logger.warning(f"Description field missing fallback configuration. Recommended: 'fallback': {{'standard': 'LEATHER', 'daf': 'LEATHER'}}.")
     
     data_rows_prepared = []
     pallet_counts_for_rows = []

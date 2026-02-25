@@ -252,11 +252,17 @@ class LegacyConfigMigrator:
             if "value_key" in mapping:
                 new_mapping["source_value"] = mapping["value_key"]
             
-            # Handle fallbacks
+            # Handle fallbacks -> Migrate to Nested Dictionary Format
+            fallback_dict = {}
             if "fallback_on_none" in mapping:
-                new_mapping["fallback_on_none"] = mapping["fallback_on_none"]
+                fallback_dict["standard"] = mapping["fallback_on_none"]
             if "fallback_on_DAF" in mapping:
-                new_mapping["fallback_on_DAF"] = mapping["fallback_on_DAF"]
+                fallback_dict["daf"] = mapping["fallback_on_DAF"]
+            if "fallback_on_custom" in mapping:
+                fallback_dict["custom"] = mapping["fallback_on_custom"]
+                
+            if fallback_dict:
+                new_mapping["fallback"] = fallback_dict
             
             # Handle formulas
             if "formula" in mapping:

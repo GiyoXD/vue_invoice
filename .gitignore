@@ -25,3 +25,8 @@ __pycache__/
 .venv
 env/
 venv/
+
+# Ignore Output Directories
+database/generated_invoices/
+database/temp_uploads/
+run_log/

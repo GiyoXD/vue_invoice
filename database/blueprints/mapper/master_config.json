@@ -357,7 +357,7 @@
         "static": {
           "col_static": [
             "VENDOR#:",
-            "Des: LEATHER",
+            "Des: {col_desc_fallback}",
             "MADE IN CAMBODIA"
           ]
         }
@@ -574,7 +574,7 @@
         "static": {
           "col_static": [
             "VENDOR#:",
-            "Des: LEATHER",
+            "Des: {col_desc_fallback}",
             "Case Qty:",
             "MADE IN CAMBODIA"
           ]
@@ -602,7 +602,7 @@
           "before_footer": {
             "enabled": true,
             "column_id": "col_po",
-            "text": "LEATHER (HS.CODE: 4107.12.00)",
+            "text": "HS.CODE: 4107.12.00",
             "merge": 2
           },
           "weight_summary": {

@@ -151,11 +151,28 @@ class TableDataAdapter:
             static_col_idx = self.column_id_map.get('col_static')
             
             if static_values and static_col_idx and len(data_rows) > 0:
+                # [Smart Feature] Resolve {col_desc_fallback} placeholder for dynamic static content
+                desc_fallback_str = ""
+                for rule_key, rule in parsed['dynamic_mapping_rules'].items():
+                    if 'desc' in rule_key.lower() and isinstance(rule, dict):
+                        fc = rule.get('fallback')
+                        if isinstance(fc, dict):
+                            if self.DAF_mode and 'daf' in fc: desc_fallback_str = fc['daf']
+                            elif self.custom_mode and 'custom' in fc: desc_fallback_str = fc['custom']
+                            elif 'standard' in fc: desc_fallback_str = fc['standard']
+                        elif fc is not None:
+                            desc_fallback_str = str(fc)
+                        break
+                
                 # Merge static values into the first N data rows
                 num_static_values = len(static_values)
                 
                 for i, static_value in enumerate(static_values):
                     if i < len(data_rows):
+                        # Intercept {col_desc_fallback} in the text
+                        if isinstance(static_value, str) and "{col_desc_fallback}" in static_value:
+                            static_value = static_value.replace("{col_desc_fallback}", str(desc_fallback_str))
+                            
                         # Add static value to the existing data row
                         data_rows[i][static_col_idx] = static_value
                 

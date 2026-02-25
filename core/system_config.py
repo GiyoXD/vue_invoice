@@ -99,11 +99,11 @@ class SystemConfig:
 
     @property
     def output_dir(self) -> Path:
-        return self._resolve_path("output", "output/generated_invoices", env_key="OUTPUT_DIR")
+        return self._resolve_path("output", "database/generated_invoices", env_key="OUTPUT_DIR")
     
     @property
     def temp_uploads_dir(self) -> Path:
-        return self._resolve_path("temp_uploads", "output/temp_uploads", env_key="TEMP_UPLOADS_DIR")
+        return self._resolve_path("temp_uploads", "database/temp_uploads", env_key="TEMP_UPLOADS_DIR")
         
     @property
     def run_log_dir(self) -> Path:

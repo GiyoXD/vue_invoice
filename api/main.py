@@ -46,8 +46,8 @@ app.include_router(blueprint.router)
 orchestrator = Orchestrator()
 
 # Temporary storage for uploads
-UPLOAD_DIR = Path("temp_uploads")
-OUTPUT_DIR = Path("output")
+UPLOAD_DIR = sys_config.temp_uploads_dir
+OUTPUT_DIR = sys_config.output_dir
 UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
@@ -567,6 +567,24 @@ async def view_template(name: str):
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"Failed to read template: {str(e)}"})
 
+@app.delete("/api/template/{name}")
+async def delete_template(name: str):
+    """
+    Delete a specific template bundle.
+    """
+    bundled_dir = sys_config.bundled_dir
+    # Sanitize name to prevent traversal
+    safe_name = Path(name).name
+    template_dir = bundled_dir / safe_name
+    
+    if not template_dir.exists() or not template_dir.is_dir():
+        return JSONResponse(status_code=404, content={"error": "Template not found"})
+        
+    try:
+        shutil.rmtree(template_dir)
+        return {"status": "success", "message": f"Template {safe_name} deleted successfully"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Failed to delete template: {str(e)}"})
 
 # --- Log Viewer API ---
 from core.logger_config import clear_session_log

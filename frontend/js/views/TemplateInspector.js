@@ -30,9 +30,14 @@ export default {
                     </div>
 
                     <div v-if="currentTemplate" class="template-viewer">
-                        <div class="status-box info" style="margin-bottom: 1rem;">
-                            <strong>Viewing:</strong> {{ currentTemplateName }} <br>
-                            <span style="font-size: 0.85em; opacity: 0.8;">Source: {{ currentTemplateFingerprint?.source_file }}</span>
+                        <div class="status-box info" style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
+                            <div>
+                                <strong>Viewing:</strong> {{ currentTemplateName }} <br>
+                                <span style="font-size: 0.85em; opacity: 0.8;">Source: {{ currentTemplateFingerprint?.source_file }}</span>
+                            </div>
+                            <button class="btn-danger" @click="deleteTemplate" title="Delete Template" style="padding: 0.25rem 0.5rem; font-size: 0.875rem;">
+                                Delete Template
+                            </button>
                         </div>
 
                         <!-- Sheet Selector -->
@@ -119,6 +124,31 @@ export default {
                 }
             } catch (e) {
                 console.error("Failed to load template", e);
+            }
+        };
+
+        const deleteTemplate = async () => {
+            if (!selectedTemplateName.value) return;
+            if (!confirm(`Are you sure you want to permanently delete the template '${selectedTemplateName.value}'?`)) {
+                return;
+            }
+            try {
+                const res = await fetch(`/api/template/${encodeURIComponent(selectedTemplateName.value)}`, {
+                    method: 'DELETE'
+                });
+                if (res.ok) {
+                    currentTemplate.value = null;
+                    selectedTemplateName.value = null;
+                    currentSheetName.value = null;
+                    await fetchTemplates();
+                    alert(`Template deleted successfully.`);
+                } else {
+                    const data = await res.json();
+                    alert(`Failed to delete template: ${data.error || res.statusText}`);
+                }
+            } catch (e) {
+                console.error("Error deleting template", e);
+                alert('An error occurred while deleting the template.');
             }
         };
 
@@ -306,6 +336,7 @@ export default {
             gridStyle,
             fetchTemplates,
             loadTemplate,
+            deleteTemplate,
             formatTime
         };
     }

@@ -30,7 +30,7 @@ class ConfigBuilder:
             "col_po": {},
             "col_item": {},
             "col_unit_price": {},
-            "col_desc": {"fallback_on_none": "COW LEATHER", "fallback_on_DAF": "COW LEATHER"},
+            "col_desc": {"fallback": {"standard": "COW LEATHER", "daf": "COW LEATHER"}},
             "col_qty_sf": {},
             "col_unit_sf": {"fallback": "SF"},
             "col_amount": {"formula": "{col_qty_sf} * {col_unit_price}"},
@@ -39,7 +39,7 @@ class ConfigBuilder:
         "processed_tables_multi": {
             "col_po": {},
             "col_item": {},
-            "col_desc": {"fallback_on_none": "COW LEATHER", "fallback_on_DAF": "COW LEATHER"},
+            "col_desc": {"fallback": {"standard": "COW LEATHER", "daf": "COW LEATHER"}},
             "col_qty_pcs": {},
             "col_qty_sf": {},
             "col_unit_sf": {"fallback": "SF"},
@@ -307,8 +307,10 @@ class ConfigBuilder:
                          if dynamic_fallback == "LEATHER":
                              dynamic_fallback = "COW LEATHER"
                              
-                         mapping["fallback_on_none"] = dynamic_fallback
-                         mapping["fallback_on_DAF"] = dynamic_fallback
+                         mapping["fallback"] = {
+                             "standard": dynamic_fallback,
+                             "daf": dynamic_fallback
+                         }
                          self.logger.info(f"    [Smart]    Updated col_desc fallback to '{dynamic_fallback}'")
                 
                 # ONLY add "column" if it's different from the field key (which it isn't here)
