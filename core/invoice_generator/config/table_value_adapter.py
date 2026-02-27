@@ -71,7 +71,8 @@ class TableDataAdapter:
         DAF_mode: bool = False,
         custom_mode: bool = False,
         table_key: Optional[str] = None,
-        static_content: Optional[Dict[str, Any]] = None
+        static_content: Optional[Dict[str, Any]] = None,
+        footer_data: Optional[Dict[str, Any]] = None
     ):
         """
         Initialize the table data resolver.
@@ -86,6 +87,7 @@ class TableDataAdapter:
             custom_mode: Whether Custom mode is active
             table_key: Optional table key for multi-table data sources
             static_content: Static content from layout_bundle (e.g., col_static values)
+            footer_data: Pre-calculated footer data from data parser (table_totals + grand_total)
         """
         self.data_source_type = data_source_type
         self.data_source = data_source
@@ -95,6 +97,7 @@ class TableDataAdapter:
         self.custom_mode = custom_mode
         self.table_key = table_key
         self.static_content = static_content or {}
+        self.footer_data = footer_data or {}
         
         # Extract helper maps from header_info
         self.column_id_map = header_info.get('column_id_map', {})
@@ -183,34 +186,36 @@ class TableDataAdapter:
         if isinstance(self.data_source, dict):
             leather_summary = self.data_source.get('leather_summary')
             weight_summary = self.data_source.get('weight_summary')
-            
-            # Check for pallet count in footer_data -> table_totals if available
-            footer_data = self.data_source.get('footer_data', {})
-            if footer_data and 'table_totals' in footer_data:
-                table_totals = footer_data['table_totals']
-                if isinstance(table_totals, list) and len(table_totals) > 0:
-                    # Map table_key (e.g., '1', '2') to a zero-based list index
-                    # Fallback to index 0 if conversion fails or it's out of bounds
-                    tbl_idx = 0
-                    if self.table_key and str(self.table_key).isdigit():
-                        parsed_idx = int(self.table_key)
-                        if parsed_idx > 0:
-                            tbl_idx = parsed_idx - 1
-                    
-                    if tbl_idx >= len(table_totals):
-                        tbl_idx = 0  # Safe fallback
-                        
-                    tbl_footer = table_totals[tbl_idx]
-                    if 'col_pallet_count' in tbl_footer:
-                        pallet_summary_total = tbl_footer['col_pallet_count']
-                elif isinstance(table_totals, dict):
-                    # Fallback for old {"1": {...}} format, we just grab first value
-                    first_val = next(iter(table_totals.values()), {})
-                    if 'col_pallet_count' in first_val:
-                        pallet_summary_total = first_val['col_pallet_count']
-                        
-            if pallet_summary_total is None:
-                pallet_summary_total = self.data_source.get('pallet_summary_total')
+        
+        # Resolve pallet count from pre-calculated footer_data (top-level, from data parser)
+        # table_totals[index] for per-table footers, grand_total for overall total
+        if self.footer_data and 'table_totals' in self.footer_data:
+            table_totals = self.footer_data['table_totals']
+            if isinstance(table_totals, list) and len(table_totals) > 0:
+                # table_key is the zero-based index used by MultiTableProcessor
+                tbl_idx = 0
+                if self.table_key is not None and str(self.table_key).isdigit():
+                    tbl_idx = int(self.table_key)
+                
+                if tbl_idx >= len(table_totals):
+                    tbl_idx = 0  # Safe fallback
+                    logger.warning(f"table_key '{self.table_key}' out of bounds for table_totals (len={len(table_totals)}), using index 0")
+                
+                tbl_footer = table_totals[tbl_idx]
+                if 'col_pallet_count' in tbl_footer:
+                    pallet_summary_total = int(tbl_footer['col_pallet_count'])
+                    logger.info(f"Using pre-calculated pallet count from footer_data.table_totals[{tbl_idx}]: {pallet_summary_total}")
+            elif isinstance(table_totals, dict):
+                # Fallback for old {"1": {...}} format
+                first_val = next(iter(table_totals.values()), {})
+                if 'col_pallet_count' in first_val:
+                    pallet_summary_total = int(first_val['col_pallet_count'])
+        
+        # Last-resort fallback: check data_source directly (legacy path)
+        if pallet_summary_total is None and isinstance(self.data_source, dict):
+            pallet_summary_total = self.data_source.get('pallet_summary_total')
+            if pallet_summary_total is not None:
+                logger.warning(f"Using legacy pallet_summary_total from data_source: {pallet_summary_total}")
 
         return {
             'data_rows': data_rows,
@@ -331,7 +336,8 @@ class TableDataAdapter:
             DAF_mode=DAF_mode,
             custom_mode=custom_mode,
             table_key=data_config.get('table_key'),
-            static_content=static_content
+            static_content=static_content,
+            footer_data=data_config.get('footer_data', {})
         )
 
 

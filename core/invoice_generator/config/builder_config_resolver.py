@@ -312,6 +312,7 @@ class BuilderConfigResolver:
             'header_info': header_info,
             'mapping_rules': mapping_rules,
             'table_key': table_key,
+            'footer_data': self.invoice_data.get('footer_data', {}) if self.invoice_data else {},
         }
     
     # ========== Builder-Specific Bundle Methods ==========

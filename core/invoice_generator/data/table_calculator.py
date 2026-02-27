@@ -64,9 +64,13 @@ class TableCalculator:
             
         if 'pallet_summary_total' in resolved_data and resolved_data['pallet_summary_total'] is not None:
             self.total_pallets = int(resolved_data['pallet_summary_total'])
+            logger.info(f"[TableCalculator] Using pre-calculated pallet count: {self.total_pallets}")
         else:
-            # Fallback calculation
-            self.total_pallets = sum(self._parse_pallet_count(p) for p in pallet_counts)
+            # Pallet count MUST come from footer_data.table_totals (via TableDataAdapter).
+            # If missing, it means footer_data was not properly passed through the chain.
+            self.total_pallets = 0
+            logger.error("[TableCalculator] pallet_summary_total is missing! Pallet count will be 0. "
+                         "Ensure footer_data is passed through BuilderConfigResolver -> TableDataAdapter.")
         
         # Process each row only if needed
         if not use_precalc_leather or not use_precalc_weight:
