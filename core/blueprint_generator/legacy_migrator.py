@@ -45,12 +45,9 @@ class LegacyConfigMigrator:
         bundle = {
             "_meta": self._build_meta(customer_code, old_config_path),
             "data_preparation_module_hint": {"priority": ["po"], "numbers_per_group_by_po": 7},
-            "features": self._build_features(),
-            "extensions": self._build_extensions(),
             "processing": self._build_processing(old_config),
             "styling_bundle": self._build_styling_bundle(old_config),
-            "layout_bundle": self._build_layout_bundle(old_config),
-            "defaults": self._build_defaults()
+            "layout_bundle": self._build_layout_bundle(old_config)
         }
         
         return bundle
@@ -64,25 +61,7 @@ class LegacyConfigMigrator:
             "source_config": source_path,
             "generator": "config_converter"
         }
-    
-    def _build_features(self) -> Dict[str, Any]:
-        return {
-            "_comment": "Feature flags",
-            "enable_text_replacement": False,
-            "enable_conditional_formatting": False,
-            "enable_data_validation": False,
-            "enable_auto_calculations": True,
-            "enable_print_area": False,
-            "enable_page_breaks": False,
-            "debug_mode": False
-        }
-    
-    def _build_extensions(self) -> Dict[str, Any]:
-        return {
-            "_comment": "Custom extensions",
-            "_available_hooks": ["pre_build", "post_build", "pre_style", "post_style"],
-            "custom": {}
-        }
+
     
     def _build_processing(self, old_config: Dict) -> Dict[str, Any]:
         sheets = old_config.get("sheets_to_process", [])
@@ -293,7 +272,7 @@ class LegacyConfigMigrator:
         # Default footer configuration
         footer = {
             "label_col": footer_config.get("label_col", "col_po"),
-            "label_text": footer_config.get("label_text", "TOTAL:"),
+            "label_text": footer_config.get("label_text", "TOTAL OF:"),
             "count_col": footer_config.get("count_col", "col_desc"),
             "sum_cols": footer_config.get("sum_cols", ["col_qty_sf", "col_amount"]),
             "merge_rules": [],
@@ -329,16 +308,7 @@ class LegacyConfigMigrator:
         
         return footer
     
-    def _build_defaults(self) -> Dict[str, Any]:
-        return {
-            "footer": {
-                "show_total": True,
-                "show_pallet_count": True,
-                "total_text": "TOTAL:",
-                "merge_total_cells": True,
-                "sum_columns": ["col_qty_pcs", "col_qty_sf", "col_net", "col_gross", "col_cbm"]
-            }
-        }
+
 
 
 def main():

@@ -10,8 +10,7 @@ class BundledConfigLoader:
     - processing: sheets and data sources
     - layout_bundle: structure, data_flow, content, footer per sheet
     - styling_bundle: styling configuration per sheet
-    - features: feature flags
-    - defaults: default settings
+    - layout_bundle: defines structure, data flow, content, and footers
     """
     
     def __init__(self, config_data: Dict[str, Any]):
@@ -21,9 +20,7 @@ class BundledConfigLoader:
         self.processing = config_data.get('processing', {})
         self.layout_bundle = config_data.get('layout_bundle', {})
         self.styling_bundle = config_data.get('styling_bundle', {})
-        self.features = config_data.get('features', {})
-        self.defaults = config_data.get('defaults', {})
-        self.data_preparation_hint = config_data.get('data_preparation_module_hint', {})
+        # Note: 'data_preparation_module_hint' is informational metadata only, not parsed here
     
     @property
     def config_version(self) -> str:
@@ -88,9 +85,6 @@ class BundledConfigLoader:
     
     # ========== Features ==========
     
-    def is_feature_enabled(self, feature_name: str) -> bool:
-        """Check if a feature is enabled."""
-        return self.features.get(feature_name, False)
 
 
 def load_config(config_path: str) -> Dict[str, Any]:

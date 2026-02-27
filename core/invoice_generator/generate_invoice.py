@@ -188,14 +188,18 @@ def _load_resources(ctx: GeneratorContext):
     except Exception as e:
         raise RuntimeError(f"Failed to load configuration: {e}") from e
 
-    # C. Calculate Grand Totals (Legacy)
-    processed_tables = ctx.invoice_data.get('processed_tables_data', {})
-    if isinstance(processed_tables, dict):
-        ctx.final_grand_total_pallets = sum(
-            int(c) for t in processed_tables.values() 
-            for c in (t.get("col_pallet_count") or t.get("pallet_count") or [])
-            if str(c).isdigit()
-        )
+    # C. Calculate Grand Total Pallets
+    # Read the pre-calculated total from footer_data.grand_total (set by data_parser)
+    footer_data = ctx.invoice_data.get('footer_data', {})
+    grand_total = footer_data.get('grand_total', {})
+    gt_pallets = grand_total.get('col_pallet_count', 0)
+    
+    if gt_pallets:
+        ctx.final_grand_total_pallets = int(gt_pallets)
+        logger.info(f"Grand total pallets from footer_data: {ctx.final_grand_total_pallets}")
+    else:
+        ctx.final_grand_total_pallets = 0
+        logger.warning("⚠ No pallet count found in footer_data.grand_total.col_pallet_count")
 
 
 def _prepare_workbooks(ctx: GeneratorContext):

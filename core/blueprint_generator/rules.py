@@ -175,12 +175,7 @@ class BlueprintRules:
             return cls.COLUMNS[col_id].excel_format
         return "@"
 
-    # 3. Default Footer Sums
-    # Defines which columns should be summed in the footer by default
-    DEFAULT_FOOTER_SUMS: Dict[str, List[str]] = {
-        "aggregation": ["col_qty_pcs", "col_qty_sf", "col_amount", "col_net", "col_gross", "col_cbm"],
-        "processed_tables_multi": ["col_qty_pcs", "col_qty_sf", "col_net", "col_gross", "col_cbm"]
-    }
+
 
     # 4. Standard Row Heights (Fallback)
     # derived from JF_v2_bundle_config.json

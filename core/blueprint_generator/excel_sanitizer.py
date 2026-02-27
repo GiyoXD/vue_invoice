@@ -10,10 +10,9 @@ This module is responsible for:
 import logging
 from typing import Dict, Any, List, Optional, Tuple
 import openpyxl
-import base64
-from io import BytesIO
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.cell.cell import Cell, MergedCell
+from openpyxl.utils import get_column_letter
 
 from .excel_scanner import TemplateAnalysisResult, SheetAnalysis
 
@@ -123,7 +122,7 @@ class ExcelTemplateSanitizer:
         
         
         # --- CAPTURE GLOBAL LAYOUT (Column Widths) ---
-        from openpyxl.utils import get_column_letter
+
         for c in range(1, safe_max_column + 1):
             letter = get_column_letter(c)
             if letter in ws.column_dimensions:
@@ -136,7 +135,7 @@ class ExcelTemplateSanitizer:
         # Capture strictly ABOVE the header row (Metadata area)
         
         # 1. Header Merges
-        from openpyxl.utils import get_column_letter
+
         for merged_range in ws.merged_cells:
             if merged_range.max_row < analysis.header_row:
                  range_str = str(merged_range)
@@ -233,7 +232,7 @@ class ExcelTemplateSanitizer:
             
             # Use max_row from before deletion
             current_max_row = ws.max_row
-            from openpyxl.utils import get_column_letter
+
             
             for r in range(end_delete + 1, current_max_row + 1):
                 # 1. Capture Height
@@ -253,7 +252,7 @@ class ExcelTemplateSanitizer:
                         shifted_r = r - rows_to_delete
                         if shifted_r < 1: continue 
                         
-                        from openpyxl.utils import get_column_letter
+
                         new_coord = f"{get_column_letter(c)}{shifted_r}"
                         is_empty = (cell.value is None)
                         
@@ -290,7 +289,7 @@ class ExcelTemplateSanitizer:
                 
                 # Save to metadata (using openpyxl range string format, e.g. "A40:G40")
                 # We need to construct the range string manually or use helper
-                from openpyxl.utils import get_column_letter
+
                 range_str = f"{get_column_letter(min_c)}{new_min_r}:{get_column_letter(max_c)}{new_max_r}"
                 preserved_layout["footer_merges"].append(range_str)
 
@@ -486,7 +485,7 @@ class ExcelTemplateSanitizer:
         
         This prevents recording thousands of empty cells with only default styling.
         """
-        from openpyxl.utils import get_column_letter
+
         
         # Check row height
         if row in ws.row_dimensions:
@@ -501,22 +500,6 @@ class ExcelTemplateSanitizer:
             if width is not None and width != self.DEFAULT_COL_WIDTH:
                 return True
         
-        return False
-    
-    def _is_default_style(self, style: Dict[str, Any]) -> bool:
-        """Check if a style dict represents standard/default Excel formatting."""
-        if not style: return True
-        
-        # Check Font (Calibri 11 is default, or internal theme default)
-        # We'll consider it default if it has no meaningful override (no bold, no specific color, standard size)
-        font = style.get('font', {})
-        if font.get('bold') or font.get('italic') or font.get('color'):
-             return False
-        # Ignore font name/size changes for "default" check if they are standard (Calibri/Arial 10-12)
-        # Actually, let's just say if there's NO font dict, it's default.
-        # But openpyxl always gives a font object. 
-        # Strategy: If it returns a dict, it's "significant".
-        # We need to filter INSIDE _capture_cell_style to return None if it's boring.
         return False
 
     def _capture_cell_style(self, cell: Cell, is_empty: bool = False) -> Optional[Dict[str, Any]]:
@@ -620,98 +603,3 @@ class ExcelTemplateSanitizer:
                 return color.rgb
         return None
 
-    def _capture_images_from_sheet(self, ws: Worksheet, header_limit: int, footer_start: int, delete_count: int) -> Tuple[List[Dict], List[Dict]]:
-        """
-        Capture images from the sheet, classifying them as Header or Footer.
-        Returns (header_images, footer_images).
-        Footer images have their row coordinates SHIFTED up by delete_count.
-        """
-        header_imgs = []
-        footer_imgs = []
-        
-        # Access internal images list (standard way in openpyxl for now)
-        if not hasattr(ws, "_images"):
-            return header_imgs, footer_imgs
-            
-        for img in ws._images:
-            # Determine anchor row (0-indexed in openpyxl, convert to 1-based for comparison)
-            # anchor type varies (OneCellAnchor, TwoCellAnchor)
-            # But usually has _from
-            try:
-                row_idx = img.anchor._from.row
-                col_idx = img.anchor._from.col
-                # col_off = img.anchor._from.colOff
-                # row_off = img.anchor._from.rowOff
-                
-                row_num = row_idx + 1 # 1-based
-                
-                img_data = self._serialize_image(img)
-                if not img_data: continue
-                
-                # Add anchor info
-                from openpyxl.utils import get_column_letter
-                anchor_col = get_column_letter(col_idx + 1)
-                
-                # Header Image
-                if row_num < header_limit:
-                    img_data["anchor"] = f"{anchor_col}{row_num}"
-                    # Allow fine definition? For now just cell anchor.
-                    # Ideally we want offsets too.
-                    img_data["anchor_details"] = {
-                        "col": col_idx, "row": row_idx,
-                        "colOff": getattr(img.anchor._from, "colOff", 0),
-                        "rowOff": getattr(img.anchor._from, "rowOff", 0)
-                    }
-                    header_imgs.append(img_data)
-                    
-                # Footer Image (Strictly below deletion zone)
-                # If deletion goes up to footer_start, then Footer starts at footer_start + 1 ??
-                # In my logic: end_delete = footer_start. So Footer is > footer_start.
-                elif row_num > footer_start:
-                    # Shift row
-                    new_row_num = row_num - delete_count
-                    if new_row_num < 1: continue
-                    
-                    img_data["anchor"] = f"{anchor_col}{new_row_num}"
-                    img_data["anchor_details"] = {
-                        "col": col_idx, "row": row_idx - delete_count, # Shifted internal row
-                        "colOff": getattr(img.anchor._from, "colOff", 0),
-                        "rowOff": getattr(img.anchor._from, "rowOff", 0)
-                    }
-                    footer_imgs.append(img_data)
-                    
-            except Exception as e:
-                self.logger.warning(f"Failed to capture image: {e}")
-                
-        return header_imgs, footer_imgs
-
-    def _serialize_image(self, img) -> Optional[Dict]:
-        """Convert image to base64 dict."""
-        try:
-            # Read binary data
-            # img.ref is a file-like object or bytes?
-            # openpyxl Image has ._data? or we read from path?
-            # Actually img._data might cover it if loaded.
-            data = None
-            if hasattr(img, "_data"): # internal blob
-                 data = img._data()
-            elif hasattr(img, "ref") and hasattr(img.ref, "read"):
-                 data = img.ref.read()
-            elif hasattr(img, "path"): # path to file
-                 with open(img.path, "rb") as f:
-                     data = f.read()
-                     
-            if not data: return None
-            
-            b64_str = base64.b64encode(data).decode('utf-8')
-            
-            return {
-                "width": img.width,
-                "height": img.height,
-                "format": img.format,
-                "data": b64_str
-            }
-        except (ValueError, OSError, AttributeError, Exception) as e:
-            # Catch 'I/O operation on closed file' (ValueError) and others
-            self.logger.warning(f"Error serializing image: {e}")
-            return None

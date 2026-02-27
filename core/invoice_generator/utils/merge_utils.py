@@ -290,19 +290,32 @@ def merge_vertical_cells_in_range(worksheet: Worksheet, scan_col: int, start_row
             # Value changed or end of range — merge the previous group if 2+ rows
             group_end = row_idx - 1
             if group_end > group_start and group_value is not None:
+                # Skip merging if the value is a pure integer — merging
+                # integers causes data loss (e.g. quantities collapsed into one cell).
+                # Only text values like "1-25" should be merged.
+                skip_int = False
                 try:
-                    worksheet.merge_cells(
-                        start_row=group_start,
-                        start_column=scan_col,
-                        end_row=group_end,
-                        end_column=scan_col
-                    )
-                    # Apply center alignment to the merged cell
-                    anchor_cell = worksheet.cell(row=group_start, column=scan_col)
-                    anchor_cell.alignment = center_alignment
-                    logger.debug(f"  Merged column {scan_col} rows {group_start}-{group_end} (value = '{group_value}')")
-                except Exception as e:
-                    logger.warning(f"  Failed to merge column {scan_col} rows {group_start}-{group_end}: {e}")
+                    int(group_value)
+                    skip_int = True
+                except (ValueError, TypeError):
+                    pass
+
+                if skip_int:
+                    logger.debug(f"  Skipped merge column {scan_col} rows {group_start}-{group_end} — value '{group_value}' is an integer")
+                else:
+                    try:
+                        worksheet.merge_cells(
+                            start_row=group_start,
+                            start_column=scan_col,
+                            end_row=group_end,
+                            end_column=scan_col
+                        )
+                        # Apply center alignment to the merged cell
+                        anchor_cell = worksheet.cell(row=group_start, column=scan_col)
+                        anchor_cell.alignment = center_alignment
+                        logger.debug(f"  Merged column {scan_col} rows {group_start}-{group_end} (value = '{group_value}')")
+                    except Exception as e:
+                        logger.warning(f"  Failed to merge column {scan_col} rows {group_start}-{group_end}: {e}")
             
             # Start new group
             group_start = row_idx

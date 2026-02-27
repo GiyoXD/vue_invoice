@@ -140,77 +140,24 @@ class BuilderConfigResolver:
             'all_sheet_configs': self.config_loader.get_raw_config().get('layout_bundle', {}),
         }
         
-        # Add processed_tables_data separately for features that need raw data (e.g., weight_summary)
-        if self.invoice_data and 'processed_tables_data' in self.invoice_data:
-            base_context['processed_tables_data'] = self.invoice_data['processed_tables_data']
+        
+        # Aggregate pre-calculated summaries from footer_data.grand_total
+        footer_data = self.invoice_data.get('footer_data', {}) if self.invoice_data else {}
+        grand_total = footer_data.get('grand_total', {})
+        
+        if grand_total:
+            total_net = float(grand_total.get('col_net', 0))
+            total_gross = float(grand_total.get('col_gross', 0))
+            total_pallets = int(grand_total.get('col_pallet_count', 0))
             
-            # Aggregate pre-calculated summaries from data_parser
-            # This replaces GlobalSummaryCalculator with a lighter-weight aggregation
-            total_net = 0.0
-            total_gross = 0.0
-            total_pallets = 0
-            
-            for table_data in self.invoice_data['processed_tables_data'].values():
-                # Extract table_index if possible, else default to 0
-                table_idx = 0
-                try:
-                    if str(table_key).isdigit():
-                        # table_key is typically '1', '2' etc., so list index is int(table_key) - 1
-                        idx_val = int(table_key)
-                        if idx_val > 0:
-                            table_idx = idx_val - 1
-                except (ValueError, TypeError):
-                    pass
-                
-                # Check for footer_data first
-                footer_data = table_data.get('footer_data', table_data)
-
-                # Aggregate weights
-                if 'weight_summary' in footer_data:
-                    ws = footer_data['weight_summary']
-                    total_net += float(ws.get('net', 0.0))
-                    total_gross += float(ws.get('gross', 0.0))
-                
-                # Aggregate pallets - Look first at the global grand_total or the new table_totals list structure
-                pallet_count_added = False
-                
-                if 'table_totals' in footer_data:
-                    table_totals = footer_data['table_totals']
-                    if isinstance(table_totals, list) and table_idx < len(table_totals):
-                        tbl_footer = table_totals[table_idx]
-                        if 'col_pallet_count' in tbl_footer:
-                            total_pallets += int(tbl_footer['col_pallet_count'])
-                            pallet_count_added = True
-                    elif isinstance(table_totals, dict) and str(table_key) in table_totals:
-                        # Fallback for old {"1": {...}} format
-                        tbl_footer = table_totals[str(table_key)]
-                        if 'col_pallet_count' in tbl_footer:
-                            total_pallets += int(tbl_footer['col_pallet_count'])
-                            pallet_count_added = True
-
-                if not pallet_count_added and 'pallet_summary_total' in footer_data:
-                    total_pallets += int(footer_data['pallet_summary_total'])
-                    pallet_count_added = True
-                    
-                if not pallet_count_added:
-                    # Fallback if summary missing
-                    # Check both 'pallet_count' and 'col_pallet_count' keys
-                    p_array = table_data.get('col_pallet_count') or table_data.get('pallet_count')
-                    if p_array:
-                        for p in p_array:
-                            if p is not None:
-                                try:
-                                    total_pallets += int(float(p))
-                                except (ValueError, TypeError):
-                                    pass
+            if not grand_total.get('col_pallet_count'):
+                logger.warning("⚠ No col_pallet_count in footer_data.grand_total. Pallet count will be 0.")
 
             summaries = {
                 'total_net_weight': total_net,
                 'total_gross_weight': total_gross,
                 'total_pallets': total_pallets
             }
-            
-            # Add calculated summaries to context
             base_context.update(summaries)
             logger.debug(f"Added global summaries to context: {summaries}")
         

@@ -16,11 +16,11 @@ from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
-from openpyxl.cell.cell import MergedCell
 from openpyxl.utils import get_column_letter
 
 from .rules import BlueprintRules
 from core.utils.snitch import snitch
+from .utils.footer_scanner import FooterInfo, scan_footer
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +39,6 @@ class ColumnInfo:
     children: List['ColumnInfo'] = field(default_factory=list)
     wrap_text: bool = False
 
-
-@dataclass
-class FooterInfo:
-    """Information about the footer structure."""
-    row_num: int
-    total_text: str
-    total_text_col_id: str
-    merge_curr_colspan: int
 
 
 @dataclass
@@ -426,8 +418,8 @@ class ExcelLayoutScanner:
             if fallback_hint:
                 static_hints["description_fallback"] = fallback_hint
 
-            # [Smart Feature] Dynamic Footer Analysis
-            footer_info = self._analyze_footer(worksheet, header_row, columns)
+            # [Smart Feature] Dynamic Footer Analysis (Delegated to Utility)
+            footer_info = scan_footer(worksheet, header_row, columns, self.logger, sheet_name=sheet_name)
             if footer_info:
                 self.logger.info(f"    Footer detected at row {footer_info.row_num}: '{footer_info.total_text}' (colspan={footer_info.merge_curr_colspan})")
             
@@ -780,66 +772,6 @@ class ExcelLayoutScanner:
         
         return hints
 
-    def _analyze_footer(self, worksheet: Worksheet, header_row: int, columns: List[ColumnInfo]) -> Optional[FooterInfo]:
-        """
-        Analyze the footer structure by searching for 'TOTAL'.
-        Returns FooterInfo if found, or None.
-        """
-        # Scan from row after header down to max_row (limit scan deepness to avoid performance issues)
-        start_scan = header_row + 1
-        # limit scan to 500 rows to prevent freezing on huge blank sheets
-        end_scan = min(worksheet.max_row, header_row + 500) 
-        
-        found_cell = None
-        
-        # We look for the FIRST occurrence of "TOTAL" or "TOTAL OF:" in the sheet
-        # Usually it's in the first few columns
-        for row in range(start_scan, end_scan + 1):
-            for col in range(1, min(worksheet.max_column + 1, 20)): # Scan first 20 cols only
-                cell = worksheet.cell(row=row, column=col)
-                val = str(cell.value).strip().upper() if cell.value else ""
-                
-                # Check for exact or near-exact match, not just 'in val' to avoid false positives
-                # like "Total Net Weight" or "Warning: total items"
-                if val in ["TOTAL", "TOTAL:", "TOTAL OF:", "TOTAL OF", "TOTAL："] or val.startswith("TOTAL OF"):
-                    found_cell = cell
-                    break
-            if found_cell:
-                break
-        
-        if not found_cell:
-            return None
-            
-        # Determine colspan from merged cells
-        colspan = 1
-        for merged in worksheet.merged_cells.ranges:
-            if found_cell.row >= merged.min_row and found_cell.row <= merged.max_row:
-                if found_cell.column >= merged.min_col and found_cell.column <= merged.max_col:
-                    colspan = merged.max_col - merged.min_col + 1
-                    break
-        
-        # Determine total_text_col_id
-        # We need to map the found_cell.column index to a ColumnInfo.id
-        # We check our detected columns list
-        col_id = f"col_unknown_{found_cell.column}"
-        
-        # Look for a column that covers this index
-        for c in columns:
-            # Check main column
-            if c.col_index == found_cell.column:
-                col_id = c.id
-                break
-            # Check if it's within a colspan of a main column (less likely for total text but possible)
-            if c.col_index <= found_cell.column < c.col_index + c.colspan:
-                 col_id = c.id
-                 break
-                 
-        return FooterInfo(
-            row_num=found_cell.row,
-            total_text=str(found_cell.value).strip(),
-            total_text_col_id=col_id,
-            merge_curr_colspan=colspan
-        )
 
 
 if __name__ == "__main__":

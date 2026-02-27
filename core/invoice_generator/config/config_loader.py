@@ -11,7 +11,7 @@ Bundled Config Structure:
     - styling_bundle: per-sheet styling configs
     - layout_bundle: per-sheet layout configs (headers, blanks, static content)
     - data_bundle: per-sheet data configs (mappings, header_info)
-    - context: global context (replacements, features, extensions)
+    - data_bundle: per-sheet data configs (mappings, header_info)
 """
 
 import json
@@ -45,7 +45,6 @@ class BundledConfigLoader:
         self._styling_bundle: Dict[str, Any] = {}
         self._layout_bundle: Dict[str, Any] = {}
         self._data_bundle: Dict[str, Any] = {}
-        self._context: Dict[str, Any] = {}
         
         self._load()
     
@@ -68,7 +67,6 @@ class BundledConfigLoader:
             self._styling_bundle = self.raw_config.get('styling_bundle', {})
             self._layout_bundle = self.raw_config.get('layout_bundle', {})
             self._data_bundle = self.raw_config.get('data_bundle', {})
-            self._context = self.raw_config.get('context', {})
             
             # Load sibling template config for JSON-based reconstruction
             self.template_json_config: Dict[str, Any] = None
@@ -130,8 +128,7 @@ class BundledConfigLoader:
             'data_source': self.get_data_source_type(sheet_name),
             'styling_config': self.get_styling_config(sheet_name),
             'layout_config': self.get_layout_config(sheet_name),
-            'data_config': self.get_data_config(sheet_name),
-            'context_config': self.get_context_config()
+            'data_config': self.get_data_config(sheet_name)
         }
     
     def get_styling_config(self, sheet_name: str) -> Dict[str, Any]:
@@ -229,17 +226,7 @@ class BundledConfigLoader:
         """Get data configuration for a sheet (mappings, header_info, etc.)."""
         return self._data_bundle.get(sheet_name, {})
     
-    def get_context_config(self) -> Dict[str, Any]:
-        """Get global context configuration (replacements, features, extensions)."""
-        return self._context
-    
-    def get_replacement_rules(self) -> Dict[str, Any]:
-        """Get text replacement rules from context."""
-        return self._context.get('replacements', {})
-    
-    def get_features(self) -> Dict[str, bool]:
-        """Get feature flags."""
-        return self.raw_config.get('features', {})
+
         
     def get_template_json_config(self) -> Optional[Dict[str, Any]]:
         """Get the loaded sibling template JSON config if available."""

@@ -303,9 +303,9 @@ class TableFooterBuilder(BundleAccessor):
             return -1
 
     def _build_regular_footer(self, current_footer_row: int):
-        """Build regular footer with TOTAL: text."""
+        """Build regular footer with TOTAL OF: text."""
         logger.debug(f"[FooterBuilder._build_regular_footer] Starting at row {current_footer_row}")
-        default_total_text = self.footer_config.get("total_text", "TOTAL:")
+        default_total_text = self.footer_config.get("total_text", "TOTAL OF:")
         self._build_footer_common(current_footer_row, default_total_text, footer_type="regular")
         logger.debug(f"[FooterBuilder._build_regular_footer] Complete")
 

@@ -11,7 +11,6 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 
 from .excel_scanner import TemplateAnalysisResult, SheetAnalysis, ColumnInfo
-from .rules import BlueprintRules
 from .validator import BlueprintLogicValidator
 from core.utils.snitch import snitch
 
@@ -63,12 +62,9 @@ class ConfigBuilder:
         bundle = {
             "_meta": self._build_meta(analysis),
             "data_preparation_module_hint": self._build_data_prep_hints(),
-            "features": self._build_features(),
-            "extensions": self._build_extensions(),
             "processing": self._build_processing(analysis),
             "styling_bundle": self._build_styling_bundle(analysis),
-            "layout_bundle": self._build_layout_bundle(analysis),
-            "defaults": self._build_defaults()
+            "layout_bundle": self._build_layout_bundle(analysis)
         }
         
         return bundle
@@ -91,27 +87,7 @@ class ConfigBuilder:
             "priority": ["po"],
             "numbers_per_group_by_po": 7
         }
-    
-    def _build_features(self) -> Dict[str, Any]:
-        """Build features section."""
-        return {
-            "_comment": "Feature flags for optional/experimental functionality",
-            "enable_text_replacement": True,
-            "enable_conditional_formatting": False,
-            "enable_data_validation": False,
-            "enable_auto_calculations": True,
-            "enable_print_area": False,
-            "enable_page_breaks": False,
-            "debug_mode": False
-        }
-    
-    def _build_extensions(self) -> Dict[str, Any]:
-        """Build extensions section."""
-        return {
-            "_comment": "Custom extensions - add new features here",
-            "_available_hooks": ["pre_build", "post_build", "pre_style", "post_style"],
-            "custom": {}
-        }
+
     
     def _build_processing(self, analysis: TemplateAnalysisResult) -> Dict[str, Any]:
         """Build processing section."""
@@ -198,17 +174,6 @@ class ConfigBuilder:
                 "row_height": sheet.row_heights.get("footer", 35)
             }
         }
-        
-        # Add footer add-ons for invoice sheets
-        if sheet.data_source == "aggregation":
-            sheet_styling["row_contexts"]["footer"]["add_ons"] = {
-                "weight_summary": {
-                    "enabled": True,
-                    "label_col_id": "col_po",
-                    "value_col_id": "col_item",
-                    "mode": ["daf", "standard"]
-                }
-            }
         
         return sheet_styling
     
@@ -327,12 +292,7 @@ class ConfigBuilder:
 
         
         return {"mappings": mappings}
-    
-    def _col_id_to_field_name(self, col_id: str) -> str:
-        """Convert column ID to field name."""
-        # IDENTITY MAPPING: Return the column ID directly.
-        # This ensures that the generated config uses the same keys as the data parser output.
-        return col_id
+
     
     def _build_content(self, sheet: SheetAnalysis) -> Dict[str, Any]:
         """Build content section for a sheet."""
@@ -352,28 +312,19 @@ class ConfigBuilder:
         return content
     
     def _build_footer(self, sheet: SheetAnalysis) -> Dict[str, Any]:
-        """Build footer section for a sheet."""
-        # Find appropriate columns for footer
-        col_ids = [c.id for c in sheet.columns]
-        for c in sheet.columns:
-            col_ids.extend([child.id for child in c.children])
+        """
+        Build footer section for a sheet.
         
-        # Determine total text column
-        total_col = "col_po"
-        if "col_no" in col_ids:
-            total_col = "col_no"
-        
-        # Determine pallet count column
-        if "col_pallet_count" in col_ids:
-            pallet_col = "col_pallet_count" 
-        else:
-            pallet_col = "col_desc" if "col_desc" in col_ids else "col_item"
-        
-        # Default settings
-        total_text = "TOTAL OF:"
+        Uses excel_scanner's FooterInfo to resolve:
+        - label_col: column where 'TOTAL' text was found in the XLSX
+        - count_col: column where 'X PALLETS' pattern was found in the XLSX
+        - sum_cols: universal list of all summable columns (no filtering)
+        """
+        # --- label_col & label_text (from scanner's TOTAL detection) ---
+        total_col = None
+        total_text = None
         merge_rules = []
         
-        # [Smart Feature] Use Dynamic Footer Info if available
         if sheet.footer_info:
             self.logger.info(f"  [Smart] Using detected footer info for {sheet.name}")
             total_col = sheet.footer_info.total_text_col_id
@@ -387,25 +338,33 @@ class ConfigBuilder:
                     "comment": "Auto-detected from template"
                 })
                 self.logger.info(f"    [Smart] Added merge rule: {total_col} spans {sheet.footer_info.merge_curr_colspan} columns")
+        else:
+            self.logger.warning(f"  ⚠ No footer 'TOTAL' text found for {sheet.name}. Check template footer row.")
         
-        # Determine pallet count column  
-        pallet_col = "col_desc" if "col_desc" in col_ids else "col_item"
+        # --- count_col (from scanner's PALLETS regex detection) ---
+        pallet_col = None
+        if sheet.footer_info and sheet.footer_info.pallet_count_col_id:
+            pallet_col = sheet.footer_info.pallet_count_col_id
+            self.logger.info(f"    [Smart] Pallet count column: {pallet_col}")
+        else:
+            self.logger.warning(f"  ⚠ No pallet count column detected for {sheet.name}. Check template footer row.")
         
-        # Determine sum columns
-        sum_cols = []
-        default_sum = BlueprintRules.DEFAULT_FOOTER_SUMS.get(sheet.data_source, [])
-        for col_id in default_sum:
-            if col_id in col_ids:
-                sum_cols.append(col_id)
+        # --- sum_cols (universal — invoice generator skips non-existent columns) ---
+        sum_cols = ["col_qty_pcs", "col_qty_sf", "col_amount", "col_net", "col_gross", "col_cbm"]
         
         footer = {
-            "label_col": total_col,
-            "label_text": total_text,
-            "count_col": pallet_col,
             "sum_cols": sum_cols,
             "merge_rules": merge_rules,
             "add_ons": self._build_footer_addons(sheet)
         }
+        
+        # Only include label/count keys if scanner actually found them
+        if total_col:
+            footer["label_col"] = total_col
+            # Always normalize label_text to "TOTAL OF:" regardless of scanned text
+            footer["label_text"] = "TOTAL OF:"
+        if pallet_col:
+            footer["count_col"] = pallet_col
         
         return footer
     
@@ -443,18 +402,7 @@ class ConfigBuilder:
         }
         
         return add_ons
-    
-    def _build_defaults(self) -> Dict[str, Any]:
-        """Build defaults section."""
-        return {
-            "footer": {
-                "show_total": True,
-                "show_pallet_count": True,
-                "total_text": "TOTAL:",
-                "merge_total_cells": True,
-                "sum_columns": ["col_qty_pcs", "col_qty_sf", "col_net", "col_gross", "col_cbm"]
-            }
-        }
+
 
 
 if __name__ == "__main__":
