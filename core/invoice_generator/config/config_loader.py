@@ -219,8 +219,39 @@ class BundledConfigLoader:
         return transformed
     
     def get_layout_config(self, sheet_name: str) -> Dict[str, Any]:
-        """Get layout configuration for a sheet (headers, blanks, static content, merges)."""
-        return self._layout_bundle.get(sheet_name, {})
+        """
+        Get layout configuration for a sheet (headers, blanks, static content, merges).
+
+        Merges layout_bundle.defaults.data_flow.mappings as a base layer.
+        Per-sheet mappings override defaults (shallow merge by column ID).
+
+        Args:
+            sheet_name: Name of the sheet to get config for.
+
+        Returns:
+            The sheet's layout config with defaults merged in.
+        """
+        import copy
+        sheet_config = copy.deepcopy(self._layout_bundle.get(sheet_name, {}))
+
+        # Merge defaults.data_flow.mappings as base for per-sheet mappings
+        defaults = self._layout_bundle.get('defaults', {})
+        default_mappings = defaults.get('data_flow', {}).get('mappings', {})
+
+        if default_mappings:
+            sheet_data_flow = sheet_config.get('data_flow', {})
+            sheet_mappings = sheet_data_flow.get('mappings', {})
+
+            # Defaults as base, per-sheet overrides on top
+            merged = {**default_mappings, **sheet_mappings}
+            sheet_config.setdefault('data_flow', {})['mappings'] = merged
+
+            logger.debug(
+                f"[{sheet_name}] Merged {len(default_mappings)} default mappings + "
+                f"{len(sheet_mappings)} sheet mappings = {len(merged)} total"
+            )
+
+        return sheet_config
     
     def get_data_config(self, sheet_name: str) -> Dict[str, Any]:
         """Get data configuration for a sheet (mappings, header_info, etc.)."""

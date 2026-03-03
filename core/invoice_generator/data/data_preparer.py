@@ -189,6 +189,46 @@ def _parse_formula_def(formula_def: Union[str, Dict[str, Any]]) -> Optional[Dict
         
     return None
 
+def _resolve_mode_formula(
+    rule: Dict[str, Any],
+    DAF_mode: bool,
+    custom_mode: bool
+) -> Optional[Union[str, Dict[str, Any]]]:
+    """
+    Resolves the correct formula from a mapping rule based on the current mode.
+
+    Supports:
+    1. Modern nested dict: "formula": {"standard": "...", "daf": "...", "custom": "..."}
+    2. Plain string: "formula": "{col_a} * {col_b}" (applies to all modes)
+
+    Args:
+        rule: The mapping rule dict for a column.
+        DAF_mode: Whether the current invoice is in DAF mode.
+        custom_mode: Whether the current invoice is in custom mode.
+
+    Returns:
+        The formula string for the current mode, or None if no formula applies.
+    """
+    formula_config = rule.get('formula')
+    if formula_config is None:
+        return None
+
+    # Modern nested dict: pick by mode
+    if isinstance(formula_config, dict):
+        if custom_mode and 'custom' in formula_config:
+            return formula_config['custom']
+        elif DAF_mode and 'daf' in formula_config:
+            return formula_config['daf']
+        elif not custom_mode and not DAF_mode and 'standard' in formula_config:
+            return formula_config['standard']
+        return None  # Dict exists but no key matches this mode
+
+    # Plain string: applies to all modes
+    if isinstance(formula_config, str):
+        return formula_config
+
+    return None
+
 def prepare_data_rows(
     data_source_type: str,
     data_source: Union[Dict, List],
@@ -301,58 +341,23 @@ def prepare_data_rows(
                 if val is not None:
                     row_dict[target_col_idx] = val
                 
-                # If value is empty or missing, try Formula Fallback, then Text Fallback
-                current_val = row_dict.get(target_col_idx)
-                if current_val in [None, ""]:
-                    formula_applied = False
-                    
-                    # Check for Custom Mode Formula
-                    if custom_mode and 'formula_on_custom' in rule:
-                        parsed_formula = _parse_formula_def(rule['formula_on_custom'])
-                        if parsed_formula:
-                             row_dict[target_col_idx] = {
-                                 'type': 'formula',
-                                 'template': parsed_formula['template'],
-                                 'inputs': parsed_formula.get('inputs', [])
-                             }
-                             formula_applied = True
-                    
-                    # Check for DAF Mode Formula
-                    elif DAF_mode and 'formula_on_DAF' in rule:
-                        parsed_formula = _parse_formula_def(rule['formula_on_DAF'])
-                        if parsed_formula:
-                             row_dict[target_col_idx] = {
-                                 'type': 'formula',
-                                 'template': parsed_formula['template'],
-                                 'inputs': parsed_formula.get('inputs', [])
-                             }
-                             formula_applied = True
-                    
-                    # Check for Standard Mode Formula (Explicit)
-                    elif not custom_mode and not DAF_mode and 'formula_on_standard' in rule:
-                        parsed_formula = _parse_formula_def(rule['formula_on_standard'])
-                        if parsed_formula:
-                             row_dict[target_col_idx] = {
-                                 'type': 'formula',
-                                 'template': parsed_formula['template'],
-                                 'inputs': parsed_formula.get('inputs', [])
-                             }
-                             formula_applied = True
+                # --- Formula-First Resolution ---
+                # If a formula is defined for this mode, it always wins over raw data.
+                # If no formula exists, the raw data value is kept as fallback.
+                mode_formula = _resolve_mode_formula(rule, DAF_mode, custom_mode)
+                if mode_formula:
+                    parsed_formula = _parse_formula_def(mode_formula)
+                    if parsed_formula:
+                        row_dict[target_col_idx] = {
+                            'type': 'formula',
+                            'template': parsed_formula['template'],
+                            'inputs': parsed_formula.get('inputs', [])
+                        }
+                        continue  # Formula applied, skip fallback
 
-                    # Check for Generic/Standard Formula (Default)
-                    elif 'formula' in rule:
-                        parsed_formula = _parse_formula_def(rule['formula'])
-                        if parsed_formula:
-                             row_dict[target_col_idx] = {
-                                 'type': 'formula',
-                                 'template': parsed_formula['template'],
-                                 'inputs': parsed_formula.get('inputs', [])
-                             }
-                             formula_applied = True
-                             
-                    # Apply Text Fallback if no formula was applied
-                    if not formula_applied:
-                        _apply_fallback(row_dict, target_col_idx, rule, DAF_mode, custom_mode)
+                # No formula for this mode — apply text fallback if value is empty
+                if row_dict.get(target_col_idx) in [None, ""]:
+                    _apply_fallback(row_dict, target_col_idx, rule, DAF_mode, custom_mode)
             
             # Apply static values
             for col_idx, static_val in static_value_map.items():
@@ -385,58 +390,23 @@ def prepare_data_rows(
                 if val is not None:
                     row_dict[target_col_idx] = val
 
-                # If value is empty or missing, try Formula Fallback, then Text Fallback
-                current_val = row_dict.get(target_col_idx)
-                if current_val in [None, ""]:
-                    formula_applied = False
-                    
-                    # Check for Custom Mode Formula
-                    if custom_mode and 'formula_on_custom' in rule:
-                        parsed_formula = _parse_formula_def(rule['formula_on_custom'])
-                        if parsed_formula:
-                             row_dict[target_col_idx] = {
-                                 'type': 'formula',
-                                 'template': parsed_formula['template'],
-                                 'inputs': parsed_formula.get('inputs', [])
-                             }
-                             formula_applied = True
-                    
-                    # Check for DAF Mode Formula
-                    elif DAF_mode and 'formula_on_DAF' in rule:
-                        parsed_formula = _parse_formula_def(rule['formula_on_DAF'])
-                        if parsed_formula:
-                             row_dict[target_col_idx] = {
-                                 'type': 'formula',
-                                 'template': parsed_formula['template'],
-                                 'inputs': parsed_formula.get('inputs', [])
-                             }
-                             formula_applied = True
-                             
-                    # Check for Standard Mode Formula (Explicit)
-                    elif not custom_mode and not DAF_mode and 'formula_on_standard' in rule:
-                        parsed_formula = _parse_formula_def(rule['formula_on_standard'])
-                        if parsed_formula:
-                             row_dict[target_col_idx] = {
-                                 'type': 'formula',
-                                 'template': parsed_formula['template'],
-                                 'inputs': parsed_formula.get('inputs', [])
-                             }
-                             formula_applied = True
+                # --- Formula-First Resolution ---
+                # If a formula is defined for this mode, it always wins over raw data.
+                # If no formula exists, the raw data value is kept as fallback.
+                mode_formula = _resolve_mode_formula(rule, DAF_mode, custom_mode)
+                if mode_formula:
+                    parsed_formula = _parse_formula_def(mode_formula)
+                    if parsed_formula:
+                        row_dict[target_col_idx] = {
+                            'type': 'formula',
+                            'template': parsed_formula['template'],
+                            'inputs': parsed_formula.get('inputs', [])
+                        }
+                        continue  # Formula applied, skip fallback
 
-                    # Check for Generic/Standard Formula (Default)
-                    elif 'formula' in rule:
-                        parsed_formula = _parse_formula_def(rule['formula'])
-                        if parsed_formula:
-                             row_dict[target_col_idx] = {
-                                 'type': 'formula',
-                                 'template': parsed_formula['template'],
-                                 'inputs': parsed_formula.get('inputs', [])
-                             }
-                             formula_applied = True
-                             
-                    # Apply Text Fallback if no formula was applied
-                    if not formula_applied:
-                        _apply_fallback(row_dict, target_col_idx, rule, DAF_mode, custom_mode)
+                # No formula for this mode — apply text fallback if value is empty
+                if row_dict.get(target_col_idx) in [None, ""]:
+                    _apply_fallback(row_dict, target_col_idx, rule, DAF_mode, custom_mode)
             
             # Apply static values
             for col_idx, static_val in static_value_map.items():

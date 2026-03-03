@@ -5,8 +5,10 @@ This module takes TemplateAnalysisResult and builds a complete bundle config
 in the format expected by the invoice generator.
 """
 
+import json
 import logging
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 
@@ -20,32 +22,20 @@ logger = logging.getLogger(__name__)
 class ConfigBuilder:
     """Builds bundle config from template analysis."""
     
-    # Default field mappings for data_flow (IDENTITY MAPPING - Keys match Column IDs)
-    # MINIMALIST: No source_key/value, no redundant column mapping.
-    # We rely on data_preparer's smart lookup and auto-mapping.
+    # Default field mappings by data source type.
+    # These define WHICH columns to include in data_flow for each source type.
+    # Formulas and fallbacks are NOT here — they come from master_config.json defaults.
     FIELD_MAPPINGS = {
         # Aggregation sheets (Invoice, Contract)
-        "aggregation": {
-            "col_po": {},
-            "col_item": {},
-            "col_unit_price": {},
-            "col_desc": {"fallback": {"standard": "COW LEATHER", "daf": "COW LEATHER"}},
-            "col_qty_sf": {},
-            "col_unit_sf": {"fallback": "SF"},
-            "col_amount": {"formula": "{col_qty_sf} * {col_unit_price}"},
-        },
+        "aggregation": [
+            "col_po", "col_item", "col_desc", "col_qty_sf",
+            "col_unit_price", "col_amount", "col_sqm"
+        ],
         # Processed tables (Packing list)
-        "processed_tables_multi": {
-            "col_po": {},
-            "col_item": {},
-            "col_desc": {"fallback": {"standard": "COW LEATHER", "daf": "COW LEATHER"}},
-            "col_qty_pcs": {},
-            "col_qty_sf": {},
-            "col_unit_sf": {"fallback": "SF"},
-            "col_net": {},
-            "col_gross": {},
-            "col_cbm": {},
-        }
+        "processed_tables_multi": [
+            "col_po", "col_item", "col_desc", "col_qty_pcs",
+            "col_qty_sf", "col_net", "col_gross", "col_cbm", "col_sqm"
+        ]
     }
     
     def __init__(self):
@@ -178,15 +168,54 @@ class ConfigBuilder:
         return sheet_styling
     
     def _build_layout_bundle(self, analysis: TemplateAnalysisResult) -> Dict[str, Any]:
-        """Build layout_bundle section."""
+        """Build layout_bundle section, sourcing defaults from master_config.json."""
         layout = {
             "_comment": "Layout configuration - structure, data flow, content, and footer"
         }
+
+        # Load defaults from master_config.json and cache the column IDs
+        master_defaults = self._load_master_defaults()
+        if master_defaults:
+            layout["defaults"] = master_defaults
+            self._default_mapping_keys = set(
+                master_defaults.get('data_flow', {}).get('mappings', {}).keys()
+            )
+            self.logger.info(f"  [Defaults] Loaded {len(self._default_mapping_keys)} default mappings from master_config")
+        else:
+            self._default_mapping_keys = set()
         
         for sheet in analysis.sheets:
             layout[sheet.name] = self._build_sheet_layout(sheet)
         
         return layout
+    
+    def _load_master_defaults(self) -> Optional[Dict[str, Any]]:
+        """
+        Load the defaults section from master_config.json.
+        
+        Returns:
+            The defaults dict from layout_bundle, or None if not found.
+        """
+        try:
+            from core.system_config import sys_config
+            master_path = sys_config.blueprints_root / "mapper" / "master_config.json"
+            
+            if not master_path.exists():
+                self.logger.warning(f"Master config not found at {master_path}")
+                return None
+            
+            with open(master_path, 'r', encoding='utf-8') as f:
+                master_config = json.load(f)
+            
+            defaults = master_config.get('layout_bundle', {}).get('defaults')
+            if defaults:
+                return defaults
+            else:
+                self.logger.warning("No 'defaults' section found in master_config.json layout_bundle")
+                return None
+        except Exception as e:
+            self.logger.error(f"Failed to load master config defaults: {e}")
+            return None
     
     def _build_sheet_layout(self, sheet: SheetAnalysis) -> Dict[str, Any]:
         """Build layout for a single sheet."""
@@ -243,13 +272,18 @@ class ConfigBuilder:
         }
     
     def _build_data_flow(self, sheet: SheetAnalysis) -> Dict[str, Any]:
-        """Build data_flow section for a sheet."""
+        """
+        Build data_flow section for a sheet.
+        
+        Only emits sheet-specific overrides. Columns covered by 
+        layout_bundle.defaults are not duplicated here.
+        """
         mappings = {}
         
-        # Get default mappings for this data source type
-        default_mappings = self.FIELD_MAPPINGS.get(sheet.data_source, {})
+        # Get known column IDs for this data source type
+        known_columns = self.FIELD_MAPPINGS.get(sheet.data_source, [])
         
-        # Build mapping for each column
+        # Build mapping for each column (including children)
         all_columns = sheet.columns.copy()
         for col in sheet.columns:
             all_columns.extend(col.children)
@@ -257,41 +291,42 @@ class ConfigBuilder:
         self.logger.info(f"  Mapping data flow for sheet '{sheet.name}' ({len(sheet.columns)} cols)...")
 
         for col in all_columns:
-            # IDENTITY MAPPING implies field_name == col.id
             field_name = col.id
             
-            if col.id in default_mappings:
-                # Start with empty mapping or whatever is in default
-                mapping = default_mappings[col.id].copy()
-                
-                # [Smart Feature] Inject Dynamic Description Fallback
-                if col.id == "col_desc" and sheet.static_content_hints:
-                     dynamic_fallback = sheet.static_content_hints.get("description_fallback")
-                     if dynamic_fallback:
-                         # [Refinement] Upgrade generic "LEATHER" to "COW LEATHER" per user request
-                         if dynamic_fallback == "LEATHER":
-                             dynamic_fallback = "COW LEATHER"
-                             
-                         mapping["fallback"] = {
-                             "standard": dynamic_fallback,
-                             "daf": dynamic_fallback
-                         }
-                         self.logger.info(f"    [Smart]    Updated col_desc fallback to '{dynamic_fallback}'")
-                
-                # ONLY add "column" if it's different from the field key (which it isn't here)
-                mappings[field_name] = mapping
-                self.logger.debug(f"    [Explicit] Mapped {col.id} -> {field_name} (Minimal)")
-
-            elif col.id not in ["col_static", "col_qty_header", "col_no"]:
-                # Create basic mapping for unknown columns
-                mappings[field_name] = {} 
-                self.logger.info(f"    [Auto]     Mapped {col.id} -> {field_name} (Minimal)")
-            else:
-                 self.logger.debug(f"    [Skipped]  {col.id} (Structural/Static)")
+            # Skip structural columns
+            if col.id in ["col_static", "col_qty_header", "col_no"]:
+                self.logger.debug(f"    [Skipped]  {col.id} (Structural/Static)")
+                continue
             
-
+            # [Smart Feature] Inject Dynamic Description Fallback (sheet-specific override)
+            if col.id == "col_desc" and sheet.static_content_hints:
+                dynamic_fallback = sheet.static_content_hints.get("description_fallback")
+                if dynamic_fallback:
+                    if dynamic_fallback == "LEATHER":
+                        dynamic_fallback = "COW LEATHER"
+                    
+                    mappings[field_name] = {
+                        "fallback": {
+                            "standard": dynamic_fallback,
+                            "daf": dynamic_fallback
+                        }
+                    }
+                    self.logger.info(f"    [Override] col_desc fallback set to '{dynamic_fallback}'")
+                    continue
+            
+            # Skip columns already covered by defaults (no override to emit)
+            if col.id in self._default_mapping_keys:
+                self.logger.debug(f"    [Inherit]  {col.id} (covered by defaults, not emitted)")
+                continue
+            
+            # Column NOT in defaults: emit empty {} so data_preparer processes it
+            mappings[field_name] = {}
+            self.logger.info(f"    [Auto]     {col.id} (identity mapping)")
         
-        return {"mappings": mappings}
+        return {
+            "_comment": "Inherits from defaults. Only overrides go here.",
+            "mappings": mappings
+        }
 
     
     def _build_content(self, sheet: SheetAnalysis) -> Dict[str, Any]:

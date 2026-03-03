@@ -6,31 +6,10 @@
     "description": "Strict Mode (Zero-Config) - Auto-mapped Packing List"
   },
   "data_preparation_module_hint": {
-    "prority": [
+    "priority": [
       "po"
     ],
     "numbers_per_group_by_po": 7
-  },
-  "template_store": {},
-  "features": {
-    "_comment": "Feature flags for optional/experimental functionality",
-    "enable_text_replacement": false,
-    "enable_conditional_formatting": false,
-    "enable_data_validation": false,
-    "enable_auto_calculations": true,
-    "enable_print_area": false,
-    "enable_page_breaks": false,
-    "debug_mode": false
-  },
-  "extensions": {
-    "_comment": "Custom extensions - add new features here without breaking existing config",
-    "_available_hooks": [
-      "pre_build",
-      "post_build",
-      "pre_style",
-      "post_style"
-    ],
-    "custom": {}
   },
   "processing": {
     "sheets": [
@@ -57,7 +36,7 @@
       }
     },
     "Invoice": {
-      "_comment": "NEW FORMAT: ID-driven styling with columns + row_contexts",
+      "_comment": "ID-driven styling with columns + row_contexts",
       "columns": {
         "col_static": {
           "format": "@",
@@ -116,23 +95,12 @@
           "font_size": 12,
           "font_name": "Times New Roman",
           "border_style": "thin",
-          "row_height": 35,
-          "add_ons": {
-            "weight_summary": {
-              "enabled": true,
-              "label_col_id": "col_po",
-              "value_col_id": "col_item",
-              "mode": [
-                "daf",
-                "standard"
-              ]
-            }
-          }
+          "row_height": 35
         }
       }
     },
     "Contract": {
-      "_comment": "NEW FORMAT: ID-driven styling with columns + row_contexts",
+      "_comment": "ID-driven styling with columns + row_contexts",
       "columns": {
         "col_no": {
           "format": "@",
@@ -185,7 +153,7 @@
       }
     },
     "Packing list": {
-      "_comment": "NEW FORMAT: ID-driven styling with columns + row_contexts",
+      "_comment": "ID-driven styling with columns + row_contexts",
       "columns": {
         "col_static": {
           "format": "@",
@@ -265,19 +233,45 @@
           "border_style": "thin",
           "row_height": 27
         }
-      },
-      "_legacy_column_specific": {
-        "col_static": {
-          "alignment": {
-            "horizontal": "left",
-            "vertical": "top"
-          }
-        }
       }
     }
   },
   "layout_bundle": {
     "_comment": "Layout configuration - structure, data flow, content, and footer rules",
+    "defaults": {
+      "_comment": "Shared mappings inherited by all sheets. Per-sheet mappings override these.",
+      "data_flow": {
+        "mappings": {
+          "col_po": {},
+          "col_item": {},
+          "col_desc": {
+            "fallback": {
+              "standard": "LEATHER",
+              "daf": "LEATHER"
+            }
+          },
+          "col_qty_sf": {},
+          "col_unit_price": {
+            "formula": {
+              "daf": "{col_amount} / {col_qty_sf}",
+              "custom": "{col_amount} / {col_qty_sf}"
+            }
+          },
+          "col_amount": {
+            "formula": {
+              "standard": "{col_qty_sf} * {col_unit_price}"
+            }
+          },
+          "col_sqm": {
+            "formula": {
+              "standard": "{col_qty_sf} * 0.092903",
+              "daf": "{col_qty_sf} * 0.092903",
+              "custom": "{col_qty_sf} * 0.092903"
+            }
+          }
+        }
+      }
+    },
     "Invoice": {
       "_sections": [
         "structure",
@@ -294,13 +288,11 @@
           },
           {
             "id": "col_po",
-            "header": "P.O. Nº",
-            "format": "@"
+            "header": "P.O. Nº"
           },
           {
             "id": "col_item",
-            "header": "ITEM Nº",
-            "format": "@"
+            "header": "ITEM Nº"
           },
           {
             "id": "col_desc",
@@ -324,34 +316,8 @@
         ]
       },
       "data_flow": {
-        "mappings": {
-          "po": {
-            "column": "col_po",
-            "source_key": 0
-          },
-          "item": {
-            "column": "col_item",
-            "source_key": 1
-          },
-          "description": {
-            "column": "col_desc",
-            "source_key": 3,
-            "fallback_on_none": "LEATHER",
-            "fallback_on_DAF": "LEATHER"
-          },
-          "sqft": {
-            "column": "col_qty_sf",
-            "source_value": "sqft_sum"
-          },
-          "unit_price": {
-            "column": "col_unit_price",
-            "source_key": 2
-          },
-          "amount": {
-            "column": "col_amount",
-            "formula": "{col_qty_sf} * {col_unit_price}"
-          }
-        }
+        "_comment": "Inherits from defaults. Only overrides go here.",
+        "mappings": {}
       },
       "content": {
         "static": {
@@ -363,12 +329,10 @@
         }
       },
       "footer": {
-        "total_text_column_id": "col_po",
-        "total_text": "TOTAL OF:",
-        "pallet_count_column_id": "col_item",
-        "sum_column_ids": [
+        "sum_cols": [
           "col_qty_sf",
-          "col_amount"
+          "col_amount",
+          "col_sqm"
         ],
         "merge_rules": [],
         "add_ons": {
@@ -393,7 +357,17 @@
               "standard"
             ]
           }
-        }
+        },
+        "footer_cells": [
+          [
+            "TOTAL OF:",
+            "col_po"
+          ],
+          [
+            "{pallet_count} PALLETS",
+            "col_item"
+          ]
+        ]
       }
     },
     "Contract": {
@@ -407,8 +381,7 @@
         "columns": [
           {
             "id": "col_no",
-            "header": "No.",
-            "format": "@"
+            "header": "No."
           },
           {
             "id": "col_item",
@@ -432,42 +405,14 @@
         ]
       },
       "data_flow": {
-        "mappings": {
-          "po": {
-            "column": "col_po",
-            "source_key": 0
-          },
-          "item": {
-            "column": "col_item",
-            "source_key": 1
-          },
-          "desc": {
-            "column": "col_desc",
-            "source_key": 3,
-            "fallback_on_none": "LEATHER",
-            "fallback_on_DAF": "LEATHER"
-          },
-          "sqft": {
-            "column": "col_qty_sf",
-            "source_value": "sqft_sum"
-          },
-          "unit_price": {
-            "column": "col_unit_price",
-            "source_key": 2
-          },
-          "amount": {
-            "column": "col_amount",
-            "formula": "{col_qty_sf} * {col_unit_price}"
-          }
-        }
+        "_comment": "Inherits from defaults. Only overrides go here.",
+        "mappings": {}
       },
       "footer": {
-        "total_text_column_id": "col_no",
-        "total_text": "TOTAL OF:",
-        "pallet_count_column_id": "col_item",
-        "sum_column_ids": [
+        "sum_cols": [
           "col_qty_sf",
-          "col_amount"
+          "col_amount",
+          "col_sqm"
         ],
         "merge_rules": [],
         "add_ons": {
@@ -487,7 +432,17 @@
               "standard"
             ]
           }
-        }
+        },
+        "footer_cells": [
+          [
+            "TOTAL OF:",
+            "col_no"
+          ],
+          [
+            "{pallet_count} PALLETS",
+            "col_item"
+          ]
+        ]
       }
     },
     "Packing list": {
@@ -509,20 +464,17 @@
           {
             "id": "col_po",
             "header": "P.O Nº",
-            "rowspan": 2,
-            "format": "@"
+            "rowspan": 2
           },
           {
             "id": "col_item",
             "header": "ITEM Nº",
-            "rowspan": 2,
-            "format": "@"
+            "rowspan": 2
           },
           {
             "id": "col_desc",
             "header": "Description",
-            "rowspan": 2,
-            "format": "@"
+            "rowspan": 2
           },
           {
             "id": "col_qty_header",
@@ -562,13 +514,8 @@
         ]
       },
       "data_flow": {
-        "mappings": {
-          "description": {
-            "column": "col_desc",
-            "fallback_on_none": "LEATHER",
-            "fallback_on_DAF": "LEATHER"
-          }
-        }
+        "_comment": "Inherits from defaults. Only overrides go here.",
+        "mappings": {}
       },
       "content": {
         "static": {
@@ -581,15 +528,13 @@
         }
       },
       "footer": {
-        "total_text_column_id": "col_po",
-        "total_text": "TOTAL OF:",
-        "pallet_count_column_id": "col_desc",
-        "sum_column_ids": [
+        "sum_cols": [
           "col_qty_pcs",
           "col_qty_sf",
           "col_net",
           "col_gross",
-          "col_cbm"
+          "col_cbm",
+          "col_sqm"
         ],
         "merge_rules": [
           {
@@ -621,23 +566,18 @@
               "standard"
             ]
           }
-        }
+        },
+        "footer_cells": [
+          [
+            "TOTAL OF:",
+            "col_po"
+          ],
+          [
+            "{pallet_count} PALLETS",
+            "col_desc"
+          ]
+        ]
       }
-    }
-  },
-  "defaults": {
-    "footer": {
-      "show_total": true,
-      "show_pallet_count": true,
-      "total_text": "TOTAL:",
-      "merge_total_cells": true,
-      "sum_columns": [
-        "col_qty_pcs",
-        "col_qty_sf",
-        "col_net",
-        "col_gross",
-        "col_cbm"
-      ]
     }
   }
 }

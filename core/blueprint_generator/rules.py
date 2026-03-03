@@ -142,6 +142,12 @@ class BlueprintRules:
             excel_format="@",
             width=20.0
         ),
+        "col_sqm": ColumnDefinition(
+            id="col_sqm",
+            keywords=["sqm", "m²", "square meter"],
+            excel_format="#,##0.00",
+            width=16.0
+        ),
     }
 
     @classmethod
