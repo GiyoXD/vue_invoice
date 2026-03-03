@@ -28,8 +28,8 @@ class TableCalculator:
         
         # Initialize summaries
         self.leather_summary = {
-            'BUFFALO': {'pallet_count': 0},
-            'COW': {'pallet_count': 0}
+            'BUFFALO': {'col_pallet_count': 0},
+            'COW': {'col_pallet_count': 0}
         }
         self.weight_summary = {
             'net': 0.0,
@@ -110,7 +110,7 @@ class TableCalculator:
             self.weight_summary['gross'] += safe_float_convert(row_data[gross_col_idx])
 
     def _update_leather_summary(self, row_data: Dict[int, Any], row_index: int, pallet_counts: List[Any]):
-        """Updates the running totals for Buffalo and Cow leather."""
+        """Updates the running totals for Buffalo and Cow leather. No longer calculates pallets row-by-row."""
         desc_col_idx = self.col_id_map.get('col_desc')
         if not desc_col_idx:
             return
@@ -123,9 +123,8 @@ class TableCalculator:
             target_type = 'COW'
             
         if target_type:
-            # Add pallet count for this row
-            if row_index < len(pallet_counts):
-                self.leather_summary[target_type]['pallet_count'] += self._parse_pallet_count(pallet_counts[row_index])
+            # Pallet counts are STRICTLY handled by pre-calculated JSON block now. 
+            # We NO LONGER attempt to guess/parse '1-25' strings here.
             
             # Sum numeric columns
             for col_idx, value in row_data.items():
@@ -139,53 +138,3 @@ class TableCalculator:
                     self.leather_summary[target_type][col_id] = 0
                     
                 self.leather_summary[target_type][col_id] += num_val
-
-    def _parse_pallet_count(self, pallet_str: Any) -> int:
-        """
-        Parses a pallet string (like '1-25' or '1~5-25') to determine how many pallets it represents.
-        Returns 1 as default if parsing fails but it's a non-empty string.
-        """
-        if pallet_str is None or pallet_str == "":
-            return 0
-            
-        pallet_str = str(pallet_str).strip()
-        
-        # Try direct int conversion first
-        val = safe_int_convert(pallet_str, default=-1)
-        if val != -1:
-            return val
-            
-        # Parse strings like "1-25" (Pallet 1 of 25 -> 1 pallet)
-        # Or "1~5-25" (Pallets 1 through 5 of 25 -> 5 pallets)
-        # Or "1,2-25" (Pallets 1 and 2 of 25 -> 2 pallets)
-        # Or "1~5" (Pallets 1 to 5)
-        
-        # Strip the "-{total}" part if present (e.g., "-25")
-        if "-" in pallet_str:
-            parts = pallet_str.split("-")
-            # If there are multiple dashes or it's just X-Y, we assume the part before the LAST dash is the identifier
-            identifier = "-".join(parts[:-1]) 
-        else:
-            identifier = pallet_str
-            
-        identifier = identifier.strip()
-        
-        # Count pallets in identifier
-        if "~" in identifier:
-            range_parts = identifier.split("~")
-            if len(range_parts) == 2:
-                try:
-                    start = int(range_parts[0].strip())
-                    end = int(range_parts[1].strip())
-                    return abs(end - start) + 1
-                except ValueError:
-                    pass
-        elif "," in identifier or "&" in identifier:
-            # Count the items
-            separators = [",", "&"]
-            for sep in separators:
-                if sep in identifier:
-                    return len([x for x in identifier.split(sep) if x.strip()])
-                    
-        # Default: if it's a string like "1" or "A", it represents 1 pallet
-        return 1

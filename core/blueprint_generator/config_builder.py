@@ -373,19 +373,24 @@ class ConfigBuilder:
         add_ons = {}
         
         # before_footer (HS.CODE line)
-        if sheet.data_source == "processed_tables_multi":
-            add_ons["before_footer"] = {
-                "enabled": True,
-                "column_id": "col_po",
-                "text": "HS.CODE: 4107.12.00",
-                "merge": 2
-            }
-        else:
-            add_ons["before_footer"] = {
-                "enabled": False,
-                "column_id": "col_po",
-                "text": "HS.CODE: 4107.12.00"
-            }
+        has_hs_code = False
+        hs_code_text = "HS.CODE: 4107.12.00"
+        hs_code_colspan = 1
+
+        if sheet.footer_info:
+            has_hs_code = sheet.footer_info.has_hs_code
+            if sheet.footer_info.hs_code_text:
+                hs_code_text = sheet.footer_info.hs_code_text
+            hs_code_colspan = sheet.footer_info.hs_code_colspan
+            
+        add_ons["before_footer"] = {
+            "enabled": has_hs_code,
+            "column_id": "col_po",
+            "text": hs_code_text
+        }
+        
+        if hs_code_colspan > 1:
+            add_ons["before_footer"]["merge"] = hs_code_colspan
         
         # weight_summary
         add_ons["weight_summary"] = {

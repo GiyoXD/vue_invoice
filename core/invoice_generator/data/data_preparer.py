@@ -121,7 +121,11 @@ def _to_numeric(value: Any) -> Union[int, float, None, Any]:
         except (ValueError, TypeError):
             return value # Return original string if conversion fails
     if isinstance(value, Decimal):
-        return float(value)
+        # Preserve precision: whole numbers → int, fractional → float via string
+        # to avoid IEEE 754 artifacts (e.g. 0.30000000000000004)
+        if value == value.to_integral_value():
+            return int(value)
+        return float(str(value))
     return value # Return original value for other types
 
 def _apply_fallback(

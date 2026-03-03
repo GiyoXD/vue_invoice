@@ -185,7 +185,18 @@ class TableDataAdapter:
         
         if isinstance(self.data_source, dict):
             leather_summary = self.data_source.get('leather_summary')
+            # Look in footer_data if not found directly in data_source
+            if not leather_summary and self.footer_data and 'add_ons' in self.footer_data:
+                leather_summary = self.footer_data['add_ons'].get('leather_summary_addon')
+            
             weight_summary = self.data_source.get('weight_summary')
+            if not weight_summary and self.footer_data and 'add_ons' in self.footer_data:
+                weight_summary = self.footer_data['add_ons'].get('weight_summary_addon')
+        elif isinstance(self.data_source, list):
+            # If data_source is a list (like multi_table), summaries are strictly in footer_data
+            if self.footer_data and 'add_ons' in self.footer_data:
+                leather_summary = self.footer_data['add_ons'].get('leather_summary_addon')
+                weight_summary = self.footer_data['add_ons'].get('weight_summary_addon')
         
         # Resolve pallet count from pre-calculated footer_data (top-level, from data parser)
         # table_totals[index] for per-table footers, grand_total for overall total

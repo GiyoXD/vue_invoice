@@ -177,11 +177,11 @@ def _convert_to_decimal(value: Any, context: str = "") -> Optional[decimal.Decim
         return None
     
     # Handle floats specially to avoid floating-point precision issues
-    # Round to 14 decimal places before converting to avoid issues like 0.30000000000000004
+    # repr() in Python 3.1+ gives the SHORTEST string that round-trips back
+    # to the same float, e.g. repr(5028.2) → '5028.2' not '5028.19999999999982'
     if isinstance(value, float):
-        # Use string formatting with precision to clean up float representation
-        value_str = f"{value:.14f}".rstrip('0').rstrip('.')
-        if not value_str or value_str == '-':
+        value_str = repr(value)
+        if not value_str or value_str in ('-', 'nan', 'inf', '-inf'):
             return None
         try:
             return decimal.Decimal(value_str)
@@ -713,8 +713,8 @@ def calculate_leather_summary(processed_data: List[Dict[str, Any]]) -> Dict[str,
     """
     # Initialize summary structure with default 0s
     summary = {
-        'BUFFALO': {'pcs': 0, 'sqft': decimal.Decimal(0), 'net': decimal.Decimal(0), 'gross': decimal.Decimal(0), 'pallet_count': 0},
-        'COW': {'pcs': 0, 'sqft': decimal.Decimal(0), 'net': decimal.Decimal(0), 'gross': decimal.Decimal(0), 'pallet_count': 0}
+        'BUFFALO': {'col_qty_pcs': 0, 'col_qty_sf': decimal.Decimal(0), 'col_net': decimal.Decimal(0), 'col_gross': decimal.Decimal(0), 'col_cbm': decimal.Decimal(0), 'col_pallet_count': 0},
+        'COW': {'col_qty_pcs': 0, 'col_qty_sf': decimal.Decimal(0), 'col_net': decimal.Decimal(0), 'col_gross': decimal.Decimal(0), 'col_cbm': decimal.Decimal(0), 'col_pallet_count': 0}
     }
 
     if not processed_data:
@@ -729,208 +729,36 @@ def calculate_leather_summary(processed_data: List[Dict[str, Any]]) -> Dict[str,
         # Sum PCS
         try:
             val = row.get('col_qty_pcs')
-            summary[leather_type]['pcs'] += int(float(val)) if val else 0
-        except (ValueError, TypeError): pass
-
-        # Sum SQFT
-        try:
-            val = row.get('col_qty_sf')
-            summary[leather_type]['sqft'] += _convert_to_decimal(val) if val else decimal.Decimal(0)
-        except (ValueError, TypeError): pass
-
-        # Sum Net
-        try:
-            val = row.get('col_net')
-            summary[leather_type]['net'] += _convert_to_decimal(val) if val else decimal.Decimal(0)
-        except (ValueError, TypeError): pass
-
-        # Sum Gross
-        try:
-            val = row.get('col_gross')
-            summary[leather_type]['gross'] += _convert_to_decimal(val) if val else decimal.Decimal(0)
-        except (ValueError, TypeError): pass
-
-        # Sum Pallet Count (if available per row)
-        try:
-            val = row.get('col_pallet_count')
-            summary[leather_type]['pallet_count'] += int(float(val)) if val else 0
-        except (ValueError, TypeError): pass
-
-    return summary
-
-
-def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Aggregates data by PO and Price, summing sqft, amount, and pallet_count.
-    Groups rows that have the same PO and unit_price together.
-    
-    Returns a list of aggregated records with:
-    - po: The PO number
-    - item: Combined unique items (comma-separated)
-    - desc: Combined unique descriptions (comma-separated)
-    - unit_price: The unit price
-    - sqft: Total sqft for this PO+price combination
-    - amount: Total amount for this PO+price combination
-    - pallet_count: Total pallets for this PO+price combination
-    - net: Total net weight for this PO+price combination
-    - gross: Total gross weight for this PO+price combination
-    - cbm: Total cbm for this PO+price combination
-    """
-    if not processed_data:
-        return []
-    
-    # Aggregation map: (po, price) -> {items: set, descs: set, sqft: Decimal, amount: Decimal, pallets: int, net: Decimal, gross: Decimal, cbm: Decimal}
-    aggregation_map = {}
-    
-    for row in processed_data:
-        po = str(row.get('col_po', "")) if row.get('col_po') else ""
-        if not po:
-            continue
-            
-        try:
-            price_val = row.get('col_unit_price')
-            price = _convert_to_decimal(price_val) if price_val else decimal.Decimal(0)
-        except:
-            price = decimal.Decimal(0)
-            
-        key = (po, price)
-        
-        if key not in aggregation_map:
-            aggregation_map[key] = {
-                'items': set(),
-                'descs': set(),
-                'sqft': decimal.Decimal(0),
-                'amount': decimal.Decimal(0),
-                'pallets': 0,
-                'net': decimal.Decimal(0),
-                'gross': decimal.Decimal(0),
-                'cbm': decimal.Decimal(0)
-            }
-            
-        agg = aggregation_map[key]
-        
-        # Build sets for items and descriptions to maintain uniqueness
-        item = str(row.get('col_item', "")).strip()
-        if item and item != "None":
-            agg['items'].add(item)
-            
-        desc = str(row.get('col_desc', "")).strip()
-        if desc and desc != "None":
-            agg['descs'].add(desc)
-            
-        # Sum numeric values
-        try:
-             sqft = _convert_to_decimal(row.get('col_qty_sf'))
-             if sqft: agg['sqft'] += sqft
-        except: pass
-        
-        try:
-             amount = _convert_to_decimal(row.get('col_amount'))
-             if amount: agg['amount'] += amount
-        except: pass
-        
-        try:
-             pallet = row.get('col_pallet_count')
-             if pallet: agg['pallets'] += int(float(pallet))
-        except: pass
-        
-        try:
-             net = _convert_to_decimal(row.get('col_net'))
-             if net: agg['net'] += net
-        except: pass
-        
-        try:
-             gross = _convert_to_decimal(row.get('col_gross'))
-             if gross: agg['gross'] += gross
-        except: pass
-        
-        try:
-             cbm = _convert_to_decimal(row.get('col_cbm'))
-             if cbm: agg['cbm'] += cbm
-        except: pass
-
-
-    # --- Log summary for this table's contribution ---
-    logging.info(f"{prefix} Finished processing {rows_processed_this_table} rows for this table.")
-    logging.info(f"{prefix} SQFT values successfully converted/defaulted for {successful_conversions_sqft} rows.")
-    logging.info(f"{prefix} Amount values successfully converted/defaulted for {successful_conversions_amount} rows.")
-    logging.info(f"{prefix} Global custom aggregation map now contains {len(aggregated_results)} unique (PO, Item, None, Description) keys.")
-
-    return aggregated_results
-
-
-def calculate_leather_summary(processed_data: Dict[str, List[Any]]) -> Dict[str, Any]:
-    """
-    Calculates the leather summary (PCS, SQFT, Net, Gross, Pallet Count) per leather type.
-    Iterates through rows to sum values for each leather type found in 'description' or 'desc'.
-    BUFFALO = rows containing "BUFFALO" in description
-    COW = rows NOT containing "BUFFALO" (all other leather)
-    """
-    # Initialize summary structure with default 0s
-    summary = {
-        'BUFFALO': {'col_qty_pcs': 0, 'col_qty_sf': decimal.Decimal(0), 'col_net': decimal.Decimal(0), 'col_gross': decimal.Decimal(0), 'col_pallet_count': 0},
-        'COW': {'col_qty_pcs': 0, 'col_qty_sf': decimal.Decimal(0), 'col_net': decimal.Decimal(0), 'col_gross': decimal.Decimal(0), 'col_pallet_count': 0}
-    }
-
-    if not isinstance(processed_data, dict):
-        return summary
-
-    # Get columns - check both 'description' and 'desc' field names
-    description_list = processed_data.get('col_desc', [])
-    
-    # robustly determine num_rows
-    lists_to_check = [processed_data.get(col) for col in ['col_po', 'col_item', 'col_qty_sf', 'col_amount', 'col_net', 'col_gross', 'col_quantity', 'col_qty_pcs'] if processed_data.get(col)]
-    if description_list:
-        num_rows = len(description_list)
-    elif lists_to_check:
-        num_rows = len(lists_to_check[0])
-    else:
-        num_rows = 0
-
-    # Get other columns safely
-    pcs_list = processed_data.get('col_qty_pcs', [])
-    sqft_list = processed_data.get('col_qty_sf', [])
-    net_list = processed_data.get('col_net', [])
-    gross_list = processed_data.get('col_gross', [])
-    pallet_count_list = processed_data.get('col_pallet_count', [])
-
-    for i in range(num_rows):
-        desc = str(description_list[i]).upper() if i < len(description_list) and description_list[i] else ""
-        
-        # BUFFALO = contains "BUFFALO", COW = everything else (non-buffalo leather)
-        leather_type = None
-        if "BUFFALO" in desc:
-            leather_type = 'BUFFALO'
-        else:
-            leather_type = 'COW'  # All non-buffalo is considered COW/regular leather
-        
-        # Sum PCS
-        try:
-            val = pcs_list[i] if i < len(pcs_list) else 0
             summary[leather_type]['col_qty_pcs'] += int(float(val)) if val else 0
         except (ValueError, TypeError): pass
 
         # Sum SQFT
         try:
-            val = sqft_list[i] if i < len(sqft_list) else 0
-            summary[leather_type]['col_qty_sf'] += _convert_to_decimal(val) if val else 0
+            val = row.get('col_qty_sf')
+            summary[leather_type]['col_qty_sf'] += _convert_to_decimal(val) if val else decimal.Decimal(0)
         except (ValueError, TypeError): pass
 
         # Sum Net
         try:
-            val = net_list[i] if i < len(net_list) else 0
-            summary[leather_type]['col_net'] += _convert_to_decimal(val) if val else 0
+            val = row.get('col_net')
+            summary[leather_type]['col_net'] += _convert_to_decimal(val) if val else decimal.Decimal(0)
         except (ValueError, TypeError): pass
 
         # Sum Gross
         try:
-            val = gross_list[i] if i < len(gross_list) else 0
-            summary[leather_type]['col_gross'] += _convert_to_decimal(val) if val else 0
+            val = row.get('col_gross')
+            summary[leather_type]['col_gross'] += _convert_to_decimal(val) if val else decimal.Decimal(0)
+        except (ValueError, TypeError): pass
+
+        # Sum CBM
+        try:
+            val = row.get('col_cbm')
+            summary[leather_type]['col_cbm'] += _convert_to_decimal(val) if val else decimal.Decimal(0)
         except (ValueError, TypeError): pass
 
         # Sum Pallet Count (if available per row)
         try:
-            val = pallet_count_list[i] if i < len(pallet_count_list) else 0
+            val = row.get('col_pallet_count')
             summary[leather_type]['col_pallet_count'] += int(float(val)) if val else 0
         except (ValueError, TypeError): pass
 
@@ -942,36 +770,19 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
     Aggregates data by PO and Price, summing sqft, amount, and pallet_count.
     Groups rows that have the same PO and unit_price together.
     
-    Returns a list of aggregated records with:
-    - po: The PO number
-    - item: Combined unique items (comma-separated)
-    - desc: Combined unique descriptions (comma-separated)
-    - unit_price: The unit price
-    - sqft: Total sqft for this PO+price combination
-    - amount: Total amount for this PO+price combination
-    - pallet_count: Total pallets for this PO+price combination
-    - net: Total net weight for this PO+price combination
-    - gross: Total gross weight for this PO+price combination
-    - cbm: Total cbm for this PO+price combination
+    Returns a list of aggregated records with col_* keys matching the data schema.
     """
-    if not isinstance(processed_data, list):
+    if not isinstance(processed_data, list) or not processed_data:
         return []
     
-    if not processed_data:
-        return []
-        
-    num_rows = len(processed_data)
-    
-    # Aggregation map: (po, price) -> {items: set, descs: set, sqft: Decimal, amount: Decimal, pallets: int, net: Decimal, gross: Decimal, cbm: Decimal}
     aggregation_map = {}
     
     for row in processed_data:
         po_val = row.get('col_po')
         po = str(po_val) if po_val else ""
         if not po:
-            continue # Don't aggregate rows without POs for this manifest mapping
+            continue
         
-        # Get price - try to convert to Decimal for consistent key
         try:
             price_val = row.get('col_unit_price')
             price = _convert_to_decimal(price_val) if price_val else decimal.Decimal(0)
@@ -1072,7 +883,10 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
     # Sort by PO for consistent output
     result.sort(key=lambda x: x['col_po'])
     
+    logging.info(f"[aggregate_per_po_with_pallets] Aggregated {len(processed_data)} rows into {len(result)} unique PO+price combinations.")
+    
     return result
+
 
 def calculate_weight_summary(processed_data: List[Dict[str, Any]]) -> Dict[str, decimal.Decimal]:
     """
@@ -1136,8 +950,7 @@ def calculate_footer_totals(processed_data: List[Dict[str, Any]]) -> Dict[str, A
         "col_net": decimal.Decimal(0),
         "col_gross": decimal.Decimal(0),
         "col_cbm": decimal.Decimal(0),
-        "col_amount": decimal.Decimal(0),
-        "col_pallet_count": 0
+        "col_amount": decimal.Decimal(0)
     }
     
     if not processed_data:
@@ -1167,7 +980,6 @@ def calculate_footer_totals(processed_data: List[Dict[str, Any]]) -> Dict[str, A
         safe_add_decimal('col_gross', row.get('col_gross'))
         safe_add_decimal('col_cbm', row.get('col_cbm'))
         safe_add_decimal('col_amount', row.get('col_amount'))
-        safe_add_int('col_pallet_count', row.get('col_pallet_count'))
 
     return totals
 

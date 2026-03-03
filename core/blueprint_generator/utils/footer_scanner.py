@@ -19,6 +19,9 @@ class FooterInfo:
     total_text_col_id: str
     merge_curr_colspan: int
     pallet_count_col_id: Optional[str] = None
+    has_hs_code: bool = False
+    hs_code_text: Optional[str] = None
+    hs_code_colspan: int = 1
 
 
 def find_column_id_by_index(col_index: int, columns: List[ColumnInfo]) -> Optional[str]:
@@ -77,12 +80,18 @@ def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo]
     # --- Step 4: Find pallet count column on the same row ---
     pallet_col_id = _find_pallet_count_column(worksheet, found_cell.row, columns, logger, sheet_name)
     
+    # --- Step 5: Find HS Code row ---
+    hs_code_text, hs_code_colspan = _find_hs_code(worksheet, start_scan, end_scan)
+
     return FooterInfo(
         row_num=found_cell.row,
         total_text=str(found_cell.value).strip(),
         total_text_col_id=total_col_id,
         merge_curr_colspan=colspan,
-        pallet_count_col_id=pallet_col_id
+        pallet_count_col_id=pallet_col_id,
+        has_hs_code=bool(hs_code_text),
+        hs_code_text=hs_code_text,
+        hs_code_colspan=hs_code_colspan
     )
 
 
@@ -160,4 +169,29 @@ def _find_pallet_count_column(worksheet: Worksheet, footer_row: int, columns: Li
     
     logger.warning(f"    ⚠ [{sheet_name}] No pallet count pattern (e.g. '25 PALLETS') found on footer row {footer_row}")
     return None
+
+
+def _find_hs_code(worksheet: Worksheet, start_row: int, end_row: int) -> tuple[Optional[str], int]:
+    """
+    Scan rows for a cell containing HS Code information.
+    
+    Matches variations of 'HS.CODE', 'HS CODE', 'HS-CODE'.
+    
+    Returns:
+        A tuple of (text value if found else None, colspan of the merged cell if merged else 1).
+    """
+    hs_keywords = {"HS.CODE", "HS CODE", "HS-CODE"}
+    
+    for row in range(start_row, end_row + 1):
+        for col in range(1, min(worksheet.max_column + 1, 20)):
+            cell = worksheet.cell(row=row, column=col)
+            val = str(cell.value).strip() if cell.value else ""
+            upper_val = val.upper()
+            
+            # Check if any of the keywords are in the string
+            if any(kw in upper_val for kw in hs_keywords):
+                colspan = _get_cell_merge_colspan(worksheet, cell)
+                return val, colspan
+                
+    return None, 1
 

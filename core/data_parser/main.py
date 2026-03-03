@@ -596,6 +596,28 @@ def run_invoice_automation(
 
         # --- End Final Logging ---
 
+        # --- Calculate Add-on Data (Leather Summary) ---
+        logging.info("--- Calculating Add-on Data ---")
+        
+        # Calculate grand total (merged across all tables)
+        merged_processed_data: List[Dict[str, Any]] = []
+        for table_data in processed_tables:
+            if isinstance(table_data, list):
+                merged_processed_data.extend(table_data)
+
+        # Calculate normal aggregate per PO with pallets (group by PO + price)
+        # We calculate this FIRST so we can use its accurate pallet count for the footer
+        normal_aggregate_per_po = data_processor.aggregate_per_po_with_pallets(merged_processed_data)
+        logging.info(f"Normal Aggregate Per PO: {len(normal_aggregate_per_po)} unique PO+price combinations")
+
+        # Extract the true total pallets from the aggregated manifest
+        true_total_pallets = sum(item.get('col_pallet_count', 0) for item in normal_aggregate_per_po)
+
+        # Calculate leather summary (BUFFALO vs COW) across all tables
+        # Use the normal_aggregate_per_po data so we get integer pallet counts and correct sums
+        leather_summary = data_processor.calculate_leather_summary(normal_aggregate_per_po)
+        logging.info(f"Leather Summary: {leather_summary}")
+
         # --- Calculate Footer Data ---
         logging.info("--- Calculating Footer Data ---")
         
@@ -605,28 +627,24 @@ def run_invoice_automation(
             table_id = str(table_index + 1)
             if isinstance(table_data, list):
                 footer_totals = data_processor.calculate_footer_totals(table_data)
+                
+                # If there's only one table, it gets all the pallets. If multiple, we'd need to distribute, 
+                # but for now we'll rely on the parser to not double count. (Will be fixed in data_processor.py)
+                
                 table_footer_data.append(footer_totals)
                 logging.info(f"Table {table_id} Footer: {footer_totals}")
         
         # Calculate grand total (merged across all tables)
-        merged_processed_data: List[Dict[str, Any]] = []
-        for table_data in processed_tables:
-            if isinstance(table_data, list):
-                merged_processed_data.extend(table_data)
-        
         grand_total_footer = data_processor.calculate_footer_totals(merged_processed_data)
+        
+        # Override the potentially inflated pallet count with the true aggregated count
+        grand_total_footer['col_pallet_count'] = true_total_pallets
+        
+        # If there's only one table (common case), ensure its table total also has the correct pallet count
+        if len(table_footer_data) == 1:
+            table_footer_data[0]['col_pallet_count'] = true_total_pallets
+
         logging.info(f"Grand Total Footer: {grand_total_footer}")
-        
-        # --- Calculate Add-on Data (Leather Summary) ---
-        logging.info("--- Calculating Add-on Data ---")
-        
-        # Calculate leather summary (BUFFALO vs COW) across all tables
-        leather_summary = data_processor.calculate_leather_summary(merged_processed_data)
-        logging.info(f"Leather Summary: {leather_summary}")
-        
-        # Calculate normal aggregate per PO with pallets (group by PO + price)
-        normal_aggregate_per_po = data_processor.aggregate_per_po_with_pallets(merged_processed_data)
-        logging.info(f"Normal Aggregate Per PO: {len(normal_aggregate_per_po)} unique PO+price combinations")
 
         # --- Convert pallet_count to "x-y" pallet order format (AFTER aggregation) ---
         # Must happen AFTER aggregate_per_po_with_pallets which needs integer pallet values.

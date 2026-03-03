@@ -31,6 +31,7 @@ from core.blueprint_generator.utils.footer_scanner import (
     _find_total_label_cell,
     _get_cell_merge_colspan,
     _find_pallet_count_column,
+    _find_hs_code,
     scan_footer,
     FooterInfo,
 )
@@ -256,6 +257,84 @@ class TestFindPalletCountColumn(unittest.TestCase):
         ws = self._make_worksheet({3: '=A1 & " PALLET"'})
         result = _find_pallet_count_column(ws, footer_row=10, columns=self.columns, logger=self.logger)
         self.assertEqual(result, "col_pallet_count")
+
+
+class TestFindHsCode(unittest.TestCase):
+    """Tests for _find_hs_code()."""
+
+    def _make_worksheet(self, cell_values: dict, max_column: int = 10):
+        """
+        Create a mock worksheet with specific cell values.
+        """
+        ws = MagicMock()
+        ws.max_column = max_column
+
+        def mock_cell(row, column):
+            cell = MagicMock()
+            cell.value = cell_values.get((row, column))
+            cell.row = row
+            cell.column = column
+            return cell
+
+        ws.cell = mock_cell
+        return ws
+        
+    def _make_worksheet_with_merges(self, cell_values: dict, merge_ranges: list, max_column: int = 10):
+        """
+        Create a mock worksheet with specific cell values and merges.
+        """
+        ws = self._make_worksheet(cell_values, max_column)
+        
+        ranges = []
+        for min_r, min_c, max_r, max_c in merge_ranges:
+            r = MagicMock()
+            r.min_row, r.min_col = min_r, min_c
+            r.max_row, r.max_col = max_r, max_c
+            ranges.append(r)
+        ws.merged_cells.ranges = ranges
+        return ws
+
+    def test_finds_hs_code_exact(self):
+        """Detects exact 'HS.CODE: XXXX'."""
+        ws = self._make_worksheet({(5, 2): "HS.CODE: 4107.12.00"})
+        val, colspan = _find_hs_code(ws, start_row=1, end_row=10)
+        self.assertEqual(val, "HS.CODE: 4107.12.00")
+        self.assertEqual(colspan, 1)
+
+    def test_finds_hs_code_space(self):
+        """Detects 'HS CODE: XXXX'."""
+        ws = self._make_worksheet({(6, 3): "HS CODE: 4107.12.00"})
+        val, colspan = _find_hs_code(ws, start_row=1, end_row=10)
+        self.assertEqual(val, "HS CODE: 4107.12.00")
+
+    def test_finds_hs_code_dash(self):
+        """Detects 'HS-CODE: XXXX'."""
+        ws = self._make_worksheet({(6, 3): "HS-CODE: 4107.12.00"})
+        val, colspan = _find_hs_code(ws, start_row=1, end_row=10)
+        self.assertEqual(val, "HS-CODE: 4107.12.00")
+
+    def test_finds_hs_code_case_insensitive(self):
+        """Detection is case-insensitive."""
+        ws = self._make_worksheet({(4, 1): "hs code: 4107.12"})
+        val, colspan = _find_hs_code(ws, start_row=1, end_row=10)
+        self.assertEqual(val, "hs code: 4107.12")
+        
+    def test_returns_colspan_if_merged(self):
+        """Returns the correct colspan if the cell is merged."""
+        ws = self._make_worksheet_with_merges(
+            {(5, 2): "HS.CODE: 4107.12.00"}, 
+            [(5, 2, 5, 3)] # cols 2 to 3 are merged
+        )
+        val, colspan = _find_hs_code(ws, start_row=1, end_row=10)
+        self.assertEqual(val, "HS.CODE: 4107.12.00")
+        self.assertEqual(colspan, 2)
+
+    def test_no_match_returns_none(self):
+        """Returns None if no HS code keyword is found."""
+        ws = self._make_worksheet({(1, 1): "Total:", (2, 1): "Grand Summary"})
+        val, colspan = _find_hs_code(ws, start_row=1, end_row=10)
+        self.assertIsNone(val)
+        self.assertEqual(colspan, 1)
 
 
 if __name__ == '__main__':

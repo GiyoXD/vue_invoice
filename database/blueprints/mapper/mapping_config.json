@@ -106,7 +106,8 @@
             "Item No.": "col_item",
             "Volume (CBM)": "col_cbm",
             "Unit": "col_unit_sf",
-            "Container number": "col_container_no"
+            "Container number": "col_container_no",
+            "Unit price   (USD)": "col_unit_price"
         }
     },
     "shipping_list_header_map": {

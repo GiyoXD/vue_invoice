@@ -490,42 +490,27 @@ class TableFooterBuilder(BundleAccessor):
         
         logger.debug(f"[FooterBuilder._build_footer_common] num_columns={num_columns}, column_map has {len(column_map_by_id)} entries")
 
-        # Write total text
-        total_text = self.override_total_text if self.override_total_text is not None else default_total_text
-        # In case the override or default wasn't provided, pull from 'label_text' or fallback to 'total_text'
-        if total_text == default_total_text:
-            total_text = self.footer_config.get("label_text", default_total_text)
-        total_text_col_id = self.footer_config.get("label_col")
-        total_text_col_idx = self._resolve_column_index(total_text_col_id, column_map_by_id)
-        
-        logger.info(f"[FooterBuilder._build_footer_common] TOTAL TEXT DEBUG:")
-        logger.info(f"   total_text='{total_text}'")
-        logger.info(f"   total_text_col_id='{total_text_col_id}'")
-        logger.info(f"   total_text_col_idx={total_text_col_idx}")
-        logger.info(f"   column_map_by_id={column_map_by_id}")
-        
-        if total_text_col_idx:
-            cell = self.worksheet.cell(row=current_footer_row, column=total_text_col_idx, value=total_text)
-            self._apply_footer_cell_style(cell, total_text_col_id, apply_border=(footer_type != "grand_total"))
-            logger.info(f"[FooterBuilder._build_footer_common] WROTE TOTAL TEXT to {cell.coordinate} value='{cell.value}'")
-        else:
-            logger.error(f"[FooterBuilder._build_footer_common] MISSING label_col in footer config!")
-            logger.error(f"   footer_config keys: {list(self.footer_config.keys())}")
-            logger.error(f"   label_col value: {total_text_col_id}")
-            logger.error(f"   This footer will have NO total text label!")
-
-        # Write pallet count
-        pallet_col_id = self.footer_config.get("count_col")
-        pallet_col_idx = self._resolve_column_index(pallet_col_id, column_map_by_id)
-        
-        logger.debug(f"[FooterBuilder._build_footer_common] Pallet count: {self.pallet_count} at col_id={pallet_col_id}, col_idx={pallet_col_idx}")
-        
-        if pallet_col_idx and self.pallet_count > 0:
-            pallet_text = f"{self.pallet_count} PALLET{'S' if self.pallet_count != 1 else ''}"
-            cell = self.worksheet.cell(row=current_footer_row, column=pallet_col_idx, value=pallet_text)
-            self._apply_footer_cell_style(cell, pallet_col_id, apply_border=(footer_type != "grand_total"))
-            logger.debug(f"[FooterBuilder._build_footer_common] Wrote pallet text to {cell.coordinate}")
-
+        # Write text and dynamic variables from footer_cells
+        footer_cells = self.footer_config.get("footer_cells", [])
+        for cell_config in footer_cells:
+            if not isinstance(cell_config, list) or len(cell_config) < 2:
+                logger.warning(f"Invalid footer_cell config: {cell_config}")
+                continue
+                
+            text = str(cell_config[0])
+            col_id = cell_config[1]
+            
+            # Handle dynamic `{pallet_count}` variable
+            if "{pallet_count}" in text:
+                if self.pallet_count <= 0:
+                    continue  # Skip if there are no pallets to report
+                text = text.replace("{pallet_count}", str(self.pallet_count))
+                
+            col_idx = self._resolve_column_index(col_id, column_map_by_id)
+            if col_idx:
+                cell = self.worksheet.cell(row=current_footer_row, column=col_idx, value=text)
+                self._apply_footer_cell_style(cell, col_id, apply_border=(footer_type != "grand_total"))
+                logger.info(f"[FooterBuilder._build_footer_common] Wrote '{text}' to {cell.coordinate}")
         # Write sum formulas
         sum_column_ids = self.footer_config.get("sum_cols", [])
         logger.debug(f"[FooterBuilder._build_footer_common] Sum columns: {sum_column_ids}, sum_ranges: {self.sum_ranges}")
@@ -613,14 +598,6 @@ class TableFooterBuilder(BundleAccessor):
         try:
             column_id_map = self.header_info.get('column_id_map', {})
             
-            # Get column IDs for placement
-            total_text_col_id = self.footer_config.get("label_col", "col_desc")
-            total_text_col_idx = column_id_map.get(total_text_col_id)
-            
-            # Fallback if total_text_col_idx is missing
-            if not total_text_col_idx:
-                 total_text_col_idx = column_id_map.get("col_desc", 2)
-
             current_row = current_footer_row
             
             # Helper function to apply styling without borders
@@ -644,7 +621,7 @@ class TableFooterBuilder(BundleAccessor):
                     continue
                 
                 # Check if this row has any content (pallets or sum values)
-                pallet_count = int(summary_data.get('pallet_count', 0))
+                pallet_count = int(summary_data.get('col_pallet_count', summary_data.get('pallet_count', 0)))
                 
                 # Check sum values
                 sum_column_ids = self.footer_config.get("sum_cols", [])
@@ -664,36 +641,51 @@ class TableFooterBuilder(BundleAccessor):
                     logger.debug(f"Skipping {leather_type} summary row - no content")
                     continue
 
-                # Write Label to label_col
-                total_text_fallback = self.footer_config.get("label_text", "TOTAL OF:")
-                cell = self.worksheet.cell(row=current_row, column=total_text_col_idx)
-                cell.value = total_text_fallback
-                apply_summary_style(cell, total_text_col_id)
-                
-                # Write Leather Type to the NEXT column
-                type_text = "LEATHER" if leather_type == 'COW' else f"{leather_type} LEATHER"
-                
-                # Find the ID of the next column to apply correct styling
-                next_col_idx = total_text_col_idx + 1
-                # We need idx_to_id_map to find the ID
+                # Step 1: Write the leather type text FIRST (may be overwritten by footer_cells)
+                footer_cells = self.footer_config.get("footer_cells", [])
                 idx_to_id_map = {v: k for k, v in column_id_map.items()}
-                next_col_id = idx_to_id_map.get(next_col_idx)
                 
-                if next_col_id:
-                    type_cell = self.worksheet.cell(row=current_row, column=next_col_idx)
-                    type_cell.value = type_text
-                    apply_summary_style(type_cell, next_col_id)
+                # Find where the label will go so we can place leather type next to it
+                label_col_idx = None
+                for cell_config in footer_cells:
+                    if isinstance(cell_config, list) and len(cell_config) >= 2:
+                        if "{pallet_count}" not in str(cell_config[0]):
+                            col_idx = self._resolve_column_index(cell_config[1], column_id_map)
+                            if col_idx:
+                                label_col_idx = col_idx
+                                break
                 
-                # Write pallet count to count_col (like regular footer)
-                pallet_col_id = self.footer_config.get("count_col")
-                pallet_col_idx = column_id_map.get(pallet_col_id)
+                type_text = "LEATHER" if leather_type == 'COW' else f"{leather_type} LEATHER"
+                if label_col_idx:
+                    next_col_idx = label_col_idx + 1
+                    next_col_id = idx_to_id_map.get(next_col_idx)
+                    if next_col_id:
+                        type_cell = self.worksheet.cell(row=current_row, column=next_col_idx)
+                        type_cell.value = type_text
+                        apply_summary_style(type_cell, next_col_id)
+                        logger.info(f"Wrote leather type '{type_text}' to {type_cell.coordinate}")
                 
-                if pallet_col_idx and pallet_count > 0:
-                    pallet_text = f"{pallet_count} PALLET{'S' if pallet_count != 1 else ''}"
-                    pallet_cell = self.worksheet.cell(row=current_row, column=pallet_col_idx)
-                    pallet_cell.value = pallet_text
-                    apply_summary_style(pallet_cell, pallet_col_id)
-                    logger.debug(f"Wrote {leather_type} pallet count '{pallet_text}' to {pallet_cell.coordinate}")
+                # Step 2: Write footer_cells LAST — pallet count overwrites leather type if same column
+                for cell_config in footer_cells:
+                    if not isinstance(cell_config, list) or len(cell_config) < 2:
+                        continue
+                        
+                    raw_text = str(cell_config[0])
+                    col_id = cell_config[1]
+                    text = raw_text
+                    
+                    # Handle dynamic `{pallet_count}` variable — use the leather-specific count
+                    if "{pallet_count}" in text:
+                        if pallet_count <= 0:
+                            continue  # Skip if there are no pallets to report
+                        text = text.replace("{pallet_count}", str(pallet_count))
+                        
+                    col_idx = self._resolve_column_index(col_id, column_id_map)
+                    if col_idx:
+                        cell = self.worksheet.cell(row=current_row, column=col_idx)
+                        cell.value = text
+                        apply_summary_style(cell, col_id)
+                        logger.info(f"Wrote '{text}' to {cell.coordinate}")
                 
                 # Write sum totals to sum_cols (like regular footer)
                 for col_id in sum_column_ids:
