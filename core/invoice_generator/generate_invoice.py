@@ -106,6 +106,8 @@ def run_invoice_generation(
         
         _process_sheets(ctx, session)
         
+        _inject_unknown_sheets(ctx)
+        
         _finalize(ctx)
 
     return output_path
@@ -312,6 +314,112 @@ def _get_processor(ds_type, tmpl_ws, out_ws, name, conf, loader, data, args, pal
     else:
         logger.warning(f"Unknown data source type '{ds_type}', falling back to SingleTableProcessor")
         return SingleTableProcessor(**kwargs)
+
+
+def _inject_unknown_sheets(ctx: GeneratorContext):
+    """
+    Stage 3.5: Copy unknown sheets from bundled .xlsx into output workbook.
+    
+    Unknown sheets are those present in the original bundled .xlsx template
+    but NOT defined in the JSON template config. These are preserved as-is,
+    maintaining their original visibility state (visible/hidden/veryHidden),
+    cell values, styles, merged cells, and dimensions.
+    """
+    # Derive the bundle directory from the config path
+    config_path = Path(ctx.paths.get('config', ''))
+    if not config_path.exists():
+        logger.debug("No config path found, skipping unknown sheet injection.")
+        return
+    
+    bundle_dir = config_path.parent
+    
+    # Derive prefix from config filename (e.g. "TEST_VN_config.json" -> "TEST_VN")
+    config_stem = config_path.stem  # "TEST_VN_config"
+    prefix = config_stem.replace("_config", "")  # "TEST_VN"
+    
+    # Find matching .xlsx by prefix first, fallback to any .xlsx
+    source_xlsx_path = bundle_dir / f"{prefix}.xlsx"
+    if not source_xlsx_path.exists():
+        xlsx_candidates = list(bundle_dir.glob("*.xlsx"))
+        if not xlsx_candidates:
+            logger.debug(f"No .xlsx files found in bundle dir: {bundle_dir}")
+            return
+        source_xlsx_path = xlsx_candidates[0]
+    logger.info(f"[Unknown Sheets] Loading source template: {source_xlsx_path.name}")
+    
+    try:
+        source_wb = openpyxl.load_workbook(source_xlsx_path)
+    except Exception as e:
+        logger.warning(f"[Unknown Sheets] Failed to load source xlsx: {e}")
+        return
+    
+    # Determine which sheets are "configured" (already in output)
+    configured_sheets = set(ctx.output_workbook.sheetnames)
+    unknown_sheets = [s for s in source_wb.sheetnames if s not in configured_sheets]
+    
+    if not unknown_sheets:
+        logger.info("[Unknown Sheets] No unknown sheets to inject.")
+        source_wb.close()
+        return
+    
+    logger.info(f"[Unknown Sheets] Found {len(unknown_sheets)} unknown sheet(s): {unknown_sheets}")
+    
+    for sheet_name in unknown_sheets:
+        try:
+            source_ws = source_wb[sheet_name]
+            target_ws = ctx.output_workbook.create_sheet(sheet_name)
+            _deep_copy_worksheet(source_ws, target_ws)
+            logger.info(f"  ✅ Injected '{sheet_name}' (state={source_ws.sheet_state})")
+        except Exception as e:
+            logger.warning(f"  ⚠ Failed to inject '{sheet_name}': {e}")
+    
+    source_wb.close()
+
+
+def _deep_copy_worksheet(source_ws, target_ws):
+    """
+    Deep copy a worksheet's content from one workbook to another.
+    
+    Copies cell values, styles, merged cells, column dimensions,
+    row dimensions, and sheet visibility state.
+    
+    Args:
+        source_ws: Source worksheet (from bundled .xlsx)
+        target_ws: Target worksheet (in output workbook)
+    """
+    from openpyxl.utils import get_column_letter
+    from copy import copy
+    
+    # 1. Copy cell values and styles
+    for row in source_ws.iter_rows():
+        for cell in row:
+            target_cell = target_ws.cell(row=cell.row, column=cell.column, value=cell.value)
+            
+            # Copy style attributes
+            if cell.has_style:
+                target_cell.font = copy(cell.font)
+                target_cell.fill = copy(cell.fill)
+                target_cell.border = copy(cell.border)
+                target_cell.alignment = copy(cell.alignment)
+                target_cell.number_format = cell.number_format
+                target_cell.protection = copy(cell.protection)
+    
+    # 2. Copy merged cell ranges
+    for merged_range in source_ws.merged_cells.ranges:
+        target_ws.merge_cells(str(merged_range))
+    
+    # 3. Copy column dimensions (widths)
+    for col_letter, col_dim in source_ws.column_dimensions.items():
+        target_ws.column_dimensions[col_letter].width = col_dim.width
+        target_ws.column_dimensions[col_letter].hidden = col_dim.hidden
+    
+    # 4. Copy row dimensions (heights)
+    for row_num, row_dim in source_ws.row_dimensions.items():
+        target_ws.row_dimensions[row_num].height = row_dim.height
+        target_ws.row_dimensions[row_num].hidden = row_dim.hidden
+    
+    # 5. Copy sheet visibility state (visible/hidden/veryHidden)
+    target_ws.sheet_state = source_ws.sheet_state
 
 
 def _finalize(ctx: GeneratorContext):

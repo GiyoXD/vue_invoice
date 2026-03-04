@@ -106,6 +106,19 @@ def auto_fit_dimensions(
 
     logger.info(f"auto_fit_dimensions: scanning rows {header_start_row}-{data_end_row}, {num_columns} columns")
 
+    # Build a set of cells that belong to multi-column merges.
+    # These cells should be skipped during width calculation because their
+    # value spans multiple columns and would inflate a single column's width.
+    merged_cell_coords = set()
+    for merged_range in worksheet.merged_cells.ranges:
+        # Only skip if the merge spans more than 1 column
+        if merged_range.max_col > merged_range.min_col:
+            for row in range(merged_range.min_row, merged_range.max_row + 1):
+                for col in range(merged_range.min_col, merged_range.max_col + 1):
+                    merged_cell_coords.add((row, col))
+    if merged_cell_coords:
+        logger.debug(f"auto_fit_dimensions: found {len(merged_cell_coords)} cells in multi-column merges (will skip)")
+
     # Track the widest display text length per column + whether it's text or number
     # Format: {col_idx: (max_len, is_text)}
     col_max_info: Dict[int, tuple] = {}
@@ -118,6 +131,11 @@ def auto_fit_dimensions(
             cell_value = cell.value
 
             if cell_value is None:
+                continue
+
+            # Skip cells in multi-column merges — their value spans
+            # multiple columns and would inflate this column's width
+            if (row_idx, col_idx) in merged_cell_coords:
                 continue
 
             # Skip formula cells — their string representation (=SUM...)

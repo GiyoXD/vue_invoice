@@ -593,7 +593,28 @@ class TableFooterBuilder(BundleAccessor):
             logger.debug("No leather_summary data available in FooterData")
             return current_footer_row
 
-        logger.info(f"Building leather summary add-on at row {current_footer_row}")
+        # Count how many leather types actually have content (non-zero values).
+        # If only 1 type has data, the summary is identical to the grand total — skip it.
+        sum_column_ids = self.footer_config.get("sum_cols", [])
+        types_with_data = 0
+        for leather_type in ['BUFFALO', 'COW']:
+            summary_data = leather_summary.get(leather_type)
+            if not summary_data:
+                continue
+            pallet_count = int(summary_data.get('col_pallet_count', summary_data.get('pallet_count', 0)))
+            has_sum_value = any(
+                col_id in summary_data and float(summary_data[col_id]) != 0
+                for col_id in sum_column_ids
+                if col_id in summary_data
+            )
+            if pallet_count > 0 or has_sum_value:
+                types_with_data += 1
+
+        if types_with_data <= 1:
+            logger.debug(f"Skipping leather summary — only {types_with_data} type(s) have data (redundant with grand total)")
+            return current_footer_row
+
+        logger.info(f"Building leather summary add-on at row {current_footer_row} ({types_with_data} leather types)")
         
         try:
             column_id_map = self.header_info.get('column_id_map', {})

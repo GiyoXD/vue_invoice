@@ -372,10 +372,30 @@ class ConfigBuilder:
             self.logger.warning(f"  ⚠ No footer 'TOTAL' text found for {sheet.name}. Check template footer row.")
         
         footer = {
-            "_comment": "Inherits sum_cols and footer_cells from defaults.",
+            "_comment": "Inherits sum_cols from defaults. footer_cells detected per-sheet.",
             "merge_rules": merge_rules,
             "add_ons": self._build_footer_addons(sheet)
         }
+        
+        # Build per-sheet footer_cells from detected FooterInfo
+        if sheet.footer_info:
+            footer_cells = []
+            # Add TOTAL label cell (e.g. ["TOTAL OF:", "col_no"])
+            if sheet.footer_info.total_text_col_id:
+                footer_cells.append([
+                    sheet.footer_info.total_text,
+                    sheet.footer_info.total_text_col_id
+                ])
+                self.logger.info(f"    [Smart] footer_cells: TOTAL label '{sheet.footer_info.total_text}' -> {sheet.footer_info.total_text_col_id}")
+            # Add pallet count cell only if detected in this sheet's template
+            if sheet.footer_info.pallet_count_col_id:
+                footer_cells.append([
+                    "{pallet_count} PALLETS",
+                    sheet.footer_info.pallet_count_col_id
+                ])
+                self.logger.info(f"    [Smart] footer_cells: pallet count -> {sheet.footer_info.pallet_count_col_id}")
+            if footer_cells:
+                footer["footer_cells"] = footer_cells
         
         return footer
     
