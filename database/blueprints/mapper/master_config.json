@@ -242,6 +242,11 @@
       "_comment": "Shared mappings inherited by all sheets. Per-sheet mappings override these.",
       "data_flow": {
         "mappings": {
+          "col_unit_sf": {
+            "fallback": {
+              "default": "SF"
+            }
+          },
           "col_po": {},
           "col_item": {},
           "col_desc": {

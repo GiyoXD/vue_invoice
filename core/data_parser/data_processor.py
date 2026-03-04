@@ -767,34 +767,37 @@ def calculate_leather_summary(processed_data: List[Dict[str, Any]]) -> Dict[str,
 
 def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Aggregates data by PO and Price, summing sqft, amount, and pallet_count.
-    Groups rows that have the same PO and unit_price together.
-    
-    Returns a list of aggregated records with col_* keys matching the data schema.
+    Aggregates data by PO and Item, summing pallet, pcs, sqft, amount, net, gross, cbm.
+    Groups rows that share the same (PO, Item) combination.
+
+    Args:
+        processed_data: List of row dicts with col_* keys.
+
+    Returns:
+        A list of aggregated records keyed by (PO, Item) with col_* totals.
     """
     if not isinstance(processed_data, list) or not processed_data:
         return []
-    
+
     aggregation_map = {}
-    
+
     for row in processed_data:
+        # --- Validate PO ---
         po_val = row.get('col_po')
-        po = str(po_val) if po_val else ""
+        if po_val is None:
+            continue
+        po = str(po_val).strip()
         if not po:
             continue
-        
-        try:
-            price_val = row.get('col_unit_price')
-            price = _convert_to_decimal(price_val) if price_val else decimal.Decimal(0)
-        except:
-            price = decimal.Decimal(0)
-        
-        key = (po, price)
-        
+
+        # --- Validate Item ---
+        item_val = row.get('col_item')
+        item = str(item_val).strip() if item_val is not None else ""
+
+        key = (po, item)
+
         if key not in aggregation_map:
             aggregation_map[key] = {
-                'items': set(),
-                'descs': set(),
                 'col_qty_pcs': 0,
                 'col_qty_sf': decimal.Decimal(0),
                 'col_amount': decimal.Decimal(0),
@@ -803,17 +806,7 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
                 'col_gross': decimal.Decimal(0),
                 'col_cbm': decimal.Decimal(0)
             }
-        
-        # Collect unique items
-        item_val = row.get('col_item')
-        if item_val:
-            aggregation_map[key]['items'].add(str(item_val))
-        
-        # Collect unique descriptions
-        desc_val = row.get('col_desc')
-        if desc_val:
-            aggregation_map[key]['descs'].add(str(desc_val))
-        
+
         # Sum sqft
         sqft_val = row.get('col_qty_sf')
         if sqft_val is not None:
@@ -862,15 +855,13 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
              try:
                  aggregation_map[key]['col_qty_pcs'] += int(float(pcs_val))
              except (ValueError, TypeError): pass
-    
+
     # Convert to list of dicts
     result = []
-    for (po, price), data in aggregation_map.items():
+    for (po, item), data in aggregation_map.items():
         result.append({
             'col_po': po,
-            'col_item': ', '.join(sorted(data['items'])),
-            'col_desc': ', '.join(sorted(data['descs'])),
-            'col_unit_price': price,
+            'col_item': item,
             'col_qty_pcs': data['col_qty_pcs'],
             'col_qty_sf': data['col_qty_sf'],
             'col_amount': data['col_amount'],
@@ -879,12 +870,12 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
             'col_gross': data['col_gross'],
             'col_cbm': data['col_cbm']
         })
-    
-    # Sort by PO for consistent output
-    result.sort(key=lambda x: x['col_po'])
-    
-    logging.info(f"[aggregate_per_po_with_pallets] Aggregated {len(processed_data)} rows into {len(result)} unique PO+price combinations.")
-    
+
+    # Sort by PO, then by Item for consistent output
+    result.sort(key=lambda x: (x['col_po'], x['col_item']))
+
+    logging.info(f"[aggregate_per_po_with_pallets] Aggregated {len(processed_data)} rows into {len(result)} unique PO+Item combinations.")
+
     return result
 
 

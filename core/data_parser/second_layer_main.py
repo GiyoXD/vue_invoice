@@ -136,7 +136,7 @@ def calculate_footer_data(all_tables_data):
         "pcs": [], "sqft": [], "net": [], "gross": [], 
         "cbm": [], "amount": [], "pallet_count": [],
         "description": [], "desc": [],  # Include both description field names for leather_summary calculation
-        "po": [], "item": [], "unit_price": [], "price": []  # Include fields for aggregate_per_po_with_pallets
+        "po": [], "item": []  # Include fields for aggregate_per_po_with_pallets
     }
     
     for table_data in all_tables_data.values():
@@ -150,7 +150,7 @@ def calculate_footer_data(all_tables_data):
     # Calculate leather summary (BUFFALO vs COW) across all tables
     leather_summary = data_processor.calculate_leather_summary(merged_data)
     
-    # Calculate normal aggregate per PO with pallets (group by PO + price)
+    # Calculate normal aggregate per PO with pallets (group by PO + Item)
     normal_aggregate_per_po = data_processor.aggregate_per_po_with_pallets(merged_data)
     
     return {
@@ -158,7 +158,7 @@ def calculate_footer_data(all_tables_data):
         "grand_total": grand_total,
         "add_ons": {
             "leather_summary_addon": leather_summary,  # BUFFALO vs COW summary
-            "normal_aggregate_per_po_with_pallets": normal_aggregate_per_po  # PO+price aggregation
+            "normal_aggregate_per_po_with_pallets": normal_aggregate_per_po  # PO+Item aggregation
         }
     }
 

@@ -236,18 +236,31 @@ class BundledConfigLoader:
 
         defaults = self._layout_bundle.get('defaults', {})
 
-        # --- Merge defaults.data_flow.mappings ---
+        # --- Merge defaults.data_flow.mappings (DEEP MERGE) ---
         default_mappings = defaults.get('data_flow', {}).get('mappings', {})
         if default_mappings:
             sheet_data_flow = sheet_config.get('data_flow', {})
             sheet_mappings = sheet_data_flow.get('mappings', {})
 
-            # Defaults as base, per-sheet overrides on top
-            merged = {**default_mappings, **sheet_mappings}
+            # Deep merge: for each column, merge default rule with per-sheet rule.
+            # Per-sheet keys take priority, but an empty {} doesn't wipe out defaults.
+            merged = {}
+            all_keys = set(default_mappings.keys()) | set(sheet_mappings.keys())
+            for key in all_keys:
+                default_rule = default_mappings.get(key, {})
+                sheet_rule = sheet_mappings.get(key, {})
+                if isinstance(default_rule, dict) and isinstance(sheet_rule, dict):
+                    # Merge: default as base, sheet overrides on top
+                    merged[key] = {**default_rule, **sheet_rule}
+                elif key in sheet_mappings:
+                    merged[key] = sheet_rule  # Per-sheet non-dict overrides entirely
+                else:
+                    merged[key] = default_rule  # Only in defaults
+
             sheet_config.setdefault('data_flow', {})['mappings'] = merged
 
             logger.debug(
-                f"[{sheet_name}] Merged {len(default_mappings)} default mappings + "
+                f"[{sheet_name}] Deep-merged {len(default_mappings)} default mappings + "
                 f"{len(sheet_mappings)} sheet mappings = {len(merged)} total"
             )
 

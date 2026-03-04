@@ -139,8 +139,9 @@ def _apply_fallback(
     Applies a fallback value to the row_dict based on the DAF_mode and custom_mode.
     
     Supports:
-    1. Modern nested format: "fallback": {"standard": "X", "daf": "Y", "custom": "Z"}
-    2. Legacy flat formats: "fallback_on_none", "fallback_on_DAF", etc.
+    1. Modern nested format: "fallback": {"standard": "X", "daf": "Y", "custom": "Z", "default": "W"}
+       Resolution order: mode-specific (daf/custom) → standard → default
+    2. Legacy flat format: "fallback": "X" (same value for all modes)
     """
     # Priority 1: Check Modern Nested Dictionary Structure
     fallback_config = mapping_rule.get('fallback')
@@ -153,6 +154,10 @@ def _apply_fallback(
             return
         elif 'standard' in fallback_config:
             row_dict[target_col_idx] = fallback_config['standard']
+            return
+        elif 'default' in fallback_config:
+            # Universal catch-all: applies to any mode when no specific key matches
+            row_dict[target_col_idx] = fallback_config['default']
             return
     elif fallback_config is not None:
         # Priority 2: Try single 'fallback' string key (same value for all modes)
