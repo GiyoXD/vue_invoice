@@ -222,8 +222,8 @@ class BundledConfigLoader:
         """
         Get layout configuration for a sheet (headers, blanks, static content, merges).
 
-        Merges layout_bundle.defaults.data_flow.mappings as a base layer.
-        Per-sheet mappings override defaults (shallow merge by column ID).
+        Merges layout_bundle.defaults as a base layer for both data_flow.mappings
+        and footer config. Per-sheet values override defaults.
 
         Args:
             sheet_name: Name of the sheet to get config for.
@@ -234,10 +234,10 @@ class BundledConfigLoader:
         import copy
         sheet_config = copy.deepcopy(self._layout_bundle.get(sheet_name, {}))
 
-        # Merge defaults.data_flow.mappings as base for per-sheet mappings
         defaults = self._layout_bundle.get('defaults', {})
-        default_mappings = defaults.get('data_flow', {}).get('mappings', {})
 
+        # --- Merge defaults.data_flow.mappings ---
+        default_mappings = defaults.get('data_flow', {}).get('mappings', {})
         if default_mappings:
             sheet_data_flow = sheet_config.get('data_flow', {})
             sheet_mappings = sheet_data_flow.get('mappings', {})
@@ -250,6 +250,21 @@ class BundledConfigLoader:
                 f"[{sheet_name}] Merged {len(default_mappings)} default mappings + "
                 f"{len(sheet_mappings)} sheet mappings = {len(merged)} total"
             )
+
+        # --- Merge defaults.footer ---
+        default_footer = defaults.get('footer', {})
+        if default_footer:
+            sheet_footer = sheet_config.get('footer', {})
+
+            # For each default footer key, use it as base if not in per-sheet
+            for key, default_val in default_footer.items():
+                if key not in sheet_footer:
+                    sheet_footer[key] = copy.deepcopy(default_val)
+                    logger.debug(
+                        f"[{sheet_name}] Inherited footer.{key} from defaults"
+                    )
+
+            sheet_config['footer'] = sheet_footer
 
         return sheet_config
     

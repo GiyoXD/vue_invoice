@@ -123,7 +123,8 @@ class Orchestrator:
                                 template_path: Path, 
                                 output_dir: Path, 
                                 custom_prefix: str = None,
-                                runtime_mappings: Dict[str, str] = None) -> Path:
+                                runtime_mappings: Dict[str, str] = None,
+                                bundle_dir_name: str = None) -> Path:
         """
         Wraps BlueprintGenerator.generate.
         Generates the config and clean template bundle.
@@ -138,7 +139,8 @@ class Orchestrator:
                 output_dir=str(output_dir),
                 dry_run=False,
                 custom_prefix=custom_prefix,
-                runtime_mappings=runtime_mappings
+                runtime_mappings=runtime_mappings,
+                bundle_dir_name=bundle_dir_name
             )
             
             return result_path

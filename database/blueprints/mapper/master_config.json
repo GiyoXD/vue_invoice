@@ -270,6 +270,27 @@
             }
           }
         }
+      },
+      "footer": {
+        "sum_cols": [
+          "col_qty_pcs",
+          "col_qty_sf",
+          "col_amount",
+          "col_net",
+          "col_gross",
+          "col_cbm",
+          "col_sqm"
+        ],
+        "footer_cells": [
+          [
+            "TOTAL OF:",
+            "col_po"
+          ],
+          [
+            "{pallet_count} PALLETS",
+            "col_item"
+          ]
+        ]
       }
     },
     "Invoice": {

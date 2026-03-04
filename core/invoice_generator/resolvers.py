@@ -32,7 +32,10 @@ class InvoiceAssetResolver:
     """
     Responsible for locating the Configuration and Template files required to generate an invoice.
     It hides the complexity of where these files are stored (flat lists vs bundled folders).
+    Supports KH/VN variant detection within bundle folders.
     """
+
+    VARIANT_SUFFIXES = ["_KH", "_VN"]
 
     def __init__(self, base_config_dir: Path, base_template_dir: Path):
         self.config_dir = Path(base_config_dir)
@@ -117,30 +120,86 @@ class InvoiceAssetResolver:
         return None
 
     def _get_assets_from_folder(self, folder_path: Path, identifier: str) -> Optional[InvoiceAssets]:
-        """Helper to extract config and template from a specific valid folder."""
-        # Inside the folder, we look for key files.
-        # 1. Config: Ends with .json
-        # 2. Template: Ends with .xlsx (excluding temporary ones)
+        """
+        Helper to extract config and template from a specific valid folder.
         
+        If the folder contains KH/VN variants, returns the first variant found
+        as the primary asset (so existing single-config flow still works).
+        """
+        # Check for KH/VN variants first
+        variants = self.resolve_variants_from_folder(folder_path, identifier)
+        if variants:
+            # Return first variant as the primary (backward compatible)
+            first = variants[0]
+            return InvoiceAssets(Path(""), first["config_path"], first["template_path"])
+        
+        # Fallback: look for a single config/template pair (original logic)
         config_file = None
         template_file = None
         
-        # Heuristic: Find the "main" config file. 
-        # Usually named same as folder or "{Identifier}_config.json"
         for f in folder_path.iterdir():
             if f.suffix.lower() == '.json':
-                # Avoid "template_config.json" if possible, usually we want the main bundle config
                 if "_template" not in f.name:
                     config_file = f
             elif f.suffix.lower() == '.xlsx':
-                if not f.name.startswith('~$'): # Ignore temp lock files
+                if not f.name.startswith('~$'):
                     template_file = f
         
         if config_file and template_file:
-            # We found a pair!
-            return InvoiceAssets(Path(""), config_file, template_file) # Data path is dummy here, rewritten later
+            return InvoiceAssets(Path(""), config_file, template_file)
         
         return None
+
+    def resolve_variants_from_folder(self, folder_path: Path, prefix: str):
+        """
+        Detect KH/VN variant configs and templates in a bundle folder.
+        
+        Looks for files matching pattern:
+          {prefix}{suffix}_config.json + {prefix}{suffix}.xlsx
+        
+        Args:
+            folder_path: Path to the bundle folder (e.g. bundled/TEST/)
+            prefix: The base prefix (e.g. 'TEST')
+            
+        Returns:
+            List of dicts: [{suffix, config_path, template_path}, ...]
+            Empty list if no variants found.
+        """
+        variants = []
+        for suffix in self.VARIANT_SUFFIXES:
+            config = folder_path / f"{prefix}{suffix}_config.json"
+            template = folder_path / f"{prefix}{suffix}.xlsx"
+            if config.exists() and template.exists():
+                variants.append({
+                    "suffix": suffix,
+                    "config_path": config,
+                    "template_path": template
+                })
+        return variants
+
+    def resolve_all_variants(self, input_file_path: str):
+        """
+        Public method to find all KH/VN variants for an input file.
+        
+        Args:
+            input_file_path: Path to the input data file (e.g. 'TEST25001.json')
+            
+        Returns:
+            List of variant dicts, or empty list if no variants found.
+        """
+        input_path = Path(input_file_path)
+        stem = input_path.stem
+        
+        match = re.match(r'^([a-zA-Z]+)', stem)
+        prefix = match.group(1) if match else None
+        if not prefix:
+            return []
+        
+        potential_dir = self.config_dir / prefix
+        if potential_dir.exists() and potential_dir.is_dir():
+            return self.resolve_variants_from_folder(potential_dir, prefix)
+        
+        return []
 
     def _try_resolve_flat_files(self, file_stem: str) -> Optional[InvoiceAssets]:
         """

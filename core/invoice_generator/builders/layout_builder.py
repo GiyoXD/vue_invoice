@@ -570,6 +570,24 @@ class LayoutBuilder:
             # No footer, so next row is right after data (or header if no data)
             self.next_row_after_footer = footer_row_position
         
+        # 6b. Auto-fit column widths and row heights based on actual cell content
+        from ..utils.layout import auto_fit_dimensions
+        _af_header_start = self.header_info.get('second_row_index', 1) + 1
+        _af_data_end = self.next_row_after_footer - 1
+        _af_num_cols = self.header_info.get('num_columns', 0)
+        logger.info(f"auto_fit_dimensions CALL: header_start={_af_header_start}, data_end={_af_data_end}, num_columns={_af_num_cols}")
+        try:
+            auto_fit_dimensions(
+                worksheet=self.worksheet,
+                header_start_row=_af_header_start,
+                data_end_row=_af_data_end,
+                num_columns=_af_num_cols,
+                padding=7,
+                line_height=20.0
+            )
+        except Exception as e:
+            logger.error(f"auto_fit_dimensions FAILED: {e}", exc_info=True)
+
         # 7. Template Footer Restoration
         # This restores the static content (signatures, etc.) from the JSON template
         # that appears AFTER the dynamic table footer.

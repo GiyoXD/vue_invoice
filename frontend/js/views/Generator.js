@@ -71,6 +71,7 @@ export default {
                 <div v-if="assetStatus && assetStatus.ready" class="asset-ready">
                     <span class="ready-icon">✅</span>
                     <span class="ready-text">Blueprint found: using <strong>{{ assetConfigName }}</strong></span>
+                    <span v-if="hasVariants" style="margin-left: 0.5rem; padding: 0.15rem 0.5rem; background: rgba(234, 179, 8, 0.15); color: #facc15; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">KH/VN variants detected</span>
                 </div>
                 
                 <div class="grid-form">
@@ -102,6 +103,15 @@ export default {
                         <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                             <input type="checkbox" v-model="includeDAF" accent-color="#2563eb" /> 
                             <span>DAF Mode</span>
+                        </label>
+                    </div>
+                    
+                    <!-- KH/VN Variant Options -->
+                    <div v-if="hasVariants" style="display: flex; gap: 1.5rem; margin-top: 0.75rem; padding: 0.75rem; background: rgba(234, 179, 8, 0.05); border: 1px solid rgba(234, 179, 8, 0.15); border-radius: 6px; flex-wrap: wrap;">
+                        <span style="color: #facc15; font-weight: bold; font-size: 0.85rem; align-self: center;">Variants:</span>
+                        <label v-for="v in assetStatus.variants" :key="v.suffix" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" v-model="selectedVariants" :value="v.suffix" accent-color="#eab308" />
+                            <span>{{ v.suffix.replace('_', '') }} version</span>
                         </label>
                     </div>
                 </div>
@@ -208,6 +218,7 @@ export default {
         const includeStandard = ref(true);
         const includeCustom = ref(false);
         const includeDAF = ref(false);
+        const selectedVariants = ref([]);
 
         const isGenerating = ref(false);
         const generationStatus = ref(null);
@@ -225,6 +236,7 @@ export default {
             processingComplete.value = false;
             validationData.value = null;
             assetStatus.value = null;
+            selectedVariants.value = [];
         };
 
         /**
@@ -257,8 +269,12 @@ export default {
                     jsonPath.value = data.json_path;
                     invoiceNo.value = data.default_inv_no || '';
 
-                    // Capture asset status from API response
                     assetStatus.value = data.asset_status || null;
+
+                    // Auto-select all available variants
+                    if (data.asset_status?.variants?.length > 0) {
+                        selectedVariants.value = data.asset_status.variants.map(v => v.suffix);
+                    }
 
                     processingComplete.value = true;
                 } else {
@@ -302,12 +318,12 @@ export default {
                         json_path: jsonPath.value,
                         invoice_no: invoiceNo.value,
                         invoice_date: invoiceDate.value,
-                        invoice_no: invoiceNo.value,
-                        invoice_date: invoiceDate.value,
                         invoice_ref: invoiceRef.value,
                         generate_standard: includeStandard.value,
                         generate_custom: includeCustom.value,
-                        generate_daf: includeDAF.value
+                        generate_daf: includeDAF.value,
+                        generate_kh: selectedVariants.value.includes('_KH'),
+                        generate_vn: selectedVariants.value.includes('_VN')
                     })
                 });
 
@@ -397,6 +413,13 @@ export default {
             return path.split(/[\\/]/).pop() || 'Unknown';
         });
 
+        /**
+         * Computed: Whether KH/VN variants are available.
+         */
+        const hasVariants = computed(() => {
+            return (assetStatus.value?.variants?.length || 0) > 0;
+        });
+
         return {
             selectedFile,
             isUploading,
@@ -425,7 +448,9 @@ export default {
             retryGeneration,
             copyError,
             assetStatus,
-            assetConfigName
+            assetConfigName,
+            hasVariants,
+            selectedVariants
         };
     }
 };

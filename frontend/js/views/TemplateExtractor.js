@@ -9,12 +9,45 @@ export default {
             <div class="card" v-if="currentStep === 1">
                 <h2>1. Analyze Invoice Source</h2>
                 <p style="color: #94a3b8; margin-bottom: 1rem;">
-                    Upload a sample invoice file. The system will detect unmapped headers.
+                    Upload a sample invoice file. Upload <strong>2 files</strong> to auto-create KH + VN versions.
                 </p>
                 
-                <input type="file" @change="handleFileUpload" accept=".xlsx, .xls" />
+                <input type="file" @change="handleFileUpload" accept=".xlsx, .xls" multiple />
                 
-                <button class="btn" @click="analyzeFile" :disabled="!selectedFile || isProcessing">
+                <!-- Show selected files with KH/VN labels -->
+                <div v-if="selectedFiles.length > 0" style="margin-top: 1rem;">
+                    <div v-for="(file, idx) in selectedFiles" :key="idx" 
+                         style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.75rem; margin-bottom: 0.5rem; background: rgba(255,255,255,0.03); border-radius: 6px; border: 1px solid rgba(255,255,255,0.08);">
+                        <span v-if="selectedFiles.length === 2" 
+                              :style="{
+                                  padding: '0.2rem 0.6rem',
+                                  borderRadius: '4px',
+                                  fontSize: '0.75rem',
+                                  fontWeight: 'bold',
+                                  background: idx === 0 ? 'rgba(59, 130, 246, 0.2)' : 'rgba(234, 179, 8, 0.2)',
+                                  color: idx === 0 ? '#60a5fa' : '#facc15',
+                                  border: idx === 0 ? '1px solid rgba(59, 130, 246, 0.3)' : '1px solid rgba(234, 179, 8, 0.3)'
+                              }">
+                            {{ idx === 0 ? 'KH' : 'VN' }}
+                        </span>
+                        <span style="color: #e2e8f0;">📄 {{ file.name }}</span>
+                    </div>
+                    
+                    <!-- Single-file suffix selector -->
+                    <div v-if="selectedFiles.length === 1" style="margin-top: 0.75rem; display: flex; align-items: center; gap: 0.75rem;">
+                        <label style="color: #94a3b8; font-size: 0.875rem;">Version suffix:</label>
+                        <select v-model="singleFileSuffix" class="input-field" style="width: 160px;">
+                            <option value="_KH">KH version</option>
+                            <option value="_VN">VN version</option>
+                        </select>
+                    </div>
+
+                    <div v-if="selectedFiles.length > 2" class="status-box error" style="margin-top: 0.5rem;">
+                        ⚠️ Maximum 2 files allowed. Only the first 2 will be used.
+                    </div>
+                </div>
+                
+                <button class="btn" @click="analyzeFiles" :disabled="selectedFiles.length === 0 || isProcessing" style="margin-top: 1rem;">
                     {{ isProcessing ? 'Analyzing...' : 'Analyze & Extract' }}
                 </button>
                 
@@ -33,14 +66,22 @@ export default {
                 <div class="form-group">
                     <label>Template Prefix (Unique ID)</label>
                     <input type="text" v-model="filePrefix" class="input-field" placeholder="e.g. MOTO, JLFHM" />
+                    
+                    <!-- Show preview of what will be created -->
+                    <div v-if="filePrefix && isDualMode" style="margin-top: 0.5rem; padding: 0.5rem 0.75rem; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 6px; font-size: 0.85rem; color: #93c5fd;">
+                        📁 Will create: <strong>{{ filePrefix }}_KH</strong> + <strong>{{ filePrefix }}_VN</strong> in <code>bundled/{{ filePrefix }}/</code>
+                    </div>
+                    <div v-else-if="filePrefix && singleFileSuffix" style="margin-top: 0.5rem; padding: 0.5rem 0.75rem; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 6px; font-size: 0.85rem; color: #93c5fd;">
+                        📁 Will create: <strong>{{ filePrefix }}{{ singleFileSuffix }}</strong> in <code>bundled/{{ filePrefix }}/</code>
+                    </div>
                 </div>
 
-                <div v-if="missingHeaders.length === 0" class="status-box success">
+                <div v-if="allMissingHeaders.length === 0" class="status-box success">
                     ✅ All headers recognized automatically!
                 </div>
 
                 <div v-else class="mapping-grid" style="display: grid; gap: 1rem; margin-top: 1rem;">
-                    <div v-for="(headerText, index) in missingHeaders" :key="index" style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 6px;">
+                    <div v-for="(headerText, index) in allMissingHeaders" :key="index" style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 6px;">
                         <div style="font-weight: bold; margin-bottom: 0.5rem; color: #fbbf24;">"{{ headerText }}"</div>
                         <div style="display: flex; gap: 0.5rem; align-items: center;">
                             <select v-model="userMappings[headerText]" class="input-field" style="width: 100%;" :disabled="confirmedHeaders.includes(headerText)">
@@ -82,6 +123,12 @@ export default {
                 <div v-if="bundlePath" style="background: rgba(34, 197, 94, 0.1); padding: 1rem; border-radius: 0.5rem; margin-bottom: 1.5rem; text-align: left;">
                     <p style="color: #86efac; margin: 0 0 0.5rem 0; font-size: 0.875rem;">📁 Bundle created at:</p>
                     <code style="color: #22c55e; font-size: 0.8rem; word-break: break-all;">{{ bundlePath }}</code>
+                    <div v-if="generatedPrefixes.length > 1" style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px solid rgba(34, 197, 94, 0.2);">
+                        <p style="color: #86efac; margin: 0 0 0.25rem 0; font-size: 0.8rem;">Contains:</p>
+                        <div v-for="p in generatedPrefixes" :key="p" style="color: #4ade80; font-size: 0.8rem;">
+                            ✅ {{ p }}
+                        </div>
+                    </div>
                 </div>
                 <p style="color: #94a3b8; margin-bottom: 2rem;">
                     You can now go to the Generator and process invoices for this company.
@@ -168,7 +215,8 @@ export default {
     `,
     setup() {
         const currentStep = ref(1);
-        const selectedFile = ref(null);
+        const selectedFiles = ref([]);
+        const singleFileSuffix = ref("_KH");
         const isProcessing = ref(false);
         const statusMessage = ref("");
         const statusType = ref("info");
@@ -184,14 +232,20 @@ export default {
         const newMappingVal = ref("");
 
         // Data
-        const fileToken = ref(""); // New Token from backend
-        const missingHeaders = ref([]);
+        const fileTokens = ref([]); // Array of { filename, missingHeaders }
+        const allMissingHeaders = ref([]); // Deduplicated list across all files
         const filePrefix = ref("");
         const userMappings = reactive({});
         const confirmedHeaders = ref([]);
         const bundlePath = ref("");
+        const generatedPrefixes = ref([]);
 
         const systemOptions = ref([]);
+
+        /**
+         * Returns true when user uploaded 2 files (KH + VN mode).
+         */
+        const isDualMode = computed(() => selectedFiles.value.length >= 2);
 
         // Load options on mount
         const fetchOptions = async () => {
@@ -304,8 +358,13 @@ export default {
             }
         };
 
+        /**
+         * Handles file input change. Accepts up to 2 files.
+         */
         const handleFileUpload = (e) => {
-            selectedFile.value = e.target.files[0];
+            const files = Array.from(e.target.files).slice(0, 2);
+            selectedFiles.value = files;
+            singleFileSuffix.value = "";
             statusMessage.value = "";
         };
 
@@ -321,36 +380,55 @@ export default {
             }
         };
 
-        const analyzeFile = async () => {
-            if (!selectedFile.value) return;
+        /**
+         * Analyze all selected files (1 or 2).
+         * Calls /api/template/analyze once per file and collects missing headers.
+         */
+        const analyzeFiles = async () => {
+            if (selectedFiles.value.length === 0) return;
             isProcessing.value = true;
             statusMessage.value = "Scanning template structure...";
-            missingHeaders.value = [];
-
-            const formData = new FormData();
-            formData.append('file', selectedFile.value);
+            allMissingHeaders.value = [];
+            fileTokens.value = [];
 
             try {
-                // NEW ENDPOINT
-                const res = await fetch('/api/blueprint/scan', { method: 'POST', body: formData });
-                const data = await res.json();
+                const headerSet = new Set();
 
-                if (res.ok) {
-                    fileToken.value = data.file_token;
+                for (const file of selectedFiles.value) {
+                    const formData = new FormData();
+                    formData.append('file', file);
 
-                    if (data.status === "needs_mapping") {
-                        missingHeaders.value = data.unknown_headers || [];
-                        statusMessage.value = "Unknown headers found.";
-                    } else {
-                        statusMessage.value = "Structure looks clean!";
+                    const res = await fetch('/api/template/analyze', { method: 'POST', body: formData });
+                    const data = await res.json();
+
+                    if (!res.ok) {
+                        throw new Error(data.error || `Analysis failed for ${file.name}`);
                     }
 
-                    // Suggest prefix from filename
-                    filePrefix.value = selectedFile.value.name.split('.')[0];
-                    currentStep.value = 2;
-                } else {
-                    throw new Error(data.error || "Scan failed");
+                    // Collect file token info
+                    fileTokens.value.push({
+                        filename: data.temp_filename,
+                        missingHeaders: (data.missing_headers || []).map(h => h.text)
+                    });
+
+                    // Collect unique missing headers across all files
+                    for (const h of (data.missing_headers || [])) {
+                        headerSet.add(h.text);
+                    }
                 }
+
+                allMissingHeaders.value = Array.from(headerSet);
+
+                if (allMissingHeaders.value.length > 0) {
+                    statusMessage.value = "Unknown headers found.";
+                } else {
+                    statusMessage.value = "Structure looks clean!";
+                }
+
+                // Suggest prefix from first filename
+                filePrefix.value = selectedFiles.value[0].name.split('.')[0];
+                currentStep.value = 2;
+
             } catch (e) {
                 statusType.value = "error";
                 statusMessage.value = e.message;
@@ -359,6 +437,10 @@ export default {
             }
         };
 
+        /**
+         * Generate template(s).
+         * Single file: 1 API call. Dual files: 2 API calls into same bundle_dir_name.
+         */
         const generateTemplate = async () => {
             if (!filePrefix.value) {
                 alert("Please enter a prefix");
@@ -367,35 +449,74 @@ export default {
             isProcessing.value = true;
             statusMessage.value = "Generating bundle configuration...";
             statusType.value = "info";
+            generatedPrefixes.value = [];
 
             try {
                 // Collect confirmed mappings
                 const finalMappings = {};
                 for (const [key, value] of Object.entries(userMappings)) {
-                    // Only send if confirmed
                     if (confirmedHeaders.value.includes(key)) {
                         finalMappings[key] = value;
                     }
                 }
 
-                // NEW ENDPOINT
-                const res = await fetch('/api/blueprint/generate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        file_token: fileToken.value,
-                        customer_code: filePrefix.value,
-                        mappings: finalMappings
-                    })
-                });
-                const data = await res.json();
+                if (isDualMode.value) {
+                    // --- DUAL MODE: 2 files → KH + VN ---
+                    const suffixes = ['_KH', '_VN'];
+                    const baseName = filePrefix.value;
 
-                if (res.ok) {
-                    bundlePath.value = data.config_path || '';
+                    for (let i = 0; i < Math.min(fileTokens.value.length, 2); i++) {
+                        const suffixedPrefix = `${baseName}${suffixes[i]}`;
+                        statusMessage.value = `Generating ${suffixedPrefix}...`;
+
+                        const res = await fetch('/api/template/generate', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                file_prefix: suffixedPrefix,
+                                user_mappings: finalMappings,
+                                temp_filename: fileTokens.value[i].filename,
+                                bundle_dir_name: baseName
+                            })
+                        });
+                        const data = await res.json();
+
+                        if (!res.ok) {
+                            throw new Error(data.error || `Generation failed for ${suffixedPrefix}`);
+                        }
+
+                        generatedPrefixes.value.push(suffixedPrefix);
+                        bundlePath.value = data.bundle_path || '';
+                    }
+
                     currentStep.value = 3;
+
                 } else {
-                    throw new Error(data.error || "Generation failed");
+                    // --- SINGLE MODE: 1 file ---
+                    const effectivePrefix = `${filePrefix.value}${singleFileSuffix.value}`;
+                    const useBundleDir = singleFileSuffix.value ? filePrefix.value : "";
+
+                    const res = await fetch('/api/template/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            file_prefix: effectivePrefix,
+                            user_mappings: finalMappings,
+                            temp_filename: fileTokens.value[0].filename,
+                            bundle_dir_name: useBundleDir
+                        })
+                    });
+                    const data = await res.json();
+
+                    if (!res.ok) {
+                        throw new Error(data.error || "Generation failed");
+                    }
+
+                    generatedPrefixes.value.push(effectivePrefix);
+                    bundlePath.value = data.bundle_path || '';
+                    currentStep.value = 3;
                 }
+
             } catch (e) {
                 statusType.value = "error";
                 statusMessage.value = e.message;
@@ -406,13 +527,14 @@ export default {
 
         const resetFlow = () => {
             currentStep.value = 1;
-            selectedFile.value = null;
+            selectedFiles.value = [];
+            singleFileSuffix.value = "";
             filePrefix.value = "";
-            missingHeaders.value = [];
+            allMissingHeaders.value = [];
             statusMessage.value = "";
             bundlePath.value = "";
-            userMappings.value = {}; // Reset mappings? Reactive limitation needs check
-            // userMappings is reactive object, clear props
+            generatedPrefixes.value = [];
+            fileTokens.value = [];
             for (const prop of Object.getOwnPropertyNames(userMappings)) {
                 delete userMappings[prop];
             }
@@ -421,21 +543,24 @@ export default {
 
         return {
             currentStep,
-            selectedFile,
+            selectedFiles,
+            singleFileSuffix,
+            isDualMode,
             isProcessing,
             statusMessage,
             statusType,
             handleFileUpload,
-            analyzeFile,
+            analyzeFiles,
             generateTemplate,
             resetFlow,
             filePrefix,
-            missingHeaders,
+            allMissingHeaders,
             userMappings,
             confirmedHeaders,
             toggleMapping,
             systemOptions,
             bundlePath,
+            generatedPrefixes,
             showMappings,
             globalMappings,
             mappingSearch,

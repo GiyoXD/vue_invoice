@@ -29,7 +29,7 @@ class ConfigBuilder:
         # Aggregation sheets (Invoice, Contract)
         "aggregation": [
             "col_po", "col_item", "col_desc", "col_qty_sf",
-            "col_unit_price", "col_amount", "col_sqm"
+            "col_unit_price", "col_amount", "col_sqm", "col_net", "col_gross", "col_cbm"
         ],
         # Processed tables (Packing list)
         "processed_tables_multi": [
@@ -350,20 +350,15 @@ class ConfigBuilder:
         """
         Build footer section for a sheet.
         
-        Uses excel_scanner's FooterInfo to resolve:
-        - label_col: column where 'TOTAL' text was found in the XLSX
-        - count_col: column where 'X PALLETS' pattern was found in the XLSX
-        - sum_cols: universal list of all summable columns (no filtering)
+        Only emits sheet-specific footer data (merge_rules, add_ons).
+        sum_cols and footer_cells are inherited from layout_bundle.defaults.footer.
         """
-        # --- label_col & label_text (from scanner's TOTAL detection) ---
-        total_col = None
-        total_text = None
+        # --- Detect merge rules from scanner ---
         merge_rules = []
         
         if sheet.footer_info:
             self.logger.info(f"  [Smart] Using detected footer info for {sheet.name}")
             total_col = sheet.footer_info.total_text_col_id
-            total_text = sheet.footer_info.total_text
             
             # Create merge rule if colspan > 1
             if sheet.footer_info.merge_curr_colspan > 1:
@@ -376,30 +371,11 @@ class ConfigBuilder:
         else:
             self.logger.warning(f"  ⚠ No footer 'TOTAL' text found for {sheet.name}. Check template footer row.")
         
-        # --- count_col (from scanner's PALLETS regex detection) ---
-        pallet_col = None
-        if sheet.footer_info and sheet.footer_info.pallet_count_col_id:
-            pallet_col = sheet.footer_info.pallet_count_col_id
-            self.logger.info(f"    [Smart] Pallet count column: {pallet_col}")
-        else:
-            self.logger.warning(f"  ⚠ No pallet count column detected for {sheet.name}. Check template footer row.")
-        
-        # --- sum_cols (universal — invoice generator skips non-existent columns) ---
-        sum_cols = ["col_qty_pcs", "col_qty_sf", "col_amount", "col_net", "col_gross", "col_cbm"]
-        
         footer = {
-            "sum_cols": sum_cols,
+            "_comment": "Inherits sum_cols and footer_cells from defaults.",
             "merge_rules": merge_rules,
             "add_ons": self._build_footer_addons(sheet)
         }
-        
-        # Only include label/count keys if scanner actually found them
-        if total_col:
-            footer["label_col"] = total_col
-            # Always normalize label_text to "TOTAL OF:" regardless of scanned text
-            footer["label_text"] = "TOTAL OF:"
-        if pallet_col:
-            footer["count_col"] = pallet_col
         
         return footer
     

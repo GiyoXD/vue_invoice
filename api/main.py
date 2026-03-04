@@ -60,6 +60,8 @@ class GenerateRequest(BaseModel):
     generate_standard: bool = True
     generate_custom: bool = False
     generate_daf: bool = False
+    generate_kh: bool = False
+    generate_vn: bool = False
 
 @app.get("/api/health")
 async def health_check():
@@ -90,7 +92,6 @@ def upload_excel(file: UploadFile = File(...)):
         default_inv_no = Path(file.filename).stem
         
         # === CHECK ASSET AVAILABILITY ===
-        # Use the InvoiceAssetResolver to see if we have config/template for this file
         from core.invoice_generator.resolvers import InvoiceAssetResolver
         
         resolver = InvoiceAssetResolver(
@@ -101,6 +102,9 @@ def upload_excel(file: UploadFile = File(...)):
         # Check if assets can be resolved for this input
         assets = resolver.resolve_assets_for_input_file(str(json_path))
         
+        # Check for KH/VN variants
+        variants = resolver.resolve_all_variants(str(json_path))
+        
         asset_status = {
             "ready": assets is not None,
             "config_found": False,
@@ -108,7 +112,8 @@ def upload_excel(file: UploadFile = File(...)):
             "config_path": None,
             "template_path": None,
             "bundled_dir": str(sys_config.bundled_dir),
-            "message": ""
+            "message": "",
+            "variants": []
         }
         
         if assets:
@@ -124,6 +129,17 @@ def upload_excel(file: UploadFile = File(...)):
                 f"No config/template found for '{identifier}'. "
                 f"Expected: bundled/{prefix}/ folder with {prefix}_config.json and {prefix}.xlsx"
             )
+        
+        # Add variant info
+        if variants:
+            asset_status["variants"] = [
+                {
+                    "suffix": v["suffix"],
+                    "config_path": str(v["config_path"]),
+                    "template_path": str(v["template_path"])
+                }
+                for v in variants
+            ]
         
         return {
             "status": "success",
@@ -185,65 +201,97 @@ def generate_invoice(request: GenerateRequest):
         primary_metadata = {}
         processed_any = False
 
-        # Define tasks to run
-        tasks = []
+        # Define mode tasks
+        mode_tasks = []
         if request.generate_standard:
-            tasks.append({
+            mode_tasks.append({
                 "suffix": "", 
                 "flags": [],
                 "name": "Standard Invoice"
             })
         if request.generate_custom:
-            tasks.append({
+            mode_tasks.append({
                 "suffix": "_Custom", 
                 "flags": ["--custom"],
                 "name": "Custom Invoice"
             })
         if request.generate_daf:
-            tasks.append({
+            mode_tasks.append({
                 "suffix": "_DAF", 
                 "flags": ["--DAF"],
                 "name": "DAF Invoice"
             })
 
-        if not tasks:
+        if not mode_tasks:
              return JSONResponse(status_code=400, content={"error": "No invoice type selected."})
 
-        for task in tasks:
-            try:
-                # Construct specific output name
-                # e.g. IDENTIFIER_Invoice.xlsx or IDENTIFIER_Invoice_Custom.xlsx
-                filename = f"{request.identifier}_Invoice{task['suffix']}.xlsx"
-                output_path = base_output_dir / filename
+        # Determine variant tasks (KH/VN or default)
+        variant_tasks = []
+        if request.generate_kh or request.generate_vn:
+            # Resolve variants from the bundle folder
+            from core.invoice_generator.resolvers import InvoiceAssetResolver
+            resolver = InvoiceAssetResolver(
+                base_config_dir=sys_config.registry_dir,
+                base_template_dir=sys_config.templates_dir
+            )
+            all_variants = resolver.resolve_all_variants(str(json_path_obj))
+            variant_map = {v["suffix"]: v for v in all_variants}
+            
+            if request.generate_kh and "_KH" in variant_map:
+                variant_tasks.append(variant_map["_KH"])
+            if request.generate_vn and "_VN" in variant_map:
+                variant_tasks.append(variant_map["_VN"])
+        
+        # If no variants selected, run with default (no variant suffix, no explicit paths)
+        if not variant_tasks:
+            variant_tasks = [{"suffix": "", "config_path": None, "template_path": None}]
 
-                # Generate
-                result_path = orchestrator.generate_invoice(
-                    json_path=json_path_obj,
-                    output_path=output_path,
-                    template_dir=template_dir,
-                    config_dir=config_dir,
-                    input_data_dict=full_data,
-                    flags=task['flags']
-                )
-                
-                results.append(str(result_path))
-                processed_any = True
+        # Cross-product: variant × mode
+        for variant in variant_tasks:
+            variant_suffix = variant["suffix"]  # e.g. "_KH" or ""
+            
+            for task in mode_tasks:
+                try:
+                    # Build filename: IDENTIFIER_Invoice_KH.xlsx or IDENTIFIER_Invoice_KH_Custom.xlsx
+                    filename = f"{request.identifier}_Invoice{variant_suffix}{task['suffix']}.xlsx"
+                    output_path = base_output_dir / filename
 
-                # Capture metadata if it's the standard invoice or if it's the first one we ran
-                if not primary_metadata or task['suffix'] == "":
-                    try:
-                        meta_path = result_path.parent / f"{result_path.stem}_metadata.json"
-                        if meta_path.exists():
-                            with open(meta_path, 'r', encoding='utf-8') as f:
-                                primary_metadata = json.load(f)
-                    except Exception:
-                        pass
+                    # Build flags with explicit config/template if variant has them
+                    flags = list(task['flags'])
+                    if variant.get("config_path"):
+                        flags.extend(["--config", str(variant["config_path"])])
+                    if variant.get("template_path"):
+                        flags.extend(["--template", str(variant["template_path"])])
 
-            except Exception as e:
-                import traceback
-                error_msg = f"Failed to generate {task['name']}: {str(e)}"
-                print(traceback.format_exc()) # Log it
-                errors.append(error_msg)
+                    # Generate
+                    result_path = orchestrator.generate_invoice(
+                        json_path=json_path_obj,
+                        output_path=output_path,
+                        template_dir=template_dir,
+                        config_dir=config_dir,
+                        input_data_dict=full_data,
+                        flags=flags
+                    )
+                    
+                    results.append(str(result_path))
+                    processed_any = True
+
+                    # Capture metadata from first successful generation
+                    if not primary_metadata:
+                        try:
+                            meta_path = result_path.parent / f"{result_path.stem}_metadata.json"
+                            if meta_path.exists():
+                                with open(meta_path, 'r', encoding='utf-8') as f:
+                                    primary_metadata = json.load(f)
+                        except Exception:
+                            pass
+
+                except Exception as e:
+                    import traceback
+                    task_name = f"{variant_suffix.lstrip('_')} {task['name']}" if variant_suffix else task['name']
+                    error_msg = f"Failed to generate {task_name}: {str(e)}"
+                    print(traceback.format_exc())
+                    errors.append(error_msg)
 
         # Open file explorer to the output directory (just once)
         if processed_any:
@@ -417,6 +465,7 @@ class TemplateConfig(BaseModel):
     file_prefix: str
     user_mappings: dict
     temp_filename: str
+    bundle_dir_name: str = ""
 
 @app.post("/api/template/analyze")
 def analyze_template(file: UploadFile = File(...)):
@@ -480,7 +529,8 @@ def generate_template(config: TemplateConfig):
         result_path = orchestrator.generate_blueprint_bundle(
             template_path=temp_path,
             output_dir=sys_config.bundled_dir,
-            custom_prefix=config.file_prefix
+            custom_prefix=config.file_prefix,
+            bundle_dir_name=config.bundle_dir_name or None
         )
         
         if not result_path:
