@@ -2,7 +2,6 @@
 import sys
 import logging
 from .base_processor import SheetProcessor
-from ..utils import text_replace_utils
 from ..builders.layout_builder import LayoutBuilder
 from ..config.builder_config_resolver import BuilderConfigResolver
 
@@ -65,11 +64,9 @@ class SingleTableProcessor(SheetProcessor):
         # Get the bundles needed for LayoutBuilder
         style_config = resolver.get_style_bundle()
         context_config = resolver.get_context_bundle(
-            invoice_data=self.invoice_data,
-            enable_text_replacement=False  # Already done at main level
+            invoice_data=self.invoice_data
         )
         layout_config = resolver.get_layout_bundle()
-        layout_config['enable_text_replacement'] = True
         layout_config['skip_data_table_builder'] = False  # IMPORTANT: Enable data table builder to use resolver
         
         logger.debug(f"layout_config keys: {list(layout_config.keys())}")

@@ -13,7 +13,6 @@ from ..builders.footer_builder import TableFooterBuilder
 from ..styling.models import StylingConfigModel, FooterData
 from ..config.builder_config_resolver import BuilderConfigResolver
 
-from ..utils.text_replacement_rules import build_replacement_rules
 from ..extractors.header_extractor import HeaderExtractor
 
 logger = logging.getLogger(__name__)
@@ -135,14 +134,8 @@ class MultiTableProcessor(SheetProcessor):
                     debug=getattr(self.args, 'debug', False)
                 )
                 
-                # Apply text replacements
+                # Extract header info
                 if self.args and self.invoice_data:
-                    replacement_rules = build_replacement_rules(self.args)
-                    template_state_builder.apply_text_replacements(
-                        replacement_rules=replacement_rules,
-                        invoice_data=self.invoice_data
-                    )
-                    self.replacements_log = template_state_builder.replacements_log
                     self.header_info = HeaderExtractor.extract(template_state_builder.header_state)
                     
                 return template_state_builder
@@ -173,7 +166,6 @@ class MultiTableProcessor(SheetProcessor):
         
         style_config = resolver.get_style_bundle()
         context_config = resolver.get_context_bundle(
-            enable_text_replacement=False, 
             is_last_table=is_last_table,
             show_grand_total_addons=show_grand_total_addons
         )
@@ -191,7 +183,6 @@ class MultiTableProcessor(SheetProcessor):
             layout_config['sheet_config']['structure'] = {}
         layout_config['sheet_config']['structure']['header_row'] = current_row
         
-        layout_config['enable_text_replacement'] = False
         layout_config['skip_template_header_restoration'] = (not is_first_table)
         layout_config['skip_template_footer_restoration'] = True
         

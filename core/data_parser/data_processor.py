@@ -1024,6 +1024,7 @@ def format_aggregation_as_list(
         # Extract summed values (already using col_ keys internally, but safe get)
         # Handle both new col_ keys and potential legacy keys if any remain
         row_dict['col_qty_sf'] = values.get('col_qty_sf', values.get('sqft_sum', decimal.Decimal(0)))
+        row_dict['col_amount'] = values.get('col_amount', values.get('amount_sum', decimal.Decimal(0)))
         
         flattened_list.append(row_dict)
         

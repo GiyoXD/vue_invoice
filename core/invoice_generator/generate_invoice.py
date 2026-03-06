@@ -21,7 +21,6 @@ from core.invoice_generator.builders.workbook_builder import WorkbookBuilder
 from core.invoice_generator.builders.deep_sheet_builder import DeepSheetBuilder
 from core.invoice_generator.processors.single_table_processor import SingleTableProcessor
 from core.invoice_generator.processors.multi_table_processor import MultiTableProcessor
-from core.invoice_generator.processors.placeholder_processor import PlaceholderProcessor
 
 from core.invoice_generator.utils.print_area_config import configure_print_area
 from core.invoice_generator.utils.generation_session import GenerationSession
@@ -275,8 +274,6 @@ def _process_sheets(ctx: GeneratorContext, session: GenerationSession):
 
             if processor and processor.process():
                  session.log_success(sheet_name)
-                 if hasattr(processor, 'replacements_log'):
-                     session.update_logs(replacements=processor.replacements_log)
                  if hasattr(processor, 'header_info'):
                      session.update_logs(header_info=processor.header_info)
             else:
@@ -306,8 +303,6 @@ def _get_processor(ds_type, tmpl_ws, out_ws, name, conf, loader, data, args, pal
 
     if ds_type in ["processed_tables_multi", "processed_tables", "detail_packing_list"]:
         return MultiTableProcessor(**kwargs)
-    elif ds_type == "placeholder":
-        return PlaceholderProcessor(**kwargs)
     elif "aggregation" in ds_type or ds_type in ["DAF_aggregation", "summary_packing_list"]:
         # Fallback to aggregation for unknown/custom types that have 'aggregation' in the name
         return SingleTableProcessor(**kwargs)

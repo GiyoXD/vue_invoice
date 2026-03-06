@@ -25,7 +25,6 @@ class GenerationSession:
         self.start_time = None
         self.sheets_processed = []
         self.sheets_failed = []
-        self.replacements_log = []
         self.header_info = {}
         
         self.status = "pending"
@@ -50,10 +49,8 @@ class GenerationSession:
         if error:
             logger.debug(traceback.format_exc())
 
-    def update_logs(self, replacements: List = None, header_info: Dict = None):
-        """Update session logs with replacement and header info."""
-        if replacements:
-            self.replacements_log.extend(replacements)
+    def update_logs(self, header_info: Dict = None):
+        """Update session logs with header info."""
         if header_info:
             self.header_info.update(header_info)
 

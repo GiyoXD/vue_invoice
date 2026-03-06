@@ -8,9 +8,7 @@ from ..data.table_calculator import TableCalculator
 from .header_builder import HeaderBuilderStyler as HeaderBuilder
 from .data_table_builder import DataTableBuilderStyler as DataTableBuilder
 from .footer_builder import TableFooterBuilder
-from .text_replacement_builder import TextReplacementBuilder
 from .json_template_builder import JsonTemplateStateBuilder
-from ..utils.text_replacement_rules import build_replacement_rules
 
 # Initialize logger for this module
 logger = logging.getLogger(__name__)
@@ -90,7 +88,6 @@ class LayoutBuilder:
         
         # Unpack Layout Bundle
         self.sheet_config = layout_config.get('sheet_config', {})
-        self.enable_text_replacement = layout_config.get('enable_text_replacement', False)
         
         # Skip flags
         self.skip_template_header_restoration = layout_config.get('skip_template_header_restoration', False)
@@ -127,16 +124,7 @@ class LayoutBuilder:
         logger.debug(f"Reading from template, writing to output worksheet")
         
         # 1. Text Replacement (if enabled) - Pre-processing
-        # Note: This was already done at workbook level, skip here
-        if self.enable_text_replacement:
-            text_replacer = TextReplacementBuilder(
-                workbook=self.workbook,
-                invoice_data=self.invoice_data
-            )
-            if self.args and self.args.DAF:
-                text_replacer.build()  # Run both placeholder and DAF replacements
-            else:
-                text_replacer._replace_placeholders()  # Only placeholders
+        # Removed per user request
         
         # 2. Calculate header boundaries for template state capture
         header_row = self.sheet_config.get('header_row', 1)
@@ -194,18 +182,7 @@ class LayoutBuilder:
             logger.critical(f"CRITICAL: No JSON template found for sheet '{self.sheet_name}'. XLSX scanning has been removed.")
             return False
             
-        # Common: Apply text replacements to captured/loaded state
-        if self.args and self.invoice_data and self.template_state_builder:
-            logger.info(f"Applying text replacements to template state")
-            try:
-                replacement_rules = build_replacement_rules(self.args)
-                changes = self.template_state_builder.apply_text_replacements(
-                    replacement_rules=replacement_rules,
-                    invoice_data=self.invoice_data
-                )
-                logger.info(f"Text replacements applied: {changes} changes made")
-            except Exception as e:
-                logger.error(f"Failed to apply text replacements: {e}", exc_info=True)
+        # Common: Text replacements removed per user request
         
         # 3b. Template header restoration DEFERRED - will be done AFTER table building
         # This ensures template content aligns with actual column count after filtering

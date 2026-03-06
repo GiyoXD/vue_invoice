@@ -122,20 +122,16 @@ class BuilderConfigResolver:
         Returns:
             {
                 'sheet_name': str,
-                'args': CLI args,
-                'invoice_data': dict,  # Adapted invoice_data with normalized structure for text replacements
+                'args': Any,
+                'invoice_data': dict,
                 'pallets': int,
-                'all_sheet_configs': dict,  # For cross-sheet references
-                ... (any additional context)
+                'all_sheet_configs': dict,
             }
         """
-        # Adapt invoice_data to normalize data paths for text replacements
-        adapted_invoice_data = self._adapt_invoice_data_for_sheet(table_key)
-        
         base_context = {
             'sheet_name': self.sheet_name,
             'args': self.args,
-            'invoice_data': adapted_invoice_data,  # Use adapted data with normalized paths
+            'invoice_data': self.invoice_data,
             'pallets': self.pallets,
             'all_sheet_configs': self.config_loader.get_raw_config().get('layout_bundle', {}),
         }
@@ -167,68 +163,7 @@ class BuilderConfigResolver:
         
         return base_context
     
-    def _adapt_invoice_data_for_sheet(self, table_key: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Adapt invoice_data to provide normalized data paths for text replacements.
-        
-        This ensures all sheets can use the same replacement rule paths like:
-        ["processed_tables_data", "1", "col_inv_no", 0]
-        
-        For sheets using 'aggregation' or 'DAF_aggregation', we create a synthetic
-        processed_tables_data structure pointing to the first row of actual processed_tables.
-        This allows Invoice and Contract sheets to access metadata (inv_no, inv_date, inv_ref)
-        using the same data paths as Packing list.
-        
-        Args:
-            table_key: Table key for multi-table sheets (e.g., '1', '2')
-        
-        Returns:
-            Adapted invoice_data dict with normalized structure
-        """
-        if not self.invoice_data:
-            return {}
-        
-        # Get the data source type for this sheet
-        data_source_type = self._sheet_config.get('data_source', 'aggregation')
-        
-        # If already using processed_tables_data/multi, return as-is (already has correct structure)
-        if data_source_type in ['processed_tables_multi', 'processed_tables']:
-            return self.invoice_data
-        
-        # For aggregation-based sheets (Invoice, Contract), ensure they can access metadata
-        # Copy the invoice_data (shallow copy to avoid modifying original)
-        adapted_data = dict(self.invoice_data)
-        
-        # Transformation logic for aggregation-based sheets (Invoice, Contract)
-        # They need metadata (inv_no, inv_date, inv_ref) to be available in a predictable location
-        # for text replacement rules.
-        
-        # 1. Preferred: Check 'invoice_info' (New Standard)
-        # If invoice_info exists, we don't need to synthesize processed_tables_data if text rules use invoice_info.
-        # However, to be safe for legacy rules that might still look at processed_tables_data['1'], 
-        # we can synthesize it OR just return as is if we trust rules are updated.
-        # Given we updated text_replacement_rules to fallback, we can just return adapted_data 
-        if 'invoice_info' in self.invoice_data:
-             logger.debug(f"Sheet {self.sheet_name} will use top-level 'invoice_info' for metadata.")
-             return adapted_data
-
-        # 2. Legacy Fallback: processed_tables_data['1']
-        # Check if processed_tables_data exists with metadata fields
-        if 'processed_tables_data' not in self.invoice_data:
-            logger.warning(f"No processed_tables_data found for sheet {self.sheet_name}, text replacements for JFINV/JFREF/JFTIME will not work")
-            return adapted_data
-        
-        proc_tables = self.invoice_data['processed_tables_data']
-        source_table_key = table_key or '1'  # Default to table '1' for metadata
-        
-        if source_table_key not in proc_tables:
-            logger.warning(f"Table key '{source_table_key}' not found in processed_tables_data for sheet {self.sheet_name}")
-            return adapted_data
-        
-        # The structure is already correct - processed_tables_data['1'] has col_inv_no, col_inv_date, col_inv_ref
-        logger.debug(f"Sheet {self.sheet_name} (data_source={data_source_type}) will use processed_tables_data['{source_table_key}'] for metadata (col_inv_no, col_inv_date, col_inv_ref)")
-        
-        return adapted_data
+    # _adapt_invoice_data_for_sheet removed as text replacements are disabled
     
     def get_layout_bundle(self) -> Dict[str, Any]:
         """

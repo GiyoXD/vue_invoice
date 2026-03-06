@@ -6,8 +6,7 @@ from openpyxl.styles import Font, PatternFill, Border, Side, Alignment, Color
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.cell import coordinate_from_string, column_index_from_string
 
-# Reuse text replacement logic
-from ..utils.text import find_and_replace
+# Utils
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +24,6 @@ class JsonTemplateStateBuilder:
     2.  **Style Reconstruction**: Re-creates OpenPyXL style objects (Font, Border, Fill, Alignment) from their JSON representations.
     3.  **State Management**: Maintains separate states for the Header (top of sheet) and Footer (bottom of sheet).
     4.  **Restoration**: Provides methods (`restore_header_only`, `restore_template_footer`) to write this state onto a new worksheet.
-    5.  **Text Replacement**: Supports variable substitution (e.g., {{invoice_no}}) within the template text.
 
     Usage:
         layout_data = loaded_json['template_layout']['Invoice']
@@ -80,9 +78,6 @@ class JsonTemplateStateBuilder:
         
         # Column mapping for shifting
         self.column_mapping: Dict[int, int] = {}
-        
-        # Log of text replacements
-        self.replacements_log: List[Dict[str, str]] = []
 
         # Parse the JSON data immediately
         self._parse_layout_data()
@@ -528,89 +523,4 @@ class JsonTemplateStateBuilder:
                 # Overlapping merges can cause this
                 pass
 
-    def apply_text_replacements(self, replacement_rules: list, invoice_data: dict = None) -> int:
-        """Mirror of TemplateStateBuilder.apply_text_replacements"""
-        logger.info("[JsonTemplateStateBuilder] Applying Text Replacements")
-        # DEBUG INPUT
-        logger.debug(f"[JsonTemplateStateBuilder] apply_text_replacements INPUT: rules_count={len(replacement_rules) if replacement_rules else 0}")
 
-        # We can implement the exact same logic here since we have the same structure
-        changes = 0
-        
-        def process_grid(grid):
-            c = 0
-            for row in grid:
-                for cell in row:
-                    val = cell.get('value')
-                    if val and isinstance(val, str):
-                        # Simple exact/placeholder check for now
-                        # Full rule engine logic:
-                        new_val, fmt_change, term = self._apply_rules_to_cell(val, replacement_rules, invoice_data)
-                        if new_val != val:
-                            cell['value'] = new_val
-                            if fmt_change: cell['number_format'] = 'General'
-                            c += 1
-            return c
-
-        changes += process_grid(self.header_state)
-        changes += process_grid(self.footer_state)
-        
-        # DEBUG OUTPUT
-        logger.debug(f"[JsonTemplateStateBuilder] apply_text_replacements OUTPUT: changes={changes}")
-        return changes
-
-    def _apply_rules_to_cell(self, text: str, rules: list, invoice_data: dict = None) -> tuple:
-        # Simplified version of logic from TemplateStateBuilder
-        if not text: return text, False, None
-        
-        for rule in rules:
-            find_text = rule.get('find', '')
-            if not find_text: continue
-            
-            # OPTIMIZATION: Check for match FIRST before resolving data path
-            # This prevents 100s of "Failed to resolve path" logs for cells that don't even have the placeholder.
-            match_found = False
-            match_mode = rule.get('match_mode', 'substring')
-            
-            if match_mode == 'exact':
-                 if text.strip() == find_text: match_found = True
-            else:
-                 if find_text in text: match_found = True
-                 
-            if not match_found:
-                continue
-
-            # Resolve replacement ONLY if match found
-            replacement = None
-            if 'data_path' in rule and invoice_data:
-                replacement = self._resolve_path(invoice_data, rule['data_path'])
-            elif 'replace' in rule:
-                replacement = rule['replace']
-            
-            if replacement is None: continue
-            
-            # Apply replacement
-            if match_mode == 'exact':
-                return str(replacement), True, find_text
-            else:
-                return text.replace(find_text, str(replacement)), True, find_text
-                 
-        return text, False, None
-
-    def _resolve_path(self, data, path):
-        curr = data
-        try:
-            for k in path:
-                if isinstance(curr, list): 
-                    curr = curr[int(k)]
-                else: 
-                    # Use [] access to enforce key existence check
-                    curr = curr[k]
-                    
-            return curr
-        except (KeyError, IndexError, ValueError, TypeError) as e:
-            # Log warning and return None instead of crashing, as missing data (like inv_no)
-            # should not stop the generation process (User request).
-            available_keys = list(curr.keys()) if isinstance(curr, dict) else (f"List[{len(curr)}]" if isinstance(curr, list) else type(curr))
-            logger.warning(f"Failed to resolve data path '{path}': {str(e)}. Available keys at failure: {available_keys}")
-            return None
