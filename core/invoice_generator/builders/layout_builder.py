@@ -93,7 +93,14 @@ class LayoutBuilder:
         self.skip_template_header_restoration = layout_config.get('skip_template_header_restoration', False)
         self.skip_header_builder = layout_config.get('skip_header_builder', False)
         self.skip_data_table_builder = layout_config.get('skip_data_table_builder', False)
-        self.skip_footer_builder = layout_config.get('skip_footer_builder', False)
+        self.style_config = style_config or {}
+        self.context_config = context_config or {}
+        self.layout_config = layout_config or {}
+        self.template_state_builder = template_state_builder
+        self.skip_footer_builder = self.layout_config.get('skip_footer_builder', False)
+        
+        # We need this to apply padding/dimensions after build
+        self.header_info = self.layout_config.get('header_info', {})
         self.skip_template_footer_restoration = layout_config.get('skip_template_footer_restoration', False)
         
         # Data Source (Must be provided via resolved_data in layout_config)
@@ -137,10 +144,18 @@ class LayoutBuilder:
         # 2. TABLE HEADER: Column headers for data table (e.g., "Item", "Quantity", "Price") - at table_header_row
         
         # Get table_header_row from config (where the data table column headers are)
-        # For multi-table sheets, we use the ORIGINAL sheet_config header_row (from template),
-        # not the dynamic header_row that changes for each table
+        # For multi-table sheets, multi_table_processor dynamically injects the correct
+        # expected header_row into self.sheet_config['structure']['header_row'].
+        # We MUST respect this injected value over the static global sheet_layout original value.
         sheet_layout = self.all_sheet_configs.get(self.sheet_name, {}) if self.all_sheet_configs else {}
-        table_header_row = sheet_layout.get('structure', {}).get('header_row', header_row)
+        
+        # Priority 1: Injected structure.header_row from multi_table_processor
+        if self.sheet_config and 'structure' in self.sheet_config and 'header_row' in self.sheet_config['structure']:
+            table_header_row = self.sheet_config['structure']['header_row']
+        # Priority 2: Original static template header_row
+        else:
+            table_header_row = sheet_layout.get('structure', {}).get('header_row', header_row)
+            
         header_row_for_builder = table_header_row
         logger.debug(f"[LayoutBuilder DEBUG] sheet_name={self.sheet_name}, header_row={header_row}, table_header_row={table_header_row}")
         logger.debug(f"[LayoutBuilder DEBUG] all_sheet_configs keys: {list(self.all_sheet_configs.keys()) if self.all_sheet_configs else 'None'}")
@@ -568,7 +583,9 @@ class LayoutBuilder:
         # 7. Template Footer Restoration
         # This restores the static content (signatures, etc.) from the JSON template
         # that appears AFTER the dynamic table footer.
-        if self.template_state_builder:
+        skip_template_footer = self.layout_config.get('skip_template_footer_restoration', False)
+        
+        if self.template_state_builder and not skip_template_footer:
             try:
                 # Get actual column count if not already set
                 actual_num_cols = self.header_info.get('num_columns', None)

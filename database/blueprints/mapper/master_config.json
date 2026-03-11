@@ -251,8 +251,8 @@
           "col_item": {},
           "col_desc": {
             "fallback": {
-              "standard": "LEATHER",
-              "daf": "LEATHER"
+              "standard": "COW LEATHER",
+              "daf": "COW LEATHER"
             }
           },
           "col_qty_sf": {},

@@ -245,24 +245,14 @@ def prepare_data_rows(
     static_value_map: Dict[int, Any],
     DAF_mode: bool,
     custom_mode: bool = False,
+    parent_column_ids: List[str] = None
 ) -> Tuple[List[Dict[int, Any]], List[int], int]:
     """
     Prepares data rows by applying mapping rules to the data source.
     Supports both Column-Oriented (Dict of Lists) and Row-Oriented (List of Dicts) sources.
     Uses robust lookup strategies to find data even if keys don't match column IDs exactly.
     """
-    
-    # Validate description field has fallback - CRITICAL for proper invoice generation
-    desc_mapping = None
-    for field_name, mapping_rule in dynamic_mapping_rules.items():
-        if 'desc' in field_name.lower() and isinstance(mapping_rule, dict):
-            desc_mapping = mapping_rule
-            break
-    
-    if desc_mapping:
-        has_fallback = 'fallback' in desc_mapping or any(key in desc_mapping for key in ['fallback_on_none', 'fallback_on_DAF', 'fallback_on_custom'])
-        if not has_fallback:
-            logger.warning(f"Description field missing fallback configuration. Recommended: 'fallback': {{'standard': 'LEATHER', 'daf': 'LEATHER'}}.")
+    parent_column_ids = parent_column_ids or []
     
     data_rows_prepared = []
     pallet_counts_for_rows = []
@@ -338,6 +328,9 @@ def prepare_data_rows(
                 
                 target_id = source_key
                 if not target_id: continue
+                # Skip parent columns since data should only be written to leaf columns
+                if target_id in parent_column_ids: continue
+                
                 target_col_idx = column_id_map.get(target_id)
                 if not target_col_idx: continue
                 
@@ -387,6 +380,9 @@ def prepare_data_rows(
                 
                 target_id = source_key
                 if not target_id: continue
+                # Skip parent columns since data should only be written to leaf columns
+                if target_id in parent_column_ids: continue
+                
                 target_col_idx = column_id_map.get(target_id)
                 if not target_col_idx: continue
                 

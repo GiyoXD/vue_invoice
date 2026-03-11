@@ -492,9 +492,8 @@ class ExcelLayoutScanner:
                 width = worksheet.sheet_format.defaultColWidth
             # 3. Failure
             else:
-                 self.logger.error(f"Could not detect width for column {col_letter}. Please ensure it is explicitly set.")
-                 # Per user request: "if fail just increase it too 1000 px lol" -> We raise error to force fix.
-                 raise ValueError(f"Column {col_letter} ({value}) has no explicit width and no default width set in template.")
+                 self.logger.warning(f"Could not detect width for column {col_letter} ({value}). Defaulting to 15.0")
+                 width = 15.0
             
             # Check for merged cells (colspan/rowspan)
             colspan = 1
@@ -536,8 +535,43 @@ class ExcelLayoutScanner:
             
             # Check for child columns (multi-row headers)
             if rowspan == 1 and colspan > 1:
-                children = self._find_child_columns(worksheet, header_row + 1, col, colspan, mapping_config)
-                column.children = children
+                # To be a true parent, the row below MUST be split into multiple smaller columns (or cells)
+                # and at least one of those cells should have text that corresponds to a mapping.
+                # If the row below is merged across the EXACT SAME columns, it's just a wide data column.
+                is_true_parent = False
+                
+                # Check how the row below is structured within this parent's colspan
+                child_cells_with_data = 0
+                for c in range(col, col + colspan):
+                    child_cell = worksheet.cell(row=header_row + 1, column=c)
+                    
+                    # Look if this cell is the start of a merge covering the whole parent area
+                    is_full_width_merge = False
+                    for merged in worksheet.merged_cells.ranges:
+                        if merged.min_row == header_row + 1 and merged.min_col == col and merged.max_col == col + colspan - 1:
+                            is_full_width_merge = True
+                            break
+                            
+                    if is_full_width_merge:
+                        break # It's exactly the same width as the parent. Not a parent header.
+                        
+                    val = self._get_cell_value(child_cell)
+                    if val:
+                        # Check if it matches a known mapping to be safe
+                        mapped_id = self._determine_column_id(val, c, mapping_config)
+                        if mapped_id and not mapped_id.startswith("col_unknown"):
+                            # Found a valid mapped child! This is a real parent header.
+                            is_true_parent = True
+                            break
+                        child_cells_with_data += 1
+                
+                # If we found multiple independent cells with data under it, it's a parent
+                if child_cells_with_data > 1:
+                    is_true_parent = True
+                    
+                if is_true_parent:
+                    children = self._find_child_columns(worksheet, header_row + 1, col, colspan, mapping_config)
+                    column.children = children
             
             columns.append(column)
             processed_cols.add(col)

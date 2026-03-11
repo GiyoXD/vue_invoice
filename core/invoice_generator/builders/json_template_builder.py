@@ -164,15 +164,23 @@ class JsonTemplateStateBuilder:
                     if min_row < min_r: min_r = min_row
                 except: pass
                 
-            # Check row heights keys (which are string integers)
-            for r_str in footer_row_heights.keys():
-                try:
-                    r = int(r_str)
-                    if r < min_r: min_r = r
-                except: pass
-                
-            self.template_footer_start_row = min_r if min_r != float('inf') else -1
+            # Prevent overlap: The footer CANNOT start on or before the first data row
+            # The header ends at self.header_end_row. The table header is usually 
+            # somewhere above that. To be safe, the footer must start at least 
+            # 2 rows AFTER the header ends (leaving room for at least 1 data row).
+            minimum_safe_footer_row = (self.header_end_row + 2) if self.header_end_row > 0 else 1
             
+            if min_r != float('inf'):
+                # Guarantee we don't pick a row inside the header or data area
+                self.template_footer_start_row = max(min_r, minimum_safe_footer_row)
+                if min_r < minimum_safe_footer_row:
+                    logger.warning(
+                        f"[JsonTemplateStateBuilder] Detected footer marker at row {min_r}, "
+                        f"but this overlaps with header/data area. Forcing footer start to {minimum_safe_footer_row}."
+                    )
+            else:
+                self.template_footer_start_row = -1
+                
             # FALLBACK: If footer data exists but all coordinate parsing failed to find a min_r,
             # or min_r is still inf, guess footer starts after header + table gap.
             if self.template_footer_start_row == -1:

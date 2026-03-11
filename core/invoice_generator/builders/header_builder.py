@@ -152,7 +152,8 @@ class HeaderBuilderStyler:
             'column_map': column_map,
             'column_id_map': column_id_map,
             'num_columns': max_col,
-            'column_colspan': column_colspan  # Add colspan info for automatic merging
+            'column_colspan': column_colspan,  # Add colspan info for automatic merging
+            'parent_column_ids': list(parent_column_ids)
         }
     
     def _convert_bundled_columns(self, columns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

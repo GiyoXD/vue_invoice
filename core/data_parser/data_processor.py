@@ -941,7 +941,8 @@ def calculate_footer_totals(processed_data: List[Dict[str, Any]]) -> Dict[str, A
         "col_net": decimal.Decimal(0),
         "col_gross": decimal.Decimal(0),
         "col_cbm": decimal.Decimal(0),
-        "col_amount": decimal.Decimal(0)
+        "col_amount": decimal.Decimal(0),
+        "col_pallet_count": 0
     }
     
     if not processed_data:
@@ -971,6 +972,7 @@ def calculate_footer_totals(processed_data: List[Dict[str, Any]]) -> Dict[str, A
         safe_add_decimal('col_gross', row.get('col_gross'))
         safe_add_decimal('col_cbm', row.get('col_cbm'))
         safe_add_decimal('col_amount', row.get('col_amount'))
+        safe_add_int('col_pallet_count', row.get('col_pallet_count'))
 
     return totals
 

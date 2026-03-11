@@ -102,6 +102,7 @@ class TableDataAdapter:
         # Extract helper maps from header_info
         self.column_id_map = header_info.get('column_id_map', {})
         self.column_map = header_info.get('column_map', {})
+        self.parent_column_ids = header_info.get('parent_column_ids', [])
         
         # Build reverse map (index → header)
         self.idx_to_header_map = {v: k for k, v in self.column_map.items()}
@@ -136,7 +137,8 @@ class TableDataAdapter:
             num_static_labels=parsed['num_static_labels'],
             static_value_map=parsed['static_value_map'],
             DAF_mode=self.DAF_mode,
-            custom_mode=self.custom_mode
+            custom_mode=self.custom_mode,
+            parent_column_ids=self.parent_column_ids
         )
         
         logger.debug(f"[DEBUG-RESOLVE] Parsed Rules: {parsed['dynamic_mapping_rules'].keys()}")

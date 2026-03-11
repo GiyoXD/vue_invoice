@@ -221,7 +221,37 @@ class BlueprintGenerator:
         effective_prefix = custom_prefix if custom_prefix else analysis.customer_code
         if custom_prefix:
             self.logger.info(f"\n   Using custom prefix: {effective_prefix}")
-        
+            
+        # Step 1b: Validate mappings for conflicts
+        self.logger.info("\n[Step 1b] Validating mappings for conflicts...")
+        conflict_details = []
+        for sheet in analysis.sheets:
+            id_to_headers = {}
+            for col in sheet.columns:
+                # If a column has children, we shouldn't consider its own header mapping as a conflict 
+                # against its children, because it's just a grouping label (e.g. "Quantity" over "PCS" and "SF")
+                if not col.children:
+                    if col.id not in id_to_headers:
+                        id_to_headers[col.id] = set()
+                    # Store the stripped lowercase version to check for ACTUAL text differences
+                    id_to_headers[col.id].add(col.header.strip().lower())
+                
+                # Do the same for children
+                for child in col.children:
+                    if child.id not in id_to_headers:
+                        id_to_headers[child.id] = set()
+                    id_to_headers[child.id].add(child.header.strip().lower())
+                    
+            for col_id, headers in id_to_headers.items():
+                if len(headers) > 1 and not col_id.startswith("col_unknown") and col_id != "col_static":
+                    msg = f"Sheet '{sheet.name}': ID '{col_id}' is mapped to distinct headers {headers}"
+                    self.logger.error(f"❌ MAPPING CONFLICT: {msg}")
+                    conflict_details.append(msg)
+                    
+        if conflict_details:
+            details_str = " | ".join(conflict_details)
+            raise ValueError(f"Mapping conflicts detected: {details_str}. Please fix mapping_config.json or the template.")
+
         # Step 2: Build bundle config
         self.logger.info("\n[Step 2] Building blueprint config...")
         bundle = self.builder.build_config(analysis)

@@ -304,12 +304,25 @@ class MultiTableProcessor(SheetProcessor):
 
     def _restore_template_footer(self, template_state_builder, current_row, table_keys):
         """
-        Template footer restoration - DISABLED.
-        
-        Table footer content is now constructed directly by TableFooterBuilder using config/JSON templates.
-        The old approach of capturing and restoring footer from Excel templates caused issues
-        with merged cells and was redundant with the new JSON-based footer construction.
+        Template footer restoration.
+        Runs AFTER all tables and the Grand Total row are complete to place 
+        static blueprint elements (signatures, warning text) beneath everything.
         """
-        logger.debug("Template footer restoration: DISABLED (footer is now built from config/JSON)")
-        # No-op: Table footer is now handled by TableFooterBuilder, not by restore_template_footer
-
+        if template_state_builder and not self.sheet_config.get('skip_template_footer', False):
+            try:
+                # We need actual_num_cols which we can get from the last header_info
+                actual_num_cols = getattr(self, 'header_info', {}).get('num_columns', None)
+                
+                logger.info(f"--- RESTORING TEMPLATE FOOTER (Multi-Table End) ---")
+                logger.info(f"footer_start_row: {current_row}")
+                
+                template_state_builder.restore_template_footer(
+                    target_worksheet=self.output_worksheet,
+                    footer_start_row=current_row,
+                    actual_num_cols=actual_num_cols
+                )
+                logger.info("Template footer restored successfully")
+            except Exception as e:
+                logger.error(f"Failed to restore template footer: {e}", exc_info=True)
+        else:
+            logger.debug("Skipping template footer restoration (missing builder or config skip)")
