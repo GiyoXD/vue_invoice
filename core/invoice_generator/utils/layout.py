@@ -68,6 +68,51 @@ def _estimate_display_text(cell_value, number_format: str) -> str:
     return str(cell_value)
 
 
+def _header_effective_width(text: str) -> int:
+    """
+    Calculates the effective display width of a header cell by splitting
+    at breakable boundaries like '(' so the header can wrap to a narrower width.
+
+    Does NOT modify the actual cell text — only used for width calculation.
+
+    Examples:
+        "Unit price (USD)" → max(len("Unit price"), len("(USD)")) = 10
+        "Amount (USD)"     → max(len("Amount"), len("(USD)")) = 6
+        "Description"      → 11 (no split)
+
+    Args:
+        text: The header cell text.
+
+    Returns:
+        The effective character width (longest segment after splitting).
+    """
+    if not text or not isinstance(text, str):
+        return 0
+
+    # Split at existing line breaks first
+    segments = text.split('\n')
+
+    # Further split each segment at '(' boundary
+    all_parts = []
+    for segment in segments:
+        if '(' in segment:
+            # Split before '(' — e.g. "Unit price (USD)" → ["Unit price ", "(USD)"]
+            idx = segment.index('(')
+            before = segment[:idx].strip()
+            after = segment[idx:].strip()
+            if before:
+                all_parts.append(before)
+            if after:
+                all_parts.append(after)
+        else:
+            all_parts.append(segment.strip())
+
+    if not all_parts:
+        return len(text)
+
+    return max(len(part) for part in all_parts)
+
+
 def auto_fit_dimensions(
     worksheet: Worksheet,
     header_start_row: int,
@@ -76,7 +121,12 @@ def auto_fit_dimensions(
     padding: int = 5,
     line_height: float = 15.0,
     min_width: float = 8.0,
-    max_width: float = 60.0
+    max_width: float = 60.0,
+    header_row_start: int = None,
+    header_row_end: int = None,
+    template_top_end_row: int = None,
+    template_bottom_start_row: int = None,
+    max_row: int = None
 ):
     """
     Auto-fits column widths and row heights based on actual cell content.
@@ -99,6 +149,11 @@ def auto_fit_dimensions(
         line_height: Points per line for height calculation.
         min_width: Minimum column width to prevent tiny columns.
         max_width: Maximum column width to prevent absurdly wide columns.
+        header_row_start: Optional first row of the table header (for header width calc).
+        header_row_end: Optional last row of the table header (for header width calc).
+        template_top_end_row: Optional row just before the table header starts.
+        template_bottom_start_row: Optional row just after the table footer ends.
+        max_row: Optional max row in the worksheet (for scanning bottom template).
     """
     if header_start_row <= 0 or data_end_row <= 0 or num_columns <= 0:
         logger.warning(f"auto_fit_dimensions: invalid bounds (header_start={header_start_row}, data_end={data_end_row}, cols={num_columns})")
@@ -123,6 +178,49 @@ def auto_fit_dimensions(
     # Format: {col_idx: (max_len, is_text)}
     col_max_info: Dict[int, tuple] = {}
 
+    # --- Header width pass: scan header rows with smart line-breaking ---
+    if header_row_start and header_row_end and header_row_start > 0 and header_row_end >= header_row_start:
+        from openpyxl.styles import Alignment
+        logger.info(f"auto_fit_dimensions: scanning header rows {header_row_start}-{header_row_end} for width")
+        for row_idx in range(header_row_start, header_row_end + 1):
+            for col_idx in range(1, num_columns + 1):
+                cell = worksheet.cell(row=row_idx, column=col_idx)
+                if cell.value is None:
+                    continue
+                # Skip cells in multi-column merges
+                if (row_idx, col_idx) in merged_cell_coords:
+                    continue
+
+                header_text = str(cell.value)
+                
+                # Insert \n before '(' to force a clean wrap if it isn't already there
+                if '(' in header_text and '\n(' not in header_text:
+                    import re
+                    # Replace an optional space followed by '(' with '\n('
+                    new_text = re.sub(r' ?\(', '\n(', header_text, count=1)
+                    cell.value = new_text
+                    header_text = new_text
+                
+                effective_len = _header_effective_width(header_text)
+
+                current_max, current_is_text = col_max_info.get(col_idx, (0, False))
+                if effective_len > current_max:
+                    # Use is_text=False so the compact formula (max_len + padding) is used.
+                    # Headers wrap via wrap_text=True, so we don't need the inflated text multiplier.
+                    col_max_info[col_idx] = (effective_len, False)
+
+                # Enable wrap_text so Excel wraps at the narrower width
+                existing_alignment = cell.alignment
+                cell.alignment = Alignment(
+                    horizontal=existing_alignment.horizontal,
+                    vertical=existing_alignment.vertical,
+                    text_rotation=existing_alignment.text_rotation,
+                    indent=existing_alignment.indent,
+                    shrink_to_fit=existing_alignment.shrink_to_fit,
+                    wrap_text=True
+                )
+
+    # --- Data width pass: scan data rows normally ---
     for row_idx in range(header_start_row, data_end_row + 1):
         max_lines_in_row = 1  # At least 1 line per row
 
@@ -168,6 +266,53 @@ def auto_fit_dimensions(
             computed_height = max_lines_in_row * line_height
             worksheet.row_dimensions[row_idx].height = computed_height
             logger.debug(f"auto_fit row {row_idx}: height={computed_height} ({max_lines_in_row} lines)")
+
+    # --- Template Last Column Width Pass ---
+    # Scan template rows (top and bottom) for the last column only to prevent text spill
+    last_col_idx = num_columns
+    
+    def scan_template_rows_for_last_col(start_r, end_r):
+        if not (start_r > 0 and end_r >= start_r):
+            return
+            
+        # Build a set of rows where the last column is part of a horizontal merge
+        merged_last_col_rows = set()
+        for merged_range in worksheet.merged_cells.ranges:
+            # If the merge spans multiple columns AND includes the last column
+            if merged_range.max_col > merged_range.min_col:
+                if merged_range.min_col <= last_col_idx <= merged_range.max_col:
+                    for row in range(merged_range.min_row, merged_range.max_row + 1):
+                        merged_last_col_rows.add(row)
+
+        logger.info(f"auto_fit_dimensions: scanning template rows {start_r}-{end_r} in column {last_col_idx} for spillover")
+        for r_idx in range(start_r, end_r + 1):
+            # Skip if this row's last column is part of any horizontal merge
+            if r_idx in merged_last_col_rows:
+                continue
+                
+            cell = worksheet.cell(row=r_idx, column=last_col_idx)
+            if cell.value is None:
+                continue
+                
+            cell_value = cell.value
+            is_text = isinstance(cell_value, str)
+            text = _estimate_display_text(cell_value, cell.number_format)
+            
+            lines = text.split('\n')
+            longest_line_len = max(len(line) for line in lines) if lines else 0
+            
+            if longest_line_len > 0:
+                logger.info(f"auto_fit_dimensions: LAST COL (r={r_idx}, c={last_col_idx}) found UNMERGED text of len {longest_line_len}: {repr(text)}")
+            
+            current_max, current_is_text = col_max_info.get(last_col_idx, (0, False))
+            if longest_line_len > current_max:
+                col_max_info[last_col_idx] = (longest_line_len, is_text)
+
+    if template_top_end_row and template_top_end_row >= 1:
+        scan_template_rows_for_last_col(1, template_top_end_row)
+        
+    if template_bottom_start_row and max_row and max_row >= template_bottom_start_row:
+        scan_template_rows_for_last_col(template_bottom_start_row, max_row)
 
     # Apply column widths — text gets 1.2x multiplier (wider font chars), numbers stay 1:1
     for col_idx, (max_len, is_text) in col_max_info.items():

@@ -565,7 +565,15 @@ class LayoutBuilder:
         _af_header_start = self.header_info.get('second_row_index', 1) + 1
         _af_data_end = self.next_row_after_footer - 1
         _af_num_cols = self.header_info.get('num_columns', 0)
-        logger.info(f"auto_fit_dimensions CALL: header_start={_af_header_start}, data_end={_af_data_end}, num_columns={_af_num_cols}")
+        _af_header_row_start = self.header_info.get('first_row_index', None)
+        _af_header_row_end = self.header_info.get('second_row_index', None)
+        
+        # Calculate template boundaries for last-column scanning
+        _af_template_top_end = _af_header_row_start - 1 if _af_header_row_start else None
+        _af_template_bottom_start = self.next_row_after_footer
+        _af_max_row = self.worksheet.max_row
+        
+        logger.info(f"auto_fit_dimensions CALL: header_start={_af_header_start}, data_end={_af_data_end}, num_columns={_af_num_cols}, header_rows={_af_header_row_start}-{_af_header_row_end}, template_top_end={_af_template_top_end}, template_bottom_start={_af_template_bottom_start}, max_row={_af_max_row}")
         try:
             auto_fit_dimensions(
                 worksheet=self.worksheet,
@@ -573,7 +581,12 @@ class LayoutBuilder:
                 data_end_row=_af_data_end,
                 num_columns=_af_num_cols,
                 padding=7,
-                line_height=20.0
+                line_height=20.0,
+                header_row_start=_af_header_row_start,
+                header_row_end=_af_header_row_end,
+                template_top_end_row=_af_template_top_end,
+                template_bottom_start_row=_af_template_bottom_start,
+                max_row=_af_max_row
             )
         except Exception as e:
             logger.error(f"auto_fit_dimensions FAILED: {e}", exc_info=True)
