@@ -420,16 +420,36 @@ def _deep_copy_worksheet(source_ws, target_ws):
     target_ws.sheet_state = source_ws.sheet_state
 
 
+def _get_mode_suffix(ctx: GeneratorContext) -> str:
+    """
+    Returns a filename suffix based on the active generation mode.
+    
+    Returns:
+        ' DAF' if daf_mode is active,
+        ' Custom' if custom_mode is active,
+        '' for standard mode.
+    """
+    if ctx.daf_mode:
+        return " DAF"
+    elif ctx.custom_mode:
+        return " Custom"
+    return ""
+
+
 def _build_output_filename(ctx: GeneratorContext):
     """
-    Builds a dynamic output filename based on what sheets are present and the invoice ID.
+    Builds a dynamic output filename based on what sheets are present,
+    the invoice ID, and the active generation mode.
     
     Maps sheet names to abbreviations:
         - "Contract" -> "CT"
         - "Invoice"  -> "INV"
         - "Packing list" -> "PL"
     
-    Result example: "CT&INV&PL MT2-26007E.xlsx"
+    Result examples:
+        - Standard: "CT&INV&PL MT2-26007E.xlsx"
+        - Custom:   "CT&INV&PL MT2-26007E Custom.xlsx"
+        - DAF:      "CT&INV&PL MT2-26007E DAF.xlsx"
     """
     # Sheet name -> abbreviation mapping (order matters for the prefix)
     SHEET_ABBREVS = [
@@ -467,11 +487,14 @@ def _build_output_filename(ctx: GeneratorContext):
                     inv_no = str(v)
                     break
     
+    # Get mode suffix (e.g. " DAF", " Custom", or "")
+    mode_suffix = _get_mode_suffix(ctx)
+    
     # Compose filename
     if inv_no:
-        new_name = f"{prefix} {inv_no}.xlsx"
+        new_name = f"{prefix} {inv_no}{mode_suffix}.xlsx"
     else:
-        new_name = f"{prefix}.xlsx"
+        new_name = f"{prefix}{mode_suffix}.xlsx"
     
     # Sanitize: remove characters illegal in Windows filenames
     new_name = re.sub(r'[<>:"/\\|?*]', '_', new_name)
