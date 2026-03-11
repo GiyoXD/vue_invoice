@@ -504,16 +504,58 @@ def _build_output_filename(ctx: GeneratorContext):
     ctx.output_path = new_output_path
 
 
+def _count_layout_columns(ctx: GeneratorContext, sheet_name: str):
+    """
+    Count the actual number of Excel columns from the layout config's structure.columns.
+
+    Accounts for parent columns with children (e.g. col_qty_header with
+    children col_qty_pcs + col_qty_sf = 2 actual columns, not 3).
+
+    Args:
+        ctx: The generator context containing the config loader.
+        sheet_name: Name of the sheet to count columns for.
+
+    Returns:
+        int column count, or None if no layout structure is defined.
+    """
+    layout = ctx.config_loader.get_layout_config(sheet_name)
+    columns = layout.get('structure', {}).get('columns', [])
+    if not columns:
+        return None
+
+    count = 0
+    for col in columns:
+        children = col.get('children', [])
+        if children:
+            count += len(children)
+        else:
+            count += 1
+
+    logger.debug(f"[PrintArea] Layout column count for '{sheet_name}': {count}")
+    return count
+
+
 def _finalize(ctx: GeneratorContext):
     """Stage 4: Apply print settings and save."""
     logger.info("Applying Print Area & Page Setup...")
+
+    # Only apply print settings to sheets defined in the config
+    configured_sheets = set(ctx.config_loader.get_sheets_to_process())
+
     for sheet in ctx.output_workbook.sheetnames:
+        if sheet not in configured_sheets:
+            logger.info(f"Skipping print setup for unconfigured sheet '{sheet}'")
+            continue
+
         try:
             ws = ctx.output_workbook[sheet]
             if ws is None:
                 logger.warning(f"Sheet '{sheet}' is in sheetnames but returned None - skipping print setup")
                 continue
-            configure_print_area(ws)
+
+            # Use the layout config to determine the correct max column
+            max_col = _count_layout_columns(ctx, sheet)
+            configure_print_area(ws, max_col_override=max_col)
         except Exception as e:
             logger.error(f"Print setup failed for '{sheet}': {e}")
 

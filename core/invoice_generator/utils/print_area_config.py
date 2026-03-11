@@ -31,12 +31,13 @@ class PrintAreaConfig:
         self.show_grid_lines = True   # Show grid lines
         self.show_row_col_headers = True  # Show row/column headers
 
-    def configure_print_settings(self, worksheet: Worksheet) -> None:
+    def configure_print_settings(self, worksheet: Worksheet, max_col_override: int = None) -> None:
         """
         Configure all print settings for the worksheet.
 
         Args:
             worksheet: The openpyxl worksheet to configure
+            max_col_override: Optional column count from layout config to cap print area width
         """
         try:
             # Guard against None worksheet
@@ -62,7 +63,7 @@ class PrintAreaConfig:
             self._set_worksheet_view(worksheet)
 
             # Set dynamic print area
-            self._set_dynamic_print_area(worksheet)
+            self._set_dynamic_print_area(worksheet, max_col_override)
 
         except Exception as e:
             logger.error(f"Error configuring print settings for sheet {worksheet.title}: {e}")
@@ -110,13 +111,18 @@ class PrintAreaConfig:
             # Continue without failing - view settings are not critical
             pass
 
-    def _set_dynamic_print_area(self, worksheet: Worksheet) -> None:
+    def _set_dynamic_print_area(self, worksheet: Worksheet, max_col_override: int = None) -> None:
         """
         Dynamically determine and set the print area based on non-empty cells.
 
         The print area will include:
         - Columns from the first non-empty column to the last non-empty column
+          (or capped by max_col_override if provided)
         - Rows from 1 to the last row with any non-null value
+
+        Args:
+            worksheet: The worksheet to set print area for
+            max_col_override: Optional column count from layout config to cap max_col
         """
         try:
             # Find the boundaries of non-empty data
@@ -124,6 +130,11 @@ class PrintAreaConfig:
 
             if max_row is None or max_col is None:
                 return
+
+            # Use config-derived column count if provided
+            if max_col_override and max_col_override > 0:
+                max_col = max_col_override
+                logger.debug(f"Using config-derived max_col={max_col} for '{worksheet.title}'")
 
             # Convert column numbers to letters
             start_col_letter = get_column_letter(min_col)  # Already 1-based from _find_data_boundaries
@@ -202,12 +213,13 @@ class PrintAreaConfig:
         return min_row, max_row, min_col, max_col
 
 # Convenience function for quick configuration
-def configure_print_area(worksheet: Worksheet) -> None:
+def configure_print_area(worksheet: Worksheet, max_col_override: int = None) -> None:
     """
     Convenience function to quickly configure print settings for a worksheet.
 
     Args:
         worksheet: The worksheet to configure
+        max_col_override: Optional column count from layout config to cap print area width
     """
     config = PrintAreaConfig()
-    config.configure_print_settings(worksheet)
+    config.configure_print_settings(worksheet, max_col_override)
