@@ -435,11 +435,9 @@ class LayoutBuilder:
                         logger.debug(f"Template header ends at row {self.template_state_builder.header_end_row}")
                         logger.debug(f"Table header row is at: {table_header_row_num}")
                         logger.debug(f"These should NOT overlap! (template_end < table_header)")
-                        
-                        # Set column mapping if columns were filtered
-                        if column_mapping:
-                            self.template_state_builder.set_column_mapping(column_mapping)
-                            logger.info(f"Applied column mapping to template state for filtered columns")
+                        # DO NOT apply column mapping to the template header!
+                        # The user specifically requested that we do not skip anything
+                        # when capturing/restoring the template wrapper.
                         
                         self.template_state_builder.restore_header_only(
                             target_worksheet=self.worksheet,

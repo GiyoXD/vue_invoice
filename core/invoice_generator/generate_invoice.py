@@ -107,9 +107,12 @@ def run_invoice_generation(
         
         _inject_unknown_sheets(ctx)
         
+        # 4. Build dynamic output filename based on sheets & invoice_id
+        _build_output_filename(ctx)
+        
         _finalize(ctx)
 
-    return output_path
+    return ctx.output_path
 
 
 # --- Internal Pipeline Structures ---
@@ -415,6 +418,67 @@ def _deep_copy_worksheet(source_ws, target_ws):
     
     # 5. Copy sheet visibility state (visible/hidden/veryHidden)
     target_ws.sheet_state = source_ws.sheet_state
+
+
+def _build_output_filename(ctx: GeneratorContext):
+    """
+    Builds a dynamic output filename based on what sheets are present and the invoice ID.
+    
+    Maps sheet names to abbreviations:
+        - "Contract" -> "CT"
+        - "Invoice"  -> "INV"
+        - "Packing list" -> "PL"
+    
+    Result example: "CT&INV&PL MT2-26007E.xlsx"
+    """
+    # Sheet name -> abbreviation mapping (order matters for the prefix)
+    SHEET_ABBREVS = [
+        ("Contract",     "CT"),
+        ("Invoice",      "INV"),
+        ("Packing list", "PL"),
+    ]
+    
+    # Build prefix from sheets present in the output workbook
+    present_abbrevs = []
+    for sheet_name, abbrev in SHEET_ABBREVS:
+        if sheet_name in ctx.output_workbook.sheetnames:
+            present_abbrevs.append(abbrev)
+    
+    if not present_abbrevs:
+        logger.warning("[Filename] No recognizable sheets found. Using default filename.")
+        return
+    
+    prefix = "&".join(present_abbrevs)
+    
+    # Extract invoice_id from invoice_data
+    inv_no = ""
+    if 'invoice_info' in ctx.invoice_data:
+        inv_no = ctx.invoice_data['invoice_info'].get('col_inv_no', "") or \
+                 ctx.invoice_data['invoice_info'].get('inv_no', "")
+    
+    if not inv_no:
+        # Fallback: try processed_tables_multi
+        tables = ctx.invoice_data.get('processed_tables_multi', {})
+        table_1 = tables.get('1', {})
+        vals = table_1.get('col_inv_no', [])
+        if isinstance(vals, list):
+            for v in vals:
+                if v:
+                    inv_no = str(v)
+                    break
+    
+    # Compose filename
+    if inv_no:
+        new_name = f"{prefix} {inv_no}.xlsx"
+    else:
+        new_name = f"{prefix}.xlsx"
+    
+    # Sanitize: remove characters illegal in Windows filenames
+    new_name = re.sub(r'[<>:"/\\|?*]', '_', new_name)
+    
+    new_output_path = ctx.output_path.parent / new_name
+    logger.info(f"[Filename] Dynamic output: {new_name}")
+    ctx.output_path = new_output_path
 
 
 def _finalize(ctx: GeneratorContext):

@@ -19,6 +19,16 @@ from typing import Optional
 # Track if logging has been configured to prevent double-init
 _logging_initialized = False
 
+class SafeRotatingFileHandler(RotatingFileHandler):
+    """
+    A custom RotatingFileHandler that silently catches Windows PermissionError (WinError 32)
+    when another process or thread has the log file locked during rotation.
+    """
+    def doRollover(self):
+        try:
+            super().doRollover()
+        except PermissionError:
+            pass
 
 def setup_logging(
     log_dir: Path,
@@ -65,8 +75,8 @@ def setup_logging(
     console_handler.setFormatter(formatter)
     console_handler.setLevel(level)
     
-    # Handler 1: Rolling History Log (Keeps everything, rotates)
-    history_handler = RotatingFileHandler(
+    # Handler 1: Rolling History Log (Keeps everything, rotates safely on Windows)
+    history_handler = SafeRotatingFileHandler(
         log_file,
         mode='a',
         maxBytes=max_bytes,

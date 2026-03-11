@@ -7,7 +7,10 @@ This module is responsible for:
 3. Injecting system placeholders (JFINV, JFTIME, etc.) into specific cells.
 """
 
+import re
 import logging
+import hashlib
+import json
 from typing import Dict, Any, List, Optional, Tuple
 import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
@@ -20,18 +23,6 @@ logger = logging.getLogger(__name__)
 
 class ExcelTemplateSanitizer:
     """Cleans (sanitizes) raw Excel files to create reusable templates."""
-    
-    # Text to Placeholder mappings
-    # If a cell contains valid data that looks like metadata, we replace it with these placeholders
-    PLACEHOLDERS = {
-        "invoice no": "JFINV",
-        "inv no": "JFINV",
-        "date": "JFTIME",
-        "date:": "JFTIME",
-        "ref": "JFREF",
-        "reference": "JFREF",
-        "invoice ref": "JFREF"
-    }
 
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
@@ -82,43 +73,59 @@ class ExcelTemplateSanitizer:
         self.logger.info(f"  Cleaning sheet: {analysis.name}")
         
         preserved_layout = {
-            "header_merges": [],
+            "header_merges": {},
             "header_row_heights": {},
             "header_content": {},
             "header_styles": {},
-            "footer_merges": [],
-            "footer_row_heights": {},
-            "footer_content": {},
-            "footer_styles": {},
+            "footer_rows": [],
+            "style_palette": {},
             "col_widths": {},
             "header_images": [],
             "footer_images": []
         }
         
+        # Local palette cache mapping hash string -> actual style dict
+        # This will be injected into preserved_layout
+        local_style_palette = {}
         
-        # Determine strict max column based on actual analysis result
-        # We only care about the columns that were detected as part of the table
+        def process_and_store_style(style_dict: Dict[str, Any]) -> str:
+            """Hashes a style dict and adds it to the palette if new. Returns the hash ID."""
+            # Sort keys so the hash is deterministic
+            style_str = json.dumps(style_dict, sort_keys=True)
+            style_hash = "style_" + hashlib.md5(style_str.encode('utf-8')).hexdigest()[:8]
+            
+            if style_hash not in local_style_palette:
+                local_style_palette[style_hash] = style_dict
+                
+            return style_hash
+        
+        
+        # Determine strict max column based on BOTH table and header content.
+        # The header area may extend wider than the table (e.g. Ref No, Date cells).
+        
+        # Step 1: Get table column boundary
+        table_cur_max = 0
         if analysis.columns:
-            # Calculate max column index used by any column (handling colspans)
-            # col_index is 1-based
-            table_cur_max = 0
             for col in analysis.columns:
                 end_col = col.col_index + (col.colspan - 1)
                 if end_col > table_cur_max:
                     table_cur_max = end_col
+        
+        # Step 2: Pre-scan header rows to find actual rightmost content column
+        # Capped at 25 to prevent runaway from phantom-formatted cells
+        header_max_col = 0
+        if analysis.header_row > 1:
+            for row in ws.iter_rows(min_row=1, max_row=analysis.header_row - 1,
+                                    min_col=1, max_col=25):
+                for cell in row:
+                    if cell.value is not None and cell.column > header_max_col:
+                        header_max_col = cell.column
+        
+        # Step 3: Combine — use the wider of table vs header, +1 buffer, hard cap at 25
+        dynamic_limit = max(table_cur_max, header_max_col) + 1
+        safe_max_column = min(ws.max_column, 25, dynamic_limit)
             
-            # Add small buffer +1 just in case, but cap at 25 globally
-            # If table is 5 cols, we scan 6. If table is 30 cols (unlikely), we scan 25?
-            # Actually, if table is 30 cols, we SHOULD scan 30.
-            # But earlier we found "max scanning" at 25 in Scanner. So analysis won't return > 26 cols anyway.
-            # So this is safe.
-            dynamic_limit = table_cur_max + 1
-            safe_max_column = min(ws.max_column, 25, dynamic_limit)
-        else:
-            # Fallback if no columns found (shouldn't happen for valid sheets)
-            safe_max_column = min(ws.max_column, 25)
-            
-        self.logger.info(f"    Dynamic Column Scan Limit: {safe_max_column} (Table Max: {table_cur_max if analysis.columns else '?'})")
+        self.logger.info(f"    Dynamic Column Scan Limit: {safe_max_column} (Table Max: {table_cur_max}, Header Max: {header_max_col})")
         
         
         # --- CAPTURE GLOBAL LAYOUT (Column Widths) ---
@@ -139,7 +146,12 @@ class ExcelTemplateSanitizer:
         for merged_range in ws.merged_cells:
             if merged_range.max_row < analysis.header_row:
                  range_str = str(merged_range)
-                 preserved_layout["header_merges"].append(range_str)
+                 # Extract value from top-left cell to act as key
+                 top_left_cell = ws.cell(row=merged_range.min_row, column=merged_range.min_col)
+                 val = str(top_left_cell.value) if top_left_cell.value is not None else ""
+                 # Clean up newlines for cleaner JSON
+                 val_clean = val.replace('\n', ' ').strip()
+                 preserved_layout["header_merges"][range_str] = val_clean
                  
         # 2. Header Row Heights
         for r in range(1, analysis.header_row):
@@ -158,7 +170,12 @@ class ExcelTemplateSanitizer:
                     
                     # Content
                     if not is_empty:
-                         preserved_layout["header_content"][coord] = str(cell.value)
+                         val_str = str(cell.value)
+                         # Strip external workbook refs [N] from formulas
+                         # Excel converts =DeepSheet!B1 to =[1]DeepSheet!B1 when the sheet doesn't exist
+                         if val_str.startswith('='):
+                             val_str = re.sub(r'\[\d+\]', '', val_str)
+                         preserved_layout["header_content"][coord] = val_str
                     
                     # Style - skip empty cells with default dimensions
                     if is_empty and not self._should_record_empty_cell(ws, cell.row, cell.column):
@@ -166,7 +183,10 @@ class ExcelTemplateSanitizer:
                         
                     style_data = self._capture_cell_style(cell, is_empty=is_empty)
                     if style_data:
-                        preserved_layout["header_styles"][coord] = style_data
+                        style_id = process_and_store_style(style_data)
+                        if style_id not in preserved_layout["header_styles"]:
+                            preserved_layout["header_styles"][style_id] = []
+                        preserved_layout["header_styles"][style_id].append(coord)
         
         # 1. Find Footer (Total Row) FIRST, before messing with indices?
         # Actually indices are stable if we haven't deleted yet.
@@ -225,51 +245,74 @@ class ExcelTemplateSanitizer:
                     footer_merges_to_restore.append((m_min_row, m_min_col, m_max_row, m_max_col))
                     ws.unmerge_cells(str(merged_range))
 
-            # Case C: Capture Row Heights & Content for Footer (strictly below deletion zone)
+            # Case C: Capture Row Heights, Content, Styles, and Merges as Row Objects
             footer_heights_to_restore = []
-            footer_content_dist = {} # Stores { "A25": "Value" } using SHIFTED coordinates
-            footer_styles_dist = {} # Stores { "A25": {style_dict} }
+            footer_rows = []
             
-            # Use max_row from before deletion
             current_max_row = ws.max_row
-
             
             for r in range(end_delete + 1, current_max_row + 1):
+                rel_r = r - (end_delete + 1) # 0-indexed relative to footer block start
+                row_dict = {
+                    "relative_index": rel_r,
+                    "height": None,
+                    "merges": [],
+                    "cells": []
+                }
+                
                 # 1. Capture Height
                 if r in ws.row_dimensions:
                     h = ws.row_dimensions[r].height
                     if h is not None:
+                        row_dict["height"] = h
                         footer_heights_to_restore.append((r, h))
                         
-            # 2. Capture Content & Styles
-            # Use iter_rows for speed
-            if (current_max_row >= end_delete + 1):
-                for row_cells in ws.iter_rows(min_row=end_delete + 1, max_row=current_max_row, min_col=1, max_col=safe_max_column):
-                    for cell in row_cells:
-                        r = cell.row
-                        c = cell.column
+                # 2. Capture Merges specifically starting on this row
+                for (old_min_r, min_c, old_max_r, max_c) in footer_merges_to_restore:
+                    if old_min_r == r:
+                        # Find the top-left cell value if any (mimicking old logic)
+                        top_left_cell = ws.cell(row=r, column=min_c)
+                        val = str(top_left_cell.value) if top_left_cell.value is not None else ""
+                        val_clean = val.replace('\n', ' ').strip()
                         
-                        shifted_r = r - rows_to_delete
-                        if shifted_r < 1: continue 
+                        row_dict["merges"].append({
+                            "min_col": min_c,
+                            "max_col": max_c,
+                            "row_span": old_max_r - old_min_r + 1,
+                            "value": val_clean
+                        })
                         
-
-                        new_coord = f"{get_column_letter(c)}{shifted_r}"
-                        is_empty = (cell.value is None)
+                # 3. Capture Content & Styles
+                has_content_or_style = False
+                for c in range(1, safe_max_column + 1):
+                    cell = ws.cell(row=r, column=c)
+                    is_empty = (cell.value is None)
+                    
+                    if is_empty and not self._should_record_empty_cell(ws, r, c):
+                        continue
                         
-                        if not is_empty:
-                                footer_content_dist[new_coord] = str(cell.value)
+                    cell_dict = {"col_index": c}
+                    has_content_or_style = True
+                    
+                    if not is_empty:
+                        val_str = str(cell.value)
+                        # Strip external workbook refs [N] from formulas
+                        if val_str.startswith('='):
+                            val_str = re.sub(r'\[\d+\]', '', val_str)
+                        cell_dict["value"] = val_str
                         
-                        # Style - skip empty cells with default dimensions
-                        if is_empty and not self._should_record_empty_cell(ws, r, c):
-                            continue
-                            
-                        style_data = self._capture_cell_style(cell, is_empty=is_empty)
-                        if style_data:
-                            footer_styles_dist[new_coord] = style_data
+                    style_data = self._capture_cell_style(cell, is_empty=is_empty)
+                    if style_data:
+                        style_id = process_and_store_style(style_data)
+                        cell_dict["style_id"] = style_id
                         
-            # Save captured content to metadata immediately (calculated for post-shift)
-            preserved_layout["footer_content"] = footer_content_dist
-            preserved_layout["footer_styles"] = footer_styles_dist
+                    row_dict["cells"].append(cell_dict)
+                    
+                # Store the row if it bears ANY layout information
+                if row_dict["height"] is not None or row_dict["merges"] or has_content_or_style:
+                    footer_rows.append(row_dict)
+                    
+            preserved_layout["footer_rows"] = footer_rows
 
             # --- DELETION ---
             ws.delete_rows(start_delete, amount=rows_to_delete)
@@ -287,11 +330,7 @@ class ExcelTemplateSanitizer:
                 self.logger.info(f"    Restoring footer merge at rows {new_min_r}-{new_max_r} (was {old_min_r}-{old_max_r})")
                 ws.merge_cells(start_row=new_min_r, start_column=min_c, end_row=new_max_r, end_column=max_c)
                 
-                # Save to metadata (using openpyxl range string format, e.g. "A40:G40")
-                # We need to construct the range string manually or use helper
-
-                range_str = f"{get_column_letter(min_c)}{new_min_r}:{get_column_letter(max_c)}{new_max_r}"
-                preserved_layout["footer_merges"].append(range_str)
+                # (Value extraction now happens in the row loop above)
 
             # --- RESTORE FOOTER ROW HEIGHTS ---
             for (old_r, height) in footer_heights_to_restore:
@@ -300,86 +339,16 @@ class ExcelTemplateSanitizer:
                 
                 # self.logger.info(f"    Restoring footer row height {height} at row {new_r} (was {old_r})")
                 ws.row_dimensions[new_r].height = height
-                preserved_layout["footer_row_heights"][str(new_r)] = height
 
         else:
             self.logger.warning("    Row calculation result <= 0? Check header/footer detection.")
-            
-        # 4. Inject Placeholders in Metadata Area (Above Header)
-        # Scan cells above header_row for metadata labels
-        self._inject_placeholders(ws, analysis.header_row)
+        
+        # Inject the final populated palette back into the layout
+        preserved_layout["style_palette"] = local_style_palette
         
         return preserved_layout
 
-    def _inject_placeholders(self, ws: Worksheet, header_row: int):
-        """Scan area above header for metadata labels and inject placeholders next to them."""
-        # Limit scan to reasonable header area
-        scan_rows = header_row - 1
-        if scan_rows < 1: return
-        
-        # Track cells we've already injected into to prevent duplicates
-        injected_cells = set()
-        
-        for row in range(1, scan_rows + 1):
-            for col in range(1, 15): # Scan first 15 columns
-                cell = ws.cell(row=row, column=col)
-                value = self._get_cell_value(cell)
-                
-                if value:
-                    # Skip if this cell already has a JF placeholder
-                    if value.upper().startswith("JF"):
-                        continue
-                    
-                    val_lower = value.lower().strip()
-                    # Keep original for some checks, clean version for others
-                    val_clean = val_lower.rstrip(':').rstrip('.').strip()
-                    # Also normalize spaces and dots for matching
-                    val_normalized = val_clean.replace('.', ' ').replace('  ', ' ')
 
-                    # Fuzzy / Key matching
-                    placeholder = None
-                    
-                    # INVOICE NO detection
-                    if "invoice no" in val_normalized or "inv no" in val_normalized or val_normalized == "inv":
-                        placeholder = "JFINV"
-                    
-                    # DATE detection (but avoid long strings like "Shipping Date")
-                    elif "date" in val_clean and len(val_clean) < 15:
-                        placeholder = "JFTIME"
-                    
-                    # REF NO detection - RESTRICTIVE matching
-                    # Only match SHORT labels that look like "Ref No:", "Ref.", etc.
-                    # Max length 15 chars to avoid matching addresses or long text
-                    elif len(val_clean) < 15 and (
-                        any(pattern in val_normalized for pattern in ["ref no", "ref num"]) or  # "Ref No", "Ref. No"
-                        val_normalized in ["ref", "reference"] or  # Exact match "Ref" or "Reference"
-                        (val_clean.endswith("ref") and len(val_clean) < 10) or  # "Cust Ref", "Inv Ref"
-                        ("ref" in val_clean and ("inv" in val_clean or "cust" in val_clean))  # "Inv Ref No"
-                    ):
-                        placeholder = "JFREF"
-                    
-                    if placeholder:
-                        # Look for value in next cell (right)
-                        target_cell = None
-                        
-                        # Try immediate right
-                        c1 = ws.cell(row=row, column=col + 1)
-                        if not isinstance(c1, MergedCell):
-                            target_cell = c1
-                        
-                        if target_cell:
-                            # Skip if we've already injected here
-                            if target_cell.coordinate in injected_cells:
-                                continue
-                            
-                            # Skip if target already has a JF placeholder
-                            target_value = self._get_cell_value(target_cell)
-                            if target_value and target_value.upper().startswith("JF"):
-                                continue
-                            
-                            self.logger.info(f"    Found metadata label '{value}' at {cell.coordinate}. Injecting {placeholder} at {target_cell.coordinate}")
-                            target_cell.value = placeholder
-                            injected_cells.add(target_cell.coordinate)
 
     def _find_footer_start(self, ws: Worksheet, search_start_row: int, analysis: Optional[SheetAnalysis] = None) -> Optional[int]:
         """
@@ -471,8 +440,19 @@ class ExcelTemplateSanitizer:
         return False
 
     def _get_cell_value(self, cell) -> Optional[str]:
+        # If the cell is a part of a merged range, its value might be stored in the top-left cell.
+        # openpyxl represents non-top-left cells as MergedCell which usually have .value == None
         if isinstance(cell, MergedCell) or cell.value is None:
+            # We must check if this cell belongs to any merged range to pull the text from the anchor
+            ws = cell.parent
+            for merged_range in ws.merged_cells.ranges:
+                if cell.coordinate in merged_range:
+                    # Get the top-left cell of the merged range
+                    top_left_cell = ws.cell(row=merged_range.min_row, column=merged_range.min_col)
+                    if top_left_cell.value is not None:
+                        return str(top_left_cell.value)
             return None
+            
         return str(cell.value)
 
     def _should_record_empty_cell(self, ws: Worksheet, row: int, col: int) -> bool:

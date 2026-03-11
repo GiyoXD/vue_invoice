@@ -15,7 +15,10 @@ export default {
                         <div v-for="t in templates" :key="t.name" 
                              class="history-item" :class="{ active: selectedTemplateName === t.name }"
                              @click="loadTemplate(t)">
-                            <div class="h-date">{{ t.name }}</div>
+                            <div class="h-date">
+                                {{ t.name }}
+                                <span v-if="t.bundle_name && t.name !== t.bundle_name" style="font-size: 0.8em; color: #64748b; font-weight: normal;">({{ t.bundle_name }})</span>
+                            </div>
                             <div class="h-file" style="font-size: 0.75rem; color: #64748b;">Source: {{ t.source_file }}</div>
                             <div class="h-stats">Updated: {{ formatTime(t.modified) }}</div>
                         </div>
@@ -114,8 +117,13 @@ export default {
 
         const loadTemplate = async (t) => {
             selectedTemplateName.value = t.name;
+            currentTemplate.value = null; // Clear immediately to prevent showing old data while loading
             try {
-                const res = await fetch(`/api/template/view?name=${encodeURIComponent(t.name)}`);
+                const url = t.bundle_name 
+                    ? `/api/template/view?name=${encodeURIComponent(t.name)}&bundle=${encodeURIComponent(t.bundle_name)}&_t=${Date.now()}`
+                    : `/api/template/view?name=${encodeURIComponent(t.name)}&_t=${Date.now()}`;
+                    
+                const res = await fetch(url);
                 if (res.ok) {
                     currentTemplate.value = await res.json();
                     // Default to first sheet
@@ -129,11 +137,20 @@ export default {
 
         const deleteTemplate = async () => {
             if (!selectedTemplateName.value) return;
-            if (!confirm(`Are you sure you want to permanently delete the template '${selectedTemplateName.value}'?`)) {
+            
+            // Find the full template object to get the bundle_name
+            const t = templates.value.find(tmpl => tmpl.name === selectedTemplateName.value);
+            const bundleName = t?.bundle_name || selectedTemplateName.value;
+            
+            if (!confirm(`WARNING: Are you sure you want to permanently delete the ENTIRE template bundle for '${bundleName}'?\n\nThis will delete all variants (Base, KH, VN, etc) and configuration files within the bundle folder.`)) {
                 return;
             }
             try {
-                const res = await fetch(`/api/template/${encodeURIComponent(selectedTemplateName.value)}`, {
+                const url = t?.bundle_name
+                    ? `/api/template/${encodeURIComponent(selectedTemplateName.value)}?bundle=${encodeURIComponent(t.bundle_name)}`
+                    : `/api/template/${encodeURIComponent(selectedTemplateName.value)}`;
+                    
+                const res = await fetch(url, {
                     method: 'DELETE'
                 });
                 if (res.ok) {
@@ -141,7 +158,7 @@ export default {
                     selectedTemplateName.value = null;
                     currentSheetName.value = null;
                     await fetchTemplates();
-                    alert(`Template deleted successfully.`);
+                    alert(`Template bundle deleted successfully.`);
                 } else {
                     const data = await res.json();
                     alert(`Failed to delete template: ${data.error || res.statusText}`);
@@ -311,7 +328,9 @@ export default {
         // Helper Time
         const formatTime = (ts) => {
             if (!ts) return '';
-            return new Date(ts).toLocaleString();
+            const d = new Date(ts);
+            const pad = (n) => String(n).padStart(2, '0');
+            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
         };
 
         onMounted(() => {

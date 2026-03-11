@@ -81,8 +81,8 @@ class DeepSheetBuilder:
 
         # --- Write row-based layout (Col A = label, Col B = value) ---
         rows = [
-            ("invoice_no", inv_no),
             ("ref_no",     ref_no),
+            ("invoice_no", inv_no),
             ("date",       inv_date),
             ("net",        net_val),
             ("gross",      gross_val),

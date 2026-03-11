@@ -184,6 +184,7 @@ class BlueprintGenerator:
         except Exception as e:
             self.logger.error(f"Failed to load workbook: {e}")
             raise e
+        
         # Step 1: Analyze template
         self.logger.info("\n[Step 1] Scanning template structure...")
         mapping_config = self._load_mapping_config()
@@ -329,6 +330,8 @@ class BlueprintGenerator:
         self.logger.info(f"   File: {config_file.name}")
         
         return config_file
+
+
 
     def _generate_clean_template(self, template_path: Path, analysis: TemplateAnalysisResult, 
                                  output_dir: Path, monitor: Optional[PipelineMonitor] = None,
