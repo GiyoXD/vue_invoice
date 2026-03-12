@@ -798,6 +798,7 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
 
         if key not in aggregation_map:
             aggregation_map[key] = {
+                'col_desc': '',
                 'col_qty_pcs': 0,
                 'col_qty_sf': decimal.Decimal(0),
                 'col_amount': decimal.Decimal(0),
@@ -806,6 +807,12 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
                 'col_gross': decimal.Decimal(0),
                 'col_cbm': decimal.Decimal(0)
             }
+
+        # Capture description from first row (all rows in same PO+Item group share desc)
+        if not aggregation_map[key]['col_desc']:
+            desc_val = row.get('col_desc')
+            if desc_val:
+                aggregation_map[key]['col_desc'] = str(desc_val).strip()
 
         # Sum sqft
         sqft_val = row.get('col_qty_sf')
@@ -862,6 +869,7 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
         result.append({
             'col_po': po,
             'col_item': item,
+            'col_desc': data['col_desc'],
             'col_qty_pcs': data['col_qty_pcs'],
             'col_qty_sf': data['col_qty_sf'],
             'col_amount': data['col_amount'],
