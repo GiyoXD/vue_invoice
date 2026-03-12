@@ -115,6 +115,23 @@ export default {
                         </label>
                     </div>
                 </div>
+
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label>Aggregation Adjustment (x)</label>
+                    <input
+                        type="number"
+                        v-model="adjustmentInput"
+                        step="any"
+                        class="input-field"
+                        placeholder="e.g. 100 or -50"
+                    />
+                    <p style="color: #94a3b8; font-size: 0.8rem; margin-top: 0.25rem;">
+                        Evenly distributed across aggregation rows (col_amount).
+                    </p>
+                    <p v-if="adjustmentError" style="color: #f87171; font-size: 0.8rem; margin-top: 0.25rem;">
+                        {{ adjustmentError }}
+                    </p>
+                </div>
                 
                 <button class="btn" @click="generateInvoice" :disabled="isGenerating || !assetStatus?.ready">
                     {{ isGenerating ? 'Generating...' : (assetStatus?.ready ? 'Generate Invoice' : 'Blueprint Required') }}
@@ -220,6 +237,9 @@ export default {
         const includeDAF = ref(false);
         const selectedVariants = ref([]);
 
+        const adjustmentInput = ref('');
+        const adjustmentError = ref('');
+
         const isGenerating = ref(false);
         const generationStatus = ref(null);
         const generationError = ref(null);
@@ -300,31 +320,76 @@ export default {
         };
 
         /**
+         * Validates the aggregation adjustment input.
+         * Returns an object with isValid flag and numeric value (or null if empty).
+         */
+        const validateAdjustment = () => {
+            const raw = adjustmentInput.value != null ? String(adjustmentInput.value).trim() : '';
+            if (raw === '') {
+                adjustmentError.value = '';
+                return { isValid: true, value: null };
+            }
+
+            // Allow leading + / - , digits, and optional decimal portion
+            const numPattern = /^[+-]?\d+(\.\d+)?$/;
+            if (!numPattern.test(raw)) {
+                adjustmentError.value = 'Please enter a valid number (e.g. 100 or -33.75).';
+                return { isValid: false, value: null };
+            }
+
+            const parsed = Number(raw);
+            if (!Number.isFinite(parsed)) {
+                adjustmentError.value = 'Please enter a valid number.';
+                return { isValid: false, value: null };
+            }
+
+            adjustmentError.value = '';
+            return { isValid: true, value: parsed };
+        };
+
+        /**
          * Triggers invoice generation with the provided metadata.
          * Handles both success and error responses.
          */
         const generateInvoice = async () => {
+            const { isValid, value: adjustmentValue } = validateAdjustment();
+            if (!isValid) {
+                generationStatus.value = null;
+                generationError.value = {
+                    message: 'Invalid aggregation adjustment. Please enter a valid number.',
+                    step: 'Validation',
+                    traceback: null
+                };
+                return;
+            }
+
             isGenerating.value = true;
             generationStatus.value = { type: 'info', message: 'Generating invoice, please wait...' };
             generationError.value = null;
             validationData.value = null;
 
             try {
+                const basePayload = {
+                    identifier: identifier.value,
+                    json_path: jsonPath.value,
+                    invoice_no: invoiceNo.value,
+                    invoice_date: invoiceDate.value,
+                    invoice_ref: invoiceRef.value,
+                    generate_standard: includeStandard.value,
+                    generate_custom: includeCustom.value,
+                    generate_daf: includeDAF.value,
+                    generate_kh: selectedVariants.value.includes('_KH'),
+                    generate_vn: selectedVariants.value.includes('_VN')
+                };
+
+                if (adjustmentValue !== null) {
+                    basePayload.aggregation_adjustment = adjustmentValue;
+                }
+
                 const response = await fetch('/api/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        identifier: identifier.value,
-                        json_path: jsonPath.value,
-                        invoice_no: invoiceNo.value,
-                        invoice_date: invoiceDate.value,
-                        invoice_ref: invoiceRef.value,
-                        generate_standard: includeStandard.value,
-                        generate_custom: includeCustom.value,
-                        generate_daf: includeDAF.value,
-                        generate_kh: selectedVariants.value.includes('_KH'),
-                        generate_vn: selectedVariants.value.includes('_VN')
-                    })
+                    body: JSON.stringify(basePayload)
                 });
 
                 const data = await response.json();
@@ -450,7 +515,9 @@ export default {
             assetStatus,
             assetConfigName,
             hasVariants,
-            selectedVariants
+            selectedVariants,
+            adjustmentInput,
+            adjustmentError
         };
     }
 };

@@ -62,6 +62,7 @@ class GenerateRequest(BaseModel):
     generate_daf: bool = False
     generate_kh: bool = False
     generate_vn: bool = False
+    aggregation_adjustment: Optional[float] = None
 
 @app.get("/api/health")
 async def health_check():
@@ -195,6 +196,21 @@ def generate_invoice(request: GenerateRequest):
         full_data["invoice_info"]["col_inv_no"] = request.invoice_no
         full_data["invoice_info"]["col_inv_date"] = request.invoice_date
         full_data["invoice_info"]["col_inv_ref"] = request.invoice_ref
+
+        # Optional aggregation adjustment (x ∈ ℝ, may be positive or negative, decimals allowed)
+        from core.invoice_generator.utils.aggregation_modifier import apply_aggregation_adjustment
+        adjustment = request.aggregation_adjustment
+        if adjustment is not None:
+            try:
+                adjustment_float = float(adjustment)
+            except (TypeError, ValueError):
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "Invalid aggregation_adjustment value."}
+                )
+
+            if adjustment_float != 0:
+                full_data = apply_aggregation_adjustment(full_data, adjustment_float)
         
         results = []
         errors = []
