@@ -439,9 +439,13 @@ class LayoutBuilder:
                         # The user specifically requested that we do not skip anything
                         # when capturing/restoring the template wrapper.
                         
+                        # Resolve generation mode for mode-dependent header values
+                        header_mode = "daf" if (self.args and hasattr(self.args, 'DAF') and self.args.DAF) else "standard"
+                        
                         self.template_state_builder.restore_header_only(
                             target_worksheet=self.worksheet,
-                            actual_num_cols=actual_num_cols
+                            actual_num_cols=actual_num_cols,
+                            mode=header_mode
                         )
                         logger.info(f"Template header restored successfully with {actual_num_cols} columns (rows 1-{self.template_state_builder.header_end_row})")
                     except Exception as e:

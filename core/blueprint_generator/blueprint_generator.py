@@ -304,6 +304,36 @@ class BlueprintGenerator:
             # SAVE SEPARATE TEMPLATE CONFIG
             template_config_file = config_dir / f"{effective_prefix}_template.json"
             
+            # [Preserve User Overrides]
+            # If an old template JSON exists, carry over any mode-dependent
+            # overrides (dict values in header_content, e.g. {"default":"X","daf":"Y"}).
+            # These are user-entered via Template Inspector and would be lost on regeneration.
+            if template_config_file.exists():
+                try:
+                    with open(template_config_file, 'r', encoding='utf-8') as f:
+                        old_data = json.load(f)
+                    old_layout = old_data.get("template_layout", {})
+                    
+                    for sheet_name, old_sheet in old_layout.items():
+                        if sheet_name not in layout_metadata:
+                            continue
+                        old_hc = old_sheet.get("header_content", {})
+                        new_hc = layout_metadata[sheet_name].get("header_content", {})
+                        
+                        for cell_addr, old_val in old_hc.items():
+                            if isinstance(old_val, dict):
+                                # This is a mode override — preserve it
+                                # Update the 'default' key with the new value if available
+                                new_plain = new_hc.get(cell_addr)
+                                if new_plain is not None and not isinstance(new_plain, dict):
+                                    old_val["default"] = new_plain
+                                new_hc[cell_addr] = old_val
+                                
+                        layout_metadata[sheet_name]["header_content"] = new_hc
+                    self.logger.info(f"   [Override Preservation] Merged user overrides from existing template.")
+                except Exception as e:
+                    self.logger.warning(f"   [Override Preservation] Could not merge old overrides: {e}")
+            
             # [Fingerprint]
             fingerprint = {
                 "source_file": template_path.name,

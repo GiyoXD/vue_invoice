@@ -411,11 +411,18 @@ class JsonTemplateStateBuilder:
     # --- Restoration Logic (Mirrors TemplateStateBuilder) ---
     # We copy this verbatim from TemplateStateBuilder to allow safe refactor later.
     
-    def restore_header_only(self, target_worksheet: Worksheet, actual_num_cols: int = None):
-        """Restores ONLY the header to a new clean worksheet."""
-        logger.info(f"[JsonTemplateStateBuilder] Restoring Header to '{target_worksheet.title}'")
-        # DEBUG INPUT
-        logger.debug(f"[JsonTemplateStateBuilder] restore_header_only INPUT: target_worksheet={target_worksheet.title}, actual_num_cols={actual_num_cols}")
+    def restore_header_only(self, target_worksheet: Worksheet, actual_num_cols: int = None, mode: str = "standard"):
+        """
+        Restores ONLY the header to a new clean worksheet.
+        
+        Args:
+            target_worksheet: The worksheet to write header content onto.
+            actual_num_cols: Optional column count to limit restoration.
+            mode: Generation mode ('standard', 'daf', 'custom'). Used to resolve
+                  mode-dependent cell values in header_content.
+        """
+        logger.info(f"[JsonTemplateStateBuilder] Restoring Header to '{target_worksheet.title}' (mode={mode})")
+        logger.debug(f"[JsonTemplateStateBuilder] restore_header_only INPUT: target_worksheet={target_worksheet.title}, actual_num_cols={actual_num_cols}, mode={mode}")
 
         template_num_cols = self.max_col
         target_num_cols = actual_num_cols if actual_num_cols else template_num_cols
@@ -433,7 +440,7 @@ class JsonTemplateStateBuilder:
                     continue # Skip removed columns (simple version of logic)
                 
                 target_cell = target_worksheet.cell(row=actual_row, column=output_col)
-                self._write_cell(target_cell, cell_info)
+                self._write_cell(target_cell, cell_info, mode=mode)
                 
         # Restore header merges
         for merge_str in self.header_merged_cells:
@@ -558,16 +565,42 @@ class JsonTemplateStateBuilder:
                 exc_info=True
             )
 
-    def _write_cell(self, cell, info):
+    @staticmethod
+    def _resolve_mode_value(raw_value, mode: str = "standard"):
+        """
+        Resolves a cell value that may be mode-dependent.
+        
+        If raw_value is a dict (e.g. {'default': 'INVOICE', 'daf': 'DAF'}),
+        picks the mode-specific key first, then falls back to 'default'.
+        If raw_value is a plain string/number, returns it as-is.
+        
+        Args:
+            raw_value: The raw value from header_content (str, number, or dict).
+            mode: The active generation mode ('standard', 'daf', 'custom').
+        
+        Returns:
+            The resolved scalar value.
+        """
+        if isinstance(raw_value, dict):
+            # Mode-specific → 'default' fallback → first available value
+            if mode in raw_value:
+                return raw_value[mode]
+            return raw_value.get('default', next(iter(raw_value.values()), None))
+        return raw_value
+
+    def _write_cell(self, cell, info, mode: str = "standard"):
         """
         Writes a single cell's state (value and styles) to an OpenPyXL cell object.
         
         Args:
             cell: The target OpenPyXL Cell object.
             info: A dictionary containing 'value', 'font', 'fill', 'border', 'alignment', 'number_format'.
+            mode: Generation mode for resolving mode-dependent values.
         """
         if info['value'] is not None:
-            cell.value = info['value']
+            resolved = self._resolve_mode_value(info['value'], mode)
+            if resolved is not None:
+                cell.value = resolved
         if info['font']: cell.font = copy.copy(info['font'])
         if info['fill']: cell.fill = copy.copy(info['fill'])
         if info['border']: cell.border = copy.copy(info['border'])

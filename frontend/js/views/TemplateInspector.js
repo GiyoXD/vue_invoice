@@ -68,15 +68,51 @@ export default {
                         </div>
                         
                         <!-- Excel Grid -->
-                        <div class="excel-grid-container" style="overflow: auto; border: 1px solid #e2e8f0; max-height: 600px;">
+                        <div class="excel-grid-container" style="overflow: auto; border: 1px solid #e2e8f0; max-height: 600px; position: relative;">
                             <div class="excel-grid" :style="gridStyle">
                                 <!-- Render Cells -->
                                 <div v-for="cell in gridCells" :key="cell.id"
                                      class="excel-cell"
                                      :style="cell.style"
-                                     :title="'[' + cell.address + '] ' + cell.content">
+                                     :title="'[' + cell.address + '] ' + cell.content"
+                                     @click="openCellEditor(cell)">
+                                     <span v-if="cell.hasOverride" style="position: absolute; top: 2px; right: 2px; width: 6px; height: 6px; border-radius: 50%; background: #3b82f6;" title="Has mode override"></span>
                                      <span v-if="cell.isFormula" style="color: blue; font-style: italic;">{{ cell.content }}</span>
                                      <span v-else>{{ cell.content }}</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Cell Override Editor Popup -->
+                        <div v-if="editingCell" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); z-index: 100; display: flex; align-items: center; justify-content: center;" @click.self="closeEditor">
+                            <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 1.25rem; min-width: 320px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+                                <h3 style="margin: 0 0 0.75rem 0; font-size: 1rem; color: #f1f5f9;">Cell {{ editingCell.address }}</h3>
+
+                                <div style="margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 0.85rem;">
+                                    <span style="color: #94a3b8;">Current (default):</span>
+                                    <span style="color: #e2e8f0; margin-left: 0.5rem;">{{ editingCell.content || '(empty)' }}</span>
+                                </div>
+
+                                <div style="margin-bottom: 0.75rem;">
+                                    <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.25rem;">DAF value override:</label>
+                                    <input type="text" v-model="editDafValue" class="input-field" placeholder="Enter DAF value..." style="width: 100%;" @keyup.enter="saveCellOverride" />
+                                </div>
+
+                                <div v-if="editingCell.currentOverrides" style="margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.2); border-radius: 4px; font-size: 0.8rem;">
+                                    <div style="color: #60a5fa; margin-bottom: 0.25rem;">Existing overrides:</div>
+                                    <div v-for="(v, k) in editingCell.currentOverrides" :key="k" style="color: #93c5fd;">
+                                        <strong>{{ k }}:</strong> {{ v }}
+                                    </div>
+                                </div>
+
+                                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
+                                    <button class="btn-small" @click="closeEditor" style="background: #475569;">Cancel</button>
+                                    <button class="btn-small" @click="saveCellOverride" :disabled="isSavingCell" style="background: #3b82f6; color: white;">
+                                        {{ isSavingCell ? 'Saving...' : 'Save DAF Override' }}
+                                    </button>
+                                </div>
+                                <div v-if="editorMessage" :style="{marginTop: '0.5rem', fontSize: '0.85rem', color: editorMessageType === 'error' ? '#ef4444' : '#22c55e'}">
+                                    {{ editorMessage }}
                                 </div>
                             </div>
                         </div>
@@ -92,6 +128,13 @@ export default {
         const currentSheetName = ref(null);
         const zoomLevel = ref(1.0);
         const showFullText = ref(false);
+
+        // Cell override editor state
+        const editingCell = ref(null);
+        const editDafValue = ref("");
+        const isSavingCell = ref(false);
+        const editorMessage = ref("");
+        const editorMessageType = ref("success");
 
         const zoomIn = () => {
             zoomLevel.value = Math.min(zoomLevel.value + 0.1, 3.0);
@@ -394,8 +437,11 @@ export default {
                     cells.push({
                         id: address,
                         address: address,
-                        content: cellContent,
-                        style: buildCellCss(r, c, cellStyle, mergeInfo),
+                        content: typeof cellContent === 'object' && cellContent !== null ? (cellContent.default || JSON.stringify(cellContent)) : (cellContent || ""),
+                        rawContent: cellContent,
+                        hasOverride: typeof cellContent === 'object' && cellContent !== null,
+                        currentOverrides: typeof cellContent === 'object' && cellContent !== null ? cellContent : null,
+                        style: { ...buildCellCss(r, c, cellStyle, mergeInfo), position: 'relative', cursor: 'pointer' },
                         isFormula: typeof cellContent === 'string' && cellContent.startsWith('=')
                     });
                 }
@@ -426,6 +472,65 @@ export default {
             return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
         };
 
+        /**
+         * Opens the cell override editor popup for the clicked cell.
+         */
+        const openCellEditor = (cell) => {
+            editingCell.value = cell;
+            // Pre-fill with existing DAF override if present
+            editDafValue.value = (cell.currentOverrides && cell.currentOverrides.daf) || "";
+            editorMessage.value = "";
+        };
+
+        const closeEditor = () => {
+            editingCell.value = null;
+            editDafValue.value = "";
+            editorMessage.value = "";
+        };
+
+        /**
+         * Saves the DAF override for the currently editing cell via PATCH /api/template/cell.
+         */
+        const saveCellOverride = async () => {
+            if (!editingCell.value || !currentSheetName.value) return;
+            isSavingCell.value = true;
+            editorMessage.value = "";
+
+            const t = templates.value.find(tmpl => tmpl.name === selectedTemplateName.value);
+            try {
+                const res = await fetch('/api/template/cell', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        template_name: selectedTemplateName.value,
+                        bundle_name: t?.bundle_name || "",
+                        sheet_name: currentSheetName.value,
+                        cell_address: editingCell.value.address,
+                        mode: "daf",
+                        value: editDafValue.value
+                    })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    editorMessage.value = "Saved!";
+                    editorMessageType.value = "success";
+                    // Reload the template to reflect changes
+                    setTimeout(async () => {
+                        closeEditor();
+                        if (t) await loadTemplate(t);
+                    }, 500);
+                } else {
+                    editorMessage.value = data.error || "Save failed";
+                    editorMessageType.value = "error";
+                }
+            } catch (e) {
+                editorMessage.value = e.message;
+                editorMessageType.value = "error";
+            } finally {
+                isSavingCell.value = false;
+            }
+        };
+
         onMounted(() => {
             fetchTemplates();
         });
@@ -449,7 +554,15 @@ export default {
             fetchTemplates,
             loadTemplate,
             deleteTemplate,
-            formatTime
+            formatTime,
+            editingCell,
+            editDafValue,
+            isSavingCell,
+            editorMessage,
+            editorMessageType,
+            openCellEditor,
+            closeEditor,
+            saveCellOverride
         };
     }
 };

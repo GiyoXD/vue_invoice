@@ -648,6 +648,81 @@ async def view_template(name: str, bundle: Optional[str] = None):
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"Failed to read template: {str(e)}"})
 
+
+class CellOverrideRequest(BaseModel):
+    """Request body for saving a mode-dependent cell override."""
+    template_name: str
+    bundle_name: str = ""
+    sheet_name: str
+    cell_address: str   # e.g. "A1"
+    mode: str           # "daf", "standard", etc.
+    value: str          # new value for this mode
+
+
+@app.patch("/api/template/cell")
+async def update_template_cell(req: CellOverrideRequest):
+    """
+    Save a mode-dependent override for a header cell.
+    
+    Converts the cell value from a plain string to a dict like:
+        {"default": "INVOICE", "daf": "DAF"}
+    If the cell is already a dict, just updates the specified mode key.
+    """
+    bundled_dir = sys_config.bundled_dir
+    safe_name = Path(req.template_name).name
+
+    # Resolve template directory (same logic as view_template)
+    if req.bundle_name:
+        template_dir = bundled_dir / Path(req.bundle_name).name
+    else:
+        template_dir = bundled_dir / safe_name
+        if not template_dir.exists() or not template_dir.is_dir():
+            if bundled_dir.exists() and bundled_dir.is_dir():
+                for b_dir in bundled_dir.iterdir():
+                    if b_dir.is_dir() and (b_dir / f"{safe_name}_template.json").exists():
+                        template_dir = b_dir
+                        break
+
+    template_path = template_dir / f"{safe_name}_template.json"
+    if not template_path.exists():
+        return JSONResponse(status_code=404, content={"error": "Template JSON not found"})
+
+    try:
+        with open(template_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Failed to read template: {str(e)}"})
+
+    # Validate sheet exists (sheets are nested under template_layout)
+    template_layout = data.get("template_layout", {})
+    if req.sheet_name not in template_layout:
+        return JSONResponse(status_code=404, content={"error": f"Sheet '{req.sheet_name}' not found in template"})
+
+    sheet_data = template_layout[req.sheet_name]
+    header_content = sheet_data.get("header_content", {})
+    current = header_content.get(req.cell_address)
+
+    # Build the mode-dependent value
+    if isinstance(current, dict):
+        # Already a mode map — update the mode key
+        current[req.mode] = req.value
+    elif current is not None:
+        # Plain string — convert to mode map with 'default' as the original
+        header_content[req.cell_address] = {"default": current, req.mode: req.value}
+    else:
+        # Cell doesn't exist yet — create with just the mode key
+        header_content[req.cell_address] = {"default": "", req.mode: req.value}
+
+    sheet_data["header_content"] = header_content
+
+    # Save back
+    try:
+        with open(template_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        return {"status": "success", "cell": req.cell_address, "value": header_content[req.cell_address]}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Failed to save template: {str(e)}"})
+
 @app.delete("/api/template/{name}")
 async def delete_template(name: str, bundle: Optional[str] = None):
     """
