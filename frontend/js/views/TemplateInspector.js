@@ -196,52 +196,178 @@ export default {
             return { row: parseInt(rowStr) - 1, col: col - 1 };
         };
 
+        /**
+         * Converts a 0-indexed column number to a column letter (e.g. 0 -> A, 25 -> Z, 26 -> AA).
+         */
+        const colToLetter = (c) => {
+            let colLetter = "";
+            let tempCol = c + 1;
+            while (tempCol > 0) {
+                let rem = (tempCol - 1) % 26;
+                colLetter = String.fromCharCode(65 + rem) + colLetter;
+                tempCol = Math.floor((tempCol - 1) / 26);
+            }
+            return colLetter;
+        };
+
+        /**
+         * Flattens the grouped style map into a per-cell lookup.
+         * Supports both new grouped format {hashId: [coords]} and legacy per-cell format {coord: styleDict}.
+         */
+        const flattenStyles = (stylesRaw, stylePalette) => {
+            const result = {};
+            for (const [key, value] of Object.entries(stylesRaw)) {
+                if (Array.isArray(value)) {
+                    // New grouped format: key = style_id, value = ["A1", "B2", ...]
+                    const resolved = stylePalette[key] || {};
+                    for (const coord of value) {
+                        result[coord] = resolved;
+                    }
+                } else if (typeof value === 'object' && value !== null) {
+                    // Legacy per-cell format: key = coord, value = style dict
+                    result[key] = value;
+                } else if (typeof value === 'string') {
+                    // Legacy per-cell with palette ref: key = coord, value = style_id string
+                    result[key] = stylePalette[value] || {};
+                }
+            }
+            return result;
+        };
+
+        /**
+         * Builds a CSS style object for a grid cell given its position, style dict, and merge info.
+         */
+        const buildCellCss = (r, c, cellStyle, mergeInfo) => {
+            return {
+                gridColumnStart: c + 1,
+                gridColumnEnd: mergeInfo ? c + 1 + mergeInfo.colspan : c + 2,
+                gridRowStart: r + 1,
+                gridRowEnd: mergeInfo ? r + 1 + mergeInfo.rowspan : r + 2,
+                border: '1px solid #cbd5e1',
+                padding: '4px',
+                fontSize: (cellStyle.font?.size || 11) + 'pt',
+                fontWeight: cellStyle.font?.bold ? 'bold' : 'normal',
+                fontFamily: cellStyle.font?.name || 'Arial',
+                textAlign: cellStyle.alignment?.horizontal || 'left',
+                verticalAlign: cellStyle.alignment?.vertical || 'bottom',
+                backgroundColor: '#fff',
+                whiteSpace: (showFullText.value || cellStyle.alignment?.wrap_text) ? 'normal' : 'nowrap',
+                overflow: showFullText.value ? 'visible' : 'hidden',
+                wordBreak: showFullText.value ? 'break-word' : 'normal',
+                color: '#000'
+            };
+        };
+
         const gridCells = computed(() => {
             if (!currentSheetData.value) return [];
 
             const sheet = currentSheetData.value;
             const content = sheet.header_content || {};
-            const styles = sheet.header_styles || {};
-            const merges = sheet.header_merges || [];
+            const stylePalette = sheet.style_palette || {};
+            const styles = flattenStyles(sheet.header_styles || {}, stylePalette);
+
+            // Normalize merges: support both dict {"A1:B2": "val"} and array ["A1:B2"]
+            const mergesRaw = sheet.header_merges || {};
+            const merges = Array.isArray(mergesRaw) ? mergesRaw : Object.keys(mergesRaw);
+
+            // --- Collect footer content into the same coordinate maps ---
+            const footerContent = {};
+            const footerStyles = {};
+            const footerMergeRanges = []; // strings like "A10:C10"
+            const footerRows = sheet.footer_rows || [];
+
+            // We place footer rows right after the last header row
+            // First determine header extent to set footer offset
+            let headerMaxRow = 0;
+            Object.keys(content).forEach(addr => {
+                const { row } = parseAddress(addr);
+                if (row > headerMaxRow) headerMaxRow = row;
+            });
+            Object.keys(styles).forEach(addr => {
+                const { row } = parseAddress(addr);
+                if (row > headerMaxRow) headerMaxRow = row;
+            });
+            merges.forEach(range => {
+                const parts = range.split(":");
+                if (parts.length === 2) {
+                    const e = parseAddress(parts[1]);
+                    if (e.row > headerMaxRow) headerMaxRow = e.row;
+                }
+            });
+
+            const footerBaseRow = headerMaxRow + 1; // 0-indexed row for first footer row
+
+            footerRows.forEach(rowDict => {
+                const relIdx = rowDict.relative_index ?? 0;
+                const absRow = footerBaseRow + relIdx; // 0-indexed
+
+                // Process cells
+                for (const cellDict of (rowDict.cells || [])) {
+                    const colIdx = cellDict.col_index; // 1-based
+                    const addr = `${colToLetter(colIdx - 1)}${absRow + 1}`;
+
+                    if (cellDict.value != null) {
+                        footerContent[addr] = String(cellDict.value);
+                    }
+                    if (cellDict.style_id) {
+                        footerStyles[addr] = stylePalette[cellDict.style_id] || {};
+                    }
+                }
+
+                // Process merges
+                for (const mDict of (rowDict.merges || [])) {
+                    const minCol = mDict.min_col; // 1-based
+                    const maxCol = mDict.max_col;
+                    const rowSpan = mDict.row_span || 1;
+                    const startAddr = `${colToLetter(minCol - 1)}${absRow + 1}`;
+                    const endAddr = `${colToLetter(maxCol - 1)}${absRow + rowSpan}`;
+                    footerMergeRanges.push(`${startAddr}:${endAddr}`);
+                }
+            });
+
+            // Merge header + footer into unified maps
+            const allContent = { ...content, ...footerContent };
+            const allStyles = { ...styles, ...footerStyles };
+            const allMerges = [...merges, ...footerMergeRanges];
 
             // Determine grid bounds
             let maxRow = 0;
             let maxCol = 0;
 
-            // Check content bounds
-            Object.keys(content).forEach(addr => {
+            Object.keys(allContent).forEach(addr => {
                 const { row, col } = parseAddress(addr);
                 if (row > maxRow) maxRow = row;
                 if (col > maxCol) maxCol = col;
             });
 
-            // Check styles bounds (styles might exist for empty cells)
-            Object.keys(styles).forEach(addr => {
+            Object.keys(allStyles).forEach(addr => {
                 const { row, col } = parseAddress(addr);
                 if (row > maxRow) maxRow = row;
                 if (col > maxCol) maxCol = col;
             });
 
-            // Also check merges bounds
-            merges.forEach(startEnd => {
-                const [start, end] = startEnd.split(":");
-                const s = parseAddress(start);
-                const e = parseAddress(end);
-                if (e.row > maxRow) maxRow = e.row;
-                if (e.col > maxCol) maxCol = e.col;
+            allMerges.forEach(range => {
+                const parts = range.split(":");
+                if (parts.length === 2) {
+                    const s = parseAddress(parts[0]);
+                    const e = parseAddress(parts[1]);
+                    if (e.row > maxRow) maxRow = e.row;
+                    if (e.col > maxCol) maxCol = e.col;
+                }
             });
 
-            // Add some padding
             maxRow += 2;
             maxCol += 2;
 
             const cells = [];
-            const occupied = new Set(); // track merged cells
+            const occupied = new Set();
 
             // Process Merges first to mark occupied
             const mergedRanges = {};
-            merges.forEach(range => {
-                const [start, end] = range.split(":");
+            allMerges.forEach(range => {
+                const parts = range.split(":");
+                if (parts.length !== 2) return;
+                const [start, end] = parts;
                 const s = parseAddress(start);
                 const e = parseAddress(end);
                 mergedRanges[start] = { rowspan: e.row - s.row + 1, colspan: e.col - s.col + 1 };
@@ -255,54 +381,21 @@ export default {
                 }
             });
 
-            // Iterate 1..maxRow, 1..maxCol
+            // Iterate grid
             for (let r = 0; r <= maxRow; r++) {
                 for (let c = 0; c <= maxCol; c++) {
                     if (occupied.has(`${r},${c}`)) continue;
 
-                    // Reconstruct Address (simple implementation for A..Z, AA..AZ not handled perfectly but okay for now)
-                    // Actually let's use a standard col converter
-                    let colLetter = "";
-                    let tempCol = c + 1;
-                    while (tempCol > 0) {
-                        let rem = (tempCol - 1) % 26;
-                        colLetter = String.fromCharCode(65 + rem) + colLetter;
-                        tempCol = Math.floor((tempCol - 1) / 26);
-                    }
-                    const address = `${colLetter}${r + 1}`;
-
-                    const cellContent = content[address] || "";
-                    const cellStyle = styles[address] || {};
+                    const address = `${colToLetter(c)}${r + 1}`;
+                    const cellContent = allContent[address] || "";
+                    const cellStyle = allStyles[address] || {};
                     const mergeInfo = mergedRanges[address];
-
-                    // Build Style Object
-                    const cssStyle = {
-                        gridColumnStart: c + 1,
-                        gridColumnEnd: mergeInfo ? c + 1 + mergeInfo.colspan : c + 2,
-                        gridRowStart: r + 1,
-                        gridRowEnd: mergeInfo ? r + 1 + mergeInfo.rowspan : r + 2,
-                        border: '1px solid #cbd5e1',
-                        padding: '4px',
-                        fontSize: (cellStyle.font?.size || 11) + 'pt',
-                        fontWeight: cellStyle.font?.bold ? 'bold' : 'normal',
-                        fontFamily: cellStyle.font?.name || 'Arial',
-                        textAlign: cellStyle.alignment?.horizontal || 'left',
-                        verticalAlign: cellStyle.alignment?.vertical || 'bottom',
-                        backgroundColor: '#fff',
-
-                        // Layout Logic
-                        whiteSpace: (showFullText.value || cellStyle.alignment?.wrap_text) ? 'normal' : 'nowrap',
-                        overflow: showFullText.value ? 'visible' : 'hidden',
-                        wordBreak: showFullText.value ? 'break-word' : 'normal',
-
-                        color: '#000'
-                    };
 
                     cells.push({
                         id: address,
                         address: address,
                         content: cellContent,
-                        style: cssStyle,
+                        style: buildCellCss(r, c, cellStyle, mergeInfo),
                         isFormula: typeof cellContent === 'string' && cellContent.startsWith('=')
                     });
                 }
