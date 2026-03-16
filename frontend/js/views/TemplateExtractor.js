@@ -108,6 +108,19 @@ export default {
                     </button>
                 </div>
                  
+                <!-- PROACTIVE WARNINGS PANEL -->
+                <div v-if="proactiveWarnings && proactiveWarnings.length > 0" class="warning-panel" style="margin-bottom: 1.5rem;">
+                    <div class="warning-header" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                        <span class="warning-icon" style="font-size: 1.25rem;">⚠️</span>
+                        <h3 style="margin: 0; color: #b45309; font-size: 1rem;">Template Structural Warnings</h3>
+                    </div>
+                    <ul style="margin: 0; padding-left: 1.5rem; color: #92400e; font-size: 0.9rem;">
+                        <li v-for="(msg, idx) in proactiveWarnings" :key="idx" style="margin-bottom: 0.5rem; line-height: 1.4;">
+                            {{ msg }}
+                        </li>
+                    </ul>
+                </div>
+
                 <div v-if="statusMessage" :class="['status-box', statusType]" style="margin-top: 1rem;">
                     {{ statusMessage }}
                 </div>
@@ -237,6 +250,7 @@ export default {
         const filePrefix = ref("");
         const userMappings = reactive({});
         const confirmedHeaders = ref([]);
+        const proactiveWarnings = ref([]); // warnings from analysis
         const bundlePath = ref("");
         const generatedPrefixes = ref([]);
 
@@ -380,10 +394,6 @@ export default {
             }
         };
 
-        /**
-         * Analyze all selected files (1 or 2).
-         * Calls /api/template/analyze once per file and collects missing headers.
-         */
         const analyzeFiles = async () => {
             if (selectedFiles.value.length === 0) return;
             isProcessing.value = true;
@@ -393,6 +403,7 @@ export default {
 
             try {
                 const headerSet = new Set();
+                const warningSet = new Set();
 
                 for (const file of selectedFiles.value) {
                     const formData = new FormData();
@@ -415,12 +426,20 @@ export default {
                     for (const h of (data.missing_headers || [])) {
                         headerSet.add(h.text);
                     }
+
+                    // Collect proactive warnings
+                    if (data.warnings && data.warnings.length > 0) {
+                        data.warnings.forEach(w => warningSet.add(w));
+                    }
                 }
 
                 allMissingHeaders.value = Array.from(headerSet);
+                proactiveWarnings.value = Array.from(warningSet);
 
                 if (allMissingHeaders.value.length > 0) {
                     statusMessage.value = "Unknown headers found.";
+                } else if (proactiveWarnings.value.length > 0) {
+                    statusMessage.value = "Template analyzed with warnings.";
                 } else {
                     statusMessage.value = "Structure looks clean!";
                 }
@@ -539,6 +558,7 @@ export default {
                 delete userMappings[prop];
             }
             confirmedHeaders.value = [];
+            proactiveWarnings.value = [];
         };
 
         return {
@@ -576,7 +596,8 @@ export default {
             switchMappingType,
             newMappingKey,
             newMappingVal,
-            addNewMapping
+            addNewMapping,
+            proactiveWarnings
         };
     }
 };

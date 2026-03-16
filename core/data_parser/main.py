@@ -727,9 +727,10 @@ def run_invoice_automation(
                     "DAF_chunk_size": DAF_CHUNK_SIZE,
                      "DAF_intra_separator": DAF_INTRA_CHUNK_SEPARATOR.encode('unicode_escape').decode('utf-8'), # Encode escapes for JSON clarity
                     "DAF_inter_separator": DAF_INTER_CHUNK_SEPARATOR.encode('unicode_escape').decode('utf-8'), # Encode escapes for JSON clarity
-                    "timestamp": datetime.datetime.now(), # Add generation timestamp
+                    "timestamp": datetime.datetime.now().isoformat(), # Add generation timestamp
                     "warnings": monitor.warnings # Surface runtime warnings to frontend
                 },
+                "price_adjustment": [], # Initialized for frontend adjustments
                 # Include processed table data (potentially large)
                  # RENAME: processed_tables_data -> multi_table
                  "multi_table": make_json_serializable(processed_tables),

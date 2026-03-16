@@ -316,6 +316,11 @@ def process_cbm_column(raw_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     for i, row in enumerate(raw_data):
         if cbm_key in row:
             value = row[cbm_key]
+            
+            # Save the raw string before calculating
+            if isinstance(value, str):
+                row['col_cbm_raw'] = value.strip()
+            
             calculated_value = _calculate_single_cbm(value, i) # Calculate volume using the helper
             row[cbm_key] = calculated_value # Replace string with Decimal or None
 
@@ -467,10 +472,27 @@ def normalize_by_pallet_anchor(
                                 else:
                                     anchor_row[col] = val_dec
 
+                                # Handle pulling up col_cbm_raw specifically
+                                raw_cbm_val = None
+                                if col == 'col_cbm' and 'col_cbm_raw' in member_row:
+                                    raw_cbm_val = member_row.get('col_cbm_raw')
+                                    if raw_cbm_val:
+                                        existing_raw = anchor_row.get('col_cbm_raw')
+                                        if existing_raw:
+                                            anchor_row['col_cbm_raw'] = f"{existing_raw} + {raw_cbm_val}"
+                                        else:
+                                            anchor_row['col_cbm_raw'] = str(raw_cbm_val)
+                                    member_row['col_cbm_raw'] = None
+
                                 # Clear the value from the filler row
                                 member_row[col] = None
                                 pull_up_count += 1
-                                moved_details.append(f"{col}={val}") # Track exact value moved
+                                
+                                # Track exact value moved for warning, use raw formula for CBM if available
+                                if col == 'col_cbm' and raw_cbm_val:
+                                    moved_details.append(f"CBM='{raw_cbm_val}'")
+                                else:
+                                    moved_details.append(f"{col}={val}")
                         except (decimal.InvalidOperation, ValueError, TypeError):
                             pass  # Can't convert — leave it
 
@@ -772,6 +794,15 @@ def aggregate_standard_by_po_item_price(
         # Update the sums
         current_sums['sqft_sum'] += sqft_dec
         current_sums['amount_sum'] += amount_dec
+        
+        # Track col_cbm_raw specifically
+        raw_cbm_val = row.get('col_cbm_raw')
+        if raw_cbm_val:
+            existing_raw = current_sums.get('col_cbm_raw')
+            if existing_raw:
+                current_sums['col_cbm_raw'] = f"{existing_raw} + {raw_cbm_val}"
+            else:
+                current_sums['col_cbm_raw'] = str(raw_cbm_val)
 
         # Store the updated dictionary back into the global map
         aggregated_results[key] = current_sums
@@ -878,6 +909,15 @@ def aggregate_custom_by_po_item(
         # Update the sums
         current_sums['sqft_sum'] += sqft_dec
         current_sums['amount_sum'] += amount_dec
+        
+        # Track col_cbm_raw specifically
+        raw_cbm_val = row.get('col_cbm_raw')
+        if raw_cbm_val:
+            existing_raw = current_sums.get('col_cbm_raw')
+            if existing_raw:
+                current_sums['col_cbm_raw'] = f"{existing_raw} + {raw_cbm_val}"
+            else:
+                current_sums['col_cbm_raw'] = str(raw_cbm_val)
 
         # Store the updated dictionary back into the global map
         aggregated_results[key] = current_sums
@@ -992,7 +1032,8 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
                 'col_pallet_count': 0,
                 'col_net': decimal.Decimal(0),
                 'col_gross': decimal.Decimal(0),
-                'col_cbm': decimal.Decimal(0)
+                'col_cbm': decimal.Decimal(0),
+                'col_cbm_raw': ''
             }
 
         # Capture description from first row (all rows in same PO+Item group share desc)
@@ -1000,6 +1041,20 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
             desc_val = row.get('col_desc')
             if desc_val:
                 aggregation_map[key]['col_desc'] = str(desc_val).strip()
+
+        # Concatenate col_cbm_raw strings
+        cbm_raw_val = row.get('col_cbm_raw')
+        if cbm_raw_val:
+            cbm_raw_str = str(cbm_raw_val).strip()
+            if cbm_raw_str:
+                existing_raw = aggregation_map[key]['col_cbm_raw']
+                if existing_raw:
+                    # Avoid duplicating the same formula "1.2*0.8*1 + 1.2*0.8*1" if they are identical
+                    # But for now, we just join them to show what was aggregated
+                    if cbm_raw_str not in str(existing_raw).split(" + "):
+                        aggregation_map[key]['col_cbm_raw'] = str(aggregation_map[key]['col_cbm_raw']) + f" + {cbm_raw_str}"
+                else:
+                    aggregation_map[key]['col_cbm_raw'] = cbm_raw_str
 
         # Sum sqft
         sqft_val = row.get('col_qty_sf')
@@ -1063,7 +1118,8 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
             'col_pallet_count': data['col_pallet_count'],
             'col_net': data['col_net'],
             'col_gross': data['col_gross'],
-            'col_cbm': data['col_cbm']
+            'col_cbm': data['col_cbm'],
+            'col_cbm_raw': data['col_cbm_raw']
         })
 
     # Sort by PO, then by Item for consistent output
@@ -1222,6 +1278,9 @@ def format_aggregation_as_list(
         # Handle both new col_ keys and potential legacy keys if any remain
         row_dict['col_qty_sf'] = values.get('col_qty_sf', values.get('sqft_sum', decimal.Decimal(0)))
         row_dict['col_amount'] = values.get('col_amount', values.get('amount_sum', decimal.Decimal(0)))
+        
+        if 'col_cbm_raw' in values:
+            row_dict['col_cbm_raw'] = values['col_cbm_raw']
         
         flattened_list.append(row_dict)
         

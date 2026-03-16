@@ -88,12 +88,14 @@ class TemplateAnalysisResult:
     file_path: str
     customer_code: str
     sheets: List[SheetAnalysis]
+    warnings: List[str] = field(default_factory=list)
 
     def to_legacy_dict(self) -> Dict[str, Any]:
         """Convert to legacy JSON format for frontend compatibility."""
         return {
             "file_path": self.file_path,
-            "sheets": [sheet.to_legacy_dict() for sheet in self.sheets]
+            "sheets": [sheet.to_legacy_dict() for sheet in self.sheets],
+            "warnings": self.warnings
         }
     
 
@@ -319,11 +321,16 @@ class ExcelLayoutScanner:
              self.logger.debug("Using pre-loaded workbook.")
         
         sheets = []
+        warnings = []
         for sheet_name in workbook.sheetnames:
             worksheet = workbook[sheet_name]
             analysis = self._analyze_sheet(worksheet, sheet_name, mapping_config)
             if analysis:
                 sheets.append(analysis)
+                # Collect proactive warnings
+                if hasattr(analysis, "_temp_warning"):
+                    warnings.append(getattr(analysis, "_temp_warning"))
+
         if not sheets:
              self.logger.warning(f"No valid sheets found in {template_path}. Ensure the file contains recognizable headers.")
              raise ValueError("No valid invoice structure detected. Please check your file content or Mapping Config.")
@@ -331,7 +338,8 @@ class ExcelLayoutScanner:
         return TemplateAnalysisResult(
             file_path=str(path.absolute()),
             customer_code=customer_code,
-            sheets=sheets
+            sheets=sheets,
+            warnings=warnings
         )
 
 
@@ -423,7 +431,7 @@ class ExcelLayoutScanner:
             if footer_info:
                 self.logger.info(f"    Footer detected at row {footer_info.row_num}: '{footer_info.total_text}' (colspan={footer_info.merge_curr_colspan})")
             
-            return SheetAnalysis(
+            sheet_analysis = SheetAnalysis(
                 name=sheet_name,
                 header_row=header_row,
                 columns=columns,
@@ -435,6 +443,20 @@ class ExcelLayoutScanner:
                 static_content_hints=static_hints,
                 footer_info=footer_info
             )
+            
+            # [Proactive Warning] Check for missing footer on financial/aggregation sheets
+            if not footer_info and data_source == "aggregation":
+                warning_msg = (
+                    f"[{sheet_name}] ⚠️ Footer (Total row) NOT detected. "
+                    f"WHAT TO DO: Ensure the sheet has a row starting with 'TOTAL' or 'TOTAL AMOUNT'. "
+                    f"If the label is different, update 'footer_scanner.py' or 'mapping_config.json'."
+                )
+                self.logger.warning(warning_msg)
+                # Note: We can't easily return it here since SheetAnalysis doesn't hold it, 
+                # we'll handle the collection in scan_template
+                setattr(sheet_analysis, "_temp_warning", warning_msg)
+
+            return sheet_analysis
             
         except Exception as e:
             self.logger.error(f"    Error analyzing {sheet_name}: {e}")

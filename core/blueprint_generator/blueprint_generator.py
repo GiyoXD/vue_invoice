@@ -216,6 +216,14 @@ class BlueprintGenerator:
 
         analysis = self.scanner.scan_template(str(template_path), mapping_config=mapping_config, workbook=wb)
         
+        # [Proactive Warning Reporting]
+        if analysis.warnings:
+            self.logger.warning("\n" + "!" * 60)
+            self.logger.warning("!!! BLUEPRINT GENERATION WARNINGS !!!")
+            for msg in analysis.warnings:
+                self.logger.warning(f"  {msg}")
+            self.logger.warning("!" * 60 + "\n")
+
         self._print_analysis_summary(analysis)
         
         # Use custom prefix if provided, otherwise use detected customer code

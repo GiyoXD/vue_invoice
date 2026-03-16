@@ -71,7 +71,7 @@ export default {
                                         <td contenteditable="true" spellcheck="false">{{ row.pcs }}</td>
                                         <td contenteditable="true" spellcheck="false">{{ row.sqft }}</td>
                                         <td contenteditable="true" spellcheck="false">{{ row.pallet_count }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.net }} / {{ row.gross }} / {{ row.cbm }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.net }} / {{ row.gross }} / {{ row.col_cbm_raw || row.cbm }}</td>
                                     </tr>
                                 </tbody>
                             </table>

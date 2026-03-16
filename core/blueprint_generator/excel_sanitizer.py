@@ -414,7 +414,7 @@ class ExcelTemplateSanitizer:
                 if value:
                     val_upper = value.upper().strip()
                     # Use exact/near-exact match to prevent picking up random sentence "Total Net Weight"
-                    if val_upper in ["TOTAL", "TOTAL:", "TOTAL OF:", "TOTAL OF", "TOTAL："] or val_upper.startswith("TOTAL OF"):
+                    if val_upper in ["TOTAL", "TOTAL:", "TOTAL OF:", "TOTAL OF", "TOTAL：", "TOTAL AMOUNT", "TOTAL AMOUNT:", "TOTAL AMOUNT："] or val_upper.startswith("TOTAL OF") or val_upper.startswith("TOTAL AMOUNT"):
                         fallback_candidate = row
                         break
             if fallback_candidate:

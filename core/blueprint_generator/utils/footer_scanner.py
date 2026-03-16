@@ -104,14 +104,14 @@ def _find_total_label_cell(worksheet: Worksheet, start_row: int, end_row: int):
     Returns:
         The cell object if found, or None.
     """
-    total_keywords = {"TOTAL", "TOTAL:", "TOTAL OF:", "TOTAL OF", "TOTAL："}
+    total_keywords = {"TOTAL", "TOTAL:", "TOTAL OF:", "TOTAL OF", "TOTAL：", "TOTAL AMOUNT", "TOTAL AMOUNT:", "TOTAL AMOUNT："}
     
     for row in range(start_row, end_row + 1):
         for col in range(1, min(worksheet.max_column + 1, 20)):
             cell = worksheet.cell(row=row, column=col)
             val = str(cell.value).strip().upper() if cell.value else ""
             
-            if val in total_keywords or val.startswith("TOTAL OF"):
+            if val in total_keywords or val.startswith("TOTAL OF") or val.startswith("TOTAL AMOUNT"):
                 return cell
     return None
 

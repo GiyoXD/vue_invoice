@@ -698,6 +698,16 @@ input[type="file"] {
     animation: fadeIn 0.4s ease-out forwards;
 }
 
+.warning-panel {
+    margin-top: 1.5rem;
+    background: rgba(234, 179, 8, 0.1);
+    border: 1px solid rgba(234, 179, 8, 0.3);
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    animation: fadeIn 0.4s ease-out forwards;
+    backdrop-filter: blur(8px);
+}
+
 .warning-header {
     display: flex;
     align-items: center;

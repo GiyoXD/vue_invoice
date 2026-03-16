@@ -14,3 +14,6 @@ invoice_ref: B2,
 invoice_date: C2
 total_net: D2,
 total_gross: E2
+
+# todo
+add safety measure for the cbm, and net weight placement, some sheet are freaky by the creator, cause the formula not working as expected

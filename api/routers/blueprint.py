@@ -19,6 +19,7 @@ class ScanResult(BaseModel):
     status: str  # "clean" or "needs_mapping"
     file_token: str # Temporary filename to reference in step 2
     unknown_headers: List[str] = []
+    warnings: List[str] = []
     preview_analysis: Optional[Dict[str, Any]] = None
 
 class GenerateRequest(BaseModel):
@@ -70,12 +71,14 @@ async def scan_template(file: UploadFile = File(...)):
                 status="needs_mapping",
                 file_token=file_token,
                 unknown_headers=unknown_headers,
+                warnings=analysis.get("warnings", []),
                 preview_analysis=analysis
             )
         else:
              return ScanResult(
                 status="clean",
                 file_token=file_token,
+                warnings=analysis.get("warnings", []),
                 preview_analysis=analysis
             )
 

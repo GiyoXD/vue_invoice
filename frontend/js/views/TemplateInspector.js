@@ -10,9 +10,14 @@ export default {
                 <!-- Sidebar: Template List -->
                 <div class="history-sidebar card">
                     <h3>Available Templates</h3>
-                    <div v-if="templates.length === 0" style="color: #94a3b8; font-size: 0.875rem;">No templates found.</div>
+                    
+                    <div style="margin-bottom: 1rem;">
+                        <input type="text" v-model="searchQuery" placeholder="Search templates..." class="input-field" style="width: 100%;" />
+                    </div>
+
+                    <div v-if="filteredTemplates.length === 0" style="color: #94a3b8; font-size: 0.875rem;">No templates found.</div>
                     <div class="history-list">
-                        <div v-for="t in templates" :key="t.name" 
+                        <div v-for="t in filteredTemplates" :key="t.name + (t.bundle_name || '') + (t.source_file || '')" 
                              class="history-item" :class="{ active: selectedTemplateName === t.name }"
                              @click="loadTemplate(t)">
                             <div class="h-date">
@@ -123,6 +128,7 @@ export default {
     `,
     setup() {
         const templates = ref([]);
+        const searchQuery = ref("");
         const selectedTemplateName = ref(null);
         const currentTemplate = ref(null);
         const currentSheetName = ref(null);
@@ -215,6 +221,22 @@ export default {
         const currentTemplateName = computed(() => selectedTemplateName.value);
         const currentTemplateFingerprint = computed(() => currentTemplate.value?.fingerprint);
         const templateLayout = computed(() => currentTemplate.value?.template_layout || {});
+
+        const filteredTemplates = computed(() => {
+            const q = (searchQuery.value || "").trim().toLowerCase();
+            if (!q) return templates.value;
+            
+            console.log(`Filtering for: "${q}"`);
+            const filtered = templates.value.filter(t => {
+                const nameMatch = (t.name || "").toLowerCase().includes(q);
+                const bundleMatch = (t.bundle_name || "").toLowerCase().includes(q);
+                if (nameMatch || bundleMatch) {
+                    console.log(`Match found: ${t.name} (Bundle: ${t.bundle_name})`);
+                }
+                return nameMatch || bundleMatch;
+            });
+            return filtered;
+        });
 
         const zoomPercentage = computed(() => Math.round(zoomLevel.value * 100));
 
@@ -537,6 +559,8 @@ export default {
 
         return {
             templates,
+            searchQuery,
+            filteredTemplates,
             selectedTemplateName,
             currentTemplate,
             currentTemplateName,

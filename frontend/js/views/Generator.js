@@ -130,19 +130,31 @@ export default {
                 </div>
 
                 <div class="form-group" style="margin-top: 1rem;">
-                    <label>Aggregation Adjustment (x)</label>
-                    <input
-                        type="number"
-                        v-model="adjustmentInput"
-                        step="any"
-                        class="input-field"
-                        placeholder="e.g. 100 or -50"
-                    />
-                    <p style="color: #94a3b8; font-size: 0.8rem; margin-top: 0.25rem;">
-                        Evenly distributed across aggregation rows (col_amount).
-                    </p>
-                    <p v-if="adjustmentError" style="color: #f87171; font-size: 0.8rem; margin-top: 0.25rem;">
+                    <label>Aggregation Adjustments</label>
+                    <div v-for="(adj, index) in priceAdjustments" :key="index" style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <input
+                            type="text"
+                            v-model="adj.description"
+                            class="input-field"
+                            placeholder="Reason (e.g. Shipping Discount)"
+                            style="flex: 2;"
+                        />
+                        <input
+                            type="number"
+                            v-model="adj.value"
+                            step="any"
+                            class="input-field"
+                            placeholder="Value"
+                            style="flex: 1;"
+                        />
+                        <button class="btn-small" @click="removeAdjustment(index)" style="width: auto; margin-top: 0; padding: 0 0.75rem;">✕</button>
+                    </div>
+                    <button class="btn-small" @click="addAdjustment" style="width: 100%; margin-top: 0.25rem;">+ Add Adjustment</button>
+                    <p v-if="adjustmentError" style="color: #f87171; font-size: 0.8rem; margin-top: 0.5rem;">
                         {{ adjustmentError }}
+                    </p>
+                    <p style="color: #94a3b8; font-size: 0.8rem; margin-top: 0.5rem;">
+                        These will be evenly distributed across aggregation rows (col_amount).
                     </p>
                 </div>
                 
@@ -250,7 +262,7 @@ export default {
         const includeDAF = ref(false);
         const selectedVariants = ref([]);
 
-        const adjustmentInput = ref('');
+        const priceAdjustments = ref([]); // List of { description: '', value: '' }
         const adjustmentError = ref('');
 
         const isGenerating = ref(false);
@@ -271,6 +283,15 @@ export default {
             validationData.value = null;
             assetStatus.value = null;
             selectedVariants.value = [];
+            priceAdjustments.value = [];
+        };
+
+        const addAdjustment = () => {
+            priceAdjustments.value.push({ description: '', value: '' });
+        };
+
+        const removeAdjustment = (index) => {
+            priceAdjustments.value.splice(index, 1);
         };
 
         /**
@@ -346,28 +367,30 @@ export default {
          * Validates the aggregation adjustment input.
          * Returns an object with isValid flag and numeric value (or null if empty).
          */
-        const validateAdjustment = () => {
-            const raw = adjustmentInput.value != null ? String(adjustmentInput.value).trim() : '';
-            if (raw === '') {
-                adjustmentError.value = '';
-                return { isValid: true, value: null };
-            }
+        const validateAdjustments = () => {
+            const validSet = [];
+            for (const adj of priceAdjustments.value) {
+                const desc = (adj.description || '').trim();
+                const valRaw = String(adj.value || '').trim();
+                
+                if (desc === '' && valRaw === '') continue; // Skip empty rows
+                
+                if (valRaw === '') {
+                    adjustmentError.value = 'Please enter a value for all adjustments.';
+                    return { isValid: false, list: [] };
+                }
 
-            // Allow leading + / - , digits, and optional decimal portion
-            const numPattern = /^[+-]?\d+(\.\d+)?$/;
-            if (!numPattern.test(raw)) {
-                adjustmentError.value = 'Please enter a valid number (e.g. 100 or -33.75).';
-                return { isValid: false, value: null };
-            }
+                const parsed = Number(valRaw);
+                if (isNaN(parsed) || !Number.isFinite(parsed)) {
+                    adjustmentError.value = `Invalid value for "${desc || 'adjustment'}".`;
+                    return { isValid: false, list: [] };
+                }
 
-            const parsed = Number(raw);
-            if (!Number.isFinite(parsed)) {
-                adjustmentError.value = 'Please enter a valid number.';
-                return { isValid: false, value: null };
+                validSet.push([desc || 'Adjustment', parsed]);
             }
 
             adjustmentError.value = '';
-            return { isValid: true, value: parsed };
+            return { isValid: true, list: validSet };
         };
 
         /**
@@ -375,11 +398,11 @@ export default {
          * Handles both success and error responses.
          */
         const generateInvoice = async () => {
-            const { isValid, value: adjustmentValue } = validateAdjustment();
+            const { isValid, list: validAdjustments } = validateAdjustments();
             if (!isValid) {
                 generationStatus.value = null;
                 generationError.value = {
-                    message: 'Invalid aggregation adjustment. Please enter a valid number.',
+                    message: adjustmentError.value,
                     step: 'Validation',
                     traceback: null
                 };
@@ -405,8 +428,8 @@ export default {
                     generate_vn: selectedVariants.value.includes('_VN')
                 };
 
-                if (adjustmentValue !== null) {
-                    basePayload.aggregation_adjustment = adjustmentValue;
+                if (validAdjustments.length > 0) {
+                    basePayload.price_adjustment = validAdjustments;
                 }
 
                 const response = await fetch('/api/generate', {
@@ -539,9 +562,11 @@ export default {
             assetConfigName,
             hasVariants,
             selectedVariants,
-            adjustmentInput,
             adjustmentError,
-            validationWarnings
+            validationWarnings,
+            priceAdjustments,
+            addAdjustment,
+            removeAdjustment
         };
     }
 };

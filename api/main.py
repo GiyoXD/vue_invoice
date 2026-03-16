@@ -1,3 +1,4 @@
+import logging
 from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import JSONResponse, FileResponse
@@ -7,7 +8,7 @@ import os
 import json
 from pathlib import Path
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Any
 import datetime
 
 # Initialize logging FIRST before any other core imports
@@ -34,6 +35,7 @@ SYSTEM_HEADERS = [
 ]
 
 app = FastAPI()
+logger = logging.getLogger(__name__)
 
 # Mount frontend
 app.mount("/frontend", StaticFiles(directory=str(sys_config.frontend_dir), html=True), name="frontend")
@@ -63,7 +65,7 @@ class GenerateRequest(BaseModel):
     generate_daf: bool = False
     generate_kh: bool = False
     generate_vn: bool = False
-    aggregation_adjustment: Optional[float] = None
+    price_adjustment: Optional[List[List[Any]]] = None
 
 @app.get("/api/health")
 async def health_check():
@@ -214,20 +216,18 @@ def generate_invoice(request: GenerateRequest):
         full_data["invoice_info"]["col_inv_date"] = request.invoice_date
         full_data["invoice_info"]["col_inv_ref"] = request.invoice_ref
 
-        # Optional aggregation adjustment (x ∈ ℝ, may be positive or negative, decimals allowed)
+        # Price adjustments (list of [description, value] pairs)
         from core.invoice_generator.utils.aggregation_modifier import apply_aggregation_adjustment
-        adjustment = request.aggregation_adjustment
-        if adjustment is not None:
-            try:
-                adjustment_float = float(adjustment)
-            except (TypeError, ValueError):
-                return JSONResponse(
-                    status_code=400,
-                    content={"error": "Invalid aggregation_adjustment value."}
-                )
-
-            if adjustment_float != 0:
-                full_data = apply_aggregation_adjustment(full_data, adjustment_float)
+        price_adj = request.price_adjustment
+        if price_adj:
+            full_data = apply_aggregation_adjustment(full_data, price_adj)
+        
+        # PERSIST: Save the updated JSON back to disk so the user can see the changes
+        try:
+            with open(json_path_obj, 'w', encoding='utf-8') as f:
+                json.dump(full_data, f, indent=4)
+        except Exception as e:
+            logger.warning(f"Failed to persist updated JSON to {json_path_obj}: {e}")
         
         results = []
         errors = []
@@ -513,6 +513,7 @@ def analyze_template(file: UploadFile = File(...)):
         
         # Use Orchestrator
         json_output = orchestrator.analyze_template(temp_path, legacy_format=True)
+        analysis_data = json.loads(json_output)
         
         # Save to analysis_output_path for get_missing_headers to read
         with open(analysis_output_path, 'w', encoding='utf-8') as f:
@@ -526,6 +527,7 @@ def analyze_template(file: UploadFile = File(...)):
             
         return {
             "missing_headers": missing_headers,
+            "warnings": analysis_data.get("warnings", []),
             "temp_filename": file.filename,
             "suggested_prefix": file.filename.split('.')[0]
         }
