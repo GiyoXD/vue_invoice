@@ -7,6 +7,7 @@ from typing import List, Dict, Tuple
 # Import the logic directly!
 from core.invoice_generator.generate_invoice import run_invoice_generation
 from core.data_parser.main import run_invoice_automation
+from core.data_parser.data_processor import DataValidationError
 from core.utils.snitch import snitch
 
 class Orchestrator:
@@ -33,6 +34,9 @@ class Orchestrator:
             )
             return json_path, identifier
 
+        except DataValidationError:
+            # User-facing validation errors pass through cleanly (no traceback wrapping)
+            raise
         except Exception as e:
             # Capture the full traceback for the UI to display
             import traceback

@@ -35,6 +35,7 @@ except ImportError:
 from .excel_handler import ExcelHandler
 from . import sheet_parser
 from . import data_processor # Includes all processing functions
+from .data_processor import DataValidationError
 
 # Use centralized logger - no basicConfig here
 # Logging is configured by core.logger_config.setup_logging() at app startup
@@ -477,6 +478,18 @@ def run_invoice_automation(
             
             header_row, column_mapping = smart_result
             
+            # --- Validate Required Columns ---
+            # col_pallet_count is required for correct distribution of net, gross, and CBM values.
+            # Without it, distribution bleeds across pallet boundaries producing silently wrong data.
+            if 'col_pallet_count' not in column_mapping:
+                err = DataValidationError(
+                    "Required column 'col_pallet_count' was not found in the worksheet headers. "
+                    "Please add a pallet count column (e.g. 'PALLET', '拖数', '件数', '托数') to the source Excel. "
+                    "This column is required for correct distribution of net weight, gross weight, and CBM values."
+                )
+                monitor.log_process_item("Header Validation", status="error", error=err)
+                raise err
+            
             # Find Additional Tables
             additional_header_rows = sheet_parser.find_all_header_rows(
                 sheet=sheet,
@@ -508,9 +521,16 @@ def run_invoice_automation(
                     # 5a. CBM
                     data_after_cbm = data_processor.process_cbm_column(current_table_data)
                     
+                    # 5a.5 Pallet-anchored normalization
+                    # Ensures net/gross/cbm sit on the same row as pallet_count.
+                    # Misplaced values are pulled up to their pallet anchor row.
+                    data_normalized = data_processor.normalize_by_pallet_anchor(
+                        data_after_cbm, cfg.COLUMNS_TO_DISTRIBUTE, cfg.DISTRIBUTION_BASIS_COLUMN, monitor=monitor
+                    )
+                    
                     # 5b. Distribute
                     try:
-                        data_after_distribution = data_processor.distribute_values(data_after_cbm, cfg.COLUMNS_TO_DISTRIBUTE, cfg.DISTRIBUTION_BASIS_COLUMN)
+                        data_after_distribution = data_processor.distribute_values(data_normalized, cfg.COLUMNS_TO_DISTRIBUTE, cfg.DISTRIBUTION_BASIS_COLUMN)
                         processed_tables.append(data_after_distribution)
                         data_for_aggregation = data_after_distribution
                     except Exception as distrib_e:
@@ -707,7 +727,8 @@ def run_invoice_automation(
                     "DAF_chunk_size": DAF_CHUNK_SIZE,
                      "DAF_intra_separator": DAF_INTRA_CHUNK_SEPARATOR.encode('unicode_escape').decode('utf-8'), # Encode escapes for JSON clarity
                     "DAF_inter_separator": DAF_INTER_CHUNK_SEPARATOR.encode('unicode_escape').decode('utf-8'), # Encode escapes for JSON clarity
-                    "timestamp": datetime.datetime.now() # Add generation timestamp
+                    "timestamp": datetime.datetime.now(), # Add generation timestamp
+                    "warnings": monitor.warnings # Surface runtime warnings to frontend
                 },
                 # Include processed table data (potentially large)
                  # RENAME: processed_tables_data -> multi_table

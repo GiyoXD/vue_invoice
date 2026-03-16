@@ -20,6 +20,19 @@ export default {
                     {{ uploadStatus.message }}
                 </div>
 
+                <!-- NORMALIZATION WARNINGS PANEL -->
+                <div v-if="validationWarnings && validationWarnings.length > 0" class="warning-panel">
+                    <div class="warning-header" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
+                        <span class="warning-icon" style="font-size: 1.25rem;">⚠️</span>
+                        <h3 style="margin: 0; color: #b45309; font-size: 1rem;">Data Auto-Correction Notices</h3>
+                    </div>
+                    <ul style="margin: 0; padding-left: 1.5rem; color: #92400e; font-size: 0.9rem;">
+                        <li v-for="(msg, idx) in validationWarnings" :key="idx" style="margin-bottom: 0.25rem;">
+                            {{ msg }}
+                        </li>
+                    </ul>
+                </div>
+
                 <!-- ERROR PANEL FOR UPLOAD -->
                 <div v-if="uploadError" class="error-panel">
                     <div class="error-header">
@@ -245,6 +258,7 @@ export default {
         const generationError = ref(null);
         const showGenTraceback = ref(false);
         const validationData = ref(null); // Validation data from generation
+        const validationWarnings = ref([]); // Validation warnings from extraction step
         const assetStatus = ref(null); // Asset availability status from upload
 
         // --- Generator Actions ---
@@ -271,6 +285,7 @@ export default {
             uploadStatus.value = { type: 'info', message: 'Uploading and processing...' };
             uploadError.value = null;
             validationData.value = null;
+            validationWarnings.value = []; // Clear previous warnings
 
             const formData = new FormData();
             formData.append('file', selectedFile.value);
@@ -294,6 +309,14 @@ export default {
                     // Auto-select all available variants
                     if (data.asset_status?.variants?.length > 0) {
                         selectedVariants.value = data.asset_status.variants.map(v => v.suffix);
+                    }
+
+                    // Store any normalization warnings
+                    if (data.warnings && data.warnings.length > 0) {
+                        validationWarnings.value = data.warnings;
+                        uploadStatus.value = { type: 'warning', message: 'File processed successfully, but with data corrections.' };
+                    } else {
+                        validationWarnings.value = [];
                     }
 
                     processingComplete.value = true;
@@ -517,7 +540,8 @@ export default {
             hasVariants,
             selectedVariants,
             adjustmentInput,
-            adjustmentError
+            adjustmentError,
+            validationWarnings
         };
     }
 };

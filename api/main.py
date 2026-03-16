@@ -17,6 +17,7 @@ setup_logging(log_dir=sys_config.run_log_dir)
 
 # Import core orchestrator
 from core.orchestrator import Orchestrator
+from core.data_parser.data_processor import DataValidationError
 import subprocess
 import sys
 
@@ -131,6 +132,15 @@ def upload_excel(file: UploadFile = File(...)):
                 f"Expected: bundled/{prefix}/ folder with {prefix}_config.json and {prefix}.xlsx"
             )
         
+        # --- Read warnings from generated JSON ---
+        warnings_list = []
+        try:
+            with open(json_path, 'r', encoding='utf-8') as f:
+                parsed_data = json.load(f)
+                warnings_list = parsed_data.get('metadata', {}).get('warnings', [])
+        except Exception as e:
+            logger.warning(f"Could not read warnings from JSON output: {e}")
+
         # Add variant info
         if variants:
             asset_status["variants"] = [
@@ -148,9 +158,16 @@ def upload_excel(file: UploadFile = File(...)):
             "identifier": identifier,
             "json_path": str(json_path),
             "default_inv_no": default_inv_no,
+            "warnings": warnings_list,
             "asset_status": asset_status,
             "message": "File processed successfully"
         }
+    except DataValidationError as ve:
+        # User-facing validation errors get a clean response (no traceback noise)
+        return JSONResponse(status_code=422, content={
+            "error": str(ve),
+            "step": "Data Validation"
+        })
     except Exception as e:
         import traceback
         return JSONResponse(status_code=500, content={

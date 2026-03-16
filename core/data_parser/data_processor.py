@@ -164,6 +164,15 @@ class ProcessingError(Exception):
     """Custom exception for data processing errors."""
     pass
 
+
+class DataValidationError(Exception):
+    """User-facing validation error for missing required data.
+    
+    This exception is caught separately in the API layer to return
+    a clean, human-readable error message without traceback noise.
+    """
+    pass
+
 def _convert_to_decimal(value: Any, context: str = "") -> Optional[decimal.Decimal]:
     """Safely convert a value to Decimal, logging errors.
     
@@ -312,6 +321,184 @@ def process_cbm_column(raw_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
     logging.info(f"{prefix} Finished processing '{cbm_key}' column. Rows updated with calculated values (Decimals or Nones).")
     return raw_data
+
+from core.utils.pipeline_monitor import PipelineMonitor
+
+def normalize_by_pallet_anchor(
+    raw_data: List[Dict[str, Any]],
+    columns_to_normalize: List[str],
+    basis_column: str = 'col_qty_pcs',
+    pallet_column: str = 'col_pallet_count',
+    monitor: Optional[PipelineMonitor] = None
+) -> List[Dict[str, Any]]:
+    """
+    Uses col_pallet_count as anchor to fix misplaced distributable values.
+
+    Rule: net/gross/cbm are ONLY valid on the same row as pallet_count.
+    If they appear on a row without pallet_count, they are misplaced and
+    must be pulled up to the nearest pallet anchor row above.
+
+    After pull-up:
+    - If the filler row still has pcs (basis), keep it but clear its distributable values.
+    - If the filler row has no pcs, remove it entirely.
+
+    Args:
+        raw_data: List of row dicts (post-CBM processing).
+        columns_to_normalize: Columns to check/pull up (e.g. ['col_net', 'col_gross', 'col_cbm']).
+        basis_column: The basis column name (e.g. 'col_qty_pcs') used to decide if a filler row has data.
+        pallet_column: The pallet count column name.
+
+    Returns:
+        Cleaned list of row dicts with values consolidated onto anchor rows.
+    """
+    prefix = "[normalize_by_pallet_anchor]"
+
+    if not raw_data:
+        return []
+
+    # --- Resolve canonical column names ---
+    resolved_cols = []
+    for col in columns_to_normalize:
+        target = col
+        if not target.startswith('col_'):
+            name_map = {'net': 'col_net', 'gross': 'col_gross', 'cbm': 'col_cbm'}
+            target = name_map.get(target, f"col_{target}")
+        resolved_cols.append(target)
+
+    resolved_basis = basis_column
+    if not resolved_basis.startswith('col_'):
+        resolved_basis = f"col_{basis_column}"
+
+    # --- Check if pallet_column exists in data at all ---
+    has_pallet_col = any(pallet_column in row for row in raw_data)
+    if not has_pallet_col:
+        logging.info(f"{prefix} No '{pallet_column}' found in data. Skipping normalization.")
+        return raw_data
+
+    # --- Helper: check if a row is a pallet anchor ---
+    def _is_pallet_row(row: Dict[str, Any]) -> bool:
+        """Returns True if this row has a pallet_count value >= 1."""
+        val = row.get(pallet_column)
+        if val is None:
+            return False
+        try:
+            return decimal.Decimal(str(val)) >= 1
+        except (decimal.InvalidOperation, ValueError, TypeError):
+            return False
+
+    def _has_distributable_value(row: Dict[str, Any]) -> bool:
+        """Returns True if any of the distributable columns have a non-empty, non-zero value."""
+        for col in resolved_cols:
+            val = row.get(col)
+            if val is not None:
+                try:
+                    if decimal.Decimal(str(val)) != 0:
+                        return True
+                except (decimal.InvalidOperation, ValueError, TypeError):
+                    # Non-numeric but non-None (e.g. a string) — treat as having a value
+                    if str(val).strip():
+                        return True
+        return False
+
+    def _has_basis_value(row: Dict[str, Any]) -> bool:
+        """Returns True if the row has a valid, non-zero basis (pcs) value."""
+        val = row.get(resolved_basis)
+        if val is None:
+            return False
+        try:
+            return decimal.Decimal(str(val)) > 0
+        except (decimal.InvalidOperation, ValueError, TypeError):
+            return False
+
+    # --- Build pallet groups ---
+    # Each group: { 'anchor_idx': int, 'member_indices': [int, ...] }
+    groups = []
+    current_group = None
+
+    for i, row in enumerate(raw_data):
+        if _is_pallet_row(row):
+            current_group = {'anchor_idx': i, 'member_indices': [i]}
+            groups.append(current_group)
+        elif current_group is not None:
+            current_group['member_indices'].append(i)
+        else:
+            # Rows before the first pallet anchor — no group to attach to, leave as-is
+            pass
+
+    if not groups:
+        logging.info(f"{prefix} No pallet anchor rows found. Skipping normalization.")
+        return raw_data
+
+    logging.info(f"{prefix} Found {len(groups)} pallet group(s). Checking for misplaced values...")
+
+    # --- Normalize: pull misplaced values up to anchor ---
+    rows_to_remove = set()
+    pull_up_count = 0
+
+    for group in groups:
+        anchor_idx = group['anchor_idx']
+        anchor_row = raw_data[anchor_idx]
+
+        for member_idx in group['member_indices']:
+            if member_idx == anchor_idx:
+                continue  # Skip the anchor itself
+
+            member_row = raw_data[member_idx]
+
+            # Is this member row misplaced? (has distributable values but NOT a pallet row)
+            if not _is_pallet_row(member_row) and _has_distributable_value(member_row):
+                # Track details for UI warning
+                moved_details = []
+                # Pull up each distributable column value to the anchor
+                for col in resolved_cols:
+                    val = member_row.get(col)
+                    if val is not None:
+                        try:
+                            val_dec = val if isinstance(val, decimal.Decimal) else decimal.Decimal(str(val))
+                            if val_dec != 0:
+                                # Add to anchor (sum if anchor already has a value)
+                                existing = anchor_row.get(col)
+                                if existing is not None:
+                                    try:
+                                        existing_dec = existing if isinstance(existing, decimal.Decimal) else decimal.Decimal(str(existing))
+                                        anchor_row[col] = existing_dec + val_dec
+                                    except (decimal.InvalidOperation, ValueError, TypeError):
+                                        anchor_row[col] = val_dec
+                                else:
+                                    anchor_row[col] = val_dec
+
+                                # Clear the value from the filler row
+                                member_row[col] = None
+                                pull_up_count += 1
+                                moved_details.append(f"{col}={val}") # Track exact value moved
+                        except (decimal.InvalidOperation, ValueError, TypeError):
+                            pass  # Can't convert — leave it
+
+                logging.debug(f"{prefix} Pulled up values from row {member_idx} to anchor row {anchor_idx}")
+                
+                # Emit a user-visible warning via the monitor with exact values
+                if monitor and moved_details:
+                    po_val = anchor_row.get('col_po', 'Unknown PO')
+                    item_val = anchor_row.get('col_item', 'Unknown Item')
+                    moved_str = ", ".join(moved_details)
+                    monitor.log_warning(
+                        f"Auto-corrected misplaced data: Pulled up [{moved_str}] to Pallet Row (PO: {po_val}, Item: {item_val}). Please verify."
+                    )
+
+                # If filler row now has NO basis (pcs), mark for removal
+                if not _has_basis_value(member_row):
+                    rows_to_remove.add(member_idx)
+
+    # --- Remove empty filler rows ---
+    if rows_to_remove:
+        result = [row for i, row in enumerate(raw_data) if i not in rows_to_remove]
+        logging.info(f"{prefix} Normalization complete. Pulled up {pull_up_count} misplaced row(s), removed {len(rows_to_remove)} empty filler row(s). {len(result)} rows remain.")
+    else:
+        result = raw_data
+        logging.info(f"{prefix} Normalization complete. Pulled up {pull_up_count} misplaced row(s), no rows removed. {len(result)} rows remain.")
+
+    return result
+
 
 # distribute_values function remains unchanged...
 def distribute_values(
