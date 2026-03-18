@@ -9,6 +9,8 @@ from .header_builder import HeaderBuilderStyler as HeaderBuilder
 from .data_table_builder import DataTableBuilderStyler as DataTableBuilder
 from .footer_builder import TableFooterBuilder
 from .json_template_builder import JsonTemplateStateBuilder
+from openpyxl.drawing.image import Image
+from ...system_config import sys_config
 
 # Initialize logger for this module
 logger = logging.getLogger(__name__)
@@ -625,10 +627,54 @@ class LayoutBuilder:
         else:
             logger.debug("Skipping template footer restoration (no template_state_builder)")
 
+        # 8. Inject Template Images (New Feature)
+        self._inject_images()
         
         logger.info(f"Layout built successfully for sheet '{self.sheet_name}'")
         
         return True
+
+    def _inject_images(self):
+        """
+        Injects images from the configured directory into the worksheet.
+        """
+        try:
+            img_dir = sys_config.template_image_dir
+            if not img_dir.exists():
+                logger.debug(f"Template image directory not found: {img_dir}")
+                return
+
+            images = list(img_dir.glob("*"))
+            if not images:
+                logger.debug(f"No images found in {img_dir}")
+                return
+
+            logger.info(f"Injecting {len(images)} images from {img_dir}")
+            
+            for i, img_path in enumerate(images):
+                if img_path.suffix.lower() not in ['.png', '.jpg', '.jpeg', '.bmp', '.gif']:
+                    continue
+                    
+                try:
+                    img = Image(str(img_path))
+                    
+                    # Resize to 70px height (maintaining aspect ratio)
+                    # This only affects display size; original image data is preserved
+                    target_height = 140
+                    if img.height > 0:
+                        aspect_ratio = img.width / img.height
+                        new_width = target_height * aspect_ratio
+                        
+                        img.height = target_height
+                        img.width = new_width
+                        
+                    # Default placement at N1 (as requested)
+                    self.worksheet.add_image(img, 'N1')
+                    logger.debug(f"Injected image: {img_path.name} (resized to 70px height) at N1")
+                except Exception as e:
+                    logger.warning(f"Failed to inject image {img_path.name}: {e}")
+        except Exception as e:
+            logger.error(f"Image injection failed: {e}", exc_info=True)
     
     def _apply_footer_row_height(self, footer_row: int, styling_config):
         """Helper method to apply footer height to a single footer row."""

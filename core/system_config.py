@@ -114,6 +114,11 @@ class SystemConfig:
         return self._resolve_path("frontend", "frontend", env_key="FRONTEND_DIR")
 
     @property
+    def template_image_dir(self) -> Path:
+        """Directory containing images to be injected into every generated template sheet."""
+        return self._resolve_path("template_image_dir", "database/template_images", env_key="TEMPLATE_IMAGE_DIR")
+
+    @property
     def default_template_name(self) -> str:
         env_val = os.getenv("FALLBACK_TEMPLATE")
         if env_val:
