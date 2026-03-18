@@ -12,10 +12,13 @@ export default {
                      <div v-if="historyList.length === 0" style="color: #94a3b8; font-size: 0.875rem;">No history found.</div>
                     <div class="history-list">
                         <div v-for="run in historyList" :key="run.filename" 
-                             class="history-item" @click="loadHistoryItem(run)">
+                             class="history-item" :class="run.type" @click="loadHistoryItem(run)">
                             <div class="h-date">{{ formatTime(run.timestamp) }}</div>
                             <div class="h-file">{{ run.output_file }}</div>
-                            <div class="h-stats">{{ run.item_count }} items • {{ run.status }}</div>
+                            <div class="h-stats">
+                                <span class="badge">{{ run.type }}</span>
+                                {{ run.item_count }} items • {{ run.status }}
+                            </div>
                         </div>
                     </div>
                     <button class="btn-small" @click="fetchHistory" style="width: 100%; margin-top: 1rem;">Refresh List</button>
@@ -38,14 +41,25 @@ export default {
                     <div v-if="inspectorData">
                          <div class="status-box info" style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
                             <div>
-                                <strong>Viewing:</strong> {{ inspectorData.output_file || 'Uploaded File' }}
-                                <span style="opacity: 0.7; margin-left: 1rem;">{{ inspectorData.timestamp }}</span>
+                                <strong>Viewing:</strong> {{ inspectorData.output_file || currentRun?.output_file || 'Uploaded File' }}
+                                <span style="opacity: 0.7; margin-left: 1rem;">{{ inspectorData.timestamp || currentRun?.timestamp }}</span>
+                                <span v-if="currentRun?.type === 'accepted'" class="badge accepted" style="margin-left:1rem;">ACCEPTED</span>
                             </div>
-                            <button v-if="inspectorData.output_path_absolute" class="btn-small" 
-                                    style="background: #2563eb; color: white; border: none;"
-                                    @click="downloadExcel(inspectorData.output_path_absolute)">
-                                Download .xlsx 📥
-                            </button>
+                            <div style="display: flex; gap: 0.5rem;">
+                                <button v-if="currentRun?.type === 'processed'" class="btn-small btn-accept" 
+                                        @click="acceptCurrentRun">
+                                    Accept & Save Check ✅
+                                </button>
+                                <button v-if="currentRun?.type === 'processed'" class="btn-small btn-reject" 
+                                        @click="rejectCurrentRun">
+                                    Reject & Delete ❌
+                                </button>
+                                <button v-if="inspectorData.output_path_absolute" class="btn-small" 
+                                        style="background: #2563eb; color: white; border: none;"
+                                        @click="downloadExcel(inspectorData.output_path_absolute)">
+                                    Download .xlsx 📥
+                                </button>
+                            </div>
                          </div>
                     
                         <div class="table-container">
@@ -53,25 +67,55 @@ export default {
                                 <thead>
                                     <tr>
                                         <th>#</th>
+                                        <th>DC</th>
                                         <th>PO</th>
+                                        <th>Prod Order</th>
+                                        <th>Prod Date</th>
+                                        <th>Line No</th>
+                                        <th>Direction</th>
                                         <th>Item Code</th>
+                                        <th>Ref Code</th>
                                         <th>Description</th>
+                                        <th>Level</th>
                                         <th>PCS</th>
                                         <th>SQFT</th>
                                         <th>Pallets</th>
-                                        <th>Net/Gross/CBM</th>
+                                        <th>Raw Pallets</th>
+                                        <th>Net</th>
+                                        <th>Gross</th>
+                                        <th>CBM</th>
+                                        <th>Unit Price</th>
+                                        <th>Amount</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="(row, index) in inspectorItems" :key="index">
+                                    <tr v-for="(row, index) in inspectorItems" :key="index" :style="row.is_adjustment ? 'background: #f0fdf4; font-weight: 500;' : ''">
                                         <td>{{ index + 1 }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.po }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.item }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.description }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.pcs }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.sqft }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.pallet_count }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.net }} / {{ row.gross }} / {{ row.col_cbm_raw || row.cbm }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.col_dc || '' }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.col_po || row.po }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.col_production_order_no || row.production_order_no || '' }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.col_production_date || '' }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.col_line_no || '' }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.col_direction || '' }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.col_item || row.item }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.col_reference_code || '' }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.col_desc || row.description }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.col_level || '' }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.col_qty_pcs || row.pcs }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.col_qty_sf || row.sqft }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.col_pallet_count || row.pallet_count }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.col_pallet_count_raw !== undefined ? row.col_pallet_count_raw : '' }}</td>
+                                        <td contenteditable="true" spellcheck="false">
+                                            <span v-if="!row.is_adjustment">{{ row.col_net || row.net }}</span>
+                                        </td>
+                                        <td contenteditable="true" spellcheck="false">
+                                            <span v-if="!row.is_adjustment">{{ row.col_gross || row.gross }}</span>
+                                        </td>
+                                        <td contenteditable="true" spellcheck="false">
+                                            <span v-if="!row.is_adjustment">{{ row.col_cbm_raw || row.col_cbm || row.cbm }}</span>
+                                        </td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.col_unit_price || '' }}</td>
+                                        <td contenteditable="true" spellcheck="false">{{ row.col_amount || row.amount }}</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -84,6 +128,7 @@ export default {
     setup() {
         const uploadedMetadata = ref(null);
         const historyList = ref([]);
+        const currentRun = ref(null);
 
         // Computed
         const inspectorData = computed(() => {
@@ -91,7 +136,27 @@ export default {
         });
 
         const inspectorItems = computed(() => {
-            return inspectorData.value?.database_export?.packing_list_items || [];
+            const data = inspectorData.value;
+            if (!data) return [];
+            
+            let items = [];
+            
+            // 1. Add Price Adjustments as top rows (highest rows)
+            if (data.price_adjustment && Array.isArray(data.price_adjustment)) {
+                data.price_adjustment.forEach(adj => {
+                    items.push({
+                        col_desc: adj[0],
+                        col_amount: adj[1],
+                        is_adjustment: true
+                    });
+                });
+            }
+            
+            // 2. Add Main Items (Supports multi_table or legacy database_export)
+            const mainItems = data.multi_table?.[0] || data.database_export?.packing_list_items || [];
+            items = items.concat(mainItems);
+            
+            return items;
         });
 
         // Methods
@@ -108,15 +173,73 @@ export default {
 
         const loadHistoryItem = async (run) => {
             try {
-                const res = await fetch(`/api/history/view?filename=${encodeURIComponent(run.filename)}`);
+                const res = await fetch(`/api/history/view?filename=${encodeURIComponent(run.filename)}&source=${run.type || 'run_log'}`);
                 if (res.ok) {
                     const data = await res.json();
                     uploadedMetadata.value = data;
+                    currentRun.value = run;
                 } else {
                     alert("Failed to load history item.");
                 }
             } catch (e) {
                 console.error("Error loading history item", e);
+            }
+        };
+
+        const acceptCurrentRun = async () => {
+            if (!currentRun.value || !currentRun.value.filename) return;
+            if (!confirm(`Accept and save "${currentRun.value.filename}" to database?`)) return;
+            
+            try {
+                const res = await fetch('/api/registry/accept', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: currentRun.value.filename })
+                });
+                const result = await res.json();
+                if (res.ok) {
+                    alert(result.message || "Saved successfully!");
+                    // Refresh history and clear view or update currentRun
+                    await fetchHistory();
+                    // Find the newly accepted item in history and load it
+                    const acceptedItem = historyList.value.find(h => h.filename === currentRun.value.filename && h.type === 'accepted');
+                    if (acceptedItem) {
+                        loadHistoryItem(acceptedItem);
+                    } else {
+                        uploadedMetadata.value = null;
+                        currentRun.value = null;
+                    }
+                } else {
+                    alert("Error: " + result.error);
+                }
+            } catch (e) {
+                console.error("Failed to accept run", e);
+                alert("Failed to accept run");
+            }
+        };
+
+        const rejectCurrentRun = async () => {
+            if (!currentRun.value || !currentRun.value.filename) return;
+            if (!confirm(`Reject and delete "${currentRun.value.filename}"? This cannot be undone.`)) return;
+            
+            try {
+                const res = await fetch('/api/registry/reject', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: currentRun.value.filename })
+                });
+                const result = await res.json();
+                if (res.ok) {
+                    alert(result.message || "Deleted successfully!");
+                    uploadedMetadata.value = null;
+                    currentRun.value = null;
+                    await fetchHistory();
+                } else {
+                    alert("Error: " + result.error);
+                }
+            } catch (e) {
+                console.error("Failed to reject run", e);
+                alert("Failed to reject run");
             }
         };
 
@@ -161,10 +284,13 @@ export default {
             inspectorItems,
             fetchHistory,
             loadHistoryItem,
+            acceptCurrentRun,
+            rejectCurrentRun,
             loadMetadataFile,
             clearInspector,
             downloadExcel,
-            formatTime
+            formatTime,
+            currentRun
         };
     }
 };

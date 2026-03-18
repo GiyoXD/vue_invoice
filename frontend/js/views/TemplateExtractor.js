@@ -148,7 +148,6 @@ export default {
                 </p>
                 <button class="btn" @click="resetFlow">Process Another</button>
             </div>
-        </div>
 
             <!-- GLOBAL MAPPINGS -->
             <div class="card" style="margin-top: 2rem;">

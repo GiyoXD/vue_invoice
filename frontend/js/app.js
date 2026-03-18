@@ -1,9 +1,10 @@
 import { createApp, ref } from 'vue';
-import GeneratorView from './views/Generator.js';
-import InspectorView from './views/Inspector.js';
-import TemplateExtractorView from './views/TemplateExtractor.js?v=2';
-import TemplateInspectorView from './views/TemplateInspector.js?v=revert_spill';
-import LogViewerView from './views/LogViewer.js?v=1';
+import GeneratorView from './views/Generator.js?v=4';
+import InspectorView from './views/Inspector.js?v=4';
+import TemplateExtractorView from './views/TemplateExtractor.js?v=4';
+import TemplateInspectorView from './views/TemplateInspector.js?v=4';
+import LogViewerView from './views/LogViewer.js?v=4';
+import ExportDataView from './views/ExportData.js?v=4';
 
 const App = {
     components: {
@@ -11,7 +12,8 @@ const App = {
         InspectorView,
         TemplateExtractorView,
         TemplateInspectorView,
-        LogViewerView
+        LogViewerView,
+        ExportDataView
     },
     template: `
         <div class="container fade-in">
@@ -19,6 +21,7 @@ const App = {
             <div class="nav-bar">
                 <button class="nav-btn" :class="{ active: currentView === 'home' }" @click="currentView = 'home'">Generator</button>
                 <button class="nav-btn" :class="{ active: currentView === 'inspector' }" @click="currentView = 'inspector'">Data Inspector</button>
+                <button class="nav-btn" :class="{ active: currentView === 'export' }" @click="currentView = 'export'">Data Export</button>
                 <button class="nav-btn" :class="{ active: currentView === 'template_inspector' }" @click="currentView = 'template_inspector'">Inspect Template</button>
                 <button class="nav-btn" :class="{ active: currentView === 'extractor' }" @click="currentView = 'extractor'">New Template</button>
                 <button class="nav-btn" :class="{ active: currentView === 'logs' }" @click="currentView = 'logs'">Logs</button>
@@ -32,6 +35,11 @@ const App = {
             <!-- INSPECTOR VIEW -->
             <div v-show="currentView === 'inspector'">
                 <inspector-view ref="inspectorRef"></inspector-view>
+            </div>
+
+            <!-- EXPORT VIEW -->
+            <div v-show="currentView === 'export'">
+                <export-data-view></export-data-view>
             </div>
             
             <!-- EXTRACTOR VIEW -->

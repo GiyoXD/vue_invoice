@@ -687,6 +687,9 @@ def run_invoice_automation(
                     pallet_val = int(float(row.get('col_pallet_count', 0)))
                 except (ValueError, TypeError):
                     pallet_val = 0
+                
+                row['col_pallet_count_raw'] = pallet_val
+                
                 if pallet_val >= 1:
                     pallet_order += 1
                     row['col_pallet_count'] = f"{pallet_order}-{total_pallets}"
