@@ -43,7 +43,8 @@ EXPECTED_HEADER_DATA_TYPES = {
     'col_inv_date': ['string', 'numeric', 'date'], # Invoice date can be a string or numeric date
     'col_inv_ref': ['string'],
     'col_container_no': ['string'],
-    'col_unit_sf': ['numeric']
+    'col_unit_sf': ['numeric'],
+    'col_hs_code': ['string', 'numeric']
 }
 
 # --- Column Mapping Configuration ---
@@ -60,6 +61,7 @@ TARGET_HEADERS_MAP = {
     "col_gross": ["GW", "gross weight", "毛重", "gross", "Gross", "gross weight", "Gross Weight", "毛重量KG", "重量KG", "重量", "毛重", "毛重KG", "G.W(kgs)", "G.W", "Gross Weight"],       # Primary English: 'gross weight', Primary Chinese: '毛重'
     "col_qty_sf": ["sqft", "出货数量 (sf)", "尺数", "SF", "出货数量(sf)", "出货数量(SF)", "出货数量 SF", "尺码", "出货数量（SF）"],      # Primary English: 'sqft', Primary Chinese: '出货数量 (sf)' (Assuming this specific text)
     "col_amount": ["金额 USD","金额USD", "金额", "USD","amount", "总价", "usd", "Amount", "Total Amount", "total", "total amount"],            # Primary English: 'amount', Primary Chinese: '金额' # Ensure this is present and mapped
+    "col_hs_code": ["hs code", "h.s. code", "commodity code", "h.s.code", "hs_code", "hs-code", "税号", "海关编码"],
 
     # --- Less Certain Canonical Names ---
     "col_date_recipt": ["入库时间", "入库日期", "date receipt", "Date Receipt", "date receipt", "Date Receipt", "date receipt"],

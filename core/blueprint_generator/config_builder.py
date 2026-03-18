@@ -415,7 +415,7 @@ class ConfigBuilder:
             hs_code_colspan = sheet.footer_info.hs_code_colspan
             
         add_ons["before_footer"] = {
-            "enabled": has_hs_code,
+            "enabled": True,
             "column_id": "col_po",
             "text": hs_code_text
         }

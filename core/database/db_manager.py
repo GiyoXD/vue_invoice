@@ -53,6 +53,7 @@ class InvoiceItem(Base):
     col_net = Column(Float)
     col_gross = Column(Float)
     col_cbm_raw = Column(String)
+    col_hs_code = Column(String)
     col_unit_price = Column(Float)
     col_amount = Column(Float)
     is_adjustment = Column(Integer, default=0) # SQLite uses 0/1 for False/True usually, but SQLAlchemy handles Booleans. Let's use Integer for safety or Boolean.

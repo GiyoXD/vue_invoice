@@ -37,7 +37,7 @@ MAPPING_CONFIG_PATH = sys_config.mapping_config_path
 SYSTEM_HEADERS = [
     "col_po", "col_item", "col_desc", "col_qty_pcs", "col_qty_sf", 
     "col_unit_price", "col_amount", "col_net", "col_gross", "col_cbm", 
-    "col_pallet", "col_remarks", "col_static", "col_dc"
+    "col_pallet", "col_remarks", "col_static", "col_dc", "col_hs_code"
 ]
 
 app = FastAPI()
@@ -577,6 +577,7 @@ async def accept_invoice(req: AcceptRejectRequest, db: Session = Depends(get_db)
                             col_net=to_float(net),
                             col_gross=to_float(gross),
                             col_cbm_raw=str(row.get("col_cbm", "")), # Fallback to original payload name usually "col_cbm" or "col_cbm_raw"
+                            col_hs_code=str(row.get("col_hs_code", "")),
                             col_unit_price=to_float(unit_price),
                             col_amount=to_float(amount),
                             is_adjustment=0,
@@ -739,7 +740,7 @@ async def export_registry(
             "Production Date", "Line No", "Direction", "Item", "Reference Code", 
             "Description", "Level", "Grade", "Qty (PCS)", "Qty (SF)", "Pallet Count", 
             "Pallet Count Raw", "Net Weight", "Gross Weight", "CBM Raw", 
-            "Unit Price", "Amount", "Is Adjustment"
+            "HS Code", "Unit Price", "Amount", "Is Adjustment"
         ])
         
         # Write Rows
@@ -766,6 +767,7 @@ async def export_registry(
                 row.col_net,
                 row.col_gross,
                 row.col_cbm_raw,
+                row.col_hs_code,
                 row.col_unit_price,
                 row.col_amount,
                 "Yes" if row.is_adjustment else "No"
