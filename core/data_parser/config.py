@@ -44,7 +44,12 @@ EXPECTED_HEADER_DATA_TYPES = {
     'col_inv_ref': ['string'],
     'col_container_no': ['string'],
     'col_unit_sf': ['numeric'],
-    'col_hs_code': ['string', 'numeric']
+    'col_hs_code': ['string', 'numeric'],
+    'col_no': ['string', 'numeric'],
+    'col_static': ['string'],
+    'col_sqm': ['numeric'],
+    'col_qty_header': ['string', 'numeric'],
+    'col_date_recipt': ['string', 'numeric', 'date']
 }
 
 # --- Column Mapping Configuration ---
@@ -56,23 +61,27 @@ TARGET_HEADERS_MAP = {
     # --- Core Logic Canonical Names ---
     "col_po": ["PO NO.", "po", "PO", "Po", "订单号", "order number", "order no", "Po Nb", "尺数", "PO NB", "Po Nb", "客户订单号", "订单号", "P.O Nº", "P.O NO", "PO Nº"],                 # Primary English: 'po', Primary Chinese: '订单号'
     "col_item": ["物料代码","item no", "ITEM NO.",  'item', "Item No", "ITEM NO", "Item No", "客户品名", "物料编码", "产品编号", "ITEM Nº", "Item Nº"],        # Primary English: 'item no', Primary Chinese: '物料代码'
-    "col_qty_pcs": ["pcs", "总张数", "张数", "PCS", "Quantity"],                # Primary English: 'pcs', Primary Chinese: '总张数'
+    "col_qty_pcs": ["pcs", "总张数", "张数", "PCS"],                # Primary English: 'pcs', Primary Chinese: '总张数'
     "col_net": ["NW", "net weight", "净重kg", "净重", "net", "净重KG", "N.W (kgs)", "N.W", "Net Weight"],          # Primary English: 'net weight', Primary Chinese: '净重'
     "col_gross": ["GW", "gross weight", "毛重", "gross", "Gross", "gross weight", "Gross Weight", "毛重量KG", "重量KG", "重量", "毛重", "毛重KG", "G.W(kgs)", "G.W", "Gross Weight"],       # Primary English: 'gross weight', Primary Chinese: '毛重'
-    "col_qty_sf": ["sqft", "出货数量 (sf)", "尺数", "SF", "出货数量(sf)", "出货数量(SF)", "出货数量 SF", "尺码", "出货数量（SF）"],      # Primary English: 'sqft', Primary Chinese: '出货数量 (sf)' (Assuming this specific text)
+    "col_qty_sf": ["sqft", "出货数量 (sf)", "尺数", "SF", "出货数量(sf)", "出货数量(SF)", "出货数量 SF", "尺码", "出货数量（SF）", "Quantity", "Qty"],      # Primary English: 'sqft', Primary Chinese: '出货数量 (sf)' (Assuming this specific text)
     "col_amount": ["金额 USD","金额USD", "金额", "USD","amount", "总价", "usd", "Amount", "Total Amount", "total", "total amount"],            # Primary English: 'amount', Primary Chinese: '金额' # Ensure this is present and mapped
     "col_hs_code": ["hs code", "h.s. code", "commodity code", "h.s.code", "hs_code", "hs-code", "税号", "海关编码"],
 
     # --- Less Certain Canonical Names ---
     "col_date_recipt": ["入库时间", "入库日期", "date receipt", "Date Receipt", "date receipt", "Date Receipt", "date receipt"],
-    "col_cbm": ["cbm", "材积", "CBM","remarks", "备注", "Remark", 'remark', '低', "REMARKS", "REMARK"],          # Primary English: 'remarks', Primary Chinese: '备注'
+    "col_cbm": ["cbm", "材积", "CBM"],          # Primary English: 'cbm', Primary Chinese: '材积'
     "col_desc": ["description","产品名称", "品名规格", "描述", "desc", "DESCRIPTION"],      # Primary English: 'description', Primary Chinese: '品名规格'
     "col_inv_no": ["invoice no", "发票号码", "INV NO", "INV NO", "inv no", "INV NO", "inv no", "INVOICE NO"],    # Primary English: 'invoice no', Primary Chinese: '发票号码'
     "col_inv_date": ["invoice date", "发票日期", "INV DATE", "INV DATE", "inv date", "INV DATE", "inv date", "INVOICE DATE", "invoice date"], # Primary English: 'invoice date', Primary Chinese: '发票日期'
     "col_inv_ref": ["ref", "invoice ref", "ref no", "REF NO", "REF NO", "ref no", "inv ref", "INV REF", "INVOICE REF"],
 
-    "col_remarks": ["cbm", "材积", "CBM", "remarks", "备注", "Remark", 'remark', '低', "REMARKS", "REMARK"],          # Primary English: 'remarks', Primary Chinese: '备注'
+    "col_remarks": ["remarks", "备注", "Remark", 'remark', '低', "REMARKS", "REMARK"],          # Primary English: 'remarks', Primary Chinese: '备注'
     # --- Other Found Headers ---
+    "col_no": ["no.", "NO", "No.", "NO.", "no"],
+    "col_static": ["mark & nº", "mark & n°", "mark & note", "MARK & NOTE", "Mark & Note"],
+    "col_sqm": ["sqm", "m2", "M2", "square meter", "平方米", "sqm（M²）"],
+    "col_qty_header": ["Quantity (SF)", "Quantity(SF)", "Quantity(SF)\nSố lượng(SF)"],
     "col_container_no": ["container no", "集装箱号", "Container No", "CONTAINER NO", "container no", "CONTAINER NO", "container no", "CONTAINER NO", "container"],
     "col_unit_sf": ["unit/sf", "unit sf", "unit(sf)", "UNIT/SF", "Unit/SF"],
     "col_dc": ["批次号", "DC", "dc"],
@@ -134,7 +143,7 @@ MAX_DATA_ROWS_TO_SCAN = 1000
 # --- Data Processing Configuration ---
 # List of canonical header names for columns where values should be distributed
 # CBM processing/distribution depends on the 'col_cbm' mapping above and if the column contains L*W*H strings
-COLUMNS_TO_DISTRIBUTE = ["col_net", "col_gross", "col_cbm"] # Include 'col_cbm' if you want to distribute calculated CBM values
+COLUMNS_TO_DISTRIBUTE = ["col_net", "col_gross", "col_cbm", "col_amount", "col_sqm"] # Include 'col_cbm' if you want to distribute calculated CBM values
 
 # The canonical header name of the column used for proportional distribution
 DISTRIBUTION_BASIS_COLUMN = "col_qty_pcs"
@@ -170,20 +179,6 @@ def load_and_update_mappings():
         for header, canonical in mappings.items():
             # Handle legacy canonical names in JSON by mapping them to col_ names if needed
             target_canonical = canonical
-            if not target_canonical.startswith('col_'):
-                 # Simple heuristic mapping - user should update JSON ideally
-                 if target_canonical == 'po': target_canonical = 'col_po'
-                 elif target_canonical == 'item': target_canonical = 'col_item'
-                 elif target_canonical == 'unit': target_canonical = 'col_unit_price'
-                 elif target_canonical == 'pcs': target_canonical = 'col_qty_pcs'
-                 elif target_canonical == 'sqft': target_canonical = 'col_qty_sf'
-                 elif target_canonical == 'amount': target_canonical = 'col_amount'
-                 elif target_canonical == 'net': target_canonical = 'col_net'
-                 elif target_canonical == 'gross': target_canonical = 'col_gross'
-                 elif target_canonical == 'cbm': target_canonical = 'col_cbm'
-                 elif target_canonical == 'desc': target_canonical = 'col_desc'
-                 elif target_canonical == 'pallet_count': target_canonical = 'col_pallet_count'
-                 # Add others as needed or rely on user to update JSON
             
             if target_canonical in TARGET_HEADERS_MAP:
                 if header not in TARGET_HEADERS_MAP[target_canonical]:
