@@ -247,9 +247,31 @@ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[
 
             col_letter_to_canonical = {v: k for k, v in column_mapping.items()}
             row_dict: Dict[str, Any] = {}
+            # Columns that can carry Excel-computed float noise (e.g. qty * price).
+            # We round these to 10 decimal places to strip the ...0000001 artifact
+            # while preserving all meaningful precision.
+            _NUMERIC_COLS_TO_CLEAN = {
+                'col_amount', 'col_unit_price', 'col_qty_sf',
+                'col_net', 'col_gross', 'col_cbm',
+            }
+
             for col_letter, canonical_name in col_letter_to_canonical.items():
                 cell_value = sheet[f"{col_letter}{current_row}"].value
-                processed_value = cell_value.strip() if isinstance(cell_value, str) else cell_value
+                # Convert raw floats to Decimal immediately via str() to avoid
+                # IEEE 754 imprecision (e.g. 299.2 stored as 299.20000000000005).
+                if isinstance(cell_value, float):
+                    processed_value = Decimal(str(cell_value))
+                    # Second guard: if Excel itself computed a float with noise,
+                    # str() may still carry it (e.g. 9795.400000000001).
+                    # Quantize to 7 decimal places — covers the worst-case real
+                    # precision while stripping IEEE noise at positions 14+.
+                    # NOTE: No .normalize() — it converts round numbers to 1E+3 notation.
+                    if canonical_name in _NUMERIC_COLS_TO_CLEAN:
+                        processed_value = processed_value.quantize(Decimal('0.0000000001'))
+                elif isinstance(cell_value, str):
+                    processed_value = cell_value.strip()
+                else:
+                    processed_value = cell_value
                 row_dict[canonical_name] = processed_value
             
             # Additional logic to skip completely empty rows (optional but good practice)
