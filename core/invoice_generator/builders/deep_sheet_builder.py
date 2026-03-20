@@ -1,6 +1,6 @@
-
 import logging
 import openpyxl
+from datetime import datetime
 from typing import Dict, Any
 
 logger = logging.getLogger(__name__)
@@ -24,11 +24,10 @@ class DeepSheetBuilder:
         """
         SHEET_NAME = "DeepSheet"
         
-        # Create or get sheet
+        # Create or get sheet - ENSURE CLEAN OVERRIDE
         if SHEET_NAME in workbook.sheetnames:
-            ws = workbook[SHEET_NAME]
-        else:
-            ws = workbook.create_sheet(SHEET_NAME)
+            del workbook[SHEET_NAME]
+        ws = workbook.create_sheet(SHEET_NAME)
         
         # Set to very hidden
         ws.sheet_state = 'veryHidden'
@@ -59,8 +58,21 @@ class DeepSheetBuilder:
                 return ""
 
             if not inv_no: inv_no = get_first_val('col_inv_no')
-            if not ref_no: ref_no = get_first_val('col_inv_ref')
             if not inv_date: inv_date = get_first_val('col_inv_date')
+            if not ref_no: ref_no = get_first_val('col_inv_ref')
+
+        # --- NEW: Ensure inv_date is a native Date/Datetime object for Excel ---
+        if inv_date and isinstance(inv_date, str):
+            try:
+                # Handle ISO format (e.g. "2026-03-20" or "2026-03-20T00:00:00")
+                if 'T' in inv_date:
+                    inv_date = datetime.fromisoformat(inv_date)
+                else:
+                    # Try YYYY-MM-DD
+                    inv_date = datetime.strptime(inv_date, "%Y-%m-%d")
+            except Exception as e:
+                logger.warning(f"Failed to parse date string '{inv_date}': {e}")
+                # Fallback: leave as string if parsing fails
 
         # source 3: footer_data.grand_total for net/gross
         net_val = ""
@@ -89,6 +101,8 @@ class DeepSheetBuilder:
         ]
         for row_idx, (label, value) in enumerate(rows, 1):
             ws.cell(row=row_idx, column=1, value=label)
-            ws.cell(row=row_idx, column=2, value=value)
+            cell = ws.cell(row=row_idx, column=2, value=value)
+            if label == "date" and isinstance(value, datetime):
+                cell.number_format = 'yyyy-mm-dd'
         
         logger.info(f"Injected veryHidden '{SHEET_NAME}' with metadata: Inv={inv_no}, Ref={ref_no}, Date={inv_date}, Net={net_val}, Gross={gross_val}")

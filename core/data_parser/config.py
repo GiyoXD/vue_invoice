@@ -161,31 +161,45 @@ def load_and_update_mappings():
     """
     Loads header mappings from the JSON config file and updates the
     TARGET_HEADERS_MAP dictionary. This makes the configuration dynamic.
+
+    Reads from two sections of mapping_config.json:
+    - 'header_text_mappings': explicit text → col_id overrides (e.g. template headers)
+    - 'shipping_header_map': col_id → {keywords, ...} — keywords are reversed into
+      the TARGET_HEADERS_MAP so the data parser recognizes them automatically.
     """
     try:
         from core.system_config import sys_config
         json_path = sys_config.mapping_config_path
-        
+
         if not json_path.exists():
             print(f"Warning: Mapping config file not found at {json_path}. Using default TARGET_HEADERS_MAP.")
             return
 
         with open(json_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            
-        # Use header_text_mappings as per new config structure
+
+        # --- Source 1: header_text_mappings (explicit text → col_id) ---
         mappings = data.get('header_text_mappings', {}).get('mappings', {})
-        
         for header, canonical in mappings.items():
-            # Handle legacy canonical names in JSON by mapping them to col_ names if needed
             target_canonical = canonical
-            
             if target_canonical in TARGET_HEADERS_MAP:
                 if header not in TARGET_HEADERS_MAP[target_canonical]:
                     TARGET_HEADERS_MAP[target_canonical].append(header)
             else:
-                # If the canonical name (e.g., 'new_header_type') doesn't exist in the map, create it
                 TARGET_HEADERS_MAP[target_canonical] = [header]
+
+        # --- Source 2: shipping_header_map (col_id → {keywords}) ---
+        # Reverse the keywords into TARGET_HEADERS_MAP entries.
+        col_defs = data.get('shipping_header_map', {})
+        for col_id, props in col_defs.items():
+            if not isinstance(props, dict):
+                continue
+            for keyword in props.get('keywords', []):
+                if col_id in TARGET_HEADERS_MAP:
+                    if keyword not in TARGET_HEADERS_MAP[col_id]:
+                        TARGET_HEADERS_MAP[col_id].append(keyword)
+                else:
+                    TARGET_HEADERS_MAP[col_id] = [keyword]
 
     except json.JSONDecodeError:
         print("Warning: Could not decode mapping_config.json. Check for syntax errors. Using default TARGET_HEADERS_MAP.")

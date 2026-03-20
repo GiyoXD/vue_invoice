@@ -162,14 +162,26 @@ async def get_mapping_options():
 async def get_mappings(mapping_type: str = "header_text_mappings"):
     """
     Get the global mapping dictionary of the specified type.
-    Options: header_text_mappings, sheet_name_mappings, shipping_list_header_map
+    Options: header_text_mappings, sheet_name_mappings, shipping_header_map
+
+    For shipping_header_map, returns a flat dict of {col_id: "kw1, kw2, ..."}
+    so the frontend can use the same key-value editor UI.
     """
     try:
         from core.system_config import sys_config
         with open(sys_config.mapping_config_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            # return the mappings dictionary for the specific type
-            return data.get(mapping_type, {}).get("mappings", {})
+
+        if mapping_type == "shipping_header_map":
+            # Flatten to {col_id: "kw1, kw2"} for the UI
+            col_defs = data.get("shipping_header_map", {})
+            flat = {}
+            for col_id, props in col_defs.items():
+                if isinstance(props, dict):
+                    flat[col_id] = ", ".join(props.get("keywords", []))
+            return flat
+
+        return data.get(mapping_type, {}).get("mappings", {})
     except Exception as e:
         logger.error(f"Failed to get mappings: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -181,28 +193,38 @@ class MappingsUpdateRequest(BaseModel):
 @router.post("/mappings")
 async def update_mappings(request: MappingsUpdateRequest):
     """
-    Overwrite the specified global mapping dictionary
+    Overwrite the specified global mapping dictionary.
+
+    For column_definitions, the mappings dict is {col_id: "kw1, kw2, ..."}
+    and is converted back to the structured format on save.
     """
     try:
         from core.system_config import sys_config
         config_path = sys_config.mapping_config_path
-        
-        # Load existing config
+
         data = {}
         if config_path.exists():
             with open(config_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-        
-        # Update or create mapping block
-        if request.mapping_type not in data:
-            data[request.mapping_type] = {"mappings": {}}
-            
-        data[request.mapping_type]["mappings"] = request.mappings
-        
-        # Save back
+
+        if request.mapping_type == "shipping_header_map":
+            # Unflatten from {col_id: "kw1, kw2"} back to structured format
+            existing = data.get("shipping_header_map", {})
+            for col_id, kw_str in request.mappings.items():
+                keywords = [k.strip() for k in kw_str.split(",") if k.strip()]
+                if col_id in existing and isinstance(existing[col_id], dict):
+                    existing[col_id]["keywords"] = keywords
+                else:
+                    existing[col_id] = {"keywords": keywords, "format": "@"}
+            data["shipping_header_map"] = existing
+        else:
+            if request.mapping_type not in data:
+                data[request.mapping_type] = {"mappings": {}}
+            data[request.mapping_type]["mappings"] = request.mappings
+
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
-            
+
         return {"status": "success"}
     except Exception as e:
         logger.error(f"Failed to update mappings: {e}")

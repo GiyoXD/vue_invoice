@@ -163,18 +163,18 @@ export default {
                     
                     <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
                         <select v-model="activeMappingType" @change="switchMappingType($event.target.value)" class="input-field" style="width: 280px; font-weight: bold;">
-                            <option value="header_text_mappings">Header Mappings (Standard)</option>
-                            <option value="shipping_list_header_map">Header Mappings (Shipping)</option>
+                            <option value="header_text_mappings">Header Mappings</option>
                             <option value="sheet_name_mappings">Sheet Name Mappings</option>
+                            <option value="shipping_header_map">Shipping Header Map</option>
                         </select>
                         <input type="text" v-model="mappingSearch" class="input-field" placeholder="Search..." style="flex: 1;" />
                     </div>
 
                     <!-- Add New Mapping Row -->
                     <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; margin-bottom: 1rem; padding: 0.5rem; background: rgba(34, 197, 94, 0.05); border: 1px dashed #22c55e; border-radius: 6px; align-items: center;">
-                        <input type="text" v-model="newMappingKey" class="input-field" placeholder="New Input Text (e.g. 'Qty(SF)')" style="padding: 0.5rem;" />
+                        <input type="text" v-model="newMappingKey" class="input-field" :placeholder="activeMappingType === 'shipping_header_map' ? 'Col ID (e.g. col_grade)' : 'New Input Text (e.g. Qty(SF))'" style="padding: 0.5rem;" />
                         
-                        <input v-if="activeMappingType === 'sheet_name_mappings'" type="text" v-model="newMappingVal" class="input-field" placeholder="Target Name (e.g. 'Packing list')" style="padding: 0.5rem;" />
+                        <input v-if="activeMappingType === 'sheet_name_mappings' || activeMappingType === 'shipping_header_map'" type="text" v-model="newMappingVal" class="input-field" :placeholder="activeMappingType === 'shipping_header_map' ? 'Keywords (comma-separated)' : 'Target Name (e.g. Packing list)'" style="padding: 0.5rem;" />
                         <select v-else v-model="newMappingVal" class="input-field" style="padding: 0.5rem;">
                             <option value="" disabled selected>Select system field...</option>
                             <option v-for="opt in systemOptions" :value="opt.id">{{ opt.label }} ({{ opt.id }})</option>
@@ -187,15 +187,15 @@ export default {
                         <div class="mapping-grid" style="display: grid; gap: 0.5rem;">
                             <!-- Header Row -->
                             <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; font-weight: bold; padding: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                                <div>Original Text (Excel)</div>
-                                <div>Mapped Target (System)</div>
+                                <div>{{ activeMappingType === 'shipping_header_map' ? 'Column ID' : 'Original Text (Excel)' }}</div>
+                                <div>{{ activeMappingType === 'shipping_header_map' ? 'Keywords (comma-separated)' : 'Mapped Target (System)' }}</div>
                                 <div style="width: 70px; text-align: center;">Action</div>
                             </div>
                             
                             <div v-for="(colId, headerText) in filteredMappings" :key="headerText" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: center; background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 4px;">
                                 <input type="text" :value="headerText" @change="updateMappingHeader(headerText, $event.target.value)" class="input-field" style="padding: 0.3rem;" />
                                 
-                                <input v-if="activeMappingType === 'sheet_name_mappings'" type="text" :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="input-field" style="padding: 0.3rem;" />
+                                <input v-if="activeMappingType === 'sheet_name_mappings' || activeMappingType === 'shipping_header_map'" type="text" :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="input-field" style="padding: 0.3rem;" />
                                 
                                 <select v-else :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="input-field" style="padding: 0.3rem;">
                                     <option v-for="opt in systemOptions" :value="opt.id">

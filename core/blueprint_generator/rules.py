@@ -5,10 +5,18 @@ This module defines the business rules for:
 1. Column Identification (keywords -> column definition)
 2. Sheet Classification (name -> data source)
 3. Column Formatting (id -> excel number format)
+
+NOTE: Additional column definitions are loaded dynamically from
+`mapping_config.json` (the `shipping_header_map` section) at class
+load time. Add new system columns there instead of hardcoding here.
 """
 
+import json
+import logging
 from dataclasses import dataclass, field
 from typing import List, Dict, Set, Optional
+
+logger = logging.getLogger(__name__)
 
 @dataclass
 class ColumnDefinition:
@@ -181,7 +189,54 @@ class BlueprintRules:
             return cls.COLUMNS[col_id].excel_format
         return "@"
 
+    @classmethod
+    def _load_from_config(cls) -> None:
+        """
+        Merge column definitions from mapping_config.json into COLUMNS.
 
+        Reads the 'shipping_header_map' section from the JSON config and
+        creates ColumnDefinition entries for any ID not already hardcoded
+        here. This makes mapping_config.json the source of truth for
+        new/custom columns without requiring Python code changes.
+
+        Hardcoded COLUMNS always take priority over JSON definitions.
+        """
+        try:
+            from core.system_config import sys_config
+            json_path = sys_config.mapping_config_path
+
+            if not json_path.exists():
+                logger.warning(f"mapping_config.json not found at {json_path}. Skipping dynamic column load.")
+                return
+
+            with open(json_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            col_defs = data.get("shipping_header_map", {})
+            loaded = 0
+            for col_id, props in col_defs.items():
+                # Skip metadata keys like 'comment'
+                if not isinstance(props, dict):
+                    continue
+                # Never override a hardcoded definition
+                if col_id in cls.COLUMNS:
+                    continue
+                keywords = [kw.lower() for kw in props.get("keywords", [])]
+                excel_format = props.get("format", "@")
+                width = float(props.get("width", 15.0))
+                cls.COLUMNS[col_id] = ColumnDefinition(
+                    id=col_id,
+                    keywords=keywords,
+                    excel_format=excel_format,
+                    width=width
+                )
+                loaded += 1
+
+            if loaded:
+                logger.info(f"[BlueprintRules] Loaded {loaded} column definition(s) from mapping_config.json.")
+
+        except Exception as e:
+            logger.error(f"[BlueprintRules] Failed to load shipping_header_map from mapping_config.json: {e}")
 
     # 4. Standard Row Heights (Fallback)
     # derived from JF_v2_bundle_config.json
@@ -202,3 +257,7 @@ class BlueprintRules:
             "footer": 27.0
         }
     }
+
+
+# Load JSON-defined columns once at module import time.
+BlueprintRules._load_from_config()

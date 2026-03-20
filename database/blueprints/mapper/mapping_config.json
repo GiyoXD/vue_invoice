@@ -116,150 +116,268 @@
       "Unit Price       \n(USD)": "col_unit_price"
     }
   },
-  "shipping_list_header_map": {
-    "comment": "Map shipping list headers to mapping names",
-    "mappings": {
-      "production order number": "col_production_order_no",
-      "生产单号": "col_production_order_no",
-      "po": "col_po",
-      "入库单号": "col_production_order_no",
-      "PO": "col_po",
-      "PO NO.": "col_po",
-      "订单号": "col_po",
-      "TTX编号": "col_production_order_no",
-      "unit price": "col_unit_price",
-      "单价": "col_unit_price",
-      "price": "col_unit_price",
-      "unit": "col_unit_price",
-      "USD": "col_amount",
-      "usd": "col_amount",
-      "单价USD": "col_unit_price",
-      "价格": "col_unit_price",
-      "单价 USD": "col_unit_price",
-      "Po": "col_po",
-      "order number": "col_po",
-      "order no": "col_po",
-      "Po Nb": "col_po",
-      "尺数": "col_qty_sf",
-      "PO NB": "col_po",
-      "客户订单号": "col_po",
-      "物料代码": "col_item",
-      "item no": "col_item",
-      "ITEM NO.": "col_item",
-      "item": "col_item",
-      "Item No": "col_item",
-      "ITEM NO": "col_item",
-      "客户品名": "col_item",
-      "物料编码": "col_item",
-      "产品编号": "col_item",
-      "pcs": "col_qty_pcs",
-      "总张数": "col_qty_pcs",
-      "张数": "col_qty_pcs",
-      "PCS": "col_qty_pcs",
-      "NW": "col_net",
-      "net weight": "col_net",
-      "净重kg": "col_net",
-      "净重": "col_net",
-      "net": "col_net",
-      "净重KG": "col_net",
-      "GW": "col_gross",
-      "gross weight": "col_gross",
-      "毛重": "col_gross",
-      "gross": "col_gross",
-      "Gross": "col_gross",
-      "Gross Weight": "col_gross",
-      "毛重量KG": "col_gross",
-      "重量KG": "col_gross",
-      "重量": "col_gross",
-      "毛重KG": "col_gross",
-      "sqft": "col_qty_sf",
-      "出货数量 (sf)": "col_qty_sf",
-      "SF": "col_qty_sf",
-      "出货数量(sf)": "col_qty_sf",
-      "出货数量(SF)": "col_qty_sf",
-      "出货数量 SF": "col_qty_sf",
-      "尺码": "col_qty_sf",
-      "出货数量（SF）": "col_qty_sf",
-      "金额 USD": "col_amount",
-      "金额USD": "col_amount",
-      "金额": "col_amount",
-      "amount": "col_amount",
-      "总价": "col_amount",
-      "Amount": "col_amount",
-      "Total Amount": "col_amount",
-      "total": "col_amount",
-      "total amount": "col_amount",
-      "入库时间": "col_date_recipt",
-      "入库日期": "col_date_recipt",
-      "date receipt": "col_date_recipt",
-      "Date Receipt": "col_date_recipt",
-      "cbm": "col_cbm",
-      "材积": "col_cbm",
-      "CBM": "col_cbm",
-      "remarks": "col_remarks",
-      "备注": "col_remarks",
-      "Remark": "col_remarks",
-      "remark": "col_remarks",
-      "低": "col_remarks",
-      "REMARKS": "col_remarks",
-      "REMARK": "col_remarks",
-      "description": "col_desc",
-      "产品名称": "col_desc",
-      "品名规格": "col_desc",
-      "描述": "col_desc",
-      "desc": "col_desc",
-      "DESCRIPTION": "col_desc",
-      "invoice no": "col_inv_no",
-      "发票号码": "col_inv_no",
-      "INV NO": "col_inv_no",
-      "inv no": "col_inv_no",
-      "INVOICE NO": "col_inv_no",
-      "invoice date": "col_inv_date",
-      "发票日期": "col_inv_date",
-      "INV DATE": "col_inv_date",
-      "inv date": "col_inv_date",
-      "INVOICE DATE": "col_inv_date",
-      "ref": "col_inv_ref",
-      "invoice ref": "col_inv_ref",
-      "ref no": "col_inv_ref",
-      "REF NO": "col_inv_ref",
-      "inv ref": "col_inv_ref",
-      "INV REF": "col_inv_ref",
-      "INVOICE REF": "col_inv_ref",
-      "批次号": "col_batch_no",
-      "DC": "col_dc",
-      "dc": "col_dc",
-      "batch number": "col_batch_no",
-      "line no": "col_line_no",
-      "行号": "col_line_no",
-      "direction": "col_direction",
-      "内向": "col_direction",
-      "production date": "col_production_date",
-      "生产日期": "col_production_date",
-      "reference code": "col_reference_code",
-      "ttx编号": "col_reference_code",
-      "生产名称": "col_reference_code",
-      "grade": "col_level",
-      "等级": "col_level",
-      "pallet count": "col_pallet_count",
-      "拖数": "col_pallet_count",
-      "PALLET": "col_pallet_count",
-      "件数": "col_pallet_count",
-      "PALLET COUNT": "col_pallet_count",
-      "托数": "col_pallet_count",
-      "manual number": "col_manual_no",
-      "手册号": "col_manual_no",
-      "dog": "col_dog",
-      "级别": "col_level",
-      "TEST PO": "col_po",
-      "test sqft": "col_qty_sf"
-    }
-  },
   "fallback_strategies": {
     "comment": "Configuration for handling unrecognized headers and sheets",
     "case_insensitive_matching": true,
     "partial_matching_threshold": 0.7,
     "log_unrecognized_items": true,
     "create_suggestions": true
+  },
+  "shipping_header_map": {
+    "comment": "Single source of truth for column metadata. rules.py loads from here so any column defined here is recognized by the blueprint scanner and won't show as (Unknown) in the UI.",
+    "col_level": {
+      "keywords": [
+        "grade",
+        "level",
+        "级别",
+        "等级"
+      ],
+      "format": "@"
+    },
+    "col_batch_no": {
+      "keywords": [
+        "batch no",
+        "batch number",
+        "批次号"
+      ],
+      "format": "@"
+    },
+    "col_line_no": {
+      "keywords": [
+        "line no",
+        "行号"
+      ],
+      "format": "@"
+    },
+    "col_direction": {
+      "keywords": [
+        "direction",
+        "内向"
+      ],
+      "format": "@"
+    },
+    "col_production_date": {
+      "keywords": [
+        "production date",
+        "生产日期"
+      ],
+      "format": "@"
+    },
+    "col_reference_code": {
+      "keywords": [
+        "reference code",
+        "ttx编号",
+        "生产名称"
+      ],
+      "format": "@"
+    },
+    "col_manual_no": {
+      "keywords": [
+        "manual no",
+        "manual number",
+        "手册号"
+      ],
+      "format": "@"
+    },
+    "col_production_order_no": {
+      "keywords": [
+        "production order number",
+        "生产单号",
+        "入库单号",
+        "TTX编号"
+      ],
+      "format": "@"
+    },
+    "col_date_recipt": {
+      "keywords": [
+        "date receipt",
+        "入库时间",
+        "入库日期"
+      ],
+      "format": "@"
+    },
+    "col_inv_no": {
+      "keywords": [
+        "invoice no",
+        "inv no",
+        "发票号码"
+      ],
+      "format": "@"
+    },
+    "col_inv_date": {
+      "keywords": [
+        "invoice date",
+        "inv date",
+        "发票日期"
+      ],
+      "format": "@"
+    },
+    "col_inv_ref": {
+      "keywords": [
+        "ref",
+        "inv ref",
+        "invoice ref",
+        "ref no"
+      ],
+      "format": "@"
+    },
+    "col_hs_code": {
+      "keywords": [
+        "hs code",
+        "h.s. code",
+        "税号"
+      ],
+      "format": "@"
+    },
+    "col_container_no": {
+      "keywords": [
+        "container no",
+        "集装箱号"
+      ],
+      "format": "@"
+    },
+    "col_po": {
+      "keywords": [
+        "po",
+        "PO NO.",
+        "订单号",
+        "order number",
+        "order no",
+        "Po Nb",
+        "客户订单号",
+        "TEST PO"
+      ],
+      "format": "@"
+    },
+    "col_unit_price": {
+      "keywords": [
+        "unit price",
+        "单价",
+        "price",
+        "unit",
+        "单价USD",
+        "价格",
+        "单价 USD"
+      ],
+      "format": "@"
+    },
+    "col_amount": {
+      "keywords": [
+        "USD",
+        "金额 USD",
+        "金额USD",
+        "金额",
+        "amount",
+        "总价",
+        "Total Amount",
+        "total"
+      ],
+      "format": "@"
+    },
+    "col_qty_sf": {
+      "keywords": [
+        "尺数",
+        "sqft",
+        "出货数量 (sf)",
+        "SF",
+        "出货数量(sf)",
+        "出货数量 SF",
+        "尺码",
+        "出货数量（SF）",
+        "test sqft"
+      ],
+      "format": "@"
+    },
+    "col_item": {
+      "keywords": [
+        "物料代码",
+        "item no",
+        "ITEM NO.",
+        "item",
+        "客户品名",
+        "物料编码",
+        "产品编号"
+      ],
+      "format": "@"
+    },
+    "col_qty_pcs": {
+      "keywords": [
+        "pcs",
+        "总张数",
+        "张数"
+      ],
+      "format": "@"
+    },
+    "col_net": {
+      "keywords": [
+        "NW",
+        "net weight",
+        "净重kg",
+        "净重",
+        "net"
+      ],
+      "format": "@"
+    },
+    "col_gross": {
+      "keywords": [
+        "GW",
+        "gross weight",
+        "毛重",
+        "gross",
+        "毛重量KG",
+        "重量KG",
+        "重量",
+        "毛重KG"
+      ],
+      "format": "@"
+    },
+    "col_cbm": {
+      "keywords": [
+        "cbm",
+        "材积"
+      ],
+      "format": "@"
+    },
+    "col_remarks": {
+      "keywords": [
+        "remarks",
+        "备注",
+        "Remark",
+        "低"
+      ],
+      "format": "@"
+    },
+    "col_desc": {
+      "keywords": [
+        "description",
+        "产品名称",
+        "品名规格",
+        "描述",
+        "desc"
+      ],
+      "format": "@"
+    },
+    "col_dc": {
+      "keywords": [
+        "DC"
+      ],
+      "format": "@"
+    },
+    "col_pallet_count": {
+      "keywords": [
+        "pallet count",
+        "拖数",
+        "PALLET",
+        "件数",
+        "托数"
+      ],
+      "format": "@"
+    },
+    "col_dog": {
+      "keywords": [
+        "dog"
+      ],
+      "format": "@"
+    }
   }
 }
