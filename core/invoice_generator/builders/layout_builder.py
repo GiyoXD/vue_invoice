@@ -121,7 +121,9 @@ class LayoutBuilder:
         self.next_row_after_footer = -1
         self.data_start_row = -1
         self.data_end_row = -1
-        self.template_state_builder = None
+        self.template_state_builder: Optional[JsonTemplateStateBuilder] = None
+        self.footer_data: Optional[FooterData] = None
+        self.leather_summary: Optional[Dict[str, Any]] = None
 
     def build(self) -> bool:
         """
@@ -223,7 +225,7 @@ class LayoutBuilder:
             # Get bundled columns from sheet_config (bundled config v2.1 format)
             # These are in layout_config -> sheet_config -> 'structure' -> 'columns'
             bundled_columns = None
-            column_mapping = None  # For template state column shifting
+            column_mapping: Dict[int, Optional[int]] = {}  # For template state column shifting
             
             if self.sheet_config:
                 structure = self.sheet_config.get('structure', {})
@@ -238,43 +240,34 @@ class LayoutBuilder:
                     # Build column mapping BEFORE filtering
                     # Map each template Excel column position to its output position (or None if removed)
                     if DAF_mode or custom_mode:
-                        column_mapping = {}
-                        template_excel_col = 1  # Current position in template
-                        output_excel_col = 1    # Current position in output
+                        template_col = 1  # current template col
+                        output_col = 1    # current output col
                         
                         for col_def in original_columns:
-                            col_id = col_def.get('id', '')
-                            skip_in_daf = col_def.get('skip_in_daf', False)
-                            skip_in_custom = col_def.get('skip_in_custom', False)
-                            colspan = col_def.get('colspan', 1)
-                            children = col_def.get('children', [])
+                            # Use full descriptive names
+                            column_id = str(col_def.get('id', ''))
+                            skip_daf = bool(col_def.get('skip_in_daf', False))
+                            skip_custom = bool(col_def.get('skip_in_custom', False))
+                            colspan_val = int(col_def.get('colspan', 1))
+                            children_list = col_def.get('children', [])
                             
-                            # Calculate actual Excel columns this definition occupies
-                            if children:
-                                # Parent with children: uses colspan number of Excel columns
-                                num_excel_cols = len(children)
-                            else:
-                                # Simple column: uses colspan
-                                num_excel_cols = colspan
-                            
-                            # Check if column should be skipped
-                            should_skip = (DAF_mode and skip_in_daf) or (custom_mode and skip_in_custom)
+                            num_columns = len(children_list) if children_list else colspan_val
+                            should_skip = (DAF_mode and skip_daf) or (custom_mode and skip_custom)
                             
                             if should_skip:
-                                # Mark all Excel columns occupied by this definition as removed
-                                for i in range(num_excel_cols):
-                                    column_mapping[template_excel_col + i] = None
-                                logger.debug(f"Column '{col_id}' removed: template cols {template_excel_col}-{template_excel_col + num_excel_cols - 1} → None")
+                                for i in range(num_columns):
+                                    column_mapping[template_col + i] = None
+                                logger.debug(f"Column '{column_id}' removed: template cols {template_col}-{template_col + num_columns - 1} → None")
                             else:
-                                # Map all Excel columns to their new positions
-                                for i in range(num_excel_cols):
-                                    column_mapping[template_excel_col + i] = output_excel_col + i
-                                logger.debug(f"Column '{col_id}': template cols {template_excel_col}-{template_excel_col + num_excel_cols - 1} → output cols {output_excel_col}-{output_excel_col + num_excel_cols - 1}")
-                                output_excel_col += num_excel_cols
+                                for i in range(num_columns):
+                                    column_mapping[template_col + i] = output_col + i
+                                logger.debug(f"Column '{column_id}': template cols {template_col}-{template_col + num_columns - 1} → output cols {output_col}-{output_col + num_columns - 1}")
+                                output_col += num_columns
                             
-                            template_excel_col += num_excel_cols
+                            template_col += num_columns
                         
-                        logger.info(f"Built column mapping for template shifting: {len([v for v in column_mapping.values() if v])} active Excel columns")
+                        mapping_vals = [v for v in column_mapping.values() if v is not None]
+                        logger.info(f"Built column mapping for template shifting: {len(mapping_vals)} active columns")
                     
                     # Now filter the columns list
                     original_count = len(bundled_columns)
@@ -369,24 +362,14 @@ class LayoutBuilder:
                 # Extract business logic: Calculate sums, pallets, etc. BEFORE rendering
                 logger.info("LayoutBuilder: Calculating table data...")
                 table_calculator = TableCalculator(self.header_info)
-                self.footer_data = table_calculator.calculate(dtb_data_config)
+                footer_data = table_calculator.calculate(dtb_data_config)
+                self.footer_data = footer_data
                 
-                if not self.footer_data:
+                if not footer_data:
                     logger.error("LayoutBuilder: TableCalculator failed to return data.")
                     return False
 
-                # Inject global weights if local weights are zero (for aggregation sheets like Invoice)
-                # This ensures TableFooterBuilder receives the correct totals calculated by GlobalSummaryCalculator
-                if (self.footer_data.weight_summary['net'] == 0 and 
-                    self.footer_data.weight_summary['gross'] == 0):
-                    
-                    if self.total_net_weight is not None and self.total_net_weight > 0:
-                        logger.info(f"Injecting global net weight into FooterData: {self.total_net_weight}")
-                        self.footer_data.weight_summary['net'] = self.total_net_weight
-                        
-                    if self.total_gross_weight is not None and self.total_gross_weight > 0:
-                        logger.info(f"Injecting global gross weight into FooterData: {self.total_gross_weight}")
-                        self.footer_data.weight_summary['gross'] = self.total_gross_weight
+
 
                 # --- 5. Build Data Table (DataTableBuilder) ---
                 if not self.skip_data_table_builder:
@@ -410,15 +393,18 @@ class LayoutBuilder:
                 # to ensure strict separation of concerns and avoid duplication.
                 
                 # Extract legacy values for logging/compatibility if needed
-                data_start_row = self.footer_data.data_start_row
-                data_end_row = self.footer_data.data_end_row
-                footer_row_position = self.footer_data.footer_row_start_idx
-                local_chunk_pallets = self.footer_data.total_pallets
-
-                # Store data range for multi-table processors to access
-                self.data_start_row = data_start_row
-                self.data_end_row = data_end_row
-                self.leather_summary = self.footer_data.leather_summary
+                if footer_data:
+                    data_start_row = footer_data.data_start_row
+                    data_end_row = footer_data.data_end_row
+                    footer_row_position = footer_data.footer_row_start_idx
+                    local_chunk_pallets = footer_data.total_pallets
+                    self.leather_summary = footer_data.leather_summary
+                else:
+                    data_start_row = 0
+                    data_end_row = 0
+                    footer_row_position = (header_row_for_builder or 0) + 2
+                    local_chunk_pallets = 0.0
+                    self.leather_summary = None
                 
                 rows_written = data_end_row - data_start_row + 1 if data_end_row >= data_start_row else 0
                 logger.debug(f"DataTableBuilder completed - rows {data_start_row}-{data_end_row} ({rows_written} rows), footer at row {footer_row_position}")
@@ -434,7 +420,8 @@ class LayoutBuilder:
                         actual_num_cols = self.header_info.get('num_columns', None)
                         table_header_row_num = self.header_info.get('second_row_index', 0)
                         logger.debug(f"Template header will use actual column count: {actual_num_cols}")
-                        logger.debug(f"Template header ends at row {self.template_state_builder.header_end_row}")
+                        if self.template_state_builder:
+                            logger.debug(f"Template header ends at row {self.template_state_builder.header_end_row}")
                         logger.debug(f"Table header row is at: {table_header_row_num}")
                         logger.debug(f"These should NOT overlap! (template_end < table_header)")
                         # DO NOT apply column mapping to the template header!
@@ -442,14 +429,15 @@ class LayoutBuilder:
                         # when capturing/restoring the template wrapper.
                         
                         # Resolve generation mode for mode-dependent header values
-                        header_mode = "daf" if (self.args and hasattr(self.args, 'DAF') and self.args.DAF) else "standard"
+                        header_mode = "daf" if (self.args and getattr(self.args, 'DAF', False)) else "standard"
                         
-                        self.template_state_builder.restore_header_only(
-                            target_worksheet=self.worksheet,
-                            actual_num_cols=actual_num_cols,
-                            mode=header_mode
-                        )
-                        logger.info(f"Template header restored successfully with {actual_num_cols} columns (rows 1-{self.template_state_builder.header_end_row})")
+                        if self.template_state_builder:
+                            self.template_state_builder.restore_header_only(
+                                target_worksheet=self.worksheet,
+                                actual_num_cols=actual_num_cols,
+                                mode=header_mode
+                            )
+                            logger.info(f"Template header restored successfully with {actual_num_cols} columns (rows 1-{self.template_state_builder.header_end_row})")
                     except Exception as e:
                         logger.error(f"Failed to restore template header after table build")
                         logger.error(f"Error: {e}", exc_info=True)
@@ -461,7 +449,8 @@ class LayoutBuilder:
                 logger.error(f"DataTableBuilder crashed for sheet '{self.sheet_name}'")
                 logger.error(f"Error: {e}", exc_info=True)
                 logger.error(f"header_info={self.header_info}")
-                logger.error(f"data_config keys: {list(dtb_data_config.keys())}")
+                if dtb_data_config and hasattr(dtb_data_config, 'keys'):
+                    logger.error(f"data_config keys: {list(dtb_data_config.keys())}")
                 return False
         else:
             logger.info(f"Skipping data table builder (skip_data_table_builder=True)")
@@ -514,9 +503,9 @@ class LayoutBuilder:
                 'sum_ranges': data_range_to_sum,
                 'footer_config': footer_config,
                 'mapping_rules': sheet_inner_mapping_rules_dict,
-                'DAF_mode': self.args.DAF if self.args and hasattr(self.args, 'DAF') else False,
+                'DAF_mode': bool(getattr(self.args, 'DAF', False)) if self.args else False,
                 'override_total_text': None,
-                'leather_summary': self.footer_data.leather_summary if self.footer_data else None
+                'leather_summary': self.leather_summary
             }
 
             logger.debug(f"Creating TableFooterBuilder at row {footer_row_position}")

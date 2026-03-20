@@ -143,7 +143,7 @@ MAX_DATA_ROWS_TO_SCAN = 1000
 # --- Data Processing Configuration ---
 # List of canonical header names for columns where values should be distributed
 # CBM processing/distribution depends on the 'col_cbm' mapping above and if the column contains L*W*H strings
-COLUMNS_TO_DISTRIBUTE = ["col_net", "col_gross", "col_cbm", "col_amount", "col_sqm"] # Include 'col_cbm' if you want to distribute calculated CBM values
+COLUMNS_TO_DISTRIBUTE = ["col_net", "col_gross", "col_cbm"] # Include 'col_cbm' if you want to distribute calculated CBM values
 
 # The canonical header name of the column used for proportional distribution
 DISTRIBUTION_BASIS_COLUMN = "col_qty_pcs"

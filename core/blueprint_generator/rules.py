@@ -136,8 +136,8 @@ class BlueprintRules:
             excel_format="@",
             width=18.0
         ),
-        "col_remark": ColumnDefinition(
-            id="col_remark",
+        "col_remarks": ColumnDefinition(
+            id="col_remarks",
             keywords=["remark", "remarks", "note", "notes", "comment", "comments"],
             excel_format="@",
             width=20.0

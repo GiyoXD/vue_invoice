@@ -109,7 +109,11 @@
       "Container number": "col_container_no",
       "Unit price   (USD)": "col_unit_price",
       "sqm（M²）": "col_sqm",
-      "Name of  \n Cormodity": "col_item"
+      "Name of  \n Cormodity": "col_item",
+      "Net Weight\n(Kgs)": "col_net",
+      "Gross Weight\n(Kgs)": "col_gross",
+      "Volume\n(CBM)": "col_cbm",
+      "Unit Price       \n(USD)": "col_unit_price"
     }
   },
   "shipping_list_header_map": {

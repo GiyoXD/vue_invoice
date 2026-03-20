@@ -421,10 +421,9 @@ class ExcelLayoutScanner:
             # Detect static content hints (like "Mark & Nº" column content)
             static_hints = self._detect_static_content(worksheet, header_row, columns)
             
-            # [Smart Feature] Description Fallback (Ported from Extractor)
-            fallback_hint = self._extract_description_fallback(worksheet, header_row, columns)
-            if fallback_hint:
-                static_hints["description_fallback"] = fallback_hint
+            # Note: _extract_description_fallback was removed. 
+            # Description is now only detected via label in _detect_static_content.
+
 
             # [Smart Feature] Dynamic Footer Analysis (Delegated to Utility)
             footer_info = scan_footer(worksheet, header_row, columns, self.logger, sheet_name=sheet_name)
@@ -624,27 +623,7 @@ class ExcelLayoutScanner:
         most_common = Counter(formats).most_common(1)
         return most_common[0][0] if most_common else None
 
-    def _extract_description_fallback(self, worksheet: Worksheet, header_row: int, columns: List[ColumnInfo]) -> Optional[str]:
-        """
-        Extract fallback description from rows below header.
-        Ported from DescriptionFallbackExtractor.
-        """
-        desc_col = next((c for c in columns if c.id == 'col_desc'), None)
-        if not desc_col:
-            return None
-            
-        # Check usually 2 rows below header (to account for merged headers common in packing lists)
-        target_row = header_row + 2
-        if target_row > worksheet.max_row:
-            return None
-            
-        cell = worksheet.cell(row=target_row, column=desc_col.col_index)
-        val = str(cell.value).strip().upper() if cell.value else ""
-        
-        if "COW" in val or "LEATHER" in val:
-            return val
-            
-        return None
+
     
     def _find_child_columns(self, worksheet: Worksheet, row: int, 
                             start_col: int, span: int,
@@ -812,19 +791,26 @@ class ExcelLayoutScanner:
         """Detect static content patterns in the data area."""
         hints = {}
         
-        # Look for "Mark & Nº" type columns with static content
+        # Look for "Mark & Nº" type columns with description label
         for col in columns:
             if col.id == "col_static":
-                static_values = []
                 # Sample first few data rows
-                for row in range(header_row + 1, min(header_row + 5, worksheet.max_row + 1)):
+                for row in range(header_row + 1, min(header_row + 10, worksheet.max_row + 1)):
                     cell = worksheet.cell(row=row, column=col.col_index)
                     value = self._get_cell_value(cell)
-                    if value and value not in static_values:
-                        static_values.append(value)
-                
-                if static_values:
-                    hints[col.id] = static_values
+                    if not value:
+                        continue
+                        
+                    # [Smart Feature] Label-based Description Detection
+                    # If we find "Des:" or "Desc:" in col_static, capture it!
+                    val_upper = value.upper()
+                    if val_upper.startswith("DES:") or val_upper.startswith("DESC:"):
+                        if ":" in value:
+                            desc_part = value.split(":", 1)[1].strip()
+                            if desc_part:
+                                hints["description_fallback"] = desc_part
+                                self.logger.info(f"    [Detection] Found description label in col_static: '{desc_part}'")
+                                break # Stop once found
         
         return hints
 
