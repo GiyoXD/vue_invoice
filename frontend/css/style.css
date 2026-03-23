@@ -298,6 +298,11 @@ input[type="file"] {
 }
 
 /* Inspector Layout */
+.inspector-view {
+    max-width: 95vw;
+    margin: 0 auto;
+}
+
 .inspector-layout {
     display: flex;
     gap: 1.5rem;
@@ -305,7 +310,8 @@ input[type="file"] {
 }
 
 .history-sidebar {
-    width: 300px;
+    width: 280px;
+    min-width: 280px;
     flex-shrink: 0;
     max-height: 80vh;
     overflow-y: auto;
@@ -313,6 +319,26 @@ input[type="file"] {
 
 .inspector-main {
     flex-grow: 1;
+    min-width: 0;
+    overflow-x: auto;
+}
+
+.inspector-status-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.inspector-status-info {
+    flex: 0 1 auto;
+    min-width: 200px;
+}
+
+.inspector-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
 }
 
 /* History List */
@@ -438,23 +464,7 @@ input[type="file"] {
     color: #93c5fd;
 }
 
-/* Inspector Layout */
-.inspector-layout {
-    display: flex;
-    gap: 1.5rem;
-    align-items: flex-start;
-}
-
-.history-sidebar {
-    width: 300px;
-    flex-shrink: 0;
-    max-height: 80vh;
-    overflow-y: auto;
-}
-
-.inspector-main {
-    flex-grow: 1;
-}
+/* (Inspector Layout defined above) */
 
 /* History List */
 .history-list {

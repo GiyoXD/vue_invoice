@@ -12,6 +12,7 @@ import argparse # <<< ADDED IMPORT for argument parsing
 from pathlib import Path # <<< ADDED IMPORT for pathlib
 from typing import Dict, List, Any, Optional, Tuple, Union
 import time # Added for timing operations
+import copy # For deep-copying raw table data before processing mutates it
 
 # Import from our refactored modules
 try:
@@ -372,7 +373,8 @@ from core.utils.snitch import snitch
 
 @snitch
 def run_invoice_automation(
-    input_excel_override: str = None,
+    input_excel_override: Union[str, Any] = None,
+    input_filename_override: str = None,
     output_dir_override: str = None,
     monitor_override: PipelineMonitor = None
 ) -> Tuple[Path, str]:
@@ -392,8 +394,13 @@ def run_invoice_automation(
         output_dir = sys_config.temp_uploads_dir
 
     # 2. Determine Input File (Prep for Monitor)
-    input_filepath = input_excel_override or getattr(cfg, 'INPUT_EXCEL_FILE', 'unknown.xlsx')
-    input_name = Path(input_filepath).name
+    is_buffer = hasattr(input_excel_override, "read")
+    if is_buffer:
+        input_filepath = input_excel_override
+        input_name = input_filename_override or "upload.xlsx"
+    else:
+        input_filepath = input_excel_override or getattr(cfg, 'INPUT_EXCEL_FILE', 'unknown.xlsx')
+        input_name = Path(input_filepath).name
     
     # 3. Setup Monitor
     monitor_output_path = output_dir / f"{Path(input_name).stem}_parser.json"
@@ -408,27 +415,30 @@ def run_invoice_automation(
         # -------------------------------------------------------------
         # Re-Validate Input File inside Monitor to capture errors
         # -------------------------------------------------------------
-        if not input_excel_override:
-             try:
-                 input_filepath = cfg.INPUT_EXCEL_FILE
-                 logging.info(f"Using input Excel path from config.py: {input_filepath}")
-             except Exception as e:
-                 monitor.log_process_item("Configuration", status="error", error=e)
-                 raise RuntimeError("Input Excel file path is missing in config.")
+        if not is_buffer:
+            if not input_excel_override:
+                 try:
+                     input_filepath = cfg.INPUT_EXCEL_FILE
+                     logging.info(f"Using input Excel path from config.py: {input_filepath}")
+                 except Exception as e:
+                     monitor.log_process_item("Configuration", status="error", error=e)
+                     raise RuntimeError("Input Excel file path is missing in config.")
 
-        if not os.path.isfile(input_filepath):
-             # Try relative resolution
-             script_dir = os.path.dirname(__file__)
-             potential_path = os.path.join(script_dir, input_filepath)
-             if os.path.isfile(potential_path):
-                 input_filepath = potential_path
-                 logging.info(f"Resolved relative input path: {input_filepath}")
-             else:
-                 err = FileNotFoundError(f"Input Excel file not found: {input_filepath}")
-                 monitor.log_process_item("Input File Check", status="error", error=err)
-                 raise err
-        
-        input_filename = os.path.basename(input_filepath)
+            if not os.path.isfile(input_filepath):
+                 # Try relative resolution
+                 script_dir = os.path.dirname(__file__)
+                 potential_path = os.path.join(script_dir, input_filepath)
+                 if os.path.isfile(potential_path):
+                     input_filepath = potential_path
+                     logging.info(f"Resolved relative input path: {input_filepath}")
+                 else:
+                     err = FileNotFoundError(f"Input Excel file not found: {input_filepath}")
+                     monitor.log_process_item("Input File Check", status="error", error=err)
+                     raise err
+            input_filename = os.path.basename(input_filepath)
+        else:
+            input_filename = input_name
+
         logging.info(f"Processing workbook: {input_filename}")
         
         # ... [Rest of logic continues largely unchanged but inside this block] ...
@@ -501,7 +511,11 @@ def run_invoice_automation(
             monitor.update_logs("tables_found", len(all_header_rows))
             
             all_tables_data = sheet_parser.extract_multiple_tables(sheet, all_header_rows, column_mapping)
-            
+
+            # Freeze a deep copy BEFORE any processing loop mutates the row dicts in-place.
+            # This is what gets written to "raw_data" in the JSON — CBM is never distributed here.
+            raw_tables_snapshot = copy.deepcopy(all_tables_data)
+
 
 
 
@@ -734,9 +748,14 @@ def run_invoice_automation(
                     "warnings": monitor.warnings # Surface runtime warnings to frontend
                 },
                 "price_adjustment": [], # Initialized for frontend adjustments
-                # Include processed table data (potentially large)
+                 # Include processed table data (potentially large)
                  # RENAME: processed_tables_data -> multi_table
                  "multi_table": make_json_serializable(processed_tables),
+
+                 # Raw/unprocessed table data exactly as extracted from Excel.
+                 # CBM and other values are NEVER distributed here.
+                 # Kept purely for shipping list record-keeping; never used by invoice generation.
+                 "raw_data": make_json_serializable(raw_tables_snapshot),
                  
                  # Include Footer Data - both per-table and grand total
                  "footer_data": {

@@ -57,8 +57,9 @@ def run_invoice_generation(
     custom_mode: bool = False,
     explicit_config_path: Optional[Path] = None,
     explicit_template_path: Optional[Path] = None,
-    input_data_dict: Optional[Dict[str, Any]] = None
-) -> Path:
+    input_data_dict: Optional[Dict[str, Any]] = None,
+    return_bytes: bool = False
+):
     """
     Library entry point for invoice generation. 
     Uses GenerationSession context manager to ensure robust error handling.
@@ -107,10 +108,39 @@ def run_invoice_generation(
         
         _inject_unknown_sheets(ctx)
         
-        # 4. Build dynamic output filename based on sheets & invoice_id
+    # 4. Build dynamic output filename based on sheets & invoice_id
         _build_output_filename(ctx)
         
-        _finalize(ctx)
+        if return_bytes:
+            import io
+            logger.info("Applying Print Area & Page Setup...")
+
+            # Only apply print settings to sheets defined in the config
+            configured_sheets = set(ctx.config_loader.get_sheets_to_process())
+
+            for sheet in ctx.output_workbook.sheetnames:
+                if sheet not in configured_sheets:
+                    continue
+                try:
+                    ws = ctx.output_workbook[sheet]
+                    if ws is None: continue
+                    max_col = _count_layout_columns(ctx, sheet)
+                    configure_print_area(ws, max_col_override=max_col)
+                except Exception as e:
+                    logger.error(f"Print setup failed for '{sheet}': {e}")
+                    
+            logger.info("Saving workbook to in-memory buffer")
+            buffer = io.BytesIO()
+            ctx.output_workbook.save(buffer)
+            buffer.seek(0)
+            
+            # Cleanup
+            if ctx.template_workbook: ctx.template_workbook.close()
+            if ctx.output_workbook: ctx.output_workbook.close()
+            
+            return ctx.output_path.name, buffer.getvalue()
+        else:
+            _finalize(ctx)
 
     return ctx.output_path
 

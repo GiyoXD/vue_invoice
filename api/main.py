@@ -1,7 +1,7 @@
 import logging
 from fastapi import FastAPI, BackgroundTasks, UploadFile, File, Body
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse, RedirectResponse
 from pydantic import BaseModel
 import shutil
 import os
@@ -51,6 +51,11 @@ app.mount("/static", StaticFiles(directory=str(sys_config.frontend_dir), html=Tr
 from api.routers import blueprint
 app.include_router(blueprint.router)
 
+@app.get("/")
+def redirect_to_frontend():
+    return RedirectResponse(url="/frontend/")
+
+
 # Initialize Database
 db_manager.init_db()
 
@@ -91,15 +96,20 @@ def upload_excel(file: UploadFile = File(...)):
     """
     try:
         print(f"DEBUG: Received upload request for {file.filename}") # Direct console log
-        file_path = UPLOAD_DIR / file.filename
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        
+        # Read the file into memory
+        file_bytes = file.file.read()
+        buffer = io.BytesIO(file_bytes)
             
         # Process to JSON using Orchestrator
         json_output_dir = UPLOAD_DIR / "processed"
         json_output_dir.mkdir(exist_ok=True)
 
-        json_path, identifier = orchestrator.process_excel_to_json(file_path, json_output_dir)
+        json_path, identifier = orchestrator.process_excel_to_json(
+            buffer, 
+            json_output_dir,
+            input_filename_override=file.filename
+        )
         
         # Default Invoice No to filename stem
         default_inv_no = Path(file.filename).stem
@@ -202,9 +212,8 @@ def generate_invoice(request: GenerateRequest):
         if not json_path_obj.exists():
              return JSONResponse(status_code=404, content={"error": "JSON file not found. Please upload again."})
 
-        # Define base output directory
+        # Define base output path (not created on disk to avoid clutter)
         base_output_dir = OUTPUT_DIR / request.identifier
-        base_output_dir.mkdir(exist_ok=True)
 
         # Default Template/Config dirs - use bundled directory from config
         template_dir = sys_config.bundled_dir
@@ -240,6 +249,7 @@ def generate_invoice(request: GenerateRequest):
         
         results = []
         errors = []
+        generated_files = []
         primary_metadata = {}
         processed_any = False
 
@@ -306,41 +316,32 @@ def generate_invoice(request: GenerateRequest):
                         flags.extend(["--template", str(variant["template_path"])])
 
                     # Generate
-                    result_path = orchestrator.generate_invoice(
+                    result = orchestrator.generate_invoice(
                         json_path=json_path_obj,
                         output_path=output_path,
                         template_dir=template_dir,
                         config_dir=config_dir,
                         input_data_dict=full_data,
-                        flags=flags
+                        flags=flags,
+                        return_bytes=True
                     )
                     
-                    results.append(str(result_path))
-                    processed_any = True
+                    if result:
+                        filename, file_bytes = result
+                        results.append(filename)
+                        # Store in memory temporarily
+                        generated_files.append((filename, file_bytes))
+                        processed_any = True
 
-                    # Capture metadata from first successful generation
-                    if not primary_metadata:
-                        try:
-                            meta_path = result_path.parent / f"{result_path.stem}_metadata.json"
-                            if meta_path.exists():
-                                with open(meta_path, 'r', encoding='utf-8') as f:
-                                    primary_metadata = json.load(f)
-                        except Exception:
-                            pass
-
+                    # Try to capture metadata from the first successful generation session if available
+                    # Actually wait, GenerationSession writes to output_path parent dir which we just overrode if we didn't save?
+                    
                 except Exception as e:
                     import traceback
                     task_name = f"{variant_suffix.lstrip('_')} {task['name']}" if variant_suffix else task['name']
                     error_msg = f"Failed to generate {task_name}: {str(e)}"
                     print(traceback.format_exc())
                     errors.append(error_msg)
-
-        # Open file explorer to the output directory (just once)
-        if processed_any:
-            try:
-                 os.startfile(base_output_dir)
-            except Exception:
-                 pass 
 
         if not processed_any and errors:
              # All failed
@@ -349,11 +350,37 @@ def generate_invoice(request: GenerateRequest):
                 "details": errors
             })
 
+        # Gather metadata from the database or run_log if needed?
+        # Actually metadata is stored during extract, we can just return what we have or nothing
+        # The user's main requirement is that the file is sent back via web ram.
+
+        final_payload_files = []
+        if generated_files:
+            import zipfile
+            import io
+            import base64
+            
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+                for fname, fbytes in generated_files:
+                    zf.writestr(fname, fbytes)
+            
+            zip_buffer.seek(0)
+            zip_b64 = base64.b64encode(zip_buffer.read()).decode('utf-8')
+            zip_name = f"Invoices_{request.identifier}.zip"
+            
+            final_payload_files.append({
+                "filename": zip_name,
+                "mime_type": "application/zip",
+                "content": zip_b64
+            })
+
         return {
             "status": "completed",
             "output_paths": results,
             "message": f"Generated {len(results)} invoices.",
             "metadata": primary_metadata,
+            "files": final_payload_files,
             "errors": errors if errors else None
         }
 
@@ -474,6 +501,14 @@ async def view_history_item(filename: str, source: str = "run_log"):
 class AcceptRejectRequest(BaseModel):
     filename: str
 
+@app.post("/api/registry/check")
+async def check_invoice_exists(req: AcceptRejectRequest, db: Session = Depends(get_db)):
+    """
+    Checks if a processed JSON file has already been accepted and exists in the database.
+    """
+    existing = db.query(ProcessedData).filter(ProcessedData.filename == req.filename).first()
+    return {"exists": existing is not None}
+
 @app.post("/api/registry/accept")
 async def accept_invoice(req: AcceptRejectRequest, db: Session = Depends(get_db)):
     """
@@ -503,7 +538,9 @@ async def accept_invoice(req: AcceptRejectRequest, db: Session = Depends(get_db)
         summary = data.get("aggregated_summary", {})
         item_count = summary.get("item_count", 0) # Note: second_layer_main might not have total items easily, let's derive
         
-        if "multi_table" in data:
+        if "raw_data" in data:
+            item_count = sum(len(table) for table in data["raw_data"] if isinstance(table, list))
+        elif "multi_table" in data:  # fallback for older files
             item_count = sum(len(table) for table in data["multi_table"] if isinstance(table, list))
             
         total_sqft = float(summary.get("sqft", 0.0))
@@ -538,52 +575,54 @@ async def accept_invoice(req: AcceptRejectRequest, db: Session = Depends(get_db)
         # 1. Clear existing items for this invoice
         db.query(InvoiceItem).filter(InvoiceItem.invoice_id == req.filename).delete()
         
-        # 2. Extract and flatten items from multi_table
+        # 2. Extract and flatten items from raw_data (unprocessed shipping list snapshot).
+        # Falls back to multi_table for older accepted files that predate raw_data.
         items_to_add = []
-        if "multi_table" in data:
-            for table in data["multi_table"]:
-                if isinstance(table, list):
-                    for row in table:
-                        # Extract fields safely, handling type conversions
-                        qty_pcs = row.get("col_qty_pcs")
-                        qty_sf = row.get("col_qty_sf")
-                        pallet_count = row.get("col_pallet_count")
-                        net = row.get("col_net")
-                        gross = row.get("col_gross")
-                        unit_price = row.get("col_unit_price")
-                        amount = row.get("col_amount")
-                        
-                        def to_float(val):
-                            try: return float(val) if val is not None and str(val).strip() != "" else 0.0
-                            except: return 0.0
+        source_tables = data.get("raw_data") or data.get("multi_table") or []
+        for table in source_tables:
+            if isinstance(table, list):
+                for row in table:
+                    # Extract fields safely, handling type conversions
+                    qty_pcs = row.get("col_qty_pcs")
+                    qty_sf = row.get("col_qty_sf")
+                    pallet_count = row.get("col_pallet_count")
+                    net = row.get("col_net")
+                    gross = row.get("col_gross")
+                    unit_price = row.get("col_unit_price")
+                    amount = row.get("col_amount")
 
-                        item = InvoiceItem(
-                            invoice_id=req.filename,
-                            col_dc=str(row.get("col_dc", "")),
-                            col_po=str(row.get("col_po", "")),
-                            col_production_order_no=str(row.get("col_production_order_no", "")),
-                            col_production_date=str(row.get("col_production_date", "")),
-                            col_line_no=str(row.get("col_line_no", "")),
-                            col_direction=str(row.get("col_direction", "")),
-                            col_item=str(row.get("col_item", "")),
-                            col_reference_code=str(row.get("col_reference_code", "")),
-                            col_desc=str(row.get("col_desc", "")),
-                            col_level=str(row.get("col_level", "")),
-                            col_grade=str(row.get("col_grade", "")),
-                            col_qty_pcs=to_float(qty_pcs),
-                            col_qty_sf=to_float(qty_sf),
-                            col_pallet_count=to_float(pallet_count),
-                            col_pallet_count_raw=str(row.get("col_pallet_count_raw", "")),
-                            col_net=to_float(net),
-                            col_gross=to_float(gross),
-                            col_cbm_raw=str(row.get("col_cbm", "")), # Fallback to original payload name usually "col_cbm" or "col_cbm_raw"
-                            col_hs_code=str(row.get("col_hs_code", "")),
-                            col_unit_price=to_float(unit_price),
-                            col_amount=to_float(amount),
-                            is_adjustment=0,
-                            timestamp=datetime.datetime.utcnow()
-                        )
-                        items_to_add.append(item)
+                    def to_float(val):
+                        try: return float(val) if val is not None and str(val).strip() != "" else 0.0
+                        except: return 0.0
+
+                    item = InvoiceItem(
+                        invoice_id=req.filename,
+                        col_dc=str(row.get("col_dc", "")),
+                        col_po=str(row.get("col_po", "")),
+                        col_production_order_no=str(row.get("col_production_order_no", "")),
+                        col_production_date=str(row.get("col_production_date", "")),
+                        col_line_no=str(row.get("col_line_no", "")),
+                        col_direction=str(row.get("col_direction", "")),
+                        col_item=str(row.get("col_item", "")),
+                        col_reference_code=str(row.get("col_reference_code", "")),
+                        col_desc=str(row.get("col_desc", "")),
+                        col_level=str(row.get("col_level", "")),
+                        col_grade=str(row.get("col_grade", "")),
+                        col_qty_pcs=to_float(qty_pcs),
+                        col_qty_sf=to_float(qty_sf),
+                        col_pallet_count=to_float(pallet_count),
+                        col_pallet_count_raw=str(row.get("col_pallet_count_raw", "")),
+                        col_net=to_float(net),
+                        col_gross=to_float(gross),
+                        col_cbm_raw=str(row.get("col_cbm_raw", row.get("col_cbm", ""))),
+                        col_hs_code=str(row.get("col_hs_code", "")),
+                        col_unit_price=to_float(unit_price),
+                        col_amount=to_float(amount),
+                        is_adjustment=0,
+                        timestamp=datetime.datetime.utcnow()
+                    )
+                    items_to_add.append(item)
+
                         
         # 3. Extract price_adjustments
         if "price_adjustment" in data:

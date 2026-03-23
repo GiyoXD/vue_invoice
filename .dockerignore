@@ -1,0 +1,22 @@
+# Exclude from Docker build context
+.git
+.pyre
+.pyre_configuration
+.agent
+.env
+
+# Python artifacts
+__pycache__
+*.pyc
+*.pyo
+
+# Data directories (mounted as volumes instead)
+database/
+output/
+run_log/
+tmp/
+
+# Dev/test files
+tests/
+*.ps1
+note.md

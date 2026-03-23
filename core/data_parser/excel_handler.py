@@ -9,14 +9,21 @@ import logging # Using logging is better than print for info/errors
 
 class ExcelHandler:
     """Handles loading and accessing data from Excel files using openpyxl."""
-    def __init__(self, file_path):
-        if not os.path.exists(file_path):
-            logging.error(f"File not found: {file_path}")
-            raise FileNotFoundError(f"The file '{file_path}' was not found.")
-        self.file_path = file_path
+    def __init__(self, file_path_or_buffer):
+        import io
+        self.is_buffer = hasattr(file_path_or_buffer, "read")
+        
+        if not self.is_buffer:
+            if not os.path.exists(file_path_or_buffer):
+                logging.error(f"File not found: {file_path_or_buffer}")
+                raise FileNotFoundError(f"The file '{file_path_or_buffer}' was not found.")
+                
+        self.file_path = file_path_or_buffer
         self.workbook = None
         self.sheet = None
-        logging.info(f"Initialized ExcelHandler for: {file_path}")
+        
+        target_name = "in-memory buffer" if self.is_buffer else self.file_path
+        logging.info(f"Initialized ExcelHandler for: {target_name}")
 
     def load_sheet(self, sheet_name=None, data_only=True):
         """

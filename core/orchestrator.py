@@ -20,7 +20,7 @@ class Orchestrator:
         self.project_root = Path(__file__).parent.parent
         
     @snitch
-    def process_excel_to_json(self, excel_path: Path, output_dir: Path) -> Tuple[Path, str]:
+    def process_excel_to_json(self, excel_path, output_dir: Path, input_filename_override: str = None) -> Tuple[Path, str]:
         """
         Directly calls the Data Parser library function.
         No more subprocess overhead.
@@ -29,7 +29,8 @@ class Orchestrator:
             # Call the refactored main function from data_parser
             # It returns (json_path, identifier) on success
             json_path, identifier = run_invoice_automation(
-                input_excel_override=str(excel_path),
+                input_excel_override=excel_path if hasattr(excel_path, 'read') else str(excel_path),
+                input_filename_override=input_filename_override,
                 output_dir_override=str(output_dir)
             )
             return json_path, identifier
@@ -50,7 +51,8 @@ class Orchestrator:
                         template_dir: Path, 
                         config_dir: Path, 
                         flags: List[str] = None,
-                        input_data_dict: Dict = None) -> Path:
+                        input_data_dict: Dict = None,
+                        return_bytes: bool = False):
         """
         Directly calls the Invoice Generator library function.
         No more subprocess overhead or serialization issues.
@@ -84,7 +86,7 @@ class Orchestrator:
 
         try:
             # CALLING DIRECTLY
-            result_path = run_invoice_generation(
+            result = run_invoice_generation(
                 input_data_path=json_path,
                 output_path=output_path,
                 template_dir=template_dir,
@@ -93,9 +95,10 @@ class Orchestrator:
                 custom_mode=custom_mode,
                 explicit_config_path=explicit_config_path,
                 explicit_template_path=explicit_template_path,
-                input_data_dict=input_data_dict
+                input_data_dict=input_data_dict,
+                return_bytes=return_bytes
             )
-            return result_path
+            return result
 
         except Exception as e:
             # Capture the full traceback for the UI to display

@@ -1,0 +1,23 @@
+# ============================================
+# Invoice Generator - Docker Compose
+# ============================================
+# Usage:
+#   docker compose up -d      Start in background
+#   docker compose logs -f    Follow logs
+#   docker compose down       Stop and remove container
+
+services:
+  app:
+    build: .
+    container_name: invoice-generator
+    ports:
+      - "8000:8000"
+    volumes:
+      # Persist data directories on host (not baked into image)
+      - ./database:/app/database
+      - ./run_log:/app/run_log
+      # Inject environment config from host
+      - ./.env:/app/.env:ro
+    environment:
+      - PYTHONPATH=.
+    restart: unless-stopped

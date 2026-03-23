@@ -39,13 +39,13 @@ export default {
                     </div>
 
                     <div v-if="inspectorData">
-                         <div class="status-box info" style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: center;">
-                            <div>
+                         <div class="status-box info inspector-status-bar" style="margin-bottom: 1rem;">
+                            <div class="inspector-status-info">
                                 <strong>Viewing:</strong> {{ inspectorData.output_file || currentRun?.output_file || 'Uploaded File' }}
                                 <span style="opacity: 0.7; margin-left: 1rem;">{{ inspectorData.timestamp || currentRun?.timestamp }}</span>
                                 <span v-if="currentRun?.type === 'accepted'" class="badge accepted" style="margin-left:1rem;">ACCEPTED</span>
                             </div>
-                            <div style="display: flex; gap: 0.5rem;">
+                            <div class="inspector-actions">
                                 <button v-if="currentRun?.type === 'processed'" class="btn-small btn-accept" 
                                         @click="acceptCurrentRun">
                                     Accept & Save Check ✅
@@ -60,6 +60,15 @@ export default {
                                     Download .xlsx 📥
                                 </button>
                             </div>
+                         </div>
+
+                         <!-- WARNING: Already in DB -->
+                         <div v-if="existingInDb && currentRun?.type === 'processed'" class="status-box" style="margin-bottom: 1rem; background-color: #fef2f2; border: 1px solid #f87171; color: #991b1b; padding: 1rem; border-radius: 8px;">
+                             <strong style="font-size: 1.1em;">⚠️ WARNING: Database Collision</strong>
+                             <p style="margin-top: 0.5rem; margin-bottom: 0;">
+                                 Invoice <strong>{{ currentRun?.filename || inspectorData.output_file }}</strong> is ALREADY in the database.
+                                 Accepting it again will <strong>REPLACE</strong> all existing records for this invoice.
+                             </p>
                          </div>
                     
                         <div class="table-container">
@@ -129,6 +138,7 @@ export default {
         const uploadedMetadata = ref(null);
         const historyList = ref([]);
         const currentRun = ref(null);
+        const existingInDb = ref(false);
 
         // Computed
         const inspectorData = computed(() => {
@@ -152,8 +162,9 @@ export default {
                 });
             }
             
-            // 2. Add Main Items (Supports multi_table or legacy database_export)
-            const mainItems = data.multi_table?.[0] || data.database_export?.packing_list_items || [];
+            // 2. Add Main Items — raw_data only (unprocessed, never distributed).
+            // Flatten all tables into one list.
+            const mainItems = (data.raw_data || []).flat();
             items = items.concat(mainItems);
             
             return items;
@@ -178,6 +189,28 @@ export default {
                     const data = await res.json();
                     uploadedMetadata.value = data;
                     currentRun.value = run;
+                    
+                    // Immediately check if this file already exists in the DB
+                    if (run.type === 'processed') {
+                        try {
+                            const checkRes = await fetch('/api/registry/check', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ filename: run.filename })
+                            });
+                            if (checkRes.ok) {
+                                const checkData = await checkRes.json();
+                                existingInDb.value = checkData.exists;
+                            } else {
+                                existingInDb.value = false;
+                            }
+                        } catch (e) {
+                            existingInDb.value = false;
+                        }
+                    } else {
+                        // If it's already accepted, it exists, but we don't need the red warning box for standard viewing
+                        existingInDb.value = false;
+                    }
                 } else {
                     alert("Failed to load history item.");
                 }
@@ -188,7 +221,31 @@ export default {
 
         const acceptCurrentRun = async () => {
             if (!currentRun.value || !currentRun.value.filename) return;
-            if (!confirm(`Accept and save "${currentRun.value.filename}" to database?`)) return;
+            
+            try {
+                // Check if already in DB
+                const checkRes = await fetch('/api/registry/check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filename: currentRun.value.filename })
+                });
+                
+                if (checkRes.ok) {
+                    const checkData = await checkRes.json();
+                    if (checkData.exists) {
+                        if (!confirm(`⚠️ WARNING: The invoice "${currentRun.value.filename}" is ALREADY in the database.\n\nDo you want to REPLACE the existing data?`)) {
+                            return;
+                        }
+                    } else {
+                        if (!confirm(`Accept and save "${currentRun.value.filename}" to database?`)) return;
+                    }
+                } else {
+                    if (!confirm(`Accept and save "${currentRun.value.filename}" to database?`)) return;
+                }
+            } catch (e) {
+                console.error("Failed to check registry", e);
+                if (!confirm(`Accept and save "${currentRun.value.filename}" to database?`)) return;
+            }
             
             try {
                 const res = await fetch('/api/registry/accept', {
@@ -290,7 +347,8 @@ export default {
             clearInspector,
             downloadExcel,
             formatTime,
-            currentRun
+            currentRun,
+            existingInDb
         };
     }
 };

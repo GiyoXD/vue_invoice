@@ -169,16 +169,22 @@ class TableDataAdapter:
                 # Merge static values into the first N data rows
                 num_static_values = len(static_values)
                 
+                # [Smart Feature] Extend data_rows if we have more static values than data rows
+                # This ensures col_static dictates the minimum span of rows for that item block
+                while len(data_rows) < num_static_values:
+                    # Append an empty row (using same column keys as existing rows to prevent errors)
+                    empty_row = {col_idx: "" for col_idx in self.column_id_map.values()}
+                    data_rows.append(empty_row)
+
                 for i, static_value in enumerate(static_values):
-                    if i < len(data_rows):
-                        # Intercept {col_desc_fallback} in the text
-                        if isinstance(static_value, str) and "{col_desc_fallback}" in static_value:
-                            static_value = static_value.replace("{col_desc_fallback}", str(desc_fallback_str))
-                            
-                        # Add static value to the existing data row
-                        data_rows[i][static_col_idx] = static_value
+                    # Intercept {col_desc_fallback} in the text
+                    if isinstance(static_value, str) and "{col_desc_fallback}" in static_value:
+                        static_value = static_value.replace("{col_desc_fallback}", str(desc_fallback_str))
+                        
+                    # Add static value to the existing (or newly extended) data row
+                    data_rows[i][static_col_idx] = static_value
                 
-                logger.info(f"Merged {num_static_values} static values into first {num_static_values} data rows")
+                logger.info(f"Merged {num_static_values} static values into {len(data_rows)} data rows")
         
         # Extract summaries if available in data source
         leather_summary = None

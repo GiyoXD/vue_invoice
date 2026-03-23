@@ -230,13 +230,7 @@ export default {
                     </div>
                 </div>
 
-                <div class="meta-details">
-                    <p><strong>Config Used:</strong> {{ validationData.config_info?.data_source_detected || 'Unknown' }}</p>
-                    <p><strong>Output Location:</strong></p>
-                    <code>{{ validationData.output_dir_absolute }}</code>
-                    
-                    <button class="btn-small" @click="$emit('switch-view', 'inspector')" style="margin-top: 1rem; width: 100%;">🔍 Open in Data Inspector</button>
-                </div>
+
             </div>
         </div>
     `,
@@ -441,9 +435,20 @@ export default {
                 const data = await response.json();
 
                 if (response.ok) {
-                    generationStatus.value = { type: 'success', message: 'Invoice generated successfully!' };
+                    generationStatus.value = { type: 'success', message: 'Invoice generated successfully! Download starting...' };
                     if (data.metadata) {
                         validationData.value = data.metadata;
+                    }
+                    if (data.files && data.files.length > 0) {
+                        data.files.forEach(f => {
+                            const link = document.createElement('a');
+                            const mimeType = f.mime_type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+                            link.href = `data:${mimeType};base64,${f.content}`;
+                            link.download = f.filename;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                        });
                     }
                 } else {
                     // Capture structured error from API
