@@ -394,6 +394,8 @@ class LayoutBuilder:
                 
                 # Extract legacy values for logging/compatibility if needed
                 if footer_data:
+                    self.data_start_row = footer_data.data_start_row
+                    self.data_end_row = footer_data.data_end_row
                     data_start_row = footer_data.data_start_row
                     data_end_row = footer_data.data_end_row
                     footer_row_position = footer_data.footer_row_start_idx

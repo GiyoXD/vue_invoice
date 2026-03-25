@@ -5,6 +5,10 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from pathlib import Path
 
+def get_cambodia_time():
+    return datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=7)))
+
+
 # Database location: database/invoice_registry.db
 DB_DIR = Path("database")
 DB_DIR.mkdir(parents=True, exist_ok=True)
@@ -22,10 +26,11 @@ class ProcessedData(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     filename = Column(String, unique=True, index=True)
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    timestamp = Column(DateTime, default=get_cambodia_time)
     item_count = Column(Integer)
     total_sqft = Column(Float)
     total_amount = Column(Float)
+    total_pallets = Column(Float)
     # Storing the full JSON payload
     data_payload = Column(JSON)
     status = Column(String, default="Accepted")
@@ -57,7 +62,7 @@ class InvoiceItem(Base):
     col_unit_price = Column(Float)
     col_amount = Column(Float)
     is_adjustment = Column(Integer, default=0) # SQLite uses 0/1 for False/True usually, but SQLAlchemy handles Booleans. Let's use Integer for safety or Boolean.
-    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    timestamp = Column(DateTime, default=get_cambodia_time)
 
 
 def init_db():

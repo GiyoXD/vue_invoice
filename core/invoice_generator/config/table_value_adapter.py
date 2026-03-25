@@ -208,27 +208,35 @@ class TableDataAdapter:
         
         # Resolve pallet count from pre-calculated footer_data (top-level, from data parser)
         # table_totals[index] for per-table footers, grand_total for overall total
-        if self.footer_data and 'table_totals' in self.footer_data:
-            table_totals = self.footer_data['table_totals']
-            if isinstance(table_totals, list) and len(table_totals) > 0:
-                # table_key is the zero-based index used by MultiTableProcessor
-                tbl_idx = 0
-                if self.table_key is not None and str(self.table_key).isdigit():
-                    tbl_idx = int(self.table_key)
-                
-                if tbl_idx >= len(table_totals):
-                    tbl_idx = 0  # Safe fallback
-                    logger.warning(f"table_key '{self.table_key}' out of bounds for table_totals (len={len(table_totals)}), using index 0")
-                
-                tbl_footer = table_totals[tbl_idx]
-                if 'col_pallet_count' in tbl_footer:
-                    pallet_summary_total = int(tbl_footer['col_pallet_count'])
-                    logger.info(f"Using pre-calculated pallet count from footer_data.table_totals[{tbl_idx}]: {pallet_summary_total}")
-            elif isinstance(table_totals, dict):
-                # Fallback for old {"1": {...}} format
-                first_val = next(iter(table_totals.values()), {})
-                if 'col_pallet_count' in first_val:
-                    pallet_summary_total = int(first_val['col_pallet_count'])
+        if self.footer_data:
+            # If no table_key is specified, it's a SingleTable context -> use grand_total
+            if self.table_key is None:
+                if 'grand_total' in self.footer_data and 'col_pallet_count' in self.footer_data['grand_total']:
+                    pallet_summary_total = int(self.footer_data['grand_total']['col_pallet_count'])
+                    logger.info(f"Using pre-calculated pallet count from footer_data.grand_total: {pallet_summary_total}")
+            
+            # If still None (not a single table, or grand_total missing), check table_totals
+            if pallet_summary_total is None and 'table_totals' in self.footer_data:
+                table_totals = self.footer_data['table_totals']
+                if isinstance(table_totals, list) and len(table_totals) > 0:
+                    # table_key is the zero-based index used by MultiTableProcessor
+                    tbl_idx = 0
+                    if self.table_key is not None and str(self.table_key).isdigit():
+                        tbl_idx = int(self.table_key)
+                    
+                    if tbl_idx >= len(table_totals):
+                        tbl_idx = 0  # Safe fallback
+                        logger.warning(f"table_key '{self.table_key}' out of bounds for table_totals (len={len(table_totals)}), using index 0")
+                    
+                    tbl_footer = table_totals[tbl_idx]
+                    if 'col_pallet_count' in tbl_footer:
+                        pallet_summary_total = int(tbl_footer['col_pallet_count'])
+                        logger.info(f"Using pre-calculated pallet count from footer_data.table_totals[{tbl_idx}]: {pallet_summary_total}")
+                elif isinstance(table_totals, dict):
+                    # Fallback for old {"1": {...}} format
+                    first_val = next(iter(table_totals.values()), {})
+                    if 'col_pallet_count' in first_val:
+                        pallet_summary_total = int(first_val['col_pallet_count'])
         
         # Last-resort fallback: check data_source directly (legacy path)
         if pallet_summary_total is None and isinstance(self.data_source, dict):

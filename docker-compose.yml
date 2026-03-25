@@ -13,11 +13,20 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      # Persist data directories on host (not baked into image)
-      - ./database:/app/database
-      - ./run_log:/app/run_log
+      # Persist data directories dynamically to any user's AppData\Local
+      - ${LOCALAPPDATA}/VueInvoiceManager/database:/app/database
+      - ${LOCALAPPDATA}/VueInvoiceManager/run_log:/app/run_log
+      # Hidden internal volume to keep temp files forever without cluttering Windows
+      - temp_data:/app/temp_inside_docker
+      - temp_data:/app/output_inside_docker
       # Inject environment config from host
       - ./.env:/app/.env:ro
     environment:
       - PYTHONPATH=.
+      # Force messy temporary files to stay strictly inside the container
+      - TEMP_UPLOADS_DIR=/app/temp_inside_docker
+      - OUTPUT_DIR=/app/output_inside_docker
     restart: unless-stopped
+
+volumes:
+  temp_data:

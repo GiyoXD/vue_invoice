@@ -46,9 +46,6 @@ class MultiTableProcessor(SheetProcessor):
         grand_total_pallets = 0
         last_header_info = None
         
-        # Use defaultdict for safer aggregation
-        aggregated_leather_summary = defaultdict(lambda: defaultdict(float))
-
         # 4. Process Each Table
         for i, table_key in enumerate(table_keys):
             result = self._process_single_table(
@@ -72,12 +69,6 @@ class MultiTableProcessor(SheetProcessor):
             if data_range:
                 all_data_ranges.append(data_range)
             last_header_info = header_info
-            
-            # Aggregate leather summary
-            if table_leather_summary:
-                for l_type, data in table_leather_summary.items():
-                    for col_id, val in data.items():
-                        aggregated_leather_summary[l_type][col_id] += val
 
         # 5. Build Grand Total Row
         if len(table_keys) > 1 and last_header_info:
@@ -87,8 +78,7 @@ class MultiTableProcessor(SheetProcessor):
                 all_data_ranges=all_data_ranges,
                 last_header_info=last_header_info,
                 all_tables_data=all_tables_data,
-                table_keys=table_keys,
-                aggregated_leather_summary=aggregated_leather_summary
+                table_keys=table_keys
             )
 
         # 6. Restore Template Footer
@@ -223,9 +213,17 @@ class MultiTableProcessor(SheetProcessor):
         )
 
     def _build_grand_total_row(self, current_row, grand_total_pallets, all_data_ranges, last_header_info, 
-                             all_tables_data, table_keys, aggregated_leather_summary):
+                             all_tables_data, table_keys):
         """Builds the Grand Total row after all tables."""
         logger.info("Adding Grand Total Row")
+        
+        # Fetch the global leather summary securely to prevent data multiplication
+        global_leather_summary = {}
+        if self.invoice_data and 'footer_data' in self.invoice_data:
+            footer_data = self.invoice_data.get('footer_data', {})
+            add_ons = footer_data.get('add_ons', {})
+            if add_ons:
+                global_leather_summary = add_ons.get('leather_summary_addon', {})
         
         grand_total_resolver = BuilderConfigResolver(
             config_loader=self.config_loader,
@@ -274,7 +272,7 @@ class MultiTableProcessor(SheetProcessor):
             data_start_row=overall_data_start,
             data_end_row=overall_data_end,
             pallet_count=grand_total_pallets,
-            leather_summary=dict(aggregated_leather_summary),
+            leather_summary=global_leather_summary,
             weight_summary={'net': 0.0, 'gross': 0.0}  # Will be auto-filled with global weights by resolver
         )
         
@@ -296,7 +294,7 @@ class MultiTableProcessor(SheetProcessor):
                 'mapping_rules': gt_layout_config.get('sheet_config', {}).get('data_flow', {}).get('mappings', {}),
                 'DAF_mode': self.args.DAF,
                 'override_total_text': None,
-                'leather_summary': dict(aggregated_leather_summary)
+                'leather_summary': global_leather_summary
             }
         )
         

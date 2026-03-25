@@ -15,7 +15,7 @@ import datetime
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from core.database import db_manager
-from core.database.db_manager import get_db, ProcessedData, InvoiceItem, init_db, engine, Base
+from core.database.db_manager import get_db, ProcessedData, InvoiceItem, init_db, engine, Base, get_cambodia_time
 
 # Initialize logging FIRST before any other core imports
 from core.system_config import sys_config
@@ -528,56 +528,23 @@ async def accept_invoice(req: AcceptRejectRequest, db: Session = Depends(get_db)
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
             
-        # Calculate summary statistics
+        # Delete existing items immediately to prepare for new ones
+        db.query(InvoiceItem).filter(InvoiceItem.invoice_id == req.filename).delete()
+        
+        items_to_add = []
         item_count = 0
         total_sqft = 0.0
         total_amount = 0.0
+        # Extract total_pallets securely from footer_data.grand_total to avoid duplicate summation
+        total_pallets = 0.0
+        try:
+            footer_data = data.get("footer_data", {})
+            grand_total = footer_data.get("grand_total", {})
+            gp_count = grand_total.get("col_pallet_count", 0)
+            total_pallets = float(gp_count) if gp_count else 0.0
+        except Exception:
+            total_pallets = 0.0
         
-        # Extract from aggregated_summary or footer_data if available
-        # In current second_layer_main.py, it's aggregated_summary
-        summary = data.get("aggregated_summary", {})
-        item_count = summary.get("item_count", 0) # Note: second_layer_main might not have total items easily, let's derive
-        
-        if "raw_data" in data:
-            item_count = sum(len(table) for table in data["raw_data"] if isinstance(table, list))
-        elif "multi_table" in data:  # fallback for older files
-            item_count = sum(len(table) for table in data["multi_table"] if isinstance(table, list))
-            
-        total_sqft = float(summary.get("sqft", 0.0))
-        total_amount = float(summary.get("amount", 0.0)) # Note: 'amount' might be 'total_amount' in some versions
-        
-        # If footer_data exists, it might be more accurate
-        if "footer_data" in data and "grand_total" in data["footer_data"]:
-            gt = data["footer_data"]["grand_total"]
-            total_sqft = float(gt.get("sqft", total_sqft))
-            total_amount = float(gt.get("amount", total_amount))
-
-        # Check for duplication
-        existing = db.query(ProcessedData).filter(ProcessedData.filename == req.filename).first()
-        if existing:
-            # Update existing? Or error? Let's update.
-            existing.item_count = item_count
-            existing.total_sqft = total_sqft
-            existing.total_amount = total_amount
-            existing.data_payload = data
-            existing.timestamp = datetime.datetime.utcnow()
-        else:
-            new_record = ProcessedData(
-                filename=req.filename,
-                item_count=item_count,
-                total_sqft=total_sqft,
-                total_amount=total_amount,
-                data_payload=data
-            )
-            db.add(new_record)
-            
-        # After updating/creating ProcessedData, handle InvoiceItems
-        # 1. Clear existing items for this invoice
-        db.query(InvoiceItem).filter(InvoiceItem.invoice_id == req.filename).delete()
-        
-        # 2. Extract and flatten items from raw_data (unprocessed shipping list snapshot).
-        # Falls back to multi_table for older accepted files that predate raw_data.
-        items_to_add = []
         source_tables = data.get("raw_data") or data.get("multi_table") or []
         for table in source_tables:
             if isinstance(table, list):
@@ -592,8 +559,19 @@ async def accept_invoice(req: AcceptRejectRequest, db: Session = Depends(get_db)
                     amount = row.get("col_amount")
 
                     def to_float(val):
-                        try: return float(val) if val is not None and str(val).strip() != "" else 0.0
+                        try:
+                            if isinstance(val, str):
+                                val = val.replace(',', '').replace('$', '').strip()
+                            return float(val) if val is not None and str(val).strip() != "" else 0.0
                         except: return 0.0
+
+                    sqft_val = to_float(qty_sf)
+                    amount_val = to_float(amount)
+                    pallet_val = to_float(pallet_count)
+                    item_count += 1
+                    total_sqft += sqft_val
+                    total_amount += amount_val
+                    # Note: We NO LONGER sum total_pallets here since it inflates when items share pallets
 
                     item = InvoiceItem(
                         invoice_id=req.filename,
@@ -609,21 +587,20 @@ async def accept_invoice(req: AcceptRejectRequest, db: Session = Depends(get_db)
                         col_level=str(row.get("col_level", "")),
                         col_grade=str(row.get("col_grade", "")),
                         col_qty_pcs=to_float(qty_pcs),
-                        col_qty_sf=to_float(qty_sf),
-                        col_pallet_count=to_float(pallet_count),
+                        col_qty_sf=sqft_val,
+                        col_pallet_count=pallet_val,
                         col_pallet_count_raw=str(row.get("col_pallet_count_raw", "")),
                         col_net=to_float(net),
                         col_gross=to_float(gross),
                         col_cbm_raw=str(row.get("col_cbm_raw", row.get("col_cbm", ""))),
                         col_hs_code=str(row.get("col_hs_code", "")),
                         col_unit_price=to_float(unit_price),
-                        col_amount=to_float(amount),
+                        col_amount=amount_val,
                         is_adjustment=0,
-                        timestamp=datetime.datetime.utcnow()
+                        timestamp=get_cambodia_time()
                     )
                     items_to_add.append(item)
 
-                        
         # 3. Extract price_adjustments
         if "price_adjustment" in data:
             for adj in data["price_adjustment"]:
@@ -631,17 +608,40 @@ async def accept_invoice(req: AcceptRejectRequest, db: Session = Depends(get_db)
                      try: return float(val) if val is not None and str(val).strip() != "" else 0.0
                      except: return 0.0
                  amount = adj.get("amount", 0.0)
+                 amount_val = to_float(amount)
+                 total_amount += amount_val
+                 
                  item = InvoiceItem(
                      invoice_id=req.filename,
                      col_desc=str(adj.get("description", "")),
-                     col_amount=to_float(amount),
+                     col_amount=amount_val,
                      is_adjustment=1,
-                     timestamp=datetime.datetime.utcnow()
+                     timestamp=get_cambodia_time()
                  )
                  items_to_add.append(item)
                  
         if items_to_add:
             db.add_all(items_to_add)
+
+        # Update ProcessedData
+        existing = db.query(ProcessedData).filter(ProcessedData.filename == req.filename).first()
+        if existing:
+            existing.item_count = item_count
+            existing.total_sqft = total_sqft
+            existing.total_amount = total_amount
+            existing.total_pallets = total_pallets
+            existing.data_payload = data
+            existing.timestamp = get_cambodia_time()
+        else:
+            new_record = ProcessedData(
+                filename=req.filename,
+                item_count=item_count,
+                total_sqft=total_sqft,
+                total_amount=total_amount,
+                total_pallets=total_pallets,
+                data_payload=data
+            )
+            db.add(new_record)
 
         db.commit()
         
@@ -783,6 +783,10 @@ async def export_registry(
         ])
         
         # Write Rows
+        total_sqft = 0.0
+        total_pallets = 0.0
+        total_amount = 0.0
+        
         for row in results:
             writer.writerow([
                 row.id,
@@ -812,10 +816,24 @@ async def export_registry(
                 "Yes" if row.is_adjustment else "No"
             ])
             
+            total_sqft += float(row.col_qty_sf or 0.0)
+            total_pallets += float(row.col_pallet_count or 0.0)
+            total_amount += float(row.col_amount or 0.0)
+            
+        # Write Summary Row
+        summary_row = [""] * 25
+        summary_row[1] = "TOTAL"
+        summary_row[15] = round(total_sqft, 2)
+        summary_row[16] = round(total_pallets, 2)
+        summary_row[23] = round(total_amount, 2)
+        
+        writer.writerow([])
+        writer.writerow(summary_row)
+            
         output.seek(0)
         csv_data = "\ufeff" + output.getvalue()
         
-        filename = f"export_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        filename = f"export_{get_cambodia_time().strftime('%Y%m%d_%H%M%S')}.csv"
         
         return StreamingResponse(
             iter([csv_data]),
@@ -842,7 +860,8 @@ async def list_registry(db: Session = Depends(get_db)):
                 "timestamp": row.timestamp.isoformat(),
                 "item_count": row.item_count,
                 "total_amount": row.total_amount,
-                "total_sqft": row.total_sqft
+                "total_sqft": row.total_sqft,
+                "total_pallets": getattr(row, 'total_pallets', 0.0)
             }
             for row in results
         ]
