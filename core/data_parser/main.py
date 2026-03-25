@@ -233,12 +233,10 @@ def perform_DAF_compounding(
         # --- End Path 1 (BUFFALO Split) --- #
 
     else:
-        # --- Path 2: Descriptions are NOT present -> PO Count Split Aggregation ---
-        # Totals are calculated based on conceptual groups of 8 POs.
-        # Final string formatting uses chunk size 2.
-        PO_GROUPING_FOR_TOTALS = 5 # Define the size for grouping totals
-        logging.info(f"{prefix} No description data found. Performing PO count split aggregation.")
-        logging.info(f"{prefix}   - Totals calculated per group of {PO_GROUPING_FOR_TOTALS} POs.")
+        # --- Path 2: Descriptions are NOT present -> Dynamic Split Aggregation ---
+        # If total POs > 7, split into 2 halves. Otherwise, keep as 1 chunk.
+        # Final string formatting continues to use chunk size 2.
+        logging.info(f"{prefix} No description data found. Performing dynamic PO count split aggregation (split in half if >7 POs).")
         logging.info(f"{prefix}   - String formatting uses chunk size {DAF_CHUNK_SIZE} and separator '{DAF_INTRA_CHUNK_SEPARATOR}'.")
 
         # Step 1: Aggregate data by PO
@@ -278,19 +276,23 @@ def perform_DAF_compounding(
         # Step 2: Get sorted list of unique POs
         sorted_pos = sorted(list(po_data_aggregation.keys()))
 
-        # Step 3: Iterate through POs in conceptual groups of 8 for total calculation
+        # Step 3: Iterate through POs in chunks based on >7 rule for total calculation
         final_po_count_split_result: FinalDAFResultType = []
-        # Calculate number of output chunks based on the total grouping size
-        num_conceptual_chunks = (len(sorted_pos) + PO_GROUPING_FOR_TOTALS - 1) // PO_GROUPING_FOR_TOTALS
+        
+        # Determine conceptual chunks
+        conceptual_po_chunks = []
+        if len(sorted_pos) > 7:
+            # Break down into half
+            import math
+            mid = math.ceil(len(sorted_pos) / 2)
+            conceptual_po_chunks.append(sorted_pos[:mid])
+            conceptual_po_chunks.append(sorted_pos[mid:])
+            logging.debug(f"{prefix} Pass 2: Over 7 POs detected ({len(sorted_pos)}). Splitting into 2 chunks of {mid} and {len(sorted_pos)-mid}.")
+        else:
+            conceptual_po_chunks.append(sorted_pos)
+            logging.debug(f"{prefix} Pass 2: {len(sorted_pos)} POs detected (<= 7). Keeping as 1 chunk.")
 
-        logging.debug(f"{prefix} Pass 2: Creating {num_conceptual_chunks} output chunks based on conceptual PO groups of {PO_GROUPING_FOR_TOTALS}.")
-
-        for i in range(num_conceptual_chunks):
-            # Determine the POs belonging to this conceptual chunk (for totals)
-            start_idx = i * PO_GROUPING_FOR_TOTALS
-            end_idx = start_idx + PO_GROUPING_FOR_TOTALS
-            conceptual_po_chunk = sorted_pos[start_idx:end_idx]
-
+        for i, conceptual_po_chunk in enumerate(conceptual_po_chunks):
             # Calculate totals and collect items for THIS conceptual chunk
             chunk_sqft_total = decimal.Decimal(0)
             chunk_amount_total = decimal.Decimal(0)
