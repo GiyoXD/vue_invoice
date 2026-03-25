@@ -374,12 +374,17 @@ class LayoutBuilder:
                 # --- 5. Build Data Table (DataTableBuilder) ---
                 if not self.skip_data_table_builder:
                     logger.info("LayoutBuilder: Building data table...")
+                    
+                    merge_cols = ['col_pallet_count']
+                    if self.layout_config.get('allow_col_desc_merge', True):
+                        merge_cols.append('col_desc')
+                        
                     data_builder = DataTableBuilder(
                         worksheet=self.worksheet,
                         header_info=self.header_info,
                         resolved_data=dtb_data_config,
                         sheet_styling_config=styling_model,
-                        vertical_merge_columns=['col_desc', 'col_pallet_count']
+                        vertical_merge_columns=merge_cols
                     )
                     result = data_builder.build()
                     if not result:

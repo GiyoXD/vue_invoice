@@ -113,7 +113,9 @@
       "Net Weight\n(Kgs)": "col_net",
       "Gross Weight\n(Kgs)": "col_gross",
       "Volume\n(CBM)": "col_cbm",
-      "Unit Price       \n(USD)": "col_unit_price"
+      "Unit Price       \n(USD)": "col_unit_price",
+      "N.W\n(kgs)": "col_net",
+      "G.W\n(kgs)": "col_gross"
     }
   },
   "fallback_strategies": {

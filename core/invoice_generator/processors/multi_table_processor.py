@@ -34,6 +34,19 @@ class MultiTableProcessor(SheetProcessor):
         if not all_tables_data:
             return True  # Nothing to do
 
+        # Evaluate global col_desc merge rules
+        # If any table contains varying descriptions in col_desc, disable merge for all tables
+        self.allow_col_desc_merge = True
+        for table_data in all_tables_data:
+            if isinstance(table_data, dict):
+                desc_list = table_data.get('col_desc') or table_data.get('desc') or table_data.get('description') or []
+                if isinstance(desc_list, list) and len(desc_list) > 1:
+                    valid_descs = [str(x).strip() for x in desc_list if x is not None and str(x).strip()]
+                    if len(set(valid_descs)) > 1:
+                        logger.info(f"MultiTableProcessor: Found varying descriptions in table. Disabling col_desc merge globally.")
+                        self.allow_col_desc_merge = False
+                        break
+
         # 2. Capture Template State
         template_state_builder = self._capture_template_state()
         if not template_state_builder:
@@ -175,6 +188,7 @@ class MultiTableProcessor(SheetProcessor):
         
         layout_config['skip_template_header_restoration'] = (not is_first_table)
         layout_config['skip_template_footer_restoration'] = True
+        layout_config['allow_col_desc_merge'] = getattr(self, 'allow_col_desc_merge', True)
         
         layout_builder = LayoutBuilder(
             self.output_workbook,
