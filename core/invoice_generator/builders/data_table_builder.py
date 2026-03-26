@@ -38,7 +38,8 @@ class DataTableBuilderStyler:
         header_info: Dict[str, Any],
         resolved_data: Dict[str, Any],
         sheet_styling_config: Optional[StylingConfigModel] = None,
-        vertical_merge_columns: Optional[List[str]] = None
+        vertical_merge_columns: Optional[List[str]] = None,
+        is_global_unique_desc: bool = False
     ):
         """
         Initialize the builder with resolved data.
@@ -48,12 +49,14 @@ class DataTableBuilderStyler:
             header_info: Header information with column maps.
             resolved_data: The data prepared by TableDataAdapter.
             sheet_styling_config: The styling configuration for the sheet.
+            is_global_unique_desc: Whether descriptions are unique across the entire dataset.
         """
         self.worksheet = worksheet
         self.header_info = header_info
         self.resolved_data = resolved_data
         self.sheet_styling_config = sheet_styling_config
         self.vertical_merge_columns = vertical_merge_columns or []
+        self.is_global_unique_desc = is_global_unique_desc
 
         # Extract commonly used values
         self.data_rows = resolved_data.get('data_rows', [])
@@ -240,13 +243,41 @@ class DataTableBuilderStyler:
                                 )
                                 logger.debug(f"Merged data row {row_idx}, columns {start_col}-{end_col} for {col_id} (colspan={colspan})")
 
-            # --- Apply Vertical Merges ---
+            # --- Apply Vertical Merges (Conditional based on GLOBAL col_desc uniqueness) ---
             if self.vertical_merge_columns and actual_rows_to_process > 0:
-                logger.debug(f"Applying vertical merges to columns: {self.vertical_merge_columns}")
+                # 1. We use self.is_global_unique_desc (passed from LayoutBuilder) 
+                # to determine the strategy for col_desc.
+                
+                # 2. Apply Merging Strategy
+                logger.info(f"DataTableBuilder: Applying vertical merges (Global Unique Description: {self.is_global_unique_desc})")
+                
                 for col_id in self.vertical_merge_columns:
                     col_idx = self.col_id_map.get(col_id)
-                    if col_idx:
-                        logger.debug(f"  Merging contiguous cells in column '{col_id}' (index {col_idx}) from row {data_start_row} to {data_end_row}")
+                    if not col_idx:
+                        continue
+
+                    if col_id == 'col_desc':
+                        if self.is_global_unique_desc:
+                            # Strategy: If GLOBALLY UNIQUE, merge the ENTIRE range for col_desc in this table
+                            try:
+                                self.worksheet.merge_cells(
+                                    start_row=data_start_row,
+                                    start_column=col_idx,
+                                    end_row=data_end_row,
+                                    end_column=col_idx
+                                )
+                                anchor_cell = self.worksheet.cell(row=data_start_row, column=col_idx)
+                                anchor_cell.alignment = Alignment(horizontal='center', vertical='center')
+                                logger.debug(f"  Merged globally unique col_desc (rows {data_start_row}-{data_end_row})")
+                            except Exception as merge_err:
+                                logger.warning(f"  Failed to merge unique col_desc: {merge_err}")
+                        else:
+                            # Strategy: If GLOBALLY MIXED, skip merging for col_desc entirely ("mix no merge")
+                            logger.info("  Skipping vertical merge for col_desc because descriptions are mixed globally.")
+                            pass
+                    else:
+                        # Strategy: For all OTHER columns, merge normally regardless of description state
+                        logger.debug(f"  Merging contiguous cells in column '{col_id}' (index {col_idx})")
                         merge_vertical_cells_in_range(
                             worksheet=self.worksheet,
                             scan_col=col_idx,
@@ -254,8 +285,6 @@ class DataTableBuilderStyler:
                             end_row=data_end_row,
                             col_id=col_id
                         )
-                    else:
-                        logger.warning(f"warning!!  Vertical merge requested for column '{col_id}' but column not found in column_id_map")
 
         except Exception as fill_data_err:
             logger.error(f"Error during data filling loop: {fill_data_err}\n{traceback.format_exc()}")

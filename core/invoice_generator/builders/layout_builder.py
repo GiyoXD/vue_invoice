@@ -375,6 +375,44 @@ class LayoutBuilder:
                 if not self.skip_data_table_builder:
                     logger.info("LayoutBuilder: Building data table...")
                     
+                    # NEW: Determine global uniqueness of descriptions across ALL tables
+                    is_global_unique_desc = False
+                    if self.invoice_data:
+                        all_descriptions = set()
+                        
+                        # 1. Check multi_table (List of Lists of Dicts)
+                        multi_table = self.invoice_data.get('multi_table', [])
+                        if isinstance(multi_table, list):
+                            for table in multi_table:
+                                if isinstance(table, list):
+                                    for row in table:
+                                        desc = str(row.get('col_desc', "")).strip()
+                                        if desc: all_descriptions.add(desc)
+                        
+                        # 2. Check single_table (Dict of Aggregations)
+                        single_table = self.invoice_data.get('single_table', {})
+                        if isinstance(single_table, dict):
+                            # Check standard aggregation
+                            agg = single_table.get('aggregation', [])
+                            if isinstance(agg, list):
+                                for row in agg:
+                                    desc = str(row.get('col_desc', "")).strip()
+                                    if desc: all_descriptions.add(desc)
+                            
+                            # Check custom aggregation
+                            agg_cust = single_table.get('aggregation_custom', [])
+                            if isinstance(agg_cust, list):
+                                for row in agg_cust:
+                                    desc = str(row.get('col_desc', "")).strip()
+                                    if desc: all_descriptions.add(desc)
+
+                        # Final Check: If only ONE unique non-empty description exists globally
+                        if len(all_descriptions) == 1:
+                            is_global_unique_desc = True
+                            logger.info(f"LayoutBuilder: Globally unique description detected: {list(all_descriptions)[0]}")
+                        elif len(all_descriptions) > 1:
+                            logger.info(f"LayoutBuilder: Globally mixed descriptions detected ({len(all_descriptions)} types).")
+                    
                     merge_cols = ['col_pallet_count']
                     if self.layout_config.get('allow_col_desc_merge', True):
                         merge_cols.append('col_desc')
@@ -384,7 +422,8 @@ class LayoutBuilder:
                         header_info=self.header_info,
                         resolved_data=dtb_data_config,
                         sheet_styling_config=styling_model,
-                        vertical_merge_columns=merge_cols
+                        vertical_merge_columns=merge_cols,
+                        is_global_unique_desc=is_global_unique_desc
                     )
                     result = data_builder.build()
                     if not result:
