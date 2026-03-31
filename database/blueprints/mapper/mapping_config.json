@@ -115,7 +115,8 @@
       "Volume\n(CBM)": "col_cbm",
       "Unit Price       \n(USD)": "col_unit_price",
       "N.W\n(kgs)": "col_net",
-      "G.W\n(kgs)": "col_gross"
+      "G.W\n(kgs)": "col_gross",
+      "Origin": "col_static"
     }
   },
   "fallback_strategies": {
@@ -381,5 +382,19 @@
       ],
       "format": "@"
     }
+  },
+  "footer_label_mappings": {
+    "comment": "Keywords used to detect the 'Total' footer row. Supports bilingual labels via partial matching.",
+    "keywords": [
+      "TOTAL",
+      "TOTAL:",
+      "TOTAL OF:",
+      "TOTAL OF",
+      "TOTAL AMOUNT",
+      "TOTAL AMOUNT:",
+      "TỔNG CỘNG",
+      "TỔNG",
+      "TỔNG"
+    ]
   }
 }

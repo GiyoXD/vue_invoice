@@ -100,6 +100,23 @@ export default {
                         </div>
                     </div>
                 </div>
+                
+                <!-- FOOTER MAPPINGS -->
+                <div v-if="allMissingFooters.length > 0" style="margin-top: 2rem;">
+                    <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem;">
+                        <span style="font-size: 1.25rem;">🔍</span>
+                        <h3 style="margin: 0; color: #4ade80;">Unconfirmed Footer Label</h3>
+                    </div>
+                    <p style="color: #94a3b8; margin-bottom: 1rem; font-size: 0.9rem;">
+                        We detected a potential footer label via partial match. If you confirm it, it will be mapped permanently so future templates are scanned exactly.
+                    </p>
+                    <div v-for="(footerText, idx) in allMissingFooters" :key="'f'+idx" style="background: rgba(34, 197, 94, 0.05); border: 1px solid rgba(34, 197, 94, 0.2); padding: 1rem; border-radius: 6px; margin-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="font-weight: bold; color: #4ade80;">"{{ footerText }}"</div>
+                        <button class="btn-sm" :class="confirmedFooters.includes(footerText) ? 'btn-secondary' : 'btn-success'" @click="toggleFooter(footerText)" style="min-width: 100px;">
+                            {{ confirmedFooters.includes(footerText) ? 'Confirmed ✓' : 'Confirm It' }}
+                        </button>
+                    </div>
+                </div>
 
                 <div class="flex-row" style="margin-top: 2rem; gap: 1rem; display: flex;">
                     <button class="nav-btn" @click="currentStep = 1">Back</button>
@@ -166,15 +183,16 @@ export default {
                             <option value="header_text_mappings">Header Mappings</option>
                             <option value="sheet_name_mappings">Sheet Name Mappings</option>
                             <option value="shipping_header_map">Shipping Header Map</option>
+                            <option value="footer_label_mappings">Footer Labels (Total)</option>
                         </select>
                         <input type="text" v-model="mappingSearch" class="input-field" placeholder="Search..." style="flex: 1;" />
                     </div>
 
                     <!-- Add New Mapping Row -->
                     <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; margin-bottom: 1rem; padding: 0.5rem; background: rgba(34, 197, 94, 0.05); border: 1px dashed #22c55e; border-radius: 6px; align-items: center;">
-                        <input type="text" v-model="newMappingKey" class="input-field" :placeholder="activeMappingType === 'shipping_header_map' ? 'Col ID (e.g. col_grade)' : 'New Input Text (e.g. Qty(SF))'" style="padding: 0.5rem;" />
+                        <input type="text" v-model="newMappingKey" class="input-field" :placeholder="activeMappingType === 'shipping_header_map' ? 'Col ID (e.g. col_grade)' : (activeMappingType === 'footer_label_mappings' ? 'New Footer Label (e.g. GRAND TOTAL)' : 'New Input Text (e.g. Qty(SF))')" style="padding: 0.5rem;" />
                         
-                        <input v-if="activeMappingType === 'sheet_name_mappings' || activeMappingType === 'shipping_header_map'" type="text" v-model="newMappingVal" class="input-field" :placeholder="activeMappingType === 'shipping_header_map' ? 'Keywords (comma-separated)' : 'Target Name (e.g. Packing list)'" style="padding: 0.5rem;" />
+                        <input v-if="activeMappingType === 'sheet_name_mappings' || activeMappingType === 'shipping_header_map' || activeMappingType === 'footer_label_mappings'" type="text" v-model="newMappingVal" class="input-field" :placeholder="activeMappingType === 'shipping_header_map' ? 'Keywords (comma-separated)' : (activeMappingType === 'footer_label_mappings' ? 'Auto-filled' : 'Target Name (e.g. Packing list)')" style="padding: 0.5rem;" :disabled="activeMappingType === 'footer_label_mappings'" />
                         <select v-else v-model="newMappingVal" class="input-field" style="padding: 0.5rem;">
                             <option value="" disabled selected>Select system field...</option>
                             <option v-for="opt in systemOptions" :value="opt.id">{{ opt.label }} ({{ opt.id }})</option>
@@ -187,15 +205,15 @@ export default {
                         <div class="mapping-grid" style="display: grid; gap: 0.5rem;">
                             <!-- Header Row -->
                             <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; font-weight: bold; padding: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.1);">
-                                <div>{{ activeMappingType === 'shipping_header_map' ? 'Column ID' : 'Original Text (Excel)' }}</div>
-                                <div>{{ activeMappingType === 'shipping_header_map' ? 'Keywords (comma-separated)' : 'Mapped Target (System)' }}</div>
+                                <div>{{ activeMappingType === 'shipping_header_map' ? 'Column ID' : (activeMappingType === 'footer_label_mappings' ? 'Footer Target Text' : 'Original Text (Excel)') }}</div>
+                                <div>{{ activeMappingType === 'shipping_header_map' ? 'Keywords (comma-separated)' : (activeMappingType === 'footer_label_mappings' ? 'Type' : 'Mapped Target (System)') }}</div>
                                 <div style="width: 70px; text-align: center;">Action</div>
                             </div>
                             
                             <div v-for="(colId, headerText) in filteredMappings" :key="headerText" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: center; background: rgba(255,255,255,0.03); padding: 0.5rem; border-radius: 4px;">
                                 <input type="text" :value="headerText" @change="updateMappingHeader(headerText, $event.target.value)" class="input-field" style="padding: 0.3rem;" />
                                 
-                                <input v-if="activeMappingType === 'sheet_name_mappings' || activeMappingType === 'shipping_header_map'" type="text" :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="input-field" style="padding: 0.3rem;" />
+                                <input v-if="activeMappingType === 'sheet_name_mappings' || activeMappingType === 'shipping_header_map' || activeMappingType === 'footer_label_mappings'" type="text" :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="input-field" style="padding: 0.3rem;" :disabled="activeMappingType === 'footer_label_mappings'" />
                                 
                                 <select v-else :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="input-field" style="padding: 0.3rem;">
                                     <option v-for="opt in systemOptions" :value="opt.id">
@@ -246,9 +264,11 @@ export default {
         // Data
         const fileTokens = ref([]); // Array of { filename, missingHeaders }
         const allMissingHeaders = ref([]); // Deduplicated list across all files
+        const allMissingFooters = ref([]); // Deduplicated footers
         const filePrefix = ref("");
         const userMappings = reactive({});
         const confirmedHeaders = ref([]);
+        const confirmedFooters = ref([]);
         const proactiveWarnings = ref([]); // warnings from analysis
         const bundlePath = ref("");
         const generatedPrefixes = ref([]);
@@ -339,7 +359,7 @@ export default {
             await fetchMappings();
             mappingStatusMessage.value = "";
             newMappingKey.value = "";
-            newMappingVal.value = "";
+            newMappingVal.value = type === 'footer_label_mappings' ? 'Footer Keyword' : '';
         };
 
         const saveMappings = async () => {
@@ -393,15 +413,25 @@ export default {
             }
         };
 
+        const toggleFooter = (footerText) => {
+            if (confirmedFooters.value.includes(footerText)) {
+                confirmedFooters.value = confirmedFooters.value.filter(f => f !== footerText);
+            } else {
+                confirmedFooters.value.push(footerText);
+            }
+        };
+
         const analyzeFiles = async () => {
             if (selectedFiles.value.length === 0) return;
             isProcessing.value = true;
             statusMessage.value = "Scanning template structure...";
             allMissingHeaders.value = [];
+            allMissingFooters.value = [];
             fileTokens.value = [];
 
             try {
                 const headerSet = new Set();
+                const footerSet = new Set();
                 const warningSet = new Set();
 
                 for (const file of selectedFiles.value) {
@@ -425,6 +455,11 @@ export default {
                     for (const h of (data.missing_headers || [])) {
                         headerSet.add(h.text);
                     }
+                    
+                    // Collect missing footers
+                    for (const f of (data.missing_footers || [])) {
+                        footerSet.add(f);
+                    }
 
                     // Collect proactive warnings
                     if (data.warnings && data.warnings.length > 0) {
@@ -433,10 +468,11 @@ export default {
                 }
 
                 allMissingHeaders.value = Array.from(headerSet);
+                allMissingFooters.value = Array.from(footerSet);
                 proactiveWarnings.value = Array.from(warningSet);
 
-                if (allMissingHeaders.value.length > 0) {
-                    statusMessage.value = "Unknown headers found.";
+                if (allMissingHeaders.value.length > 0 || allMissingFooters.value.length > 0) {
+                    statusMessage.value = "Unmapped fields found. Please review.";
                 } else if (proactiveWarnings.value.length > 0) {
                     statusMessage.value = "Template analyzed with warnings.";
                 } else {
@@ -494,7 +530,8 @@ export default {
                                 file_prefix: suffixedPrefix,
                                 user_mappings: finalMappings,
                                 temp_filename: fileTokens.value[i].filename,
-                                bundle_dir_name: baseName
+                                bundle_dir_name: baseName,
+                                confirmed_footers: confirmedFooters.value
                             })
                         });
                         const data = await res.json();
@@ -521,7 +558,8 @@ export default {
                             file_prefix: effectivePrefix,
                             user_mappings: finalMappings,
                             temp_filename: fileTokens.value[0].filename,
-                            bundle_dir_name: useBundleDir
+                            bundle_dir_name: useBundleDir,
+                            confirmed_footers: confirmedFooters.value
                         })
                     });
                     const data = await res.json();
@@ -557,6 +595,8 @@ export default {
                 delete userMappings[prop];
             }
             confirmedHeaders.value = [];
+            confirmedFooters.value = [];
+            allMissingFooters.value = [];
             proactiveWarnings.value = [];
         };
 
@@ -574,9 +614,12 @@ export default {
             resetFlow,
             filePrefix,
             allMissingHeaders,
+            allMissingFooters,
             userMappings,
             confirmedHeaders,
+            confirmedFooters,
             toggleMapping,
+            toggleFooter,
             systemOptions,
             bundlePath,
             generatedPrefixes,

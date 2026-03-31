@@ -22,6 +22,7 @@ class FooterInfo:
     has_hs_code: bool = False
     hs_code_text: Optional[str] = None
     hs_code_colspan: int = 1
+    is_exact: bool = True
 
 
 def find_column_id_by_index(col_index: int, columns: List[ColumnInfo]) -> Optional[str]:
@@ -47,7 +48,7 @@ def find_column_id_by_index(col_index: int, columns: List[ColumnInfo]) -> Option
     return None
 
 
-def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo], logger: logging.Logger, sheet_name: str = "Unknown") -> Optional[FooterInfo]:
+def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo], logger: logging.Logger, sheet_name: str = "Unknown", mapping_config: Optional[Dict[str, Any]] = None) -> Optional[FooterInfo]:
     """
     Analyze the footer structure by searching for 'TOTAL' and 'X PALLETS'.
     
@@ -57,6 +58,7 @@ def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo]
         columns: List of ColumnInfo from the scanner.
         logger: Logger instance for output.
         sheet_name: Name of the sheet being scanned (for log context).
+        mapping_config: Optional global mapping config containing 'footer_label_mappings'.
         
     Returns:
         FooterInfo if found, or None.
@@ -65,9 +67,11 @@ def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo]
     end_scan = min(worksheet.max_row, header_row + 500)
     
     # --- Step 1: Find the TOTAL label cell ---
-    found_cell = _find_total_label_cell(worksheet, start_scan, end_scan)
-    if not found_cell:
+    result = _find_total_label_cell(worksheet, start_scan, end_scan, mapping_config, logger, sheet_name)
+    if not result:
         return None
+        
+    found_cell, is_exact = result
     
     # --- Step 2: Determine merge colspan at the TOTAL cell ---
     colspan = _get_cell_merge_colspan(worksheet, found_cell)
@@ -91,28 +95,42 @@ def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo]
         pallet_count_col_id=pallet_col_id,
         has_hs_code=bool(hs_code_text),
         hs_code_text=hs_code_text,
-        hs_code_colspan=hs_code_colspan
+        hs_code_colspan=hs_code_colspan,
+        is_exact=is_exact
     )
 
 
-def _find_total_label_cell(worksheet: Worksheet, start_row: int, end_row: int):
+def _find_total_label_cell(worksheet: Worksheet, start_row: int, end_row: int, mapping_config: Optional[Dict[str, Any]] = None, logger: Optional[logging.Logger] = None, sheet_name: str = "Unknown"):
     """
     Scan rows for the first cell containing a TOTAL-like label.
     
-    Matches: 'TOTAL', 'TOTAL:', 'TOTAL OF:', 'TOTAL OF', 'TOTAL：'
+    Matches: Keywords from mapping_config (e.g., 'TOTAL', 'TỔNG CỘNG').
     
     Returns:
-        The cell object if found, or None.
+        A tuple of (cell object, is_exact_match_boolean) if found, or None.
     """
-    total_keywords = {"TOTAL", "TOTAL:", "TOTAL OF:", "TOTAL OF", "TOTAL：", "TOTAL AMOUNT", "TOTAL AMOUNT:", "TOTAL AMOUNT："}
+    # 1. Look for custom mapped keywords
+    total_keywords = []
+    if mapping_config and "footer_label_mappings" in mapping_config:
+        mappings = mapping_config["footer_label_mappings"].get("keywords", [])
+        total_keywords = [kw.upper() for kw in mappings]
+        
+    # 2. Strict Check (No Hardcoded Defaults)
+    if not total_keywords:
+        if logger:
+            logger.warning(f"    ⚠ [{sheet_name}] No footer keywords configured in global mappings. Cannot detect footer row!")
+        return None
     
     for row in range(start_row, end_row + 1):
         for col in range(1, min(worksheet.max_column + 1, 20)):
             cell = worksheet.cell(row=row, column=col)
             val = str(cell.value).strip().upper() if cell.value else ""
             
-            if val in total_keywords or val.startswith("TOTAL OF") or val.startswith("TOTAL AMOUNT"):
-                return cell
+            # Bilingual Trust Matching: If ANY keyword is INSIDE the cell value
+            for kw in total_keywords:
+                if kw in val:
+                    is_exact = (kw == val)
+                    return cell, is_exact
     return None
 
 

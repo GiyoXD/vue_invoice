@@ -78,7 +78,8 @@ class SheetAnalysis:
         return {
             "sheet_name": self.name,
             "header_positions": header_positions,
-            "start_row": self.header_row + 1 if self.header_row else 1
+            "start_row": self.header_row + 1 if self.header_row else 1,
+            "unconfirmed_footer": self.footer_info.total_text if (self.footer_info and not self.footer_info.is_exact) else None
         }
 
 
@@ -426,7 +427,7 @@ class ExcelLayoutScanner:
 
 
             # [Smart Feature] Dynamic Footer Analysis (Delegated to Utility)
-            footer_info = scan_footer(worksheet, header_row, columns, self.logger, sheet_name=sheet_name)
+            footer_info = scan_footer(worksheet, header_row, columns, self.logger, sheet_name=sheet_name, mapping_config=mapping_config)
             if footer_info:
                 self.logger.info(f"    Footer detected at row {footer_info.row_num}: '{footer_info.total_text}' (colspan={footer_info.merge_curr_colspan})")
             

@@ -716,6 +716,20 @@ def get_missing_headers(analysis_file_path: str):
         traceback.print_exc()
         return []
 
+def get_missing_footers(analysis_file_path: str):
+    try:
+        with open(analysis_file_path, 'r', encoding='utf-8') as f:
+            analysis_data = json.load(f)
+        
+        missing_footers = []
+        for sheet in analysis_data.get('sheets', []):
+            uf = sheet.get("unconfirmed_footer")
+            if uf:
+                missing_footers.append(uf)
+        return list(set(missing_footers))
+    except Exception:
+        return []
+
 def update_mapping_config(new_mappings: dict):
     try:
         mapping_data = {"header_text_mappings": {"mappings": {}}}
@@ -914,6 +928,7 @@ class TemplateConfig(BaseModel):
     user_mappings: dict
     temp_filename: str
     bundle_dir_name: str = ""
+    confirmed_footers: List[str] = []
 
 @app.post("/api/template/analyze")
 def analyze_template(file: UploadFile = File(...)):
@@ -935,6 +950,7 @@ def analyze_template(file: UploadFile = File(...)):
             f.write(json_output)
             
         missing_headers = get_missing_headers(str(analysis_output_path))
+        missing_footers = get_missing_footers(str(analysis_output_path))
         
         # Clean up analysis file immediately, keep excel for next step
         if analysis_output_path.exists():
@@ -942,6 +958,7 @@ def analyze_template(file: UploadFile = File(...)):
             
         return {
             "missing_headers": missing_headers,
+            "missing_footers": missing_footers,
             "warnings": analysis_data.get("warnings", []),
             "temp_filename": file.filename,
             "suggested_prefix": file.filename.split('.')[0]
@@ -969,6 +986,24 @@ def generate_template(config: TemplateConfig):
         if config.user_mappings:
             if not update_mapping_config(config.user_mappings):
                 return JSONResponse(status_code=500, content={"error": "Failed to update mapping config"})
+
+        if config.confirmed_footers:
+            config_path = sys_config.mapping_config_path
+            if config_path.exists():
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                if "footer_label_mappings" not in data:
+                    data["footer_label_mappings"] = {"keywords": []}
+                
+                existing_f = data["footer_label_mappings"].get("keywords", [])
+                for fm in config.confirmed_footers:
+                    if fm not in existing_f:
+                        existing_f.append(fm)
+                data["footer_label_mappings"]["keywords"] = existing_f
+                
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=4, ensure_ascii=False)
 
         # 2. Setup paths - NEW BUNDLED STRUCTURE
         temp_path = TEMP_DIR / config.temp_filename

@@ -19,6 +19,7 @@ class ScanResult(BaseModel):
     status: str  # "clean" or "needs_mapping"
     file_token: str # Temporary filename to reference in step 2
     unknown_headers: List[str] = []
+    unconfirmed_footers: List[str] = []
     warnings: List[str] = []
     preview_analysis: Optional[Dict[str, Any]] = None
 
@@ -26,6 +27,7 @@ class GenerateRequest(BaseModel):
     file_token: str
     customer_code: str # e.g. "CLW"
     mappings: Dict[str, str] = {} # {"Unknown Header": "col_remark"}
+    footer_mappings: List[str] = []
 
 class GenerateResult(BaseModel):
     status: str
@@ -58,19 +60,25 @@ async def scan_template(file: UploadFile = File(...)):
         
         # Check for unknowns
         unknown_headers = []
+        unconfirmed_footers = []
         for sheet in analysis.get("sheets", []):
             for header in sheet.get("header_positions", []):
                 if StringUtils.is_unknown_col_id(header.get("col_id")):
                     unknown_headers.append(header.get("keyword"))
+            uf = sheet.get("unconfirmed_footer")
+            if uf:
+                unconfirmed_footers.append(uf)
         
         # Deduplicate
         unknown_headers = list(set(unknown_headers))
+        unconfirmed_footers = list(set(unconfirmed_footers))
         
-        if unknown_headers:
+        if unknown_headers or unconfirmed_footers:
             return ScanResult(
                 status="needs_mapping",
                 file_token=file_token,
                 unknown_headers=unknown_headers,
+                unconfirmed_footers=unconfirmed_footers,
                 warnings=analysis.get("warnings", []),
                 preview_analysis=analysis
             )
@@ -79,7 +87,8 @@ async def scan_template(file: UploadFile = File(...)):
                 status="clean",
                 file_token=file_token,
                 warnings=analysis.get("warnings", []),
-                preview_analysis=analysis
+                preview_analysis=analysis,
+                unconfirmed_footers=[]
             )
 
     except Exception as e:
@@ -98,11 +107,26 @@ async def generate_config(request: GenerateRequest):
         raise HTTPException(status_code=404, detail="File token expired or invalid. Please re-scan.")
         
     try:
-        # 1. Update Mapping Config TEMPORARILY or PERMANENTLY? 
-        # For now, let's update strict mapping config so Scanner sees it.
-        # But safer is to pass mappings DIRECTLY to Orchestrator -> Generator -> Scanner.
-        
-        # We need to enhance Orchestrator to accept 'manual_mappings' override
+        # Save newly confirmed footer labels to global Config permanently
+        if request.footer_mappings:
+            config_path = sys_config.mapping_config_path
+            if config_path.exists():
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                
+                if "footer_label_mappings" not in data:
+                    data["footer_label_mappings"] = {"keywords": []}
+                
+                existing_footers = data["footer_label_mappings"].get("keywords", [])
+                for fm in request.footer_mappings:
+                    if fm not in existing_footers:
+                        existing_footers.append(fm)
+                data["footer_label_mappings"]["keywords"] = existing_footers
+                
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(data, f, indent=4, ensure_ascii=False)
+                    
+        # Run Generator
         orchestrator = Orchestrator()
         
         # TODO: This requires updating Orchestrator.generate_blueprint_bundle signature
@@ -180,6 +204,9 @@ async def get_mappings(mapping_type: str = "header_text_mappings"):
                 if isinstance(props, dict):
                     flat[col_id] = ", ".join(props.get("keywords", []))
             return flat
+        elif mapping_type == "footer_label_mappings":
+            keywords = data.get("footer_label_mappings", {}).get("keywords", [])
+            return {kw: "Footer Keyword" for kw in keywords}
 
         return data.get(mapping_type, {}).get("mappings", {})
     except Exception as e:
@@ -217,6 +244,10 @@ async def update_mappings(request: MappingsUpdateRequest):
                 else:
                     existing[col_id] = {"keywords": keywords, "format": "@"}
             data["shipping_header_map"] = existing
+        elif request.mapping_type == "footer_label_mappings":
+            existing = data.get("footer_label_mappings", {})
+            existing["keywords"] = list(request.mappings.keys())
+            data["footer_label_mappings"] = existing
         else:
             if request.mapping_type not in data:
                 data[request.mapping_type] = {"mappings": {}}
