@@ -505,6 +505,7 @@ class TableFooterBuilder(BundleAccessor):
                 if self.pallet_count <= 0:
                     continue  # Skip if there are no pallets to report
                 text = text.replace("{pallet_count}", str(self.pallet_count))
+                text = text.replace("{multiple}", "S" if self.pallet_count > 1 else "")
                 
             col_idx = self._resolve_column_index(col_id, column_map_by_id)
             if col_idx:
@@ -700,6 +701,7 @@ class TableFooterBuilder(BundleAccessor):
                         if pallet_count <= 0:
                             continue  # Skip if there are no pallets to report
                         text = text.replace("{pallet_count}", str(pallet_count))
+                        text = text.replace("{multiple}", "S" if pallet_count > 1 else "")
                         
                     col_idx = self._resolve_column_index(col_id, column_id_map)
                     if col_idx:
