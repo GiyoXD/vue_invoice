@@ -1,0 +1,2691 @@
+{
+    "fingerprint": {
+        "source_file": "CT&INV&PL JF25060 FCA .xlsx",
+        "created_at": "2026-02-03T09:56:09.058103"
+    },
+    "template_layout": {
+        "Contract": {
+            "header_merges": [
+                "A1:E1",
+                "B11:E11",
+                "A13:E13",
+                "A14:E14",
+                "B10:E10"
+            ],
+            "header_row_heights": {
+                "1": 45.95,
+                "2": 30.0,
+                "3": 27.0,
+                "4": 30.0,
+                "5": 32.1,
+                "6": 32.1,
+                "7": 32.1,
+                "8": 32.1,
+                "9": 32.1,
+                "10": 45.0,
+                "11": 32.1,
+                "12": 30.0,
+                "13": 60.95,
+                "14": 54.95
+            },
+            "header_content": {
+                "A1": "SALES CONTRACT",
+                "D3": "DATE:",
+                "E3": "=Invoice!G9",
+                "D4": "CONTRACT NO.:",
+                "E4": "=Invoice!G8",
+                "A5": "The Seller:   ",
+                "B5": "CALIFOR UPHOLSTERY MATERIALS CO.,LTD.",
+                "B6": "XIN BAVET SEZ, Road No. 316A, Trapeang Bon and  Prey Kokir  Villages, Prey Kokir  Commune, Chantrea District,",
+                "B7": "Svay Rieng Province, Kingdom of Cambodia.",
+                "A8": "TEL:",
+                "B8": "+855   975910636",
+                "A9": "The Buyer:  ",
+                "B9": "JASON FURNITURE VIET NAM COMPANY LIMITED",
+                "B10": "LOT 37, 38, 39, 40, 41, 44, 50, 51, 54\uff0c55, 56\uff0cB2 CLUSTER, DONG XOAI III INDUSTRIAL PARK,  ",
+                "B11": "BINH PHUOC WARD, DONG NAI PROVINCE, VIETNAM",
+                "A12": "Contact Person : Contact Person : Mr. Thuy   Tel: 0379367084",
+                "A13": "EMAll:jyangbin4720@dingtalk.com jialy@kukahome.com dailin@kukahome.com huanggf@kukahome.com zhangzp@kukahome.com",
+                "A14": "The undersigned Sellers \u3001Buyers and Beneficiary have agreed to close the  following transactions according to the terms and conditions Stipulated below:"
+            },
+            "header_styles": {
+                "A1": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 20.0
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center",
+                        "wrap_text": true
+                    }
+                },
+                "A2": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "B2": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "C2": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "D2": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "E2": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "B3": {
+                    "alignment": {
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "C3": {
+                    "alignment": {
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "D3": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 17.0
+                    },
+                    "alignment": {
+                        "horizontal": "right",
+                        "vertical": "center",
+                        "wrap_text": true
+                    }
+                },
+                "E3": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 17.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "center",
+                        "wrap_text": true
+                    },
+                    "number_format": "dd/mm/yyyy"
+                },
+                "A4": {
+                    "alignment": {
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "B4": {
+                    "alignment": {
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "C4": {
+                    "alignment": {
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "D4": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 17.0
+                    },
+                    "alignment": {
+                        "horizontal": "right",
+                        "vertical": "center",
+                        "wrap_text": true
+                    }
+                },
+                "E4": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 17.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "vertical": "center",
+                        "wrap_text": true
+                    }
+                },
+                "A5": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "B5": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "B6": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "B7": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "A8": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "B8": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "vertical": "center",
+                        "wrap_text": true
+                    }
+                },
+                "C8": {
+                    "alignment": {
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "D8": {
+                    "alignment": {
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "E8": {
+                    "alignment": {
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "A9": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "B9": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "A10": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "B10": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "center",
+                        "wrap_text": true
+                    },
+                    "number_format": "@"
+                },
+                "A11": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "B11": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "center",
+                        "wrap_text": true
+                    },
+                    "number_format": "@"
+                },
+                "A12": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "E12": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "A13": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "center",
+                        "wrap_text": true
+                    }
+                },
+                "A14": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                }
+            },
+            "footer_merges": [
+                "C21:E21",
+                "A191:B191",
+                "C22:E22",
+                "C20:E20"
+            ],
+            "footer_row_heights": {
+                "15": 29.1,
+                "16": 19.15,
+                "17": 45.95,
+                "18": 41.1,
+                "19": 29.1,
+                "20": 45.95,
+                "21": 41.1,
+                "22": 29.1,
+                "23": 21.0,
+                "24": 19.5,
+                "25": 20.25,
+                "26": 20.25,
+                "180": 27.95,
+                "191": 27.95
+            },
+            "footer_content": {
+                "A16": "FCA:",
+                "B16": "BAVET, SVAY RIENG",
+                "A17": "Term of Payment: 100% TT after shipment",
+                "A18": "Transaction method: FCA(USD)",
+                "A19": "Beneficiary bank information: ",
+                "C19": "CALIFOR UPHOLSTERY MATERIALS CO.,LTD.",
+                "A20": "Beneficiary Bank' s Name: ",
+                "C20": "BANK OF CHINA(HONG KONG)LIMITED PHNOM PENH BRANCH\n /BANK OF CHINA PHNOM PENH BRANCH",
+                "A21": "Bank Address:  ",
+                "C21": "1st AND 2nd FLOOR,CANADIA TOWER,No.315 ANDDUONG ST.\nPHNOM PEMH,CAMBODIA.",
+                "A22": "Bank account :",
+                "C22": "100001100764430",
+                "A23": "SWIFT CODE  \uff1a",
+                "C23": "BKCHKHPPXXX",
+                "A25": "The Buyer:",
+                "D25": "The Seller:",
+                "A26": "JASON FURNITURE VIET NAM COMPANY LIMITED",
+                "D26": "CALIFOR UPHOLSTERY MATERIALS CO.,LTD."
+            },
+            "footer_styles": {
+                "A15": {
+                    "font": {
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    },
+                    "number_format": "###0;###0"
+                },
+                "C15": {
+                    "font": {
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    },
+                    "number_format": "#,##0.00;[Red]#,##0.00"
+                },
+                "D15": {
+                    "font": {
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    },
+                    "number_format": "#,##0.00;[Red]#,##0.00"
+                },
+                "E15": {
+                    "font": {
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    },
+                    "number_format": "#,##0.00;[Red]#,##0.00"
+                },
+                "A16": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "center"
+                    },
+                    "number_format": "#,##0.00"
+                },
+                "B16": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "center"
+                    },
+                    "number_format": "#,##0.00"
+                },
+                "C16": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "D16": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "E16": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "A17": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "B17": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "C17": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "D17": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "E17": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "A18": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "B18": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "C18": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "D18": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "E18": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "A19": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "B19": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "C19": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "D19": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "E19": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "A20": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "B20": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "C20": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "A21": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "B21": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "C21": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "A22": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "B22": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "C22": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    },
+                    "number_format": "@"
+                },
+                "A23": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "B23": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "C23": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 15.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "D23": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "E23": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "A24": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "B24": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "C24": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "D24": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "E24": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "F24": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "A25": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 16.0
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "D25": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 16.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top"
+                    }
+                },
+                "A26": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 14.0
+                    },
+                    "alignment": {
+                        "vertical": "top"
+                    }
+                },
+                "B26": {
+                    "alignment": {
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "C26": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "D26": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 14.0
+                    },
+                    "alignment": {
+                        "vertical": "top"
+                    }
+                },
+                "E26": {
+                    "alignment": {
+                        "vertical": "top"
+                    }
+                }
+            },
+            "col_widths": {
+                "A": 17.7142857142857,
+                "B": 33.1428571428571,
+                "C": 42.5714285714286,
+                "D": 34.5714285714286,
+                "E": 47.5714285714286,
+                "F": 28.7142857142857
+            },
+            "header_images": [],
+            "footer_images": []
+        },
+        "Invoice": {
+            "header_merges": [
+                "A1:G1",
+                "A3:G3",
+                "A6:G6",
+                "A4:G4",
+                "A2:G2",
+                "A5:G5"
+            ],
+            "header_row_heights": {
+                "1": 38.25,
+                "2": 24.0,
+                "3": 17.25,
+                "4": 17.25,
+                "5": 25.5,
+                "6": 83.25,
+                "7": 14.25,
+                "8": 30.0,
+                "9": 21.0,
+                "10": 22.5,
+                "11": 20.25,
+                "12": 15.75,
+                "13": 25.5,
+                "14": 25.5,
+                "15": 25.5,
+                "16": 25.5,
+                "17": 25.5,
+                "18": 25.5,
+                "19": 27.75,
+                "20": 27.75
+            },
+            "header_content": {
+                "A1": "CALIFOR UPHOLSTERY MATERIALS CO., LTD.",
+                "A2": " XIN BAVET SEZ, Road No. 316A, Trapeang Bon and  Prey Kokir  Villages, Prey Kokir  Commune, Chantrea District, ",
+                "A3": "Svay Rieng Province, Kingdom of Cambodia.",
+                "A4": "VAT:L001-901903209",
+                "A5": "Tel: +855   975910636",
+                "A6": "INVOICE",
+                "F7": "Ref No.:",
+                "G7": "='Packing list'!I7",
+                "A8": "EXPORTER:",
+                "B8": "CALIFOR UPHOLSTERY MATERIALS CO., LTD.",
+                "F8": "INVOICE NO :",
+                "G8": "='Packing list'!I8",
+                "B9": "XIN BAVET SEZ, Road No. 316A, Trapeang Bon and Prey Kokir Villages, ",
+                "F9": "Date:",
+                "G9": "='Packing list'!I9",
+                "B10": "Prey Kokir Commune, Chantrea District,Svay Rieng Province, Kingdom of Cambodia ",
+                "F10": "FCA :",
+                "G10": "BAVET, SVAYRIENG",
+                "B11": "Tel: +855   975910636",
+                "A13": "CONSIGNEE :",
+                "B13": "JASON FURNITURE VIET NAM COMPANY LIMITED",
+                "B14": "LOT 37, 38, 39, 40, 41, 44, 50, 51, 54\uff0c55, 56\uff0cB2 CLUSTER, DONG XOAI III INDUSTRIAL PARK,  ",
+                "B15": "BINH PHUOC WARD,DONG NAI PROVINCE, VIETNAM",
+                "B16": "Contact Person : Mr. Thuy   TEl: 0379367084",
+                "B17": "EMAlL:jyangbin4720@dingtalk.com jialy@kukahome.com ",
+                "B18": "dailin@kukahome.com huanggf@kukahome.com zhangzp@kukahome.com",
+                "A19": "SHIP: ",
+                "B19": "BY\u00a0TRUCK\u00a0FROM\u00a0BAVET, SVAY RIENG, CAMBODIA\u00a0TO DONG NAI PROVINCE, VIETNAM."
+            },
+            "header_styles": {
+                "A1": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 20.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A2": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A3": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "top"
+                    }
+                },
+                "A4": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A5": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "top"
+                    },
+                    "border": {
+                        "bottom": "medium"
+                    }
+                },
+                "B5": {
+                    "border": {
+                        "bottom": "medium"
+                    }
+                },
+                "C5": {
+                    "border": {
+                        "bottom": "medium"
+                    }
+                },
+                "D5": {
+                    "border": {
+                        "bottom": "medium"
+                    }
+                },
+                "E5": {
+                    "border": {
+                        "bottom": "medium"
+                    }
+                },
+                "F5": {
+                    "border": {
+                        "bottom": "medium"
+                    }
+                },
+                "G5": {
+                    "border": {
+                        "bottom": "medium"
+                    }
+                },
+                "A6": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 24.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    },
+                    "border": {
+                        "top": "medium"
+                    }
+                },
+                "B6": {
+                    "border": {
+                        "top": "medium"
+                    }
+                },
+                "C6": {
+                    "border": {
+                        "top": "medium"
+                    }
+                },
+                "D6": {
+                    "border": {
+                        "top": "medium"
+                    }
+                },
+                "E6": {
+                    "border": {
+                        "top": "medium"
+                    }
+                },
+                "F6": {
+                    "border": {
+                        "top": "medium"
+                    }
+                },
+                "G6": {
+                    "border": {
+                        "top": "medium"
+                    }
+                },
+                "F7": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "center"
+                    }
+                },
+                "G7": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "bold": true,
+                        "color": "FF000000"
+                    }
+                },
+                "A8": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "right"
+                    }
+                },
+                "B8": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 12.0,
+                        "bold": true
+                    }
+                },
+                "E8": {
+                    "font": {
+                        "bold": true
+                    }
+                },
+                "F8": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 12.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G8": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 12.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "center"
+                    }
+                },
+                "B9": {
+                    "font": {
+                        "name": "Times New Roman"
+                    }
+                },
+                "F9": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 12.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G9": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 12.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "center"
+                    },
+                    "number_format": "dd/mm/yyyy"
+                },
+                "B10": {
+                    "font": {
+                        "name": "Times New Roman"
+                    }
+                },
+                "F10": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 12.0
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G10": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "center"
+                    },
+                    "number_format": "#,##0.00"
+                },
+                "B11": {
+                    "font": {
+                        "name": "Times New Roman"
+                    }
+                },
+                "G11": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G12": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A13": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 12.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "right"
+                    }
+                },
+                "B13": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "bold": true
+                    }
+                },
+                "G13": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "B14": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "bold": true
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    },
+                    "number_format": "@"
+                },
+                "C14": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "D14": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "E14": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "F14": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "B15": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    },
+                    "number_format": "@"
+                },
+                "C15": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "D15": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "E15": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "F15": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "B16": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "C16": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "D16": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "E16": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "F16": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "B17": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "C17": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "D17": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "E17": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "F17": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "B18": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "F18": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A19": {
+                    "font": {
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "right"
+                    }
+                },
+                "B19": {
+                    "font": {
+                        "name": "Times New Roman"
+                    }
+                },
+                "F19": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A20": {
+                    "alignment": {
+                        "horizontal": "right"
+                    }
+                },
+                "B20": {
+                    "alignment": {
+                        "horizontal": "right"
+                    }
+                }
+            },
+            "footer_merges": [
+                "A24:C24",
+                "A26:G26",
+                "A22:C22",
+                "B23:C23",
+                "A25:G25"
+            ],
+            "footer_row_heights": {
+                "21": 42.0,
+                "22": 42.0,
+                "23": 61.5,
+                "24": 42.0,
+                "25": 24.75,
+                "26": 27.0,
+                "27": 21.0,
+                "28": 21.0,
+                "29": 21.0,
+                "30": 21.0,
+                "31": 21.0,
+                "32": 21.0,
+                "33": 21.0,
+                "34": 17.25
+            },
+            "footer_content": {
+                "A22": "Country of Original Cambodia",
+                "A23": "Manufacture:",
+                "B23": "CALIFOR UPHOLSTERY MATERIALS CO., LTD.\nXIN BAVET SEZ, Road No. 316A, Trapeang Bon and Prey Kokir Villages, Prey Kokir Commune, Chantrea District,Svay Rieng Province, Kingdom of Cambodia, Tel: +855   975910636",
+                "A24": "BENEFICIARY BANK\uff1aBANK OF CHINA(HONG KONG)LIMITED PHNOM PENH BRANCH\n                                                  /BANK OF CHINA PHNOM PENH BRANCH",
+                "A25": "A/C NO:100001100764430",
+                "A26": "SWIFT CODE  \uff1aBKCHKHPPXXX",
+                "E27": "CALIFOR UPHOLSTERY MATERIALS CO., LTD.",
+                "F28": "Sign & Stamp",
+                "F34": "ZENG XUELI"
+            },
+            "footer_styles": {
+                "A21": {
+                    "alignment": {
+                        "horizontal": "right"
+                    }
+                },
+                "B21": {
+                    "alignment": {
+                        "horizontal": "right"
+                    }
+                },
+                "G21": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A22": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "center"
+                    }
+                },
+                "D22": {
+                    "font": {
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "center"
+                    }
+                },
+                "F22": {
+                    "number_format": "#,##0.00"
+                },
+                "G22": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A23": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "bold": true
+                    },
+                    "alignment": {
+                        "vertical": "top"
+                    }
+                },
+                "B23": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "D23": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "E23": {
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "G23": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A24": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "D24": {
+                    "alignment": {
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "E24": {
+                    "alignment": {
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "F24": {
+                    "alignment": {
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "G24": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A25": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "vertical": "top"
+                    }
+                },
+                "A26": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "vertical": "top"
+                    }
+                },
+                "E27": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 12.0
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "F27": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "G27": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "H27": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "F28": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G28": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G29": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G30": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G31": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G32": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G33": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "F34": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "center"
+                    }
+                },
+                "G34": {
+                    "alignment": {
+                        "horizontal": "center"
+                    }
+                },
+                "G35": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G36": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                }
+            },
+            "col_widths": {
+                "A": 24.2857142857143,
+                "B": 28.1428571428571,
+                "C": 21.7142857142857,
+                "D": 15.8571428571429,
+                "E": 15.7142857142857,
+                "F": 16.4285714285714,
+                "G": 24.8571428571429,
+                "H": 25.1428571428571
+            },
+            "header_images": [],
+            "footer_images": []
+        },
+        "Packing list": {
+            "header_merges": [
+                "A3:I3",
+                "A2:I2",
+                "A5:I5",
+                "A4:I4",
+                "A1:I1",
+                "A6:I6"
+            ],
+            "header_row_heights": {
+                "1": 38.25,
+                "2": 24.0,
+                "3": 25.5,
+                "4": 25.5,
+                "5": 25.5,
+                "6": 54.0,
+                "7": 18.0,
+                "8": 30.0,
+                "9": 21.0,
+                "10": 22.5,
+                "11": 20.25,
+                "12": 15.75,
+                "13": 25.5,
+                "14": 25.5,
+                "15": 21.0,
+                "16": 21.0,
+                "17": 21.0,
+                "18": 21.0,
+                "19": 27.75,
+                "20": 27.75
+            },
+            "header_content": {
+                "A1": "CALIFOR UPHOLSTERY MATERIALS CO., LTD.",
+                "A2": " XIN BAVET SEZ, Road No. 316A, Trapeang Bon and  Prey Kokir  Villages, Prey Kokir  Commune, Chantrea District, ",
+                "A3": "Svay Rieng Province, Kingdom of Cambodia.",
+                "A4": "VAT:L001-901903209",
+                "A5": "Tel: +855   975910636",
+                "A6": "PACKING LIST",
+                "H7": "Ref No.:",
+                "I7": "CLF2025-401",
+                "A8": "EXPORTER:",
+                "B8": "CALIFOR UPHOLSTERY MATERIALS CO., LTD.",
+                "H8": "INVOICE NO :",
+                "I8": "JF25060",
+                "B9": "XIN BAVET SEZ, Road No. 316A, Trapeang Bon and Prey Kokir Villages,",
+                "H9": "Date:",
+                "I9": "2025-12-17 00:00:00",
+                "B10": "Prey Kokir Commune, Chantrea District,Svay Rieng Province, Kingdom of Cambodia",
+                "H10": "FCA :",
+                "I10": "BAVET, SVAY RIENG",
+                "B11": "Tel: +855   975910636",
+                "A13": "CONSIGNEE :",
+                "B13": "JASON FURNITURE VIET NAM COMPANY LIMITED",
+                "B14": "LOT 37, 38, 39, 40, 41, 44, 50, 51, 54\uff0c55, 56\uff0cB2 CLUSTER, DONG XOAI III INDUSTRIAL PARK,  ",
+                "B15": "BINH PHUOC WARD, DONG NAI PROVINCE, VIETNAM",
+                "B16": "Contact Person : Mr. Thuy   TEl: 0379367084",
+                "B17": "EMAlL:jyangbin4720@dingtalk.com jialy@kukahome.com",
+                "B18": "dailin@kukahome.com huanggf@kukahome.com zhangzp@kukahome.com",
+                "A19": "SHIP: ",
+                "B19": "BY\u00a0TRUCK\u00a0FROM\u00a0BAVET, SVAY RIENG, CAMBODIA\u00a0TO DONG NAI PROVINCE, VIETNAM."
+            },
+            "header_styles": {
+                "A1": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 20.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A2": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A3": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "top"
+                    }
+                },
+                "A4": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A5": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "top"
+                    },
+                    "border": {
+                        "bottom": "medium"
+                    }
+                },
+                "B5": {
+                    "border": {
+                        "bottom": "medium"
+                    }
+                },
+                "C5": {
+                    "border": {
+                        "bottom": "medium"
+                    }
+                },
+                "D5": {
+                    "border": {
+                        "bottom": "medium"
+                    }
+                },
+                "E5": {
+                    "border": {
+                        "bottom": "medium"
+                    }
+                },
+                "F5": {
+                    "border": {
+                        "bottom": "medium"
+                    }
+                },
+                "G5": {
+                    "border": {
+                        "bottom": "medium"
+                    }
+                },
+                "H5": {
+                    "border": {
+                        "bottom": "medium"
+                    }
+                },
+                "I5": {
+                    "border": {
+                        "bottom": "medium"
+                    }
+                },
+                "A6": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 24.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    },
+                    "border": {
+                        "top": "medium"
+                    }
+                },
+                "B6": {
+                    "border": {
+                        "top": "medium"
+                    }
+                },
+                "C6": {
+                    "border": {
+                        "top": "medium"
+                    }
+                },
+                "D6": {
+                    "border": {
+                        "top": "medium"
+                    }
+                },
+                "E6": {
+                    "border": {
+                        "top": "medium"
+                    }
+                },
+                "F6": {
+                    "border": {
+                        "top": "medium"
+                    }
+                },
+                "G6": {
+                    "border": {
+                        "top": "medium"
+                    }
+                },
+                "H6": {
+                    "border": {
+                        "top": "medium"
+                    }
+                },
+                "I6": {
+                    "border": {
+                        "top": "medium"
+                    }
+                },
+                "B7": {
+                    "number_format": "@"
+                },
+                "E7": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "F7": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G7": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "H7": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "center"
+                    }
+                },
+                "I7": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "color": "FF000000"
+                    }
+                },
+                "A8": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "right"
+                    }
+                },
+                "B8": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 12.0,
+                        "bold": true
+                    },
+                    "number_format": "@"
+                },
+                "F8": {
+                    "font": {
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G8": {
+                    "font": {
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "H8": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 12.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "I8": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 12.0
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "center"
+                    }
+                },
+                "B9": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "number_format": "@"
+                },
+                "F9": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G9": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "H9": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 12.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "I9": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 12.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "center"
+                    },
+                    "number_format": "dd/mm/yyyy"
+                },
+                "B10": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "number_format": "@"
+                },
+                "F10": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G10": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "H10": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 12.0
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "I10": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "center"
+                    },
+                    "number_format": "#,##0.00"
+                },
+                "B11": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "number_format": "@"
+                },
+                "F11": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G11": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "H11": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "I11": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "B12": {
+                    "number_format": "@"
+                },
+                "E12": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "F12": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G12": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "H12": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "I12": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A13": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 12.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "right"
+                    }
+                },
+                "B13": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "bold": true
+                    },
+                    "number_format": "@"
+                },
+                "F13": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G13": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "H13": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "I13": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "B14": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "bold": true,
+                        "color": "FF000000"
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    },
+                    "number_format": "@"
+                },
+                "C14": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "D14": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "E14": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "F14": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G14": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "H14": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "B15": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "color": "FF000000"
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    },
+                    "number_format": "@"
+                },
+                "C15": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "D15": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "E15": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "F15": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G15": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "H15": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "B16": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    },
+                    "number_format": "@"
+                },
+                "C16": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "D16": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "E16": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "F16": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G16": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "H16": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "B17": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    },
+                    "number_format": "@"
+                },
+                "C17": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "D17": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "E17": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "F17": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G17": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "H17": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "B18": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    },
+                    "number_format": "@"
+                },
+                "E18": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "F18": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G18": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "H18": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A19": {
+                    "font": {
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "right"
+                    }
+                },
+                "B19": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "number_format": "@"
+                },
+                "A20": {
+                    "alignment": {
+                        "horizontal": "right"
+                    }
+                },
+                "B20": {
+                    "alignment": {
+                        "horizontal": "right"
+                    },
+                    "number_format": "@"
+                }
+            },
+            "footer_merges": [
+                "B24:D24",
+                "A25:D25"
+            ],
+            "footer_row_heights": {
+                "21": 27.75,
+                "24": 65.25,
+                "25": 51.75,
+                "26": 15.6,
+                "27": 15.6,
+                "28": 15.6
+            },
+            "footer_content": {
+                "B21": "TOTAL:",
+                "C21": "21 PALLETS",
+                "E21": "=E51+E64",
+                "F21": "=F51+F64",
+                "G21": "=G51+G64",
+                "H21": "=H51+H64",
+                "I21": "=I51+I64",
+                "A23": "Country of Original Cambodia",
+                "A24": "Manufacture:",
+                "B24": "CALIFOR UPHOLSTERY MATERIALS CO., LTD.\nXIN BAVET SEZ, Road No. 316A, Trapeang Bon and Prey Kokir Villages, Prey Kokir Commune, Chantrea District,Svay Rieng Province, Kingdom of Cambodia, Tel: +855   975910636",
+                "A25": "BENEFICIARY BANK\uff1aBANK OF CHINA(HONG KONG)LIMITED  PHNOM PENH BRANCH\n                                          /BANK OF CHINA PHNOM PENH BRANCH",
+                "A26": "A/C NO:100001100764430",
+                "A27": "SWIFT CODE  \uff1aBKCHKHPPXXX",
+                "G28": "CALIFOR UPHOLSTERY MATERIALS CO., LTD."
+            },
+            "footer_styles": {
+                "B21": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 13.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "C21": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 13.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "E21": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 13.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    },
+                    "number_format": "#,##0"
+                },
+                "F21": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 13.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    },
+                    "number_format": "#,##0.00"
+                },
+                "G21": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 13.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    },
+                    "number_format": "#,##0.00"
+                },
+                "H21": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 13.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    },
+                    "number_format": "#,##0.00"
+                },
+                "I21": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "size": 13.0,
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    },
+                    "number_format": "#,##0.00"
+                },
+                "A22": {
+                    "alignment": {
+                        "horizontal": "right"
+                    }
+                },
+                "B22": {
+                    "alignment": {
+                        "horizontal": "right"
+                    },
+                    "number_format": "@"
+                },
+                "E22": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "F22": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G22": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "H22": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "I22": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A23": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "bold": true
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "B23": {
+                    "font": {
+                        "bold": true
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "C23": {
+                    "font": {
+                        "bold": true
+                    },
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "D23": {
+                    "font": {
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "left",
+                        "vertical": "center"
+                    }
+                },
+                "E23": {
+                    "font": {
+                        "bold": true
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    },
+                    "number_format": "0.00"
+                },
+                "F23": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "G23": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "H23": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A24": {
+                    "font": {
+                        "name": "Times New Roman",
+                        "bold": true
+                    },
+                    "alignment": {
+                        "vertical": "top"
+                    }
+                },
+                "B24": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "E24": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center",
+                        "wrap_text": true
+                    }
+                },
+                "F24": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center",
+                        "wrap_text": true
+                    }
+                },
+                "G24": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center",
+                        "wrap_text": true
+                    }
+                },
+                "H24": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                },
+                "A25": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "top",
+                        "wrap_text": true
+                    }
+                },
+                "E25": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center",
+                        "wrap_text": true
+                    }
+                },
+                "F25": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center",
+                        "wrap_text": true
+                    }
+                },
+                "G25": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center",
+                        "wrap_text": true
+                    }
+                },
+                "H25": {
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center",
+                        "wrap_text": true
+                    }
+                },
+                "A26": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "vertical": "top"
+                    }
+                },
+                "B26": {
+                    "alignment": {
+                        "vertical": "top"
+                    }
+                },
+                "C26": {
+                    "alignment": {
+                        "vertical": "top"
+                    }
+                },
+                "D26": {
+                    "alignment": {
+                        "vertical": "top"
+                    }
+                },
+                "E26": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "F26": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "G26": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "H26": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "A27": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "vertical": "top"
+                    }
+                },
+                "B27": {
+                    "alignment": {
+                        "vertical": "top"
+                    }
+                },
+                "C27": {
+                    "alignment": {
+                        "vertical": "top"
+                    }
+                },
+                "D27": {
+                    "alignment": {
+                        "vertical": "top"
+                    }
+                },
+                "E27": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "F27": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "G27": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "H27": {
+                    "alignment": {
+                        "vertical": "center"
+                    }
+                },
+                "G28": {
+                    "font": {
+                        "name": "Times New Roman"
+                    },
+                    "alignment": {
+                        "horizontal": "center",
+                        "vertical": "center"
+                    }
+                }
+            },
+            "col_widths": {
+                "A": 25.4285714285714,
+                "B": 22.8571428571429,
+                "C": 19.4285714285714,
+                "D": 17.5714285714286,
+                "E": 15.0,
+                "F": 13.0,
+                "G": 13.7142857142857,
+                "H": 15.5714285714286,
+                "I": 23.7142857142857,
+                "J": 12.4285714285714
+            },
+            "header_images": [],
+            "footer_images": []
+        }
+    }
+}

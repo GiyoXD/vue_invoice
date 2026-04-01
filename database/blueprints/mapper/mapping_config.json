@@ -1,400 +1,407 @@
 {
-  "sheet_name_mappings": {
-    "comment": "Map quantity data sheet names to template config sheet names",
-    "mappings": {
-      "INV": "Invoice",
-      "INVOICE": "Invoice",
-      "Invoice": "Invoice",
-      "PAK": "Packing list",
-      "PACKING": "Packing list",
-      "PACKING LIST": "Packing list",
-      "Packing list": "Packing list",
-      "CON": "Contract",
-      "CONTRACT": "Contract",
-      "Contract": "Contract",
-      "INVOICE_NEW": "Invoice"
+    "sheet_name_mappings": {
+        "comment": "Map quantity data sheet names to template config sheet names",
+        "mappings": {
+            "INV": "Invoice",
+            "INVOICE": "Invoice",
+            "Invoice": "Invoice",
+            "PAK": "Packing list",
+            "PACKING": "Packing list",
+            "PACKING LIST": "Packing list",
+            "Packing list": "Packing list",
+            "CON": "Contract",
+            "CONTRACT": "Contract",
+            "Contract": "Contract",
+            "INVOICE_NEW": "Invoice"
+        }
+    },
+    "header_text_mappings": {
+        "comment": "Map header texts from quantity data to column IDs in template",
+        "mappings": {
+            "Mark & Nº": "col_static",
+            "Mark & N°": "col_static",
+            "MARK & NOTE": "col_static",
+            "Mark & Note": "col_static",
+            "P.O Nº": "col_po",
+            "P.O. Nº": "col_po",
+            "P.O N°": "col_po",
+            "P.O. N°": "col_po",
+            "P.O. NO.": "col_po",
+            "P.O": "col_po",
+            "ITEM Nº": "col_item",
+            "ITEM N°": "col_item",
+            "HL ITEM": "col_item",
+            "ITEM": "col_item",
+            "Description": "col_desc",
+            "DESCRIPTION": "col_desc",
+            "Cargo Description": "col_po",
+            "Cargo Descprition": "col_po",
+            "Quantity": "col_qty_sf",
+            "QUANTITY": "col_qty_sf",
+            "Quantity\n(SF)": "col_qty_sf",
+            "QUANTITY  (SQFT)": "col_qty_sf",
+            "Qty": "col_qty_sf",
+            "Unit price": "col_unit_price",
+            "Unit price (USD)": "col_unit_price",
+            "Unit price\n(USD)": "col_unit_price",
+            "Unit Price(USD)": "col_unit_price",
+            "UNIT PRICE(USD)": "col_unit_price",
+            "FCA": "col_unit_price",
+            "FCA\nSVAY RIENG": "col_unit_price",
+            "Amount": "col_amount",
+            "Amount (USD)": "col_amount",
+            "Amount(USD)": "col_amount",
+            "AMOUNT(USD)": "col_amount",
+            "Total value(USD)": "col_amount",
+            "N.W (kgs)": "col_net",
+            "NW(KGS)": "col_net",
+            "Net Weight": "col_net",
+            "G.W (kgs)": "col_gross",
+            "GW(KGS)": "col_gross",
+            "Gross Weight": "col_gross",
+            "CBM": "col_cbm",
+            "(CBM)": "col_cbm",
+            "PCS": "col_qty_pcs",
+            "SF": "col_qty_sf",
+            "No.": "col_no",
+            "Pallet\nNO.": "col_pallet_count",
+            "REMARKS": "col_remarks",
+            "HS CODE": "col_hs_code",
+            "TOTAL PRICE": "col_amount",
+            "TEST HEADER": "col_test",
+            "Name of\\nCormodity": "col_item",
+            "Unit Price\\n(USD)": "col_unit_price",
+            "Total value\\n(USD)": "col_amount",
+            "PALLET\\nNO.": "col_pallet_count",
+            "Name of\nCormodity": "col_item",
+            "Unit Price\n(USD)": "col_unit_price",
+            "NO": "col_no",
+            "Name of Commodity": "col_item",
+            "Tên và miêu tả": "col_desc",
+            "Quantity（SF）": "col_qty_sf",
+            "Unit Price  (USD)": "col_unit_price",
+            "Quantity               (SF)": "col_qty_sf",
+            "Unite price   (USD)": "col_unit_price",
+            "G.W(kgs)": "col_gross",
+            "Quantity(SF)": "col_qty_sf",
+            "Description of Goods": "col_desc",
+            "Description of Goods.": "col_po",
+            "Unit Price": "col_unit_price",
+            "Quantity (SF)": "col_qty_sf",
+            "FAIL HEADER": "col_po",
+            "Total value\n(USD)": "col_amount",
+            "Total value(USD)\nTrị giá": "col_amount",
+            "Unit Price(USD)\nĐơn giá": "col_unit_price",
+            "Description\nTả hàng hóa": "col_desc",
+            "Name of Cormodity\nTên và miêu tả": "col_item",
+            "Quantity(SF)\nSố lượng(SF)": "col_qty_sf",
+            "CUT.P.O.": "col_po",
+            "DC": "col_dc",
+            "dog": "col_amount",
+            "PO number": "col_po",
+            "Net Weight (Kgs)": "col_net",
+            "Amount\n(USD)": "col_amount",
+            "Gross Weight (Kgs)": "col_gross",
+            "Unit Price        (USD)": "col_unit_price",
+            "Item No.": "col_item",
+            "Volume (CBM)": "col_cbm",
+            "Unit": "col_unit_sf",
+            "Container number": "col_container_no",
+            "Unit price   (USD)": "col_unit_price",
+            "sqm（M²）": "col_sqm",
+            "Name of  \n Cormodity": "col_item",
+            "Net Weight\n(Kgs)": "col_net",
+            "Gross Weight\n(Kgs)": "col_gross",
+            "Volume\n(CBM)": "col_cbm",
+            "Unit Price       \n(USD)": "col_unit_price",
+            "N.W\n(kgs)": "col_net",
+            "G.W\n(kgs)": "col_gross",
+            "Origin": "col_static"
+        }
+    },
+    "fallback_strategies": {
+        "comment": "Configuration for handling unrecognized headers and sheets",
+        "case_insensitive_matching": true,
+        "partial_matching_threshold": 0.7,
+        "log_unrecognized_items": true,
+        "create_suggestions": true
+    },
+    "shipping_header_map": {
+        "comment": "Single source of truth for column metadata. rules.py loads from here so any column defined here is recognized by the blueprint scanner and won't show as (Unknown) in the UI.",
+        "col_level": {
+            "keywords": [
+                "grade",
+                "level",
+                "级别",
+                "等级"
+            ],
+            "format": "@"
+        },
+        "col_batch_no": {
+            "keywords": [
+                "batch no",
+                "batch number",
+                "批次号"
+            ],
+            "format": "@"
+        },
+        "col_line_no": {
+            "keywords": [
+                "line no",
+                "行号"
+            ],
+            "format": "@"
+        },
+        "col_direction": {
+            "keywords": [
+                "direction",
+                "内向"
+            ],
+            "format": "@"
+        },
+        "col_production_date": {
+            "keywords": [
+                "production date",
+                "生产日期"
+            ],
+            "format": "@"
+        },
+        "col_reference_code": {
+            "keywords": [
+                "reference code",
+                "ttx编号",
+                "生产名称"
+            ],
+            "format": "@"
+        },
+        "col_manual_no": {
+            "keywords": [
+                "manual no",
+                "manual number",
+                "手册号"
+            ],
+            "format": "@"
+        },
+        "col_production_order_no": {
+            "keywords": [
+                "production order number",
+                "生产单号",
+                "入库单号",
+                "TTX编号"
+            ],
+            "format": "@"
+        },
+        "col_date_recipt": {
+            "keywords": [
+                "date receipt",
+                "入库时间",
+                "入库日期"
+            ],
+            "format": "@"
+        },
+        "col_inv_no": {
+            "keywords": [
+                "invoice no",
+                "inv no",
+                "发票号码"
+            ],
+            "format": "@"
+        },
+        "col_inv_date": {
+            "keywords": [
+                "invoice date",
+                "inv date",
+                "发票日期"
+            ],
+            "format": "@"
+        },
+        "col_inv_ref": {
+            "keywords": [
+                "ref",
+                "inv ref",
+                "invoice ref",
+                "ref no"
+            ],
+            "format": "@"
+        },
+        "col_hs_code": {
+            "keywords": [
+                "hs code",
+                "h.s. code",
+                "税号"
+            ],
+            "format": "@"
+        },
+        "col_container_no": {
+            "keywords": [
+                "container no",
+                "集装箱号",
+                "container"
+            ],
+            "format": "@"
+        },
+        "col_po": {
+            "keywords": [
+                "po",
+                "PO NO.",
+                "订单号",
+                "order number",
+                "order no",
+                "Po Nb",
+                "客户订单号",
+                "TEST PO"
+            ],
+            "format": "@"
+        },
+        "col_unit_price": {
+            "keywords": [
+                "unit price",
+                "单价",
+                "price",
+                "unit",
+                "单价USD",
+                "价格",
+                "单价 USD"
+            ],
+            "format": "@"
+        },
+        "col_amount": {
+            "keywords": [
+                "USD",
+                "金额 USD",
+                "金额USD",
+                "金额",
+                "amount",
+                "总价",
+                "Total Amount",
+                "total"
+            ],
+            "format": "@"
+        },
+        "col_qty_sf": {
+            "keywords": [
+                "尺数",
+                "sqft",
+                "出货数量 (sf)",
+                "SF",
+                "出货数量(sf)",
+                "出货数量 SF",
+                "尺码",
+                "出货数量（SF）",
+                "test sqft"
+            ],
+            "format": "@"
+        },
+        "col_item": {
+            "keywords": [
+                "物料代码",
+                "item no",
+                "ITEM NO.",
+                "item",
+                "客户品名",
+                "物料编码",
+                "产品编号"
+            ],
+            "format": "@"
+        },
+        "col_qty_pcs": {
+            "keywords": [
+                "pcs",
+                "总张数",
+                "张数"
+            ],
+            "format": "@"
+        },
+        "col_net": {
+            "keywords": [
+                "NW",
+                "net weight",
+                "净重kg",
+                "净重",
+                "net"
+            ],
+            "format": "@"
+        },
+        "col_gross": {
+            "keywords": [
+                "GW",
+                "gross weight",
+                "毛重",
+                "gross",
+                "毛重量KG",
+                "重量KG",
+                "重量",
+                "毛重KG"
+            ],
+            "format": "@"
+        },
+        "col_cbm": {
+            "keywords": [
+                "cbm",
+                "材积"
+            ],
+            "format": "@"
+        },
+        "col_remarks": {
+            "keywords": [
+                "remarks",
+                "备注",
+                "Remark",
+                "低"
+            ],
+            "format": "@"
+        },
+        "col_desc": {
+            "keywords": [
+                "description",
+                "产品名称",
+                "品名规格",
+                "描述",
+                "desc"
+            ],
+            "format": "@"
+        },
+        "col_dc": {
+            "keywords": [
+                "DC"
+            ],
+            "format": "@"
+        },
+        "col_pallet_count": {
+            "keywords": [
+                "pallet count",
+                "拖数",
+                "PALLET",
+                "件数",
+                "托数"
+            ],
+            "format": "@"
+        },
+        "col_dog": {
+            "keywords": [
+                "dog"
+            ],
+            "format": "@"
+        },
+        "col_container": {
+            "keywords": [
+                "container"
+            ],
+            "format": "@"
+        }
+    },
+    "footer_label_mappings": {
+        "comment": "Keywords used to detect the 'Total' footer row. Supports bilingual labels via partial matching.",
+        "keywords": [
+            "TOTAL",
+            "TOTAL:",
+            "TOTAL OF:",
+            "TOTAL OF",
+            "TOTAL AMOUNT",
+            "TOTAL AMOUNT:",
+            "TỔNG CỘNG",
+            "TỔNG",
+            "TỔNG"
+        ]
     }
-  },
-  "header_text_mappings": {
-    "comment": "Map header texts from quantity data to column IDs in template",
-    "mappings": {
-      "Mark & Nº": "col_static",
-      "Mark & N°": "col_static",
-      "MARK & NOTE": "col_static",
-      "Mark & Note": "col_static",
-      "P.O Nº": "col_po",
-      "P.O. Nº": "col_po",
-      "P.O N°": "col_po",
-      "P.O. N°": "col_po",
-      "P.O. NO.": "col_po",
-      "P.O": "col_po",
-      "ITEM Nº": "col_item",
-      "ITEM N°": "col_item",
-      "HL ITEM": "col_item",
-      "ITEM": "col_item",
-      "Description": "col_desc",
-      "DESCRIPTION": "col_desc",
-      "Cargo Description": "col_po",
-      "Cargo Descprition": "col_po",
-      "Quantity": "col_qty_sf",
-      "QUANTITY": "col_qty_sf",
-      "Quantity\n(SF)": "col_qty_sf",
-      "QUANTITY  (SQFT)": "col_qty_sf",
-      "Qty": "col_qty_sf",
-      "Unit price": "col_unit_price",
-      "Unit price (USD)": "col_unit_price",
-      "Unit price\n(USD)": "col_unit_price",
-      "Unit Price(USD)": "col_unit_price",
-      "UNIT PRICE(USD)": "col_unit_price",
-      "FCA": "col_unit_price",
-      "FCA\nSVAY RIENG": "col_unit_price",
-      "Amount": "col_amount",
-      "Amount (USD)": "col_amount",
-      "Amount(USD)": "col_amount",
-      "AMOUNT(USD)": "col_amount",
-      "Total value(USD)": "col_amount",
-      "N.W (kgs)": "col_net",
-      "NW(KGS)": "col_net",
-      "Net Weight": "col_net",
-      "G.W (kgs)": "col_gross",
-      "GW(KGS)": "col_gross",
-      "Gross Weight": "col_gross",
-      "CBM": "col_cbm",
-      "(CBM)": "col_cbm",
-      "PCS": "col_qty_pcs",
-      "SF": "col_qty_sf",
-      "No.": "col_no",
-      "Pallet\nNO.": "col_pallet_count",
-      "REMARKS": "col_remarks",
-      "HS CODE": "col_hs_code",
-      "TOTAL PRICE": "col_amount",
-      "TEST HEADER": "col_test",
-      "Name of\\nCormodity": "col_item",
-      "Unit Price\\n(USD)": "col_unit_price",
-      "Total value\\n(USD)": "col_amount",
-      "PALLET\\nNO.": "col_pallet_count",
-      "Name of\nCormodity": "col_item",
-      "Unit Price\n(USD)": "col_unit_price",
-      "NO": "col_no",
-      "Name of Commodity": "col_item",
-      "Tên và miêu tả": "col_desc",
-      "Quantity（SF）": "col_qty_sf",
-      "Unit Price  (USD)": "col_unit_price",
-      "Quantity               (SF)": "col_qty_sf",
-      "Unite price   (USD)": "col_unit_price",
-      "G.W(kgs)": "col_gross",
-      "Quantity(SF)": "col_qty_sf",
-      "Description of Goods": "col_desc",
-      "Description of Goods.": "col_po",
-      "Unit Price": "col_unit_price",
-      "Quantity (SF)": "col_qty_sf",
-      "FAIL HEADER": "col_po",
-      "Total value\n(USD)": "col_amount",
-      "Total value(USD)\nTrị giá": "col_amount",
-      "Unit Price(USD)\nĐơn giá": "col_unit_price",
-      "Description\nTả hàng hóa": "col_desc",
-      "Name of Cormodity\nTên và miêu tả": "col_item",
-      "Quantity(SF)\nSố lượng(SF)": "col_qty_sf",
-      "CUT.P.O.": "col_po",
-      "DC": "col_dc",
-      "dog": "col_amount",
-      "PO number": "col_po",
-      "Net Weight (Kgs)": "col_net",
-      "Amount\n(USD)": "col_amount",
-      "Gross Weight (Kgs)": "col_gross",
-      "Unit Price        (USD)": "col_unit_price",
-      "Item No.": "col_item",
-      "Volume (CBM)": "col_cbm",
-      "Unit": "col_unit_sf",
-      "Container number": "col_container_no",
-      "Unit price   (USD)": "col_unit_price",
-      "sqm（M²）": "col_sqm",
-      "Name of  \n Cormodity": "col_item",
-      "Net Weight\n(Kgs)": "col_net",
-      "Gross Weight\n(Kgs)": "col_gross",
-      "Volume\n(CBM)": "col_cbm",
-      "Unit Price       \n(USD)": "col_unit_price",
-      "N.W\n(kgs)": "col_net",
-      "G.W\n(kgs)": "col_gross",
-      "Origin": "col_static"
-    }
-  },
-  "fallback_strategies": {
-    "comment": "Configuration for handling unrecognized headers and sheets",
-    "case_insensitive_matching": true,
-    "partial_matching_threshold": 0.7,
-    "log_unrecognized_items": true,
-    "create_suggestions": true
-  },
-  "shipping_header_map": {
-    "comment": "Single source of truth for column metadata. rules.py loads from here so any column defined here is recognized by the blueprint scanner and won't show as (Unknown) in the UI.",
-    "col_level": {
-      "keywords": [
-        "grade",
-        "level",
-        "级别",
-        "等级"
-      ],
-      "format": "@"
-    },
-    "col_batch_no": {
-      "keywords": [
-        "batch no",
-        "batch number",
-        "批次号"
-      ],
-      "format": "@"
-    },
-    "col_line_no": {
-      "keywords": [
-        "line no",
-        "行号"
-      ],
-      "format": "@"
-    },
-    "col_direction": {
-      "keywords": [
-        "direction",
-        "内向"
-      ],
-      "format": "@"
-    },
-    "col_production_date": {
-      "keywords": [
-        "production date",
-        "生产日期"
-      ],
-      "format": "@"
-    },
-    "col_reference_code": {
-      "keywords": [
-        "reference code",
-        "ttx编号",
-        "生产名称"
-      ],
-      "format": "@"
-    },
-    "col_manual_no": {
-      "keywords": [
-        "manual no",
-        "manual number",
-        "手册号"
-      ],
-      "format": "@"
-    },
-    "col_production_order_no": {
-      "keywords": [
-        "production order number",
-        "生产单号",
-        "入库单号",
-        "TTX编号"
-      ],
-      "format": "@"
-    },
-    "col_date_recipt": {
-      "keywords": [
-        "date receipt",
-        "入库时间",
-        "入库日期"
-      ],
-      "format": "@"
-    },
-    "col_inv_no": {
-      "keywords": [
-        "invoice no",
-        "inv no",
-        "发票号码"
-      ],
-      "format": "@"
-    },
-    "col_inv_date": {
-      "keywords": [
-        "invoice date",
-        "inv date",
-        "发票日期"
-      ],
-      "format": "@"
-    },
-    "col_inv_ref": {
-      "keywords": [
-        "ref",
-        "inv ref",
-        "invoice ref",
-        "ref no"
-      ],
-      "format": "@"
-    },
-    "col_hs_code": {
-      "keywords": [
-        "hs code",
-        "h.s. code",
-        "税号"
-      ],
-      "format": "@"
-    },
-    "col_container_no": {
-      "keywords": [
-        "container no",
-        "集装箱号"
-      ],
-      "format": "@"
-    },
-    "col_po": {
-      "keywords": [
-        "po",
-        "PO NO.",
-        "订单号",
-        "order number",
-        "order no",
-        "Po Nb",
-        "客户订单号",
-        "TEST PO"
-      ],
-      "format": "@"
-    },
-    "col_unit_price": {
-      "keywords": [
-        "unit price",
-        "单价",
-        "price",
-        "unit",
-        "单价USD",
-        "价格",
-        "单价 USD"
-      ],
-      "format": "@"
-    },
-    "col_amount": {
-      "keywords": [
-        "USD",
-        "金额 USD",
-        "金额USD",
-        "金额",
-        "amount",
-        "总价",
-        "Total Amount",
-        "total"
-      ],
-      "format": "@"
-    },
-    "col_qty_sf": {
-      "keywords": [
-        "尺数",
-        "sqft",
-        "出货数量 (sf)",
-        "SF",
-        "出货数量(sf)",
-        "出货数量 SF",
-        "尺码",
-        "出货数量（SF）",
-        "test sqft"
-      ],
-      "format": "@"
-    },
-    "col_item": {
-      "keywords": [
-        "物料代码",
-        "item no",
-        "ITEM NO.",
-        "item",
-        "客户品名",
-        "物料编码",
-        "产品编号"
-      ],
-      "format": "@"
-    },
-    "col_qty_pcs": {
-      "keywords": [
-        "pcs",
-        "总张数",
-        "张数"
-      ],
-      "format": "@"
-    },
-    "col_net": {
-      "keywords": [
-        "NW",
-        "net weight",
-        "净重kg",
-        "净重",
-        "net"
-      ],
-      "format": "@"
-    },
-    "col_gross": {
-      "keywords": [
-        "GW",
-        "gross weight",
-        "毛重",
-        "gross",
-        "毛重量KG",
-        "重量KG",
-        "重量",
-        "毛重KG"
-      ],
-      "format": "@"
-    },
-    "col_cbm": {
-      "keywords": [
-        "cbm",
-        "材积"
-      ],
-      "format": "@"
-    },
-    "col_remarks": {
-      "keywords": [
-        "remarks",
-        "备注",
-        "Remark",
-        "低"
-      ],
-      "format": "@"
-    },
-    "col_desc": {
-      "keywords": [
-        "description",
-        "产品名称",
-        "品名规格",
-        "描述",
-        "desc"
-      ],
-      "format": "@"
-    },
-    "col_dc": {
-      "keywords": [
-        "DC"
-      ],
-      "format": "@"
-    },
-    "col_pallet_count": {
-      "keywords": [
-        "pallet count",
-        "拖数",
-        "PALLET",
-        "件数",
-        "托数"
-      ],
-      "format": "@"
-    },
-    "col_dog": {
-      "keywords": [
-        "dog"
-      ],
-      "format": "@"
-    }
-  },
-  "footer_label_mappings": {
-    "comment": "Keywords used to detect the 'Total' footer row. Supports bilingual labels via partial matching.",
-    "keywords": [
-      "TOTAL",
-      "TOTAL:",
-      "TOTAL OF:",
-      "TOTAL OF",
-      "TOTAL AMOUNT",
-      "TOTAL AMOUNT:",
-      "TỔNG CỘNG",
-      "TỔNG",
-      "TỔNG"
-    ]
-  }
 }

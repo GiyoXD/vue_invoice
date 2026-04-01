@@ -91,10 +91,14 @@ class InvoiceAssetResolver:
         We NEVER check for the full filename (e.g., bundled/JF25061/) because
         those folders will never exist - only the prefix-based ones do.
         """
-        # Extract prefix (letters only, e.g., JF25058 -> JF, CT25048E -> CT)
-        match = re.match(r'^([a-zA-Z]+)', file_stem)
+        # Extract prefix (letters, hyphens, underscores, e.g., JF25058 -> JF, JLFTLT-VC25001 -> JLFTLT-VC)
+        match = re.match(r'^([a-zA-Z\-_]+)', file_stem)
         prefix = match.group(1) if match else None
         
+        if prefix:
+            # Strip trailing hyphen or underscore just in case (e.g. JF-25001 -> JF)
+            prefix = prefix.rstrip('-_')
+
         if not prefix:
             logger.warning(f"Could not extract prefix from '{file_stem}'")
             return None
@@ -108,13 +112,28 @@ class InvoiceAssetResolver:
             return self._get_assets_from_folder(potential_dir, prefix)
         
         # Fallback: Check for folders starting with prefix (e.g., JF_config, JF_v2)
-        # Only iterate if the config directory exists
+        # We ensure the next character is non-alphanumeric to prevent "JF" matching "JFT"
         if self.config_dir.exists() and self.config_dir.is_dir():
             for folder in self.config_dir.iterdir():
-                if folder.is_dir() and folder.name.startswith(prefix):
-                    assets = self._get_assets_from_folder(folder, prefix)
-                    if assets:
-                        return assets
+                if not folder.is_dir():
+                    continue
+                name = folder.name
+                if name.startswith(prefix):
+                    # Check boundary to prevent overlap (e.g., prefix='JF', name='JFT' -> fail)
+                    # If name is same length, it's exact match. 
+                    # If longer, character after prefix must not be a letter or digit.
+                    is_match = False
+                    if len(name) == len(prefix):
+                        is_match = True
+                    else:
+                        boundary_char = name[len(prefix)]
+                        if not boundary_char.isalnum():
+                            is_match = True
+                            
+                    if is_match:
+                        assets = self._get_assets_from_folder(folder, prefix)
+                        if assets:
+                            return assets
         
         logger.warning(f"No bundle folder found for prefix '{prefix}' in {self.config_dir}")
         return None
@@ -190,8 +209,11 @@ class InvoiceAssetResolver:
         input_path = Path(input_file_path)
         stem = input_path.stem
         
-        match = re.match(r'^([a-zA-Z]+)', stem)
+        match = re.match(r'^([a-zA-Z\-_]+)', stem)
         prefix = match.group(1) if match else None
+        if prefix:
+            prefix = prefix.rstrip('-_')
+            
         if not prefix:
             return []
         
@@ -208,10 +230,11 @@ class InvoiceAssetResolver:
         This is a fallback for configs not in bundled folders.
         Input: JF25061 → Look for JF_bundle_config.json or JF_config.json
         """
-        # Extract prefix (letters only)
-        match = re.match(r'^([a-zA-Z]+)', file_stem)
+        match = re.match(r'^([a-zA-Z\-_]+)', file_stem)
         prefix = match.group(1) if match else None
-        
+        if prefix:
+            prefix = prefix.rstrip('-_')
+            
         if not prefix:
             return None
         

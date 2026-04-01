@@ -121,7 +121,7 @@ def find_and_map_smart_headers(sheet: Worksheet) -> Optional[Tuple[int, Dict[str
                             if _matches_any_pattern(data_value, patterns_to_check):
                                 score = 15 # Increased score for pattern matches
                         else:
-                            allowed_types = EXPECTED_HEADER_DATA_TYPES.get(canonical_name, [])
+                            allowed_types = EXPECTED_HEADER_DATA_TYPES.get(canonical_name, ['string', 'numeric'])
                             if ('numeric' in allowed_types and _is_numeric(data_value)) or \
                                ('string' in allowed_types and _is_string_like(data_value)):
                                 score = 5 # Kept as the baseline score
@@ -135,7 +135,7 @@ def find_and_map_smart_headers(sheet: Worksheet) -> Optional[Tuple[int, Dict[str
                             score = 1
                         else:
                             # If data exists but failed type/pattern check, allow if string is permitted
-                            allowed_types = EXPECTED_HEADER_DATA_TYPES.get(canonical_name, [])
+                            allowed_types = EXPECTED_HEADER_DATA_TYPES.get(canonical_name, ['string', 'numeric'])
                             if 'string' in allowed_types:
                                 score = 1 # A minimal "mercy" score to prevent it from being ignored
 

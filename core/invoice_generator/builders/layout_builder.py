@@ -405,16 +405,30 @@ class LayoutBuilder:
                                 for row in agg_cust:
                                     desc = str(row.get('col_desc', "")).strip()
                                     if desc: all_descriptions.add(desc)
+                                    
+                            # Check DAF aggregation
+                            agg_daf = single_table.get('aggregation_DAF', [])
+                            if isinstance(agg_daf, list):
+                                for row in agg_daf:
+                                    desc = str(row.get('col_desc', "")).strip()
+                                    if desc: all_descriptions.add(desc)
 
-                        # Final Check: If only ONE unique non-empty description exists globally
-                        if len(all_descriptions) == 1:
+                        # Final Check: If 1 unique description, or 0 (all empty), we merge
+                        if len(all_descriptions) <= 1:
                             is_global_unique_desc = True
-                            logger.info(f"LayoutBuilder: Globally unique description detected: {list(all_descriptions)[0]}")
+                            if len(all_descriptions) == 1:
+                                logger.info(f"LayoutBuilder: Globally unique description detected: {list(all_descriptions)[0]}")
+                            else:
+                                logger.info("LayoutBuilder: Globally empty descriptions detected. Merging allowed.")
                         elif len(all_descriptions) > 1:
                             logger.info(f"LayoutBuilder: Globally mixed descriptions detected ({len(all_descriptions)} types).")
                     
                     merge_cols = ['col_pallet_count']
-                    if self.layout_config.get('allow_col_desc_merge', True):
+                    data_source_type = self.layout_config.get('data_source_type', 'aggregation')
+                    allow_col_desc_merge = self.layout_config.get('allow_col_desc_merge', True)
+                    
+                    # Disable col_desc vertical merging for aggregation sheets where static columns force artificial row padding
+                    if allow_col_desc_merge and not data_source_type.startswith('aggregation'):
                         merge_cols.append('col_desc')
                         
                     data_builder = DataTableBuilder(

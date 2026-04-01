@@ -189,6 +189,7 @@ class MultiTableProcessor(SheetProcessor):
         layout_config['skip_template_header_restoration'] = (not is_first_table)
         layout_config['skip_template_footer_restoration'] = True
         layout_config['allow_col_desc_merge'] = getattr(self, 'allow_col_desc_merge', True)
+        layout_config['data_source_type'] = self.sheet_config.get('data_source', 'processed_tables_multi') if self.sheet_config else 'processed_tables_multi'
         
         layout_builder = LayoutBuilder(
             self.output_workbook,

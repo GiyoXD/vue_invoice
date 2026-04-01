@@ -256,6 +256,15 @@ async def update_mappings(request: MappingsUpdateRequest):
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
 
+        # Reload the mappings dynamically so the server doesn't need to be restarted
+        try:
+            from core.data_parser.config import load_and_update_mappings
+            load_and_update_mappings()
+            from core.blueprint_generator.rules import BlueprintRules
+            BlueprintRules._load_from_config()
+        except Exception as e:
+            logger.warning(f"Could not automatically reload mappings: {e}")
+
         return {"status": "success"}
     except Exception as e:
         logger.error(f"Failed to update mappings: {e}")
