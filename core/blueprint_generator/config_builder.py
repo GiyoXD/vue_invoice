@@ -421,8 +421,10 @@ class ConfigBuilder:
                 hs_code_text = sheet.footer_info.hs_code_text
             hs_code_colspan = sheet.footer_info.hs_code_colspan
             
+        is_contract = "contract" in sheet.name.lower()
+            
         add_ons["before_footer"] = {
-            "enabled": True,
+            "enabled": not is_contract,
             "column_id": "col_po",
             "text": hs_code_text
         }
