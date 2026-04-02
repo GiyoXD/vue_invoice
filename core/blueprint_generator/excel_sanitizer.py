@@ -138,9 +138,8 @@ class ExcelTemplateSanitizer:
                 if w is not None:
                      preserved_layout["col_widths"][letter] = w
         
-        # --- [Smart Feature] Extract Fallback Description ---
-        # Look for col_desc in the analysis and take value from the first data row.
-        # This is used for 'fallback_description' in Template Inspector.
+        # --- [Smart Feature] Extract Fallback Description (Handles Mixed Values) ---
+        # Look for col_desc in the analysis and collect ALL unique values from the data body.
         fallback_description = None
         col_desc_index = None
         for col in analysis.columns:
@@ -148,15 +147,27 @@ class ExcelTemplateSanitizer:
                 col_desc_index = col.col_index
                 break
         
-        if col_desc_index:
-            # First data row is usually analysis.header_row + 1
-            if analysis.header_row > 0:
-                data_row = analysis.header_row + 1
-                if data_row <= ws.max_row:
-                    cell_val = ws.cell(row=data_row, column=col_desc_index).value
-                    if cell_val:
-                        fallback_description = str(cell_val).strip()
-                        self.logger.info(f"    [Extracted] Fallback description from {analysis.name}: '{fallback_description}'")
+        if col_desc_index and analysis.header_row > 0:
+            # We need the footer to know where to stop scanning data
+            footer_row = self._find_footer_start(ws, analysis.header_row + 1, analysis)
+            data_start = analysis.header_row + 1
+            data_end = footer_row - 1 if footer_row else ws.max_row
+            
+            unique_vals = []
+            seen = set()
+            
+            if data_start <= data_end:
+                for r in range(data_start, data_end + 1):
+                    val = ws.cell(row=r, column=col_desc_index).value
+                    if val:
+                        val_str = str(val).strip()
+                        if val_str and val_str not in seen:
+                            unique_vals.append(val_str)
+                            seen.add(val_str)
+            
+            if unique_vals:
+                fallback_description = " / ".join(unique_vals)
+                self.logger.info(f"    [Extracted] Fallback descriptions from {analysis.name}: '{fallback_description}'")
 
         preserved_layout["fallback_description"] = fallback_description
 
