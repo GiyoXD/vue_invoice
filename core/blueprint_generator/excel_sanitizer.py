@@ -138,6 +138,28 @@ class ExcelTemplateSanitizer:
                 if w is not None:
                      preserved_layout["col_widths"][letter] = w
         
+        # --- [Smart Feature] Extract Fallback Description ---
+        # Look for col_desc in the analysis and take value from the first data row.
+        # This is used for 'fallback_description' in Template Inspector.
+        fallback_description = None
+        col_desc_index = None
+        for col in analysis.columns:
+            if col.id == "col_desc":
+                col_desc_index = col.col_index
+                break
+        
+        if col_desc_index:
+            # First data row is usually analysis.header_row + 1
+            if analysis.header_row > 0:
+                data_row = analysis.header_row + 1
+                if data_row <= ws.max_row:
+                    cell_val = ws.cell(row=data_row, column=col_desc_index).value
+                    if cell_val:
+                        fallback_description = str(cell_val).strip()
+                        self.logger.info(f"    [Extracted] Fallback description from {analysis.name}: '{fallback_description}'")
+
+        preserved_layout["fallback_description"] = fallback_description
+
         # --- CAPTURE HEADER LAYOUT & CONTENT ---
         # Capture strictly ABOVE the header row (Metadata area)
         

@@ -352,10 +352,30 @@ class BlueprintGenerator:
                 "created_at": datetime.now().isoformat()
             }
             
+            # [Table Info] - Extra metadata about the data table (e.g. fallback description)
+            # We extract this from the sheet metadata (usually 'Packing list').
+            table_info = {
+                "fallback_description": None
+            }
+            
+            # Look for fallback_description in any sheet (Packing list preferred)
+            # First check 'Packing list' if it exists
+            pl_sheet = layout_metadata.get("Packing list")
+            if pl_sheet and pl_sheet.get("fallback_description"):
+                table_info["fallback_description"] = pl_sheet.get("fallback_description")
+            else:
+                # Fallback: Check any sheet that has it
+                for sheet_name, sheet_meta in layout_metadata.items():
+                    fd = sheet_meta.get("fallback_description")
+                    if fd:
+                        table_info["fallback_description"] = fd
+                        break
+            
             self.logger.info(f"   Saving Template Config: {template_config_file.name}")
             template_json_data = {
                 "fingerprint": fingerprint,
-                "template_layout": layout_metadata
+                "template_layout": layout_metadata,
+                "table_info": table_info
             }
             if preserved_notes:
                 template_json_data["notes"] = preserved_notes

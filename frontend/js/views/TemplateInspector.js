@@ -72,6 +72,18 @@ export default {
                             </div>
                         </div>
 
+                        <!-- Table Information Section -->
+                        <div v-if="currentTemplate && currentTemplate.table_info" class="card" style="margin-bottom: 1rem; background: #0f172a; border-color: #334155;">
+                            <h4 style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: #94a3b8; display: flex; align-items: center; gap: 0.5rem;">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-table-properties"><path d="M15 2H9a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z"/><path d="M9 10h12"/><path d="M9 14h12"/><path d="M9 18h12"/><path d="M9 6h12"/><path d="M11 2v20"/></svg>
+                                Table Information
+                            </h4>
+                            <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; font-size: 0.875rem;">
+                                <div style="color: #64748b; font-weight: 500;">Fallback Description:</div>
+                                <div style="color: #e2e8f0;">{{ currentTemplate.table_info.fallback_description || 'None' }}</div>
+                            </div>
+                        </div>
+
                         <!-- Sheet Selector -->
                         <div class="sheet-tabs" style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
                             <button v-for="(sheetData, sheetName) in templateLayout" :key="sheetName"
