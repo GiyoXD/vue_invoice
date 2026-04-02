@@ -48,6 +48,30 @@ export default {
                             </button>
                         </div>
 
+                        <!-- Client Notes Section -->
+                        <div class="card" style="margin-bottom: 1rem; background: #1e293b; border-color: #334155;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <h4 style="margin: 0; font-size: 0.9rem; color: #94a3b8; display: flex; align-items: center; gap: 0.5rem;">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-notebook-pen"><path d="M11 2H9a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/><path d="m16 2 4 4-8 8H8v-4l8-8Z"/><path d="M15 5 19 9"/></svg>
+                                    Client Notes / Remarks
+                                </h4>
+                                <button v-if="!isEditingNotes" class="btn-small" @click="isEditingNotes = true" style="padding: 2px 8px; font-size: 0.75rem;">Edit</button>
+                                <div v-else style="display: flex; gap: 0.25rem;">
+                                    <button class="btn-small" @click="cancelEditNotes" style="padding: 2px 8px; font-size: 0.75rem; background: #475569;">Cancel</button>
+                                    <button class="btn-small" @click="saveNotes" :disabled="isSavingNotes" style="padding: 2px 8px; font-size: 0.75rem; background: #3b82f6;">
+                                        {{ isSavingNotes ? 'Saving...' : 'Save' }}
+                                    </button>
+                                </div>
+                            </div>
+                            <div v-if="!isEditingNotes">
+                                <div v-if="templateNotes" style="font-size: 0.875rem; color: #e2e8f0; white-space: pre-wrap; line-height: 1.5;">{{ templateNotes }}</div>
+                                <div v-else style="font-size: 0.875rem; color: #64748b; font-style: italic;">No notes for this client yet. Click Edit to add.</div>
+                            </div>
+                            <div v-else>
+                                <textarea v-model="editingNotesText" class="input-field" style="width: 100%; min-height: 100px; font-size: 0.875rem; background: #0f172a;" placeholder="Enter things to remember for this client..."></textarea>
+                            </div>
+                        </div>
+
                         <!-- Sheet Selector -->
                         <div class="sheet-tabs" style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
                             <button v-for="(sheetData, sheetName) in templateLayout" :key="sheetName"
@@ -134,6 +158,58 @@ export default {
         const currentSheetName = ref(null);
         const zoomLevel = ref(1.0);
         const showFullText = ref(false);
+
+        // Client Notes state
+        const isEditingNotes = ref(false);
+        const isSavingNotes = ref(false);
+        const editingNotesText = ref("");
+
+        const templateNotes = computed(() => currentTemplate.value?.notes || "");
+
+        const saveNotes = async () => {
+            if (!selectedTemplateName.value) return;
+            isSavingNotes.value = true;
+            
+            const t = templates.value.find(tmpl => tmpl.name === selectedTemplateName.value);
+            try {
+                const res = await fetch('/api/template/notes', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        template_name: selectedTemplateName.value,
+                        bundle_name: t?.bundle_name || "",
+                        notes: editingNotesText.value
+                    })
+                });
+                
+                if (res.ok) {
+                    if (currentTemplate.value) {
+                        currentTemplate.value.notes = editingNotesText.value;
+                    }
+                    isEditingNotes.value = false;
+                } else {
+                    const data = await res.json();
+                    alert(`Failed to save notes: ${data.error || 'Unknown error'}`);
+                }
+            } catch (e) {
+                console.error("Error saving notes", e);
+                alert("Failed to save notes. See console for details.");
+            } finally {
+                isSavingNotes.value = false;
+            }
+        };
+
+        const cancelEditNotes = () => {
+            isEditingNotes.value = false;
+            editingNotesText.value = templateNotes.value;
+        };
+
+        watch(currentTemplate, (newVal) => {
+            if (newVal) {
+                editingNotesText.value = newVal.notes || "";
+                isEditingNotes.value = false;
+            }
+        });
 
         // Cell override editor state
         const editingCell = ref(null);
@@ -586,7 +662,14 @@ export default {
             editorMessageType,
             openCellEditor,
             closeEditor,
-            saveCellOverride
+            saveCellOverride,
+            // Notes
+            isEditingNotes,
+            isSavingNotes,
+            editingNotesText,
+            templateNotes,
+            saveNotes,
+            cancelEditNotes
         };
     }
 };

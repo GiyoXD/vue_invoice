@@ -316,10 +316,14 @@ class BlueprintGenerator:
             # If an old template JSON exists, carry over any mode-dependent
             # overrides (dict values in header_content, e.g. {"default":"X","daf":"Y"}).
             # These are user-entered via Template Inspector and would be lost on regeneration.
+            # ALSO PRESERVE 'notes' FIELD.
+            preserved_notes = None
             if template_config_file.exists():
                 try:
                     with open(template_config_file, 'r', encoding='utf-8') as f:
                         old_data = json.load(f)
+                    
+                    preserved_notes = old_data.get("notes")
                     old_layout = old_data.get("template_layout", {})
                     
                     for sheet_name, old_sheet in old_layout.items():
@@ -349,11 +353,15 @@ class BlueprintGenerator:
             }
             
             self.logger.info(f"   Saving Template Config: {template_config_file.name}")
+            template_json_data = {
+                "fingerprint": fingerprint,
+                "template_layout": layout_metadata
+            }
+            if preserved_notes:
+                template_json_data["notes"] = preserved_notes
+                
             with open(template_config_file, 'w', encoding='utf-8') as f:
-                json.dump({
-                    "fingerprint": fingerprint,
-                    "template_layout": layout_metadata
-                }, f, indent=2, ensure_ascii=False)
+                json.dump(template_json_data, f, indent=2, ensure_ascii=False)
                 
             # Note: We do NOT inject it into the main bundle config anymore.
         

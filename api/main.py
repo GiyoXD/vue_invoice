@@ -1128,6 +1128,55 @@ class CellOverrideRequest(BaseModel):
     value: str          # new value for this mode
 
 
+class TemplateNotesRequest(BaseModel):
+    """Request body for updating template notes."""
+    template_name: str
+    bundle_name: str = ""
+    notes: str
+
+
+@app.patch("/api/template/notes")
+async def update_template_notes(req: TemplateNotesRequest):
+    """
+    Update the 'notes' field in the template JSON.
+    """
+    bundled_dir = sys_config.bundled_dir
+    safe_name = Path(req.template_name).name
+
+    # Resolve template directory
+    if req.bundle_name:
+        template_dir = bundled_dir / Path(req.bundle_name).name
+    else:
+        template_dir = bundled_dir / safe_name
+        if not template_dir.exists() or not template_dir.is_dir():
+            if bundled_dir.exists() and bundled_dir.is_dir():
+                for b_dir in bundled_dir.iterdir():
+                    if b_dir.is_dir() and (b_dir / f"{safe_name}_template.json").exists():
+                        template_dir = b_dir
+                        break
+
+    template_path = template_dir / f"{safe_name}_template.json"
+    if not template_path.exists():
+        return JSONResponse(status_code=404, content={"error": "Template JSON not found"})
+
+    try:
+        with open(template_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Failed to read template: {str(e)}"})
+
+    # Update notes
+    data["notes"] = req.notes
+
+    # Save back
+    try:
+        with open(template_path, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        return {"status": "success", "message": "Notes updated successfully"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": f"Failed to save template: {str(e)}"})
+
+
 @app.patch("/api/template/cell")
 async def update_template_cell(req: CellOverrideRequest):
     """

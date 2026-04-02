@@ -338,7 +338,8 @@
         "col_cbm": {
             "keywords": [
                 "cbm",
-                "材积"
+                "材积",
+                "备注"
             ],
             "format": "@"
         },
@@ -401,7 +402,8 @@
             "TOTAL AMOUNT:",
             "TỔNG CỘNG",
             "TỔNG",
-            "TỔNG"
+            "TỔNG",
+            "TOTAL OF :"
         ]
     }
 }

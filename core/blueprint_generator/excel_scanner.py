@@ -219,9 +219,10 @@ class ExcelLayoutScanner:
                     is_match = False
                     
                     # 1. Check user mapping
+                    clean_val = "".join(value.lower().split())
                     if mapping_config:
                          mappings = mapping_config.get('header_text_mappings', {}).get('mappings', {})
-                         if value in mappings or any(m.lower() == value.lower() for m in mappings):
+                         if value in mappings or any("".join(m.lower().split()) == clean_val for m in mappings):
                              is_match = True
                     
                     # 2. Check system rules
@@ -501,6 +502,11 @@ class ExcelLayoutScanner:
             # Determine column ID
             col_id = self._determine_column_id(value, col, mapping_config)
             
+            # [Smart Feature] Leak Filter: Ignore long, unmapped template headers sitting on the same row.
+            if col_id.startswith("col_unknown_") and len(value) > 35:
+                self.logger.info(f"    [Leak Filter] Ignored long unmapped text as column header: '{value[:30]}...'")
+                continue
+                
             # Get column width (3-Step Strategy)
             col_letter = get_column_letter(col)
             width = 10.0 # Ultimate fallback
