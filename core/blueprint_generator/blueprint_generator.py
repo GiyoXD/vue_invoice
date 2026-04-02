@@ -355,21 +355,30 @@ class BlueprintGenerator:
             # [Table Info] - Extra metadata about the data table (e.g. fallback description)
             # We extract this from the sheet metadata (usually 'Packing list').
             table_info = {
-                "fallback_description": None
+                "fallback_description": None,
+                "hs_code": None
             }
             
-            # Look for fallback_description in any sheet (Packing list preferred)
+            # Look for fallback_description and hs_code in any sheet (Packing list preferred)
             # First check 'Packing list' if it exists
             pl_sheet = layout_metadata.get("Packing list")
-            if pl_sheet and pl_sheet.get("fallback_description"):
-                table_info["fallback_description"] = pl_sheet.get("fallback_description")
-            else:
-                # Fallback: Check any sheet that has it
+            if pl_sheet:
+                if pl_sheet.get("fallback_description"):
+                    table_info["fallback_description"] = pl_sheet.get("fallback_description")
+                if pl_sheet.get("hs_code"):
+                    table_info["hs_code"] = pl_sheet.get("hs_code")
+            
+            # Fallback: Check any sheet that has it if not already found
+            if not table_info["fallback_description"] or not table_info["hs_code"]:
                 for sheet_name, sheet_meta in layout_metadata.items():
-                    fd = sheet_meta.get("fallback_description")
-                    if fd:
-                        table_info["fallback_description"] = fd
-                        break
+                    if not table_info["fallback_description"]:
+                        fd = sheet_meta.get("fallback_description")
+                        if fd:
+                            table_info["fallback_description"] = fd
+                    if not table_info["hs_code"]:
+                        hc = sheet_meta.get("hs_code")
+                        if hc:
+                            table_info["hs_code"] = hc
             
             self.logger.info(f"   Saving Template Config: {template_config_file.name}")
             template_json_data = {

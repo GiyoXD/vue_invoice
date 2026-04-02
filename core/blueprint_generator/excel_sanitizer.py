@@ -138,38 +138,60 @@ class ExcelTemplateSanitizer:
                 if w is not None:
                      preserved_layout["col_widths"][letter] = w
         
-        # --- [Smart Feature] Extract Fallback Description (Handles Mixed Values) ---
-        # Look for col_desc in the analysis and collect ALL unique values from the data body.
+        # --- [Smart Feature] Extract Fallback Description & HS Code (Handles Mixed Values) ---
+        # Look for col_desc and col_hs_code in the analysis and collect ALL unique values from the data body.
         fallback_description = None
+        hs_code = None
         col_desc_index = None
+        col_hscode_index = None
+
         for col in analysis.columns:
             if col.id == "col_desc":
                 col_desc_index = col.col_index
-                break
+            elif col.id == "col_hs_code":
+                col_hscode_index = col.col_index
         
-        if col_desc_index and analysis.header_row > 0:
+        if (col_desc_index or col_hscode_index) and analysis.header_row > 0:
             # We need the footer to know where to stop scanning data
             footer_row = self._find_footer_start(ws, analysis.header_row + 1, analysis)
             data_start = analysis.header_row + 1
             data_end = footer_row - 1 if footer_row else ws.max_row
             
-            unique_vals = []
-            seen = set()
+            unique_descs = []
+            unique_hscodes = []
+            seen_desc = set()
+            seen_hscode = set()
             
             if data_start <= data_end:
                 for r in range(data_start, data_end + 1):
-                    val = ws.cell(row=r, column=col_desc_index).value
-                    if val:
-                        val_str = str(val).strip()
-                        if val_str and val_str not in seen:
-                            unique_vals.append(val_str)
-                            seen.add(val_str)
+                    # Description
+                    if col_desc_index:
+                        val = ws.cell(row=r, column=col_desc_index).value
+                        if val:
+                            val_str = str(val).strip()
+                            if val_str and val_str not in seen_desc:
+                                unique_descs.append(val_str)
+                                seen_desc.add(val_str)
+                    
+                    # HS Code
+                    if col_hscode_index:
+                        val = ws.cell(row=r, column=col_hscode_index).value
+                        if val:
+                            val_str = str(val).strip()
+                            if val_str and val_str not in seen_hscode:
+                                unique_hscodes.append(val_str)
+                                seen_hscode.add(val_str)
             
-            if unique_vals:
-                fallback_description = " / ".join(unique_vals)
+            if unique_descs:
+                fallback_description = " / ".join(unique_descs)
                 self.logger.info(f"    [Extracted] Fallback descriptions from {analysis.name}: '{fallback_description}'")
+            
+            if unique_hscodes:
+                hs_code = " / ".join(unique_hscodes)
+                self.logger.info(f"    [Extracted] HS Codes from {analysis.name}: '{hs_code}'")
 
         preserved_layout["fallback_description"] = fallback_description
+        preserved_layout["hs_code"] = hs_code
 
         # --- CAPTURE HEADER LAYOUT & CONTENT ---
         # Capture strictly ABOVE the header row (Metadata area)
