@@ -13,6 +13,7 @@ load time. Add new system columns there instead of hardcoding here.
 
 import json
 import logging
+import re
 from dataclasses import dataclass, field
 from typing import List, Dict, Set, Optional
 
@@ -156,6 +157,12 @@ class BlueprintRules:
             excel_format="#,##0.00",
             width=16.0
         ),
+        "col_hs_code": ColumnDefinition(
+            id="col_hs_code",
+            keywords=["hs code", "h.s. code", "hscode"],
+            excel_format="@",
+            width=15.0
+        ),
     }
 
     @classmethod
@@ -168,17 +175,17 @@ class BlueprintRules:
             return None
             
         header_lower = header_text.lower().strip()
+        header_clean = re.sub(r'[^a-z0-9]', '', header_lower)
         
-        # Check all definitions
+        # 1. Exact match check (using keywords list)
         for col_def in cls.COLUMNS.values():
             for keyword in col_def.keywords:
-                # Exact match or word boundary check could be used,
-                # but legacy logic used "if keyword in header_lower".
-                # We preserve that behavior for now.
-                # STRICT matching requested by user.
-                # Previously: if keyword in header_lower:
                 if keyword == header_lower:
                     return col_def
+        
+        # 2. Smart fallback for HS Code (regex-like: both 'hs' and 'code' present)
+        if 'hs' in header_clean and 'code' in header_clean:
+            return cls.COLUMNS.get("col_hs_code")
                     
         return None
 

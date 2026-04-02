@@ -138,57 +138,54 @@ class ExcelTemplateSanitizer:
                 if w is not None:
                      preserved_layout["col_widths"][letter] = w
         
-        # --- [Smart Feature] Extract Fallback Description & HS Code (Handles Mixed Values) ---
-        # Look for col_desc and col_hs_code in the analysis and collect ALL unique values from the data body.
-        fallback_description = None
+        # --- [Smart Feature] Global Search for HS Code ---
+        # Search for "HS.CODE" substring anywhere in the sheet, ignoring table boundaries.
         hs_code = None
+        for row_cells in ws.iter_rows(max_row=150, max_col=25):
+            for cell in row_cells:
+                val = cell.value
+                if val and isinstance(val, (str, bytes)):
+                    val_str = str(val)
+                    # Check for "HS.CODE" or "HSCODE" as a substring (case-insensitive)
+                    # We remove spaces and check uppercase for maximum reliability
+                    val_upper = val_str.upper().replace(" ", "")
+                    if "HS.CODE" in val_upper or "HSCODE" in val_upper:
+                        # Take the ENTIRE value of the cell
+                        hs_code = val_str.strip()
+                        self.logger.info(f"    [Global Search] HS Code cell found at {cell.coordinate}: '{hs_code}'")
+                        break
+            if hs_code:
+                break
+
+        # --- [Smart Feature] Extract Fallback Description (Data Table Only) ---
+        fallback_description = None
         col_desc_index = None
-        col_hscode_index = None
 
         for col in analysis.columns:
             if col.id == "col_desc":
                 col_desc_index = col.col_index
-            elif col.id == "col_hs_code":
-                col_hscode_index = col.col_index
+                break
         
-        if (col_desc_index or col_hscode_index) and analysis.header_row > 0:
-            # We need the footer to know where to stop scanning data
+        if col_desc_index and analysis.header_row > 0:
             footer_row = self._find_footer_start(ws, analysis.header_row + 1, analysis)
             data_start = analysis.header_row + 1
             data_end = footer_row - 1 if footer_row else ws.max_row
             
             unique_descs = []
-            unique_hscodes = []
             seen_desc = set()
-            seen_hscode = set()
             
             if data_start <= data_end:
                 for r in range(data_start, data_end + 1):
-                    # Description
-                    if col_desc_index:
-                        val = ws.cell(row=r, column=col_desc_index).value
-                        if val:
-                            val_str = str(val).strip()
-                            if val_str and val_str not in seen_desc:
-                                unique_descs.append(val_str)
-                                seen_desc.add(val_str)
-                    
-                    # HS Code
-                    if col_hscode_index:
-                        val = ws.cell(row=r, column=col_hscode_index).value
-                        if val:
-                            val_str = str(val).strip()
-                            if val_str and val_str not in seen_hscode:
-                                unique_hscodes.append(val_str)
-                                seen_hscode.add(val_str)
+                    val = ws.cell(row=r, column=col_desc_index).value
+                    if val:
+                        val_str = str(val).strip()
+                        if val_str and val_str not in seen_desc:
+                            unique_descs.append(val_str)
+                            seen_desc.add(val_str)
             
             if unique_descs:
                 fallback_description = " / ".join(unique_descs)
                 self.logger.info(f"    [Extracted] Fallback descriptions from {analysis.name}: '{fallback_description}'")
-            
-            if unique_hscodes:
-                hs_code = " / ".join(unique_hscodes)
-                self.logger.info(f"    [Extracted] HS Codes from {analysis.name}: '{hs_code}'")
 
         preserved_layout["fallback_description"] = fallback_description
         preserved_layout["hs_code"] = hs_code
