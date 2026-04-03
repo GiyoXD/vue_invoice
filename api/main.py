@@ -1081,6 +1081,47 @@ async def list_templates():
                         
     return templates
 
+
+def read_table_info_from_config(template_dir: Path) -> dict:
+    """
+    Reads the sibling bundle config file and extracts display-only metadata.
+    Returns a dict with 'fallback_description' (standard + daf) and 'hs_code'.
+    
+    Args:
+        template_dir: The bundle directory containing the *_config.json file.
+    """
+    result = {}
+    config_files = list(template_dir.glob("*_config.json"))
+    if not config_files:
+        return result
+
+    with open(config_files[0], 'r', encoding='utf-8') as f:
+        cfg = json.load(f)
+
+    layout = cfg.get("layout_bundle", {})
+
+    # Extract fallback_description dict (standard + daf keys)
+    fallback_dict = (
+        layout.get("defaults", {})
+              .get("data_flow", {})
+              .get("mappings", {})
+              .get("col_desc", {})
+              .get("fallback", {})
+    )
+    if fallback_dict:
+        result["fallback_description"] = fallback_dict
+
+    # Extract hs_code from first enabled before_footer found across sheets
+    for sheet_name, sheet_data in layout.items():
+        if not isinstance(sheet_data, dict):
+            continue
+        before_footer = sheet_data.get("footer", {}).get("add_ons", {}).get("before_footer", {})
+        if before_footer.get("enabled") and before_footer.get("text"):
+            result["hs_code"] = before_footer["text"]
+            break
+
+    return result
+
 @app.get("/api/template/view")
 async def view_template(name: str, bundle: Optional[str] = None):
     """
@@ -1113,9 +1154,19 @@ async def view_template(name: str, bundle: Optional[str] = None):
         
     try:
         with open(template_path, 'r', encoding='utf-8') as f:
-            return json.load(f)
+            data = json.load(f)
+
+        # Enrich table_info from config at read-time (in-memory only, not saved to disk)
+        config_info = read_table_info_from_config(template_dir)
+        if config_info:
+            if "table_info" not in data:
+                data["table_info"] = {}
+            data["table_info"].update(config_info)
+
+        return data
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"Failed to read template: {str(e)}"})
+
 
 
 class CellOverrideRequest(BaseModel):

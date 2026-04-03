@@ -79,12 +79,15 @@ export default {
                                 Table Information
                             </h4>
                             <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; font-size: 0.875rem;">
-                                <div style="color: #64748b; font-weight: 500;">Fallback Description:</div>
-                                <div style="color: #e2e8f0;">{{ currentTemplate.table_info.fallback_description || 'None' }}</div>
+                                <div style="color: #64748b; font-weight: 500;">Fallback Desc (Standard):</div>
+                                <div style="color: #e2e8f0;">{{ currentTemplate.table_info.fallback_description?.standard || 'None' }}</div>
+
+                                <div style="color: #64748b; font-weight: 500;">Fallback Desc (DAF):</div>
+                                <div style="color: #e2e8f0;">{{ currentTemplate.table_info.fallback_description?.daf || 'None' }}</div>
 
                                 <div style="color: #64748b; font-weight: 500;">HS Code:</div>
                                 <div style="color: #e2e8f0;">{{ currentTemplate.table_info.hs_code || 'None' }}</div>
-                            </div>                        </div>
+                            </div>
 
                         <!-- Sheet Selector -->
                         <div class="sheet-tabs" style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
