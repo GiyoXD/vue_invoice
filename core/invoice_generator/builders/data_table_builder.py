@@ -110,6 +110,10 @@ class DataTableBuilderStyler:
         data_start_row = data_writing_start_row
         data_end_row = data_start_row + actual_rows_to_process - 1 if actual_rows_to_process > 0 else data_start_row - 1
         
+        # Calculate actual end row of valid items, excluding static row padding
+        num_data_rows = self.resolved_data.get('num_data_rows', actual_rows_to_process)
+        actual_data_end_row = data_start_row + num_data_rows - 1 if num_data_rows > 0 else data_start_row - 1
+        
         # --- Fill Data Rows Loop ---
         try:
             data_row_indices_written = []
@@ -244,7 +248,7 @@ class DataTableBuilderStyler:
                                 logger.debug(f"Merged data row {row_idx}, columns {start_col}-{end_col} for {col_id} (colspan={colspan})")
 
             # --- Apply Vertical Merges (Conditional based on GLOBAL col_desc uniqueness) ---
-            if self.vertical_merge_columns and actual_rows_to_process > 0:
+            if self.vertical_merge_columns and num_data_rows > 0:
                 # 1. We use self.is_global_unique_desc (passed from LayoutBuilder) 
                 # to determine the strategy for col_desc.
                 
@@ -258,19 +262,15 @@ class DataTableBuilderStyler:
 
                     if col_id == 'col_desc':
                         if self.is_global_unique_desc:
-                            # Strategy: If GLOBALLY UNIQUE, merge the ENTIRE range for col_desc in this table
-                            try:
-                                self.worksheet.merge_cells(
-                                    start_row=data_start_row,
-                                    start_column=col_idx,
-                                    end_row=data_end_row,
-                                    end_column=col_idx
-                                )
-                                anchor_cell = self.worksheet.cell(row=data_start_row, column=col_idx)
-                                anchor_cell.alignment = Alignment(horizontal='center', vertical='center')
-                                logger.debug(f"  Merged globally unique col_desc (rows {data_start_row}-{data_end_row})")
-                            except Exception as merge_err:
-                                logger.warning(f"  Failed to merge unique col_desc: {merge_err}")
+                            # Strategy: If GLOBALLY UNIQUE, enable normal merging
+                            logger.debug(f"  Merging contiguous cells in column '{col_id}' (index {col_idx})")
+                            merge_vertical_cells_in_range(
+                                worksheet=self.worksheet,
+                                scan_col=col_idx,
+                                start_row=data_start_row,
+                                end_row=actual_data_end_row,
+                                col_id=col_id
+                            )
                         else:
                             # Strategy: If GLOBALLY MIXED, skip merging for col_desc entirely ("mix no merge")
                             logger.info("  Skipping vertical merge for col_desc because descriptions are mixed globally.")
@@ -282,7 +282,7 @@ class DataTableBuilderStyler:
                             worksheet=self.worksheet,
                             scan_col=col_idx,
                             start_row=data_start_row,
-                            end_row=data_end_row,
+                            end_row=actual_data_end_row,
                             col_id=col_id
                         )
 

@@ -156,14 +156,14 @@ class TableDataAdapter:
                 # [Smart Feature] Resolve {col_desc_fallback} placeholder for dynamic static content
                 desc_fallback_str = ""
                 for rule_key, rule in parsed['dynamic_mapping_rules'].items():
-                    if 'desc' in rule_key.lower() and isinstance(rule, dict):
-                        fc = rule.get('fallback')
-                        if isinstance(fc, dict):
-                            if self.DAF_mode and 'daf' in fc: desc_fallback_str = fc['daf']
-                            elif self.custom_mode and 'custom' in fc: desc_fallback_str = fc['custom']
-                            elif 'standard' in fc: desc_fallback_str = fc['standard']
-                        elif fc is not None:
-                            desc_fallback_str = str(fc)
+                    if rule_key == 'col_desc' and isinstance(rule, dict):
+                        fallback_cfg = rule.get('fallback')
+                        if isinstance(fallback_cfg, dict):
+                            if self.DAF_mode and 'daf' in fallback_cfg: desc_fallback_str = fallback_cfg['daf']
+                            elif self.custom_mode and 'custom' in fallback_cfg: desc_fallback_str = fallback_cfg['custom']
+                            elif 'standard' in fallback_cfg: desc_fallback_str = fallback_cfg['standard']
+                        elif fallback_cfg is not None:
+                            desc_fallback_str = str(fallback_cfg)
                         break
                 
                 # Merge static values into the first N data rows
@@ -318,7 +318,7 @@ class TableDataAdapter:
         desc_col_id = None
         
         # Try common description column IDs
-        for possible_id in ['col_desc', 'col_description', 'description']:
+        for possible_id in ['col_desc']:
             if possible_id in self.column_id_map:
                 desc_col_id = possible_id
                 break

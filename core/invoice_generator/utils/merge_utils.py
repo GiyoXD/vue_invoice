@@ -264,14 +264,22 @@ def merge_vertical_cells_in_range(worksheet: Worksheet, scan_col: int, start_row
     if not all(isinstance(i, int) and i > 0 for i in [scan_col, start_row, end_row]) or start_row >= end_row:
         return
 
-    # Verifier: Check if there's any value different from the starting row's value
-
     if col_id == "col_desc":
-        buffer_value = worksheet.cell(row=start_row, column=scan_col).value
-        for row_idx in range(start_row + 1, end_row + 1):
-            if worksheet.cell(row=row_idx, column=scan_col).value != buffer_value:
-                # Found at least 1 different value; end the function early
-                return
+        # Find the first non-empty value to use as the baseline
+        buffer_value = None
+        for row_idx in range(start_row, end_row + 1):
+            val = worksheet.cell(row=row_idx, column=scan_col).value
+            if val:
+                buffer_value = val
+                break
+                
+        # Only verify if we found a description
+        if buffer_value is not None:
+            for row_idx in range(start_row, end_row + 1):
+                val = worksheet.cell(row=row_idx, column=scan_col).value
+                # If we find actual text that differs from our baseline, abort
+                if val and val != buffer_value:
+                    return
 
     # Walk through the column, tracking contiguous groups
     group_start = start_row

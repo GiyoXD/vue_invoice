@@ -234,6 +234,113 @@ def _resolve_mode_formula(
 
     return None
 
+def _get_value_from_source(source_container: Any, rule_key: str, row_idx: int = None) -> Any:
+    """
+    Extract a value from the data source using the rule key.
+
+    Args:
+        source_container: Either the main data dict (column-oriented) or a single row dict (row-oriented).
+        rule_key: The column ID to look up (e.g., 'col_po', 'col_desc').
+        row_idx: Row index for column-oriented sources. None for row-oriented.
+
+    Returns:
+        The extracted value, or None if not found.
+    """
+    if rule_key is None or not isinstance(source_container, dict):
+        return None
+
+    # Column-Oriented: source is dict of lists, need row_idx
+    if row_idx is not None:
+        col_data = source_container.get(rule_key)
+        if isinstance(col_data, list) and row_idx < len(col_data):
+            return col_data[row_idx]
+
+    # Row-Oriented: source is a single row dict
+    elif rule_key in source_container:
+        return source_container[rule_key]
+
+    return None
+
+
+def _build_row_dict(
+    source_container: Any,
+    row_idx: Optional[int],
+    dynamic_mapping_rules: Dict[str, Any],
+    column_id_map: Dict[str, int],
+    parent_column_ids: List[str],
+    static_value_map: Dict[int, Any],
+    DAF_mode: bool,
+    custom_mode: bool
+) -> Dict[int, Any]:
+    """
+    Build a single row dictionary by applying mapping rules, formulas, fallbacks, and static values.
+
+    Args:
+        source_container: The data source (full dict for column-oriented, single row dict for row-oriented).
+        row_idx: Row index for column-oriented lookups. None for row-oriented.
+        dynamic_mapping_rules: Parsed mapping rules from the config.
+        column_id_map: Column ID to Excel column index mapping.
+        parent_column_ids: IDs of parent (merged header) columns to skip.
+        static_value_map: Static values to inject into each row.
+        DAF_mode: Whether DAF mode is active.
+        custom_mode: Whether custom mode is active.
+
+    Returns:
+        A dictionary mapping column indices to their resolved values.
+    """
+    row_dict = {}
+
+    for source_key, rule in dynamic_mapping_rules.items():
+        if not isinstance(rule, dict):
+            continue
+
+        target_id = source_key
+        if not target_id:
+            continue
+        # Skip parent columns since data should only be written to leaf columns
+        if target_id in parent_column_ids:
+            continue
+
+        target_col_idx = column_id_map.get(target_id)
+        if not target_col_idx:
+            continue
+
+        # Fetch value from source
+        val = _get_value_from_source(source_container, source_key, row_idx)
+        if val is not None:
+            row_dict[target_col_idx] = val
+
+        # Formula-First Resolution: formula always wins over raw data
+        mode_formula = _resolve_mode_formula(rule, DAF_mode, custom_mode)
+        if mode_formula:
+            parsed_formula = _parse_formula_def(mode_formula)
+            if parsed_formula:
+                row_dict[target_col_idx] = {
+                    'type': 'formula',
+                    'template': parsed_formula['template'],
+                    'inputs': parsed_formula.get('inputs', [])
+                }
+                continue  # Formula applied, skip fallback
+
+        # No formula for this mode — apply text fallback if value is empty
+        if row_dict.get(target_col_idx) in [None, ""]:
+            # Guard: Only apply col_desc fallback to rows that have actual data (e.g., a PO value)
+            # IMPORTANT: Check SOURCE DATA directly, not row_dict, because col_po
+            # may not have been processed yet in this iteration loop.
+            if source_key == 'col_desc':
+                po_val = _get_value_from_source(source_container, 'col_po', row_idx)
+                if not po_val:
+                    continue  # Skip fallback — this is an overflow row with no real data
+            _apply_fallback(row_dict, target_col_idx, rule, DAF_mode, custom_mode)
+
+    # Apply static values
+    for col_idx, static_val in static_value_map.items():
+        if col_idx not in row_dict:
+            row_dict[col_idx] = static_val
+
+    return row_dict
+
+
 def prepare_data_rows(
     data_source_type: str,
     data_source: Union[Dict, List],
@@ -250,177 +357,62 @@ def prepare_data_rows(
     """
     Prepares data rows by applying mapping rules to the data source.
     Supports both Column-Oriented (Dict of Lists) and Row-Oriented (List of Dicts) sources.
-    Uses robust lookup strategies to find data even if keys don't match column IDs exactly.
     """
     parent_column_ids = parent_column_ids or []
-    
     data_rows_prepared = []
     pallet_counts_for_rows = []
     num_data_rows_from_source = 0
-    
-    def get_value_from_row_or_cols(source_container: Any, rule: Dict, rule_key: str, row_idx: int = None) -> Any:
-        """
-        Helper to extract value from source using multiple lookup strategies.
-        Args:
-            source_container: Either a row dict (row-oriented) or the main data dict (col-oriented)
-            rule: The mapping rule dict
-            rule_key: The key from the mapping_rules dict (e.g. 'po')
-            row_idx: Index of the row (required for column-oriented source)
-        """
-        possible_keys = []
-        
-        # 1. Strict mapping using rule_key (the name in the mappings dict, often 'col_po', 'col_item')
-        if rule_key: possible_keys.append(rule_key)
 
-        found_value = None
-        found = False
+    # Shared kwargs for _build_row_dict
+    build_kwargs = {
+        'dynamic_mapping_rules': dynamic_mapping_rules,
+        'column_id_map': column_id_map,
+        'parent_column_ids': parent_column_ids,
+        'static_value_map': static_value_map,
+        'DAF_mode': DAF_mode,
+        'custom_mode': custom_mode,
+    }
 
-        # Try all possible keys
-        for key in possible_keys:
-            if key is None: continue
-            
-            # Case A: Column-Oriented (source_container is dict of lists)
-            # We need to look up column 'key', then index 'row_idx'
-            if row_idx is not None and isinstance(source_container, dict):
-                if key in source_container:
-                    col_data = source_container[key]
-                    if isinstance(col_data, list) and row_idx < len(col_data):
-                        found_value = col_data[row_idx]
-                        found = True
-                        break
-            
-            # Case B: Row-Oriented (source_container is the row dict/object)
-            elif row_idx is None:
-                # Direct lookup in the row object
-                if isinstance(source_container, dict) and key in source_container:
-                    found_value = source_container[key]
-                    found = True
-                    break
-        
-        if not found:
-            return None
-        return found_value
-
-    # --- Generic Handler for ANY Data Source Type ---
-    
     # Path A: Column-Oriented (Dict of Lists) - e.g., processed_tables
     if isinstance(data_source, dict):
-        # Determine number of rows from the first list found
-        num_data_rows_from_source = 0
+        # Determine number of rows from the longest list
         for val in data_source.values():
             if isinstance(val, list):
                 num_data_rows_from_source = max(num_data_rows_from_source, len(val))
-        
+
         logger.debug(f"Preparing {num_data_rows_from_source} rows from Column-Oriented source")
 
-        # Extract Pallet Counts (Try 'col_pallet_count' first as it matches parser output, then 'pallet_count')
-        raw_pallet_counts = data_source.get('col_pallet_count') 
+        # Extract pallet counts
+        raw_pallet_counts = data_source.get('col_pallet_count')
         if raw_pallet_counts and isinstance(raw_pallet_counts, list):
             pallet_counts_for_rows = raw_pallet_counts
         else:
-            logger.warning(f"[DataPreparer] ⚠️ Pallet count missing in data source (checked 'col_pallet_count' and 'pallet_count'). defaulting to None for {num_data_rows_from_source} rows.")
+            logger.warning(f"[DataPreparer] ⚠️ Pallet count missing in column-oriented source. Defaulting to None for {num_data_rows_from_source} rows.")
             pallet_counts_for_rows = [None] * num_data_rows_from_source
 
         for i in range(num_data_rows_from_source):
-            row_dict = {}
-            for source_key, rule in dynamic_mapping_rules.items():
-                if not isinstance(rule, dict): continue
-                
-                target_id = source_key
-                if not target_id: continue
-                # Skip parent columns since data should only be written to leaf columns
-                if target_id in parent_column_ids: continue
-                
-                target_col_idx = column_id_map.get(target_id)
-                if not target_col_idx: continue
-                
-                # Fetch value using smart lookup (passing main dict and row index)
-                val = get_value_from_row_or_cols(data_source, rule, source_key, row_idx=i)
-                if val is not None:
-                    row_dict[target_col_idx] = val
-                
-                # --- Formula-First Resolution ---
-                # If a formula is defined for this mode, it always wins over raw data.
-                # If no formula exists, the raw data value is kept as fallback.
-                mode_formula = _resolve_mode_formula(rule, DAF_mode, custom_mode)
-                if mode_formula:
-                    parsed_formula = _parse_formula_def(mode_formula)
-                    if parsed_formula:
-                        row_dict[target_col_idx] = {
-                            'type': 'formula',
-                            'template': parsed_formula['template'],
-                            'inputs': parsed_formula.get('inputs', [])
-                        }
-                        continue  # Formula applied, skip fallback
-
-                # No formula for this mode — apply text fallback if value is empty
-                if row_dict.get(target_col_idx) in [None, ""]:
-                    _apply_fallback(row_dict, target_col_idx, rule, DAF_mode, custom_mode)
-            
-            # Apply static values
-            for col_idx, static_val in static_value_map.items():
-                if col_idx not in row_dict:
-                    row_dict[col_idx] = static_val
-            
+            row_dict = _build_row_dict(source_container=data_source, row_idx=i, **build_kwargs)
             data_rows_prepared.append(row_dict)
 
     # Path B: Row-Oriented (List of Dicts) - e.g., standard_aggregation_results
     elif isinstance(data_source, list):
         num_data_rows_from_source = len(data_source)
         logger.debug(f"Preparing {num_data_rows_from_source} rows from Row-Oriented source")
-        
+
         for row_data in data_source:
-            # Extract Pallet Count
+            # Extract pallet count per row
             p_count = row_data.get('col_pallet_count') or row_data.get('pallet_count')
             pallet_counts_for_rows.append(p_count)
 
-            row_dict = {}
-            for source_key, rule in dynamic_mapping_rules.items():
-                if not isinstance(rule, dict): continue
-                
-                target_id = source_key
-                if not target_id: continue
-                # Skip parent columns since data should only be written to leaf columns
-                if target_id in parent_column_ids: continue
-                
-                target_col_idx = column_id_map.get(target_id)
-                if not target_col_idx: continue
-                
-                # Fetch value using smart lookup (passing row object, no row index)
-                val = get_value_from_row_or_cols(row_data, rule, source_key, row_idx=None)
-                if val is not None:
-                    row_dict[target_col_idx] = val
-
-                # --- Formula-First Resolution ---
-                # If a formula is defined for this mode, it always wins over raw data.
-                # If no formula exists, the raw data value is kept as fallback.
-                mode_formula = _resolve_mode_formula(rule, DAF_mode, custom_mode)
-                if mode_formula:
-                    parsed_formula = _parse_formula_def(mode_formula)
-                    if parsed_formula:
-                        row_dict[target_col_idx] = {
-                            'type': 'formula',
-                            'template': parsed_formula['template'],
-                            'inputs': parsed_formula.get('inputs', [])
-                        }
-                        continue  # Formula applied, skip fallback
-
-                # No formula for this mode — apply text fallback if value is empty
-                if row_dict.get(target_col_idx) in [None, ""]:
-                    _apply_fallback(row_dict, target_col_idx, rule, DAF_mode, custom_mode)
-            
-            # Apply static values
-            for col_idx, static_val in static_value_map.items():
-                if col_idx not in row_dict:
-                    row_dict[col_idx] = static_val
-            
+            row_dict = _build_row_dict(source_container=row_data, row_idx=None, **build_kwargs)
             logger.debug(f"[DEBUG-ROW] Source keys: {list(row_data.keys())} - target row dict for row {len(data_rows_prepared)}: {row_dict}")
             data_rows_prepared.append(row_dict)
-    
+
     else:
         logger.warning(f"Unknown data_source format: {type(data_source)}. Expected dict or list.")
-    
+
     # Pad with empty rows if static labels demand it
     if num_static_labels > len(data_rows_prepared):
         data_rows_prepared.extend([{}] * (num_static_labels - len(data_rows_prepared)))
+
     return data_rows_prepared, pallet_counts_for_rows, num_data_rows_from_source
