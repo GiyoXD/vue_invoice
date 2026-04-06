@@ -234,37 +234,24 @@ class ExcelLayoutScanner:
                         
                     header_cells.append((col, value))
             
-            # USER'S REQURED ALGORITHM:
-            # 1. Row must have AT LEAST 3 Valid Matches (Exact).
-            # 2. Rank primarily by "Amount of Columns with Text" (c).
-            # 3. Tie-breaker: "Amount of Matches" (c(matches)).
-            # 4. Tie-breaker: Topmost row.
-
-            # We use text_count as "c" (Amount of columns with text)
-            # We use matches as validity check
+            # HEADER ROW SELECTION ALGORITHM:
+            # 1. Row must have AT LEAST 3 Valid Matches (keyword hits).
+            # 2. Rank primarily by matches (more keyword hits = stronger header candidate).
+            # 3. Tie-breaker: text_count (more occupied cells = wider row).
+            # 4. Tie-breaker: Topmost row (implicit: we iterate top-down, strict >).
             
             # Validity Threshold
             if matches >= 3:
-                 # ScoreTuple = (TextCount, MatchCount, -RowNumber) 
-                 # We want Max TextCount, Max MatchCount, Min RowNumber (Topmost)
-                 # Since we iterate top-down and use strict >, topmost is handled implicitly if we don't update on ties.
-                 
-                 # Logic:
-                 # If we have a previous best:
-                 #   Is this row BETTER?
-                 #   Better means: More Text Cols? OR (Equal Text Cols AND More Matches)
-                 
                  is_better = False
                  if best_row is None:
                      is_better = True
                  else:
-                     # Compare with current best
                      (best_matches, best_text_count) = max_score
                      
-                     if text_count > best_text_count:
+                     if matches > best_matches:
                          is_better = True
-                     elif text_count == best_text_count:
-                         if matches > best_matches:
+                     elif matches == best_matches:
+                         if text_count > best_text_count:
                              is_better = True
                              
                  if is_better:
@@ -470,11 +457,19 @@ class ExcelLayoutScanner:
         columns = []
         processed_cols = set()
         
-        # Get merged cell ranges for this row
+        # Get merged cell ranges that START at the header row.
+        # Used for colspan/rowspan detection of actual table header columns.
         merged_ranges = []
         for merged in worksheet.merged_cells.ranges:
-            if merged.min_row <= header_row <= merged.max_row:
+            if merged.min_row == header_row:
                 merged_ranges.append(merged)
+        
+        # Also collect ALL merges that overlap the header row (including from above).
+        # Used for resolving cell values within merged regions.
+        all_merges_at_header = []
+        for merged in worksheet.merged_cells.ranges:
+            if merged.min_row <= header_row <= merged.max_row:
+                all_merges_at_header.append(merged)
         
         # Cap column analysis at 25 (Col Y)
         safe_max = min(worksheet.max_column + 1, 26)
@@ -488,7 +483,7 @@ class ExcelLayoutScanner:
             
             if not value:
                 # Check if this is part of a merged cell
-                for merged in merged_ranges:
+                for merged in all_merges_at_header:
                     if merged.min_col <= col <= merged.max_col:
                         # Get value from top-left of merged range
                         value = self._get_cell_value(

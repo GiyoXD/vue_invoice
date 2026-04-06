@@ -175,6 +175,16 @@ export default {
                     <span v-if="generationError.step" class="error-step">{{ generationError.step }}</span>
                     <div class="error-message">{{ generationError.message }}</div>
                     
+                    <!-- DETAILED ERROR LIST -->
+                    <div v-if="generationError.details && generationError.details.length" class="error-details-list" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(248, 113, 113, 0.2);">
+                        <h4 style="font-size: 0.85rem; color: #f87171; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.025em;">Root Causes:</h4>
+                        <ul style="margin: 0; padding-left: 1.25rem; font-size: 0.85rem; color: #fca5a5;">
+                            <li v-for="(detail, idx) in generationError.details" :key="idx" style="margin-bottom: 0.25rem;">
+                                {{ detail }}
+                            </li>
+                        </ul>
+                    </div>
+                    
                     <div v-if="generationError.traceback" 
                          class="traceback-toggle" 
                          :class="{ open: showGenTraceback }"
@@ -465,6 +475,7 @@ export default {
                     // Capture structured error from API
                     generationError.value = {
                         message: data.error || 'Generation failed',
+                        details: data.details || [],
                         step: data.step || null,
                         traceback: data.traceback || null
                     };

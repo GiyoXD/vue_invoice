@@ -116,7 +116,9 @@
             "Unit Price       \n(USD)": "col_unit_price",
             "N.W\n(kgs)": "col_net",
             "G.W\n(kgs)": "col_gross",
-            "Origin": "col_static"
+            "Origin": "col_static",
+            "Quantity              \n(SF)": "col_qty_sf",
+            "Unite price  \n(USD)": "col_unit_price"
         }
     },
     "fallback_strategies": {

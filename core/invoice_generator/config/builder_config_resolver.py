@@ -16,6 +16,7 @@ Each builder gets only its required arguments in the expected format.
 import logging
 from typing import Any, Dict, Optional, Tuple
 from openpyxl.worksheet.worksheet import Worksheet
+from core.system_config import ConfigurationError
 
 
 
@@ -470,7 +471,10 @@ class BuilderConfigResolver:
         """
         structure = layout_config.get('structure', {})
         columns = structure.get('columns', [])
-        header_row = structure.get('header_row', 1)
+        header_row = structure.get('header_row')
+        
+        if header_row is None:
+             raise ConfigurationError(f"CRITICAL: No 'header_row' found in structure config. Builders cannot determine header placement.")
         
         # Filter columns based on DAF/custom mode flags
         DAF_mode = self.args.DAF if self.args and hasattr(self.args, 'DAF') else False

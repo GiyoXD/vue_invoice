@@ -18,7 +18,7 @@ from core.database import db_manager
 from core.database.db_manager import get_db, ProcessedData, InvoiceItem, init_db, engine, Base, get_cambodia_time
 
 # Initialize logging FIRST before any other core imports
-from core.system_config import sys_config
+from core.system_config import sys_config, ConfigurationError
 from core.logger_config import setup_logging
 setup_logging(log_dir=sys_config.run_log_dir)
 
@@ -344,9 +344,20 @@ def generate_invoice(request: GenerateRequest):
                     errors.append(error_msg)
 
         if not processed_any and errors:
-             # All failed
-             return JSONResponse(status_code=500, content={
-                "error": "All generation tasks failed.", 
+             # Look for specific application errors to provide a cleaner status code
+             status_code = 500
+             error_message = "All generation tasks failed."
+             
+             # IMPROVEMENT: If we have configuration errors, promote the first one to the main message
+             # so the user doesn't have to dig into "Root Causes"
+             config_errors = [err for err in errors if "CRITICAL: No 'header_row'" in err]
+             if config_errors:
+                 status_code = 422
+                 # Use the first specific config error as the main message
+                 error_message = config_errors[0]
+
+             return JSONResponse(status_code=status_code, content={
+                "error": error_message, 
                 "details": errors
             })
 

@@ -10,7 +10,7 @@ from .data_table_builder import DataTableBuilderStyler as DataTableBuilder
 from .footer_builder import TableFooterBuilder
 from .json_template_builder import JsonTemplateStateBuilder
 from openpyxl.drawing.image import Image
-from ...system_config import sys_config
+from ...system_config import sys_config, ConfigurationError
 
 # Initialize logger for this module
 logger = logging.getLogger(__name__)
@@ -138,18 +138,16 @@ class LayoutBuilder:
         # Removed per user request
         
         # 2. Calculate header boundaries for template state capture
-        header_row = self.sheet_config.get('header_row', 1)
+        structure = self.sheet_config.get('structure', {})
+        header_row = structure.get('header_row') # Correct placement for header offset
 
-        # header_to_write removed - using bundled columns only
-        num_header_cols = 0
-        
         # IMPORTANT: Clarify terminology - there are TWO types of headers:
         # 1. TEMPLATE HEADER: Decorative header section (company name, logo, etc.) - rows 1 to (table_header_row - 1)
         # 2. TABLE HEADER: Column headers for data table (e.g., "Item", "Quantity", "Price") - at table_header_row
         
         # Get table_header_row from config (where the data table column headers are)
         # For multi-table sheets, multi_table_processor dynamically injects the correct
-        # expected header_row into self.sheet_config['structure']['header_row'].
+        # expected header_row into self.sheet_config ['structure']['header_row'].
         # We MUST respect this injected value over the static global sheet_layout original value.
         sheet_layout = self.all_sheet_configs.get(self.sheet_name, {}) if self.all_sheet_configs else {}
         
@@ -160,6 +158,9 @@ class LayoutBuilder:
         else:
             table_header_row = sheet_layout.get('structure', {}).get('header_row', header_row)
             
+        if table_header_row is None:
+            raise ConfigurationError(f"CRITICAL: No 'header_row' found for sheet '{self.sheet_name}'. Check configuration structure.")
+
         header_row_for_builder = table_header_row
         logger.debug(f"[LayoutBuilder DEBUG] sheet_name={self.sheet_name}, header_row={header_row}, table_header_row={table_header_row}")
         logger.debug(f"[LayoutBuilder DEBUG] all_sheet_configs keys: {list(self.all_sheet_configs.keys()) if self.all_sheet_configs else 'None'}")

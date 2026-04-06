@@ -16,6 +16,7 @@ from ..config.builder_config_resolver import BuilderConfigResolver
 from ..extractors.header_extractor import HeaderExtractor
 
 logger = logging.getLogger(__name__)
+from core.system_config import ConfigurationError
 
 class MultiTableProcessor(SheetProcessor):
     """
@@ -53,8 +54,14 @@ class MultiTableProcessor(SheetProcessor):
             return False
 
         # 3. Initialize Tracking Variables
-        structure_config = self.sheet_config.get('structure', {}) if self.sheet_config else {}
-        current_row = structure_config.get('header_row', 21)
+        layout_config = self.sheet_config.get('layout_config', {})
+        structure_config = layout_config.get('structure', {})
+        header_row = structure_config.get('header_row')
+        
+        if header_row is None:
+            raise ConfigurationError(f"CRITICAL: No 'header_row' found in layout_bundle['{self.sheet_name}']['structure']. Check your config.")
+            
+        current_row = header_row
         all_data_ranges = []
         grand_total_pallets = 0
         last_header_info = None
