@@ -1,4 +1,3 @@
-# --- START MODIFIED FILE: data_processor.py ---
 
 import logging
 from typing import Dict, List, Any, Optional, Tuple
@@ -14,48 +13,18 @@ decimal.getcontext().prec = 28 # Default precision, adjust if needed
 CBM_DECIMAL_PLACES = decimal.Decimal('0.0001')
 # Define default precision for other distributions (e.g., 4 decimal places)
 DEFAULT_DIST_PRECISION = decimal.Decimal('0.0001')
-
-## TODO: make sure all the aggregation DAF mode has price support 10 floating point
+from .validation import DataValidationError
+from .util.converters import DataConverter
+# Safely link the local legacy name to the new centralized utility
+_convert_to_decimal = DataConverter.convert_to_decimal
 
 
 class ProcessingError(Exception):
     """Custom exception for data processing errors."""
     pass
 
-def _convert_to_decimal(value: Any, context: str = "") -> Optional[decimal.Decimal]:
-    """Safely convert a value to Decimal, logging errors.
-    
-    For floats, we round to a reasonable precision to avoid floating-point errors
-    like 0.30000000000000004 becoming an issue.
-    """
-    prefix = "[_convert_to_decimal]"
-    if isinstance(value, decimal.Decimal):
-        return value
-    if value is None:
-        return None
-    
-    # Handle floats specially to avoid floating-point precision issues
-    # Round to 14 decimal places before converting to avoid issues like 0.30000000000000004
-    if isinstance(value, float):
-        # Use string formatting with precision to clean up float representation
-        value_str = f"{value:.14f}".rstrip('0').rstrip('.')
-        if not value_str or value_str == '-':
-            return None
-        try:
-            return decimal.Decimal(value_str)
-        except (decimal.InvalidOperation, TypeError, ValueError) as e:
-            logging.warning(f"{prefix} Could not convert float '{value}' to Decimal {context}: {e}")
-            return None
-    
-    value_str = str(value).strip()
-    if not value_str:
-        return None
-    try:
-        result = decimal.Decimal(value_str)
-        return result
-    except (decimal.InvalidOperation, TypeError, ValueError) as e:
-        logging.warning(f"{prefix} Could not convert '{value}' (Str: '{value_str}') to Decimal {context}: {e}")
-        return None
+
+# _convert_to_decimal is now imported from .validation
 
 # _calculate_single_cbm function remains unchanged...
 def _calculate_single_cbm(cbm_value: Any, row_index: int) -> Optional[decimal.Decimal]:
@@ -79,7 +48,7 @@ def _calculate_single_cbm(cbm_value: Any, row_index: int) -> Optional[decimal.De
     # If it's already a number, convert to Decimal and quantize
     if isinstance(cbm_value, (int, float, decimal.Decimal)):
         logging.debug(f"{prefix} Input CBM is already numeric: {cbm_value}. {log_context}")
-        calculated = _convert_to_decimal(cbm_value, log_context)
+        calculated = DataConverter.convert_to_decimal(cbm_value, log_context)
         if calculated is not None:
              result = calculated.quantize(CBM_DECIMAL_PLACES, rounding=decimal.ROUND_HALF_UP)
              logging.debug(f"{prefix} Quantized pre-numeric CBM to {result}. {log_context}")
@@ -122,158 +91,7 @@ def _calculate_single_cbm(cbm_value: Any, row_index: int) -> Optional[decimal.De
         dims = []
         valid_dims = True
         for i, part in enumerate(parts):
-             dim = _convert_to_decimal(part, f"{log_context}, part {i+1} ('{part}')")
-             if dim is None:
-                 logging.warning(f"{prefix} Failed to convert dimension part {i+1} ('{part}') to Decimal. {log_context}")
-                 valid_dims = False
-             dims.append(dim)
-
-        if not valid_dims:
-            logging.warning(f"{prefix} Failed to convert one or more dimensions for CBM string '{cbm_str}'. Cannot calculate volume. {log_context}")
-            return None
-
-        dim1, dim2, dim3 = dims
-        volume = (dim1 * dim2 * dim3).quantize(CBM_DECIMAL_PLACES, rounding=decimal.ROUND_HALF_UP)
-        logging.debug(f"{prefix} Calculated CBM volume: {volume} from '{cbm_str}' (Dims: {dims}). {log_context}")
-        return volume
-
-    except Exception as e:
-        logging.error(f"{prefix} Unexpected error calculating CBM from '{cbm_str}': {e}. {log_context}", exc_info=True)
-        return None
-
-# process_cbm_column function remains unchanged...
-# --- START MODIFIED FILE: data_processor.py ---
-
-import logging
-from typing import Dict, List, Any, Optional, Tuple
-import decimal # Use Decimal for precise calculations
-import re
-import pprint
-# Import config values (consider passing as arguments)
-from .config import DISTRIBUTION_BASIS_COLUMN # Keep this
-
-# Set precision for Decimal calculations
-decimal.getcontext().prec = 28 # Default precision, adjust if needed
-# Define precision specifically for CBM results (e.g., 4 decimal places)
-CBM_DECIMAL_PLACES = decimal.Decimal('0.0001')
-# Define default precision for other distributions (e.g., 4 decimal places)
-DEFAULT_DIST_PRECISION = decimal.Decimal('0.0001')
-
-
-class ProcessingError(Exception):
-    """Custom exception for data processing errors."""
-    pass
-
-
-class DataValidationError(Exception):
-    """User-facing validation error for missing required data.
-    
-    This exception is caught separately in the API layer to return
-    a clean, human-readable error message without traceback noise.
-    """
-    pass
-
-def _convert_to_decimal(value: Any, context: str = "") -> Optional[decimal.Decimal]:
-    """Safely convert a value to Decimal, logging errors.
-    
-    For floats, we round to a reasonable precision to avoid floating-point errors
-    like 0.30000000000000004 becoming an issue.
-    """
-    prefix = "[_convert_to_decimal]"
-    if isinstance(value, decimal.Decimal):
-        return value
-    if value is None:
-        return None
-    
-    # Handle floats specially to avoid floating-point precision issues
-    # repr() in Python 3.1+ gives the SHORTEST string that round-trips back
-    # to the same float, e.g. repr(5028.2) → '5028.2' not '5028.19999999999982'
-    if isinstance(value, float):
-        value_str = repr(value)
-        if not value_str or value_str in ('-', 'nan', 'inf', '-inf'):
-            return None
-        try:
-            return decimal.Decimal(value_str)
-        except (decimal.InvalidOperation, TypeError, ValueError) as e:
-            logging.warning(f"{prefix} Could not convert float '{value}' to Decimal {context}: {e}")
-            return None
-    
-    value_str = str(value).strip()
-    if not value_str:
-        return None
-    try:
-        result = decimal.Decimal(value_str)
-        return result
-    except (decimal.InvalidOperation, TypeError, ValueError) as e:
-        logging.warning(f"{prefix} Could not convert '{value}' (Str: '{value_str}') to Decimal {context}: {e}")
-        return None
-
-# _calculate_single_cbm function remains unchanged...
-def _calculate_single_cbm(cbm_value: Any, row_index: int) -> Optional[decimal.Decimal]:
-    """
-    Parses a CBM string (e.g., "L*W*H" or "LxWxH") and calculates the volume.
-
-    Args:
-        cbm_value: The value from the CBM cell (can be string, number, None).
-        row_index: The 0-based index of the row for logging purposes.
-
-    Returns:
-        The calculated CBM as a Decimal, or None if parsing fails or input is invalid.
-    """
-    prefix = "[_calculate_single_cbm]"
-    log_context = f"for CBM at row index {row_index}" # Use 0-based index internally
-
-    if cbm_value is None:
-        logging.debug(f"{prefix} Input CBM value is None. {log_context}")
-        return None
-
-    # If it's already a number, convert to Decimal and quantize
-    if isinstance(cbm_value, (int, float, decimal.Decimal)):
-        logging.debug(f"{prefix} Input CBM is already numeric: {cbm_value}. {log_context}")
-        calculated = _convert_to_decimal(cbm_value, log_context)
-        if calculated is not None:
-             result = calculated.quantize(CBM_DECIMAL_PLACES, rounding=decimal.ROUND_HALF_UP)
-             logging.debug(f"{prefix} Quantized pre-numeric CBM to {result}. {log_context}")
-             return result
-        else:
-             # Conversion should ideally not fail here, but handle it
-             logging.warning(f"{prefix} Failed to convert pre-numeric CBM value {cbm_value} to Decimal. {log_context}")
-             return None
-
-
-    if not isinstance(cbm_value, str):
-        logging.warning(f"{prefix} Unexpected type '{type(cbm_value).__name__}' for CBM value '{cbm_value}'. Cannot calculate. {log_context}")
-        return None
-
-    cbm_str = cbm_value.strip()
-    if not cbm_str:
-        logging.debug(f"{prefix} Input CBM string is empty after strip. {log_context}")
-        return None
-
-    logging.debug(f"{prefix} Attempting to parse CBM string: '{cbm_str}'. {log_context}")
-
-    # Try splitting by '*' first
-    parts = cbm_str.split('*')
-    separator_used = "'*'"
-
-    # If not 3 parts, try splitting by 'x' or 'X' (case-insensitive)
-    if len(parts) != 3:
-        if '*' not in cbm_str and ('x' in cbm_str.lower()):
-             parts = re.split(r'[xX]', cbm_str) # Split by 'x' or 'X'
-             separator_used = "'x' or 'X'"
-             logging.debug(f"{prefix} Split by '*' failed, trying split by {separator_used}. Parts: {parts}. {log_context}")
-
-    # Check if we have exactly 3 parts after trying separators
-    if len(parts) != 3:
-        logging.warning(f"{prefix} Invalid CBM format: '{cbm_str}'. Expected 3 parts separated by '*' or 'x'. Found {len(parts)} parts: {parts}. {log_context}")
-        return None
-
-    try:
-        # Convert each part to Decimal
-        dims = []
-        valid_dims = True
-        for i, part in enumerate(parts):
-             dim = _convert_to_decimal(part, f"{log_context}, part {i+1} ('{part}')")
+             dim = DataConverter.convert_to_decimal(part, f"{log_context}, part {i+1} ('{part}')")
              if dim is None:
                  logging.warning(f"{prefix} Failed to convert dimension part {i+1} ('{part}') to Decimal. {log_context}")
                  valid_dims = False
@@ -362,17 +180,17 @@ def normalize_by_pallet_anchor(
         return []
 
     # --- Resolve canonical column names ---
-    resolved_cols = []
+    # We strictly enforce the 'col_' prefix for all canonical column names.
+    # Magic auto-prefixing has been removed to ensure configuration clarity.
     for col in columns_to_normalize:
-        target = col
-        if not target.startswith('col_'):
-            name_map = {'net': 'col_net', 'gross': 'col_gross', 'cbm': 'col_cbm'}
-            target = name_map.get(target, f"col_{target}")
-        resolved_cols.append(target)
+        if not col.startswith('col_'):
+            raise ValueError(f"Normalization Error: Column name '{col}' must start with 'col_'.")
+    
+    if not basis_column.startswith('col_'):
+        raise ValueError(f"Normalization Error: Basis column '{basis_column}' must start with 'col_'.")
 
+    resolved_cols = list(columns_to_normalize)
     resolved_basis = basis_column
-    if not resolved_basis.startswith('col_'):
-        resolved_basis = f"col_{basis_column}"
 
     # --- Check if pallet_column exists in data at all ---
     has_pallet_col = any(pallet_column in row for row in raw_data)
@@ -703,98 +521,7 @@ def distribute_values(
     return processed_data
 
 
-def validate_weight_integrity(data_rows: List[Dict[str, Any]], monitor: Optional[Any] = None):
-    """
-    Strict validation to ensure Gross Weight is always strictly bigger than Net Weight.
-    Also verifies that the Tare weight (Gross - Net) is consistent across all pallets in the table.
-    """
-    prefix = "[validate_weight_integrity]"
-    
-    # Column keys
-    net_key = 'col_net'
-    gross_key = 'col_gross'
-    po_key = 'col_po'
-    item_key = 'col_item'
-
-    has_net = any(net_key in row for row in data_rows)
-    has_gross = any(gross_key in row for row in data_rows)
-
-    if not (has_net and has_gross):
-        logging.debug(f"{prefix} Net or Gross column missing, skipping integrity check.")
-        return
-
-    reference_tare: Optional[decimal.Decimal] = None
-    ref_row_info: str = ""
-
-    for i, row in enumerate(data_rows):
-        # We only care if both exist and are numeric
-        net_raw = row.get(net_key)
-        gross_raw = row.get(gross_key)
-
-        if net_raw is None or gross_raw is None:
-            continue
-            
-        try:
-            # Handle Decimals, floats, or strings
-            net_val = net_raw if isinstance(net_raw, decimal.Decimal) else _convert_to_decimal(net_raw)
-            gross_val = gross_raw if isinstance(gross_raw, decimal.Decimal) else _convert_to_decimal(gross_raw)
-            
-            # Skip rows where either value is missing (but log it if one is present and other is zero?)
-            # Usually we only process if both are established
-            if net_val is None or gross_val is None:
-                continue
-
-            # Skip header/footer rows where BOTH are 0 (e.g. empty rows between tables)
-            if net_val == 0 and gross_val == 0:
-                continue
-
-            # --- Validation 1: Strict Positivity Constraint (Gross > Net) ---
-            # User requirement: Gross must always be strictly bigger than Net.
-            if gross_val <= net_val:
-                po_val = row.get(po_key, "Unknown PO")
-                item_val = row.get(item_key, "Unknown Item")
-                
-                error_msg = (
-                    f"Weight Validation Error: At row for PO [{po_val}] / Item [{item_val}], "
-                    f"Gross Weight ({gross_val}) is not strictly greater than Net Weight ({net_val}). "
-                    "In shipping, Gross Weight MUST always be bigger than Net Weight. "
-                    "Please fix your source Excel and try again."
-                )
-                
-                logging.error(f"{prefix} {error_msg}")
-                # PipelineMonitor doesn't have log_error, so we rely on the exception
-                raise DataValidationError(error_msg)
-
-            # --- Validation 2: Tare Weight Consistency Constraint (Gross - Net = Fixed Tare) ---
-            # Calculate tare for THIS row
-            current_tare = gross_val - net_val
-            
-            po_val = row.get(po_key, "Unknown PO")
-            item_val = row.get(item_key, "Unknown Item")
-            row_id_str = f"PO [{po_val}] / Item [{item_val}]"
-
-            if reference_tare is None:
-                # Establish reference from the first row with non-zero weights
-                reference_tare = current_tare
-                ref_row_info = row_id_str
-                logging.info(f"{prefix} Established reference tare weight: {reference_tare} from {ref_row_info}")
-            else:
-                # Compare against reference
-                if current_tare != reference_tare:
-                    error_msg = (
-                        f"Weight Consistency Error: Tare weight (Gross - Net) is inconsistent. "
-                        f"First valid row ({ref_row_info}) has tare weight of {reference_tare}, "
-                        f"but this row ({row_id_str}) has tare weight of {current_tare}. "
-                        "All pallets in a single table must have identical tare weights. "
-                        "Please verify your source data and fix the mistake."
-                    )
-                    logging.error(f"{prefix} {error_msg}")
-                    # PipelineMonitor doesn't have log_error, we rely on the exception
-                    raise DataValidationError(error_msg)
-
-        except (decimal.InvalidOperation, ValueError, TypeError):
-            # If we can't compare (e.g. non-numeric string), we skip
-            continue
+# validate_weight_integrity is now in .validation
 
     logging.info(f"{prefix} Weight integrity and consistency validation PASSED for {len(data_rows)} rows.")
 
@@ -858,7 +585,7 @@ def aggregate_standard_by_po_item_price(
         # Description key can be None
 
         # Convert price to Decimal for the key
-        price_dec = _convert_to_decimal(unit_price_raw, f"{log_row_context} price")
+        price_dec = DataConverter.convert_to_decimal(unit_price_raw, f"{log_row_context} price")
 
         # UPDATED Key: (PO, Item, Price, Description)
         key = (po_key, item_key, price_dec, description_key)

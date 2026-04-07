@@ -36,7 +36,7 @@ except ImportError:
 from .excel_handler import ExcelHandler
 from . import sheet_parser
 from . import data_processor # Includes all processing functions
-from .data_processor import DataValidationError
+from .validation import DataValidationError, validate_data
 
 # Use centralized logger - no basicConfig here
 # Logging is configured by core.logger_config.setup_logging() at app startup
@@ -532,6 +532,9 @@ def run_invoice_automation(
                      monitor.log_warning(f"{table_id_str} is empty or invalid. Skipping.")
                      processed_tables.append([])
                      continue
+
+                # --- 5.1: Validate Presence of Essential Data ---
+                validate_data(current_table_data, table_id_str, column_mapping, monitor=monitor, phase='presence')
                 
                 try:
                     # 5a. CBM
@@ -548,7 +551,7 @@ def run_invoice_automation(
                     try:
                         # 5b.1 Strict Validation: Gross Weight MUST NOT be smaller than Net Weight (Before Distribution)
                         # This throws a DataValidationError if any single cell is inconsistent in the source data.
-                        data_processor.validate_weight_integrity(data_normalized, monitor=monitor)
+                        validate_data(data_normalized, table_id_str, column_mapping, monitor=monitor, phase='integrity')
 
                         data_after_distribution = data_processor.distribute_values(data_normalized, cfg.COLUMNS_TO_DISTRIBUTE, cfg.DISTRIBUTION_BASIS_COLUMN)
                         
