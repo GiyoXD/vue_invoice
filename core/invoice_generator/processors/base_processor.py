@@ -4,6 +4,7 @@ from openpyxl.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 import argparse
 from typing import Dict, Any, Optional
+from core.system_config import ConfigurationError
 
 class SheetProcessor(ABC):
     """
@@ -63,6 +64,15 @@ class SheetProcessor(ABC):
         # New: Store config loader for direct bundled config access
         self.config_loader = config_loader
         self._use_bundled = config_loader is not None
+        
+        # New: Strict Header Row Validation (Mandatory for all table-based sheets)
+        self.layout_config = self.sheet_config.get('layout_config', {}) if self.sheet_config else {}
+        structure = self.layout_config.get('structure', {})
+        self.header_row = structure.get('header_row')
+        
+        if self.header_row is None:
+             raise ConfigurationError(f"CRITICAL: No 'header_row' found in configuration for sheet '{self.sheet_name}'. "
+                                    f"Please ensure layout_config -> structure -> header_row is defined in your JSON.")
 
     @abstractmethod
     def process(self) -> bool:

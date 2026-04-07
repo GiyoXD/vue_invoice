@@ -703,6 +703,102 @@ def distribute_values(
     return processed_data
 
 
+def validate_weight_integrity(data_rows: List[Dict[str, Any]], monitor: Optional[Any] = None):
+    """
+    Strict validation to ensure Gross Weight is always strictly bigger than Net Weight.
+    Also verifies that the Tare weight (Gross - Net) is consistent across all pallets in the table.
+    """
+    prefix = "[validate_weight_integrity]"
+    
+    # Column keys
+    net_key = 'col_net'
+    gross_key = 'col_gross'
+    po_key = 'col_po'
+    item_key = 'col_item'
+
+    has_net = any(net_key in row for row in data_rows)
+    has_gross = any(gross_key in row for row in data_rows)
+
+    if not (has_net and has_gross):
+        logging.debug(f"{prefix} Net or Gross column missing, skipping integrity check.")
+        return
+
+    reference_tare: Optional[decimal.Decimal] = None
+    ref_row_info: str = ""
+
+    for i, row in enumerate(data_rows):
+        # We only care if both exist and are numeric
+        net_raw = row.get(net_key)
+        gross_raw = row.get(gross_key)
+
+        if net_raw is None or gross_raw is None:
+            continue
+            
+        try:
+            # Handle Decimals, floats, or strings
+            net_val = net_raw if isinstance(net_raw, decimal.Decimal) else _convert_to_decimal(net_raw)
+            gross_val = gross_raw if isinstance(gross_raw, decimal.Decimal) else _convert_to_decimal(gross_raw)
+            
+            # Skip rows where either value is missing (but log it if one is present and other is zero?)
+            # Usually we only process if both are established
+            if net_val is None or gross_val is None:
+                continue
+
+            # Skip header/footer rows where BOTH are 0 (e.g. empty rows between tables)
+            if net_val == 0 and gross_val == 0:
+                continue
+
+            # --- Validation 1: Strict Positivity Constraint (Gross > Net) ---
+            # User requirement: Gross must always be strictly bigger than Net.
+            if gross_val <= net_val:
+                po_val = row.get(po_key, "Unknown PO")
+                item_val = row.get(item_key, "Unknown Item")
+                
+                error_msg = (
+                    f"Weight Validation Error: At row for PO [{po_val}] / Item [{item_val}], "
+                    f"Gross Weight ({gross_val}) is not strictly greater than Net Weight ({net_val}). "
+                    "In shipping, Gross Weight MUST always be bigger than Net Weight. "
+                    "Please fix your source Excel and try again."
+                )
+                
+                logging.error(f"{prefix} {error_msg}")
+                # PipelineMonitor doesn't have log_error, so we rely on the exception
+                raise DataValidationError(error_msg)
+
+            # --- Validation 2: Tare Weight Consistency Constraint (Gross - Net = Fixed Tare) ---
+            # Calculate tare for THIS row
+            current_tare = gross_val - net_val
+            
+            po_val = row.get(po_key, "Unknown PO")
+            item_val = row.get(item_key, "Unknown Item")
+            row_id_str = f"PO [{po_val}] / Item [{item_val}]"
+
+            if reference_tare is None:
+                # Establish reference from the first row with non-zero weights
+                reference_tare = current_tare
+                ref_row_info = row_id_str
+                logging.info(f"{prefix} Established reference tare weight: {reference_tare} from {ref_row_info}")
+            else:
+                # Compare against reference
+                if current_tare != reference_tare:
+                    error_msg = (
+                        f"Weight Consistency Error: Tare weight (Gross - Net) is inconsistent. "
+                        f"First valid row ({ref_row_info}) has tare weight of {reference_tare}, "
+                        f"but this row ({row_id_str}) has tare weight of {current_tare}. "
+                        "All pallets in a single table must have identical tare weights. "
+                        "Please verify your source data and fix the mistake."
+                    )
+                    logging.error(f"{prefix} {error_msg}")
+                    # PipelineMonitor doesn't have log_error, we rely on the exception
+                    raise DataValidationError(error_msg)
+
+        except (decimal.InvalidOperation, ValueError, TypeError):
+            # If we can't compare (e.g. non-numeric string), we skip
+            continue
+
+    logging.info(f"{prefix} Weight integrity and consistency validation PASSED for {len(data_rows)} rows.")
+
+
 # *** Standard Aggregation Function (MODIFIED to handle SQFT, AMOUNT, and DESCRIPTION key) ***
 def aggregate_standard_by_po_item_price(
     processed_data: List[Dict[str, Any]],

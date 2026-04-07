@@ -546,11 +546,19 @@ def run_invoice_automation(
                     
                     # 5b. Distribute
                     try:
+                        # 5b.1 Strict Validation: Gross Weight MUST NOT be smaller than Net Weight (Before Distribution)
+                        # This throws a DataValidationError if any single cell is inconsistent in the source data.
+                        data_processor.validate_weight_integrity(data_normalized, monitor=monitor)
+
                         data_after_distribution = data_processor.distribute_values(data_normalized, cfg.COLUMNS_TO_DISTRIBUTE, cfg.DISTRIBUTION_BASIS_COLUMN)
+                        
                         processed_tables.append(data_after_distribution)
                         data_for_aggregation = data_after_distribution
+                    except DataValidationError as ve:
+                        # Hard stop for validation errors (propagates to API)
+                        raise ve
                     except Exception as distrib_e:
-                        # Log but continue with fallback
+                        # Log but continue with fallback for non-critical distribution errors
                         monitor.log_warning(f"{table_id_str}: Distribution failed ({distrib_e}). Using raw/CBM data.")
                         processed_tables.append(data_after_cbm)
                         data_for_aggregation = data_after_cbm
@@ -561,8 +569,12 @@ def run_invoice_automation(
                          data_processor.aggregate_custom_by_po_item(data_for_aggregation, global_custom_aggregation_results)
                     
                     monitor.log_process_item(table_id_str, status="success")
+                except DataValidationError as ve:
+                    # User-facing validation errors MUST stop the whole process immediately.
+                    # Reraise so it hits the outer catch-all and orchestrator.
+                    raise ve
                 except Exception as table_e:
-                    # Log failure for this specific table but continue loop
+                    # Log failure for this specific table but continue loop for general errors
                     monitor.log_process_item(table_id_str, status="error", error=table_e)
                     processed_tables.append([]) # Append empty to preserve indexing if needed
 
