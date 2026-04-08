@@ -65,8 +65,21 @@ class InvoiceItem(Base):
     timestamp = Column(DateTime, default=get_cambodia_time)
 
 
+from sqlalchemy import text
+
 def init_db():
     Base.metadata.create_all(bind=engine)
+    
+    # Auto-migration for newly added columns
+    try:
+        with engine.begin() as conn:
+            result = conn.execute(text("PRAGMA table_info(processed_data)")).fetchall()
+            columns = [row[1] for row in result]
+            if columns and "total_pallets" not in columns:
+                conn.execute(text("ALTER TABLE processed_data ADD COLUMN total_pallets FLOAT"))
+                print("Successfully added total_pallets column.")
+    except Exception as e:
+        pass
 
 def get_db():
     db = SessionLocal()
