@@ -18,9 +18,10 @@ import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.utils import get_column_letter
 
-from .rules import BlueprintRules
+from ..rules import BlueprintRules
 from core.utils.snitch import snitch
-from .utils.footer_scanner import FooterInfo, scan_footer
+from ..utils.footer_scanner import FooterInfo, scan_footer
+from ..utils.content_extractor import detect_static_description_label
 
 logger = logging.getLogger(__name__)
 
@@ -793,26 +794,9 @@ class ExcelLayoutScanner:
         """Detect static content patterns in the data area."""
         hints = {}
         
-        # Look for "Mark & Nº" type columns with description label
-        for col in columns:
-            if col.id == "col_static":
-                # Sample first few data rows
-                for row in range(header_row + 1, min(header_row + 10, worksheet.max_row + 1)):
-                    cell = worksheet.cell(row=row, column=col.col_index)
-                    value = self._get_cell_value(cell)
-                    if not value:
-                        continue
-                        
-                    # [Smart Feature] Label-based Description Detection
-                    # If we find "Des:" or "Desc:" in col_static, capture it!
-                    val_upper = value.upper()
-                    if val_upper.startswith("DES:") or val_upper.startswith("DESC:"):
-                        if ":" in value:
-                            desc_part = value.split(":", 1)[1].strip()
-                            if desc_part:
-                                hints["description_fallback"] = desc_part
-                                self.logger.info(f"    [Detection] Found description label in col_static: '{desc_part}'")
-                                break # Stop once found
+        desc_fallback = detect_static_description_label(worksheet, header_row, columns)
+        if desc_fallback:
+            hints["description_fallback"] = desc_fallback
         
         return hints
 

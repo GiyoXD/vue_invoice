@@ -15,7 +15,7 @@ setup_logging(log_dir=sys_config.run_log_dir)
 logger = logging.getLogger(__name__)
 
 from core.data_parser.main import run_invoice_automation
-from core.blueprint_generator.blueprint_generator import BlueprintGenerator as BlueprintGenService
+from core.blueprint_generator import BlueprintGenerator as BlueprintGenService
 from core.invoice_generator.generate_invoice import run_invoice_generation
 
 

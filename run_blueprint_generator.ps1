@@ -3,7 +3,7 @@
 # Input: temp_uploads/CT&INV&PL JF25060 FCA .xlsx
 # Output Client: JF_TEST
 
-python -m core.blueprint_generator.blueprint_generator "temp_uploads\CT&INV&PL JF25060 FCA .xlsx" --prefix "JF_TEST" -v
+python -m core.blueprint_generator "temp_uploads\CT&INV&PL JF25060 FCA .xlsx" --prefix "JF_TEST" -v
 
 Write-Host ""
 Write-Host "=========================================" -ForegroundColor Cyan

@@ -151,7 +151,13 @@ def generate_template(config: TemplateConfig):
                 with open(mapping_path, 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
 
         temp_path = sys_config.temp_uploads_dir / config.temp_filename
-        result_path = orchestrator.generate_blueprint_bundle(temp_path, sys_config.bundled_dir, config.file_prefix, config.bundle_dir_name or None)
+        result_path = orchestrator.generate_blueprint_bundle(
+            template_path=temp_path,
+            output_dir=sys_config.bundled_dir,
+            custom_prefix=config.file_prefix,
+            runtime_mappings=config.user_mappings,
+            bundle_dir_name=config.bundle_dir_name or None
+        )
         return {"status": "success", "bundle_path": str(result_path.parent)}
     except Exception as e: return JSONResponse(status_code=500, content={"error": str(e)})
 
@@ -294,12 +300,35 @@ async def delete_template(name: str, bundle: Optional[str] = None):
     bundled_dir = sys_config.bundled_dir
     safe_name = Path(name).name
     template_dir = bundled_dir / (Path(bundle).name if bundle else safe_name)
+    
+    # Try to find the directory if the direct path doesn't exist
     if not template_dir.exists():
         for b_dir in bundled_dir.iterdir():
             if b_dir.is_dir() and (b_dir / f"{safe_name}_template.json").exists():
                 template_dir = b_dir; break
+    
     if not template_dir.exists(): return JSONResponse(status_code=404, content={"error": "Not found"})
+    
     try:
-        shutil.rmtree(template_dir)
-        return {"status": "success"}
+        # Surgical deletion of specific files
+        files_to_delete = [
+            template_dir / f"{safe_name}_template.json",
+            template_dir / f"{safe_name}_config.json",
+            template_dir / f"{safe_name}.xlsx"
+        ]
+        
+        deleted_count = 0
+        for f in files_to_delete:
+            if f.exists():
+                f.unlink()
+                deleted_count += 1
+        
+        # If the directory is now empty, remove it too
+        if template_dir.exists() and not any(template_dir.iterdir()):
+            shutil.rmtree(template_dir)
+            
+        if deleted_count == 0:
+             return JSONResponse(status_code=404, content={"error": f"No files found for template '{safe_name}' in bundle '{template_dir.name}'"})
+
+        return {"status": "success", "deleted_files": deleted_count}
     except Exception as e: return JSONResponse(status_code=500, content={"error": str(e)})

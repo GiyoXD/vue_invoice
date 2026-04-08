@@ -114,7 +114,7 @@ class Orchestrator:
         Returns the analysis result as a JSON string.
         """
         try:
-            from core.blueprint_generator.blueprint_generator import BlueprintGenerator
+            from core.blueprint_generator import BlueprintGenerator
             
             # Re-initialize generator to ensure fresh state
             generator = BlueprintGenerator(self.project_root)
@@ -137,7 +137,7 @@ class Orchestrator:
         Generates the config and clean template bundle.
         """
         try:
-            from core.blueprint_generator.blueprint_generator import BlueprintGenerator
+            from core.blueprint_generator import BlueprintGenerator
             
             generator = BlueprintGenerator(self.project_root)
             

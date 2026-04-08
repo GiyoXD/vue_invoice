@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass
 
-from .excel_scanner import TemplateAnalysisResult, SheetAnalysis, ColumnInfo
-from .validator import BlueprintLogicValidator
+from .scanner import TemplateAnalysisResult, SheetAnalysis, ColumnInfo
+from .validator import ConfigValidator, BlueprintLogicValidator
 from core.utils.snitch import snitch
 
 logger = logging.getLogger(__name__)
@@ -453,7 +453,7 @@ class ConfigBuilder:
 if __name__ == "__main__":
     import sys
     import json
-    from .excel_scanner import ExcelLayoutScanner
+    from .scanner import ExcelLayoutScanner
     
     from core.logger_config import setup_logging
     from core.system_config import sys_config

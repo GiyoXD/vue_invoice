@@ -17,7 +17,8 @@ from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.cell.cell import Cell, MergedCell
 from openpyxl.utils import get_column_letter
 
-from .excel_scanner import TemplateAnalysisResult, SheetAnalysis
+from .scanner import TemplateAnalysisResult, SheetAnalysis
+from ..utils.content_extractor import extract_global_hs_code, extract_table_fallback_description
 
 logger = logging.getLogger(__name__)
 
@@ -140,22 +141,7 @@ class ExcelTemplateSanitizer:
         
         # --- [Smart Feature] Global Search for HS Code ---
         # Search for "HS.CODE" substring anywhere in the sheet, ignoring table boundaries.
-        hs_code = None
-        for row_cells in ws.iter_rows(max_row=150, max_col=25):
-            for cell in row_cells:
-                val = cell.value
-                if val and isinstance(val, (str, bytes)):
-                    val_str = str(val)
-                    # Check for "HS.CODE" or "HSCODE" as a substring (case-insensitive)
-                    # We remove spaces and check uppercase for maximum reliability
-                    val_upper = val_str.upper().replace(" ", "")
-                    if "HS.CODE" in val_upper or "HSCODE" in val_upper:
-                        # Take the ENTIRE value of the cell
-                        hs_code = val_str.strip()
-                        self.logger.info(f"    [Global Search] HS Code cell found at {cell.coordinate}: '{hs_code}'")
-                        break
-            if hs_code:
-                break
+        hs_code = extract_global_hs_code(ws)
 
         # --- [Smart Feature] Extract Fallback Description (Data Table Only) ---
         fallback_description = None
@@ -171,21 +157,7 @@ class ExcelTemplateSanitizer:
             data_start = analysis.header_row + 1
             data_end = footer_row - 1 if footer_row else ws.max_row
             
-            unique_descs = []
-            seen_desc = set()
-            
-            if data_start <= data_end:
-                for r in range(data_start, data_end + 1):
-                    val = ws.cell(row=r, column=col_desc_index).value
-                    if val:
-                        val_str = str(val).strip()
-                        if val_str and val_str not in seen_desc:
-                            unique_descs.append(val_str)
-                            seen_desc.add(val_str)
-            
-            if unique_descs:
-                fallback_description = " / ".join(unique_descs)
-                self.logger.info(f"    [Extracted] Fallback descriptions from {analysis.name}: '{fallback_description}'")
+            fallback_description = extract_table_fallback_description(ws, data_start, data_end, col_desc_index)
 
         preserved_layout["fallback_description"] = fallback_description
         preserved_layout["hs_code"] = hs_code

@@ -108,7 +108,7 @@ class BlueprintLogicValidator:
         """
         # Avoid circular imports by importing inside method if necessary, 
         # but generally safe if structured correctly.
-        from .rules import BlueprintRules
+        from ..rules import BlueprintRules
 
         allowed_ids = set(BlueprintRules.COLUMNS.keys())
         
