@@ -490,13 +490,16 @@ class LayoutBuilder:
                         # when capturing/restoring the template wrapper.
                         
                         # Resolve generation mode for mode-dependent header values
-                        header_mode = "daf" if (self.args and getattr(self.args, 'DAF', False)) else "standard"
+                        gen_mode = "standard"
+                        if self.args:
+                            if getattr(self.args, 'DAF', False): gen_mode = "daf"
+                            elif getattr(self.args, 'custom', False): gen_mode = "custom"
                         
                         if self.template_state_builder:
                             self.template_state_builder.restore_header_only(
                                 target_worksheet=self.worksheet,
                                 actual_num_cols=actual_num_cols,
-                                mode=header_mode
+                                mode=gen_mode
                             )
                             logger.info(f"Template header restored successfully with {actual_num_cols} columns (rows 1-{self.template_state_builder.header_end_row})")
                     except Exception as e:
@@ -664,10 +667,17 @@ class LayoutBuilder:
                     logger.info(f"--- RESTORING TEMPLATE FOOTER (Last Table) ---")
                     logger.info(f"next_row_after_footer: {self.next_row_after_footer}")
                     
+                    # Resolve generation mode for mode-dependent footer values
+                    gen_mode = "standard"
+                    if self.args:
+                        if getattr(self.args, 'DAF', False): gen_mode = "daf"
+                        elif getattr(self.args, 'custom', False): gen_mode = "custom"
+
                     self.template_state_builder.restore_template_footer(
                         target_worksheet=self.worksheet,
                         footer_start_row=self.next_row_after_footer,
-                        actual_num_cols=actual_num_cols
+                        actual_num_cols=actual_num_cols,
+                        mode=gen_mode
                     )
                 else:
                     logger.info(f"Skipping template footer restoration (Not last table)")

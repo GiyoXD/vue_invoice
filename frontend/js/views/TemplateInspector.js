@@ -136,12 +136,19 @@ export default {
 
                                 <div style="margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 0.85rem;">
                                     <span style="color: #94a3b8;">Current (default):</span>
-                                    <span style="color: #e2e8f0; margin-left: 0.5rem;">{{ editingCell.content || '(empty)' }}</span>
+                                    <span style="color: #e2e8f0; margin-left: 0.5rem;">
+                                        {{ (typeof editingCell.rawContent === 'object' && editingCell.rawContent !== null) ? (editingCell.rawContent.default ?? "") : (editingCell.rawContent || '(empty)') }}
+                                    </span>
+                                </div>
+
+                                <div style="margin-bottom: 0.75rem;">
+                                    <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.25rem;">Standard value override:</label>
+                                    <input type="text" v-model="editStandardValue" class="input-field" placeholder="Enter standard value..." style="width: 100%;" @keyup.enter="saveCellOverrides" />
                                 </div>
 
                                 <div style="margin-bottom: 0.75rem;">
                                     <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.25rem;">DAF value override:</label>
-                                    <input type="text" v-model="editDafValue" class="input-field" placeholder="Enter DAF value..." style="width: 100%;" @keyup.enter="saveCellOverride" />
+                                    <input type="text" v-model="editDafValue" class="input-field" placeholder="Enter DAF value..." style="width: 100%;" @keyup.enter="saveCellOverrides" />
                                 </div>
 
                                 <div v-if="editingCell.currentOverrides" style="margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.2); border-radius: 4px; font-size: 0.8rem;">
@@ -153,8 +160,8 @@ export default {
 
                                 <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
                                     <button class="btn-small" @click="closeEditor" style="background: #475569;">Cancel</button>
-                                    <button class="btn-small" @click="saveCellOverride" :disabled="isSavingCell" style="background: #3b82f6; color: white;">
-                                        {{ isSavingCell ? 'Saving...' : 'Save DAF Override' }}
+                                    <button class="btn-small" @click="saveCellOverrides" :disabled="isSavingCell" style="background: #3b82f6; color: white;">
+                                        {{ isSavingCell ? 'Saving...' : 'Save Overrides' }}
                                     </button>
                                 </div>
                                 <div v-if="editorMessage" :style="{marginTop: '0.5rem', fontSize: '0.85rem', color: editorMessageType === 'error' ? '#ef4444' : '#22c55e'}">
@@ -230,6 +237,7 @@ export default {
 
         // Cell override editor state
         const editingCell = ref(null);
+        const editStandardValue = ref("");
         const editDafValue = ref("");
         const isSavingCell = ref(false);
         const editorMessage = ref("");
@@ -464,8 +472,8 @@ export default {
                     const colIdx = cellDict.col_index; // 1-based
                     const addr = `${colToLetter(colIdx - 1)}${absRow + 1}`;
 
-                    if (cellDict.value != null) {
-                        footerContent[addr] = String(cellDict.value);
+                    if (cellDict.value !== undefined && cellDict.value !== null) {
+                        footerContent[addr] = cellDict.value;
                     }
                     if (cellDict.style_id) {
                         footerStyles[addr] = stylePalette[cellDict.style_id] || {};
@@ -552,10 +560,12 @@ export default {
                     cells.push({
                         id: address,
                         address: address,
-                        content: typeof cellContent === 'object' && cellContent !== null ? (cellContent.default || JSON.stringify(cellContent)) : (cellContent || ""),
+                        content: typeof cellContent === 'object' && cellContent !== null 
+                            ? (cellContent.default !== undefined && cellContent.default !== null ? cellContent.default : (Object.keys(cellContent).length > 0 ? JSON.stringify(cellContent) : "")) 
+                            : (cellContent || ""),
                         rawContent: cellContent,
                         hasOverride: typeof cellContent === 'object' && cellContent !== null,
-                        currentOverrides: typeof cellContent === 'object' && cellContent !== null ? cellContent : null,
+                        currentOverrides: (typeof cellContent === 'object' && cellContent !== null) ? cellContent : null,
                         style: { ...buildCellCss(r, c, cellStyle, mergeInfo), position: 'relative', cursor: 'pointer' },
                         isFormula: typeof cellContent === 'string' && cellContent.startsWith('=')
                     });
@@ -592,21 +602,23 @@ export default {
          */
         const openCellEditor = (cell) => {
             editingCell.value = cell;
-            // Pre-fill with existing DAF override if present
+            // Pre-fill with existing overrides if present
+            editStandardValue.value = (cell.currentOverrides && cell.currentOverrides.standard) || "";
             editDafValue.value = (cell.currentOverrides && cell.currentOverrides.daf) || "";
             editorMessage.value = "";
         };
 
         const closeEditor = () => {
             editingCell.value = null;
+            editStandardValue.value = "";
             editDafValue.value = "";
             editorMessage.value = "";
         };
 
         /**
-         * Saves the DAF override for the currently editing cell via PATCH /api/template/cell.
+         * Saves mode-specific overrides for the currently editing cell via PATCH /api/template/cell.
          */
-        const saveCellOverride = async () => {
+        const saveCellOverrides = async () => {
             if (!editingCell.value || !currentSheetName.value) return;
             isSavingCell.value = true;
             editorMessage.value = "";
@@ -621,8 +633,10 @@ export default {
                         bundle_name: t?.bundle_name || "",
                         sheet_name: currentSheetName.value,
                         cell_address: editingCell.value.address,
-                        mode: "daf",
-                        value: editDafValue.value
+                        overrides: {
+                            standard: editStandardValue.value,
+                            daf: editDafValue.value
+                        }
                     })
                 });
                 const data = await res.json();
@@ -673,13 +687,14 @@ export default {
             deleteTemplate,
             formatTime,
             editingCell,
+            editStandardValue,
             editDafValue,
             isSavingCell,
             editorMessage,
             editorMessageType,
             openCellEditor,
             closeEditor,
-            saveCellOverride,
+            saveCellOverrides,
             // Notes
             isEditingNotes,
             isSavingNotes,

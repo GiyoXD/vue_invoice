@@ -329,10 +329,17 @@ class MultiTableProcessor(SheetProcessor):
                 logger.info(f"--- RESTORING TEMPLATE FOOTER (Multi-Table End) ---")
                 logger.info(f"footer_start_row: {current_row}")
                 
+                # Resolve generation mode for mode-dependent footer values
+                gen_mode = "standard"
+                if self.args:
+                    if getattr(self.args, 'DAF', False): gen_mode = "daf"
+                    elif getattr(self.args, 'custom', False): gen_mode = "custom"
+
                 template_state_builder.restore_template_footer(
                     target_worksheet=self.output_worksheet,
                     footer_start_row=current_row,
-                    actual_num_cols=actual_num_cols
+                    actual_num_cols=actual_num_cols,
+                    mode=gen_mode
                 )
                 logger.info("Template footer restored successfully")
             except Exception as e:

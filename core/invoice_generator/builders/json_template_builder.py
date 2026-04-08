@@ -454,11 +454,11 @@ class JsonTemplateStateBuilder:
         for c_idx, w in self.column_widths.items():
             target_worksheet.column_dimensions[get_column_letter(c_idx)].width = w
 
-    def restore_template_footer(self, target_worksheet: Worksheet, footer_start_row: int, actual_num_cols: int = None):
+    def restore_template_footer(self, target_worksheet: Worksheet, footer_start_row: int, actual_num_cols: int = None, mode: str = "standard"):
         """
         Restores the template footer content onto the target worksheet at a specific starting row.
         """
-        logger.info(f"[JsonTemplateStateBuilder] Restoring Footer to '{target_worksheet.title}' at row {footer_start_row}")
+        logger.info(f"[JsonTemplateStateBuilder] Restoring Footer to '{target_worksheet.title}' at row {footer_start_row} (mode={mode})")
 
         # --- NEW GRID-ROW FORMAT ---
         if hasattr(self, 'footer_rows') and self.footer_rows is not None:
@@ -486,7 +486,9 @@ class JsonTemplateStateBuilder:
                     
                     val = cell_dict.get('value')
                     if val is not None:
-                        target_cell.value = val
+                        resolved = self._resolve_mode_value(val, mode)
+                        if resolved is not None:
+                            target_cell.value = resolved
                         
                     style_id = cell_dict.get('style_id')
                     if style_id:
@@ -548,7 +550,7 @@ class JsonTemplateStateBuilder:
                     if output_col is None: continue
                     
                     target_cell = target_worksheet.cell(row=actual_row, column=output_col)
-                    self._write_cell(target_cell, cell_info)
+                    self._write_cell(target_cell, cell_info, mode=mode)
 
             # 2. Restore Merged Cells (from relative tuples)
             for merge_tuple in getattr(self, 'relative_footer_merges', []):
@@ -582,10 +584,17 @@ class JsonTemplateStateBuilder:
             The resolved scalar value.
         """
         if isinstance(raw_value, dict):
-            # Mode-specific → 'default' fallback → first available value
+            # 1. Exact mode match
             if mode in raw_value:
                 return raw_value[mode]
+            
+            # 2. 'standard' fallback (for 'custom' or any other future mode)
+            if mode != "daf" and "standard" in raw_value:
+                return raw_value["standard"]
+                
+            # 3. 'default' fallback
             return raw_value.get('default', next(iter(raw_value.values()), None))
+            
         return raw_value
 
     def _write_cell(self, cell, info, mode: str = "standard"):

@@ -10,12 +10,13 @@ import io
 import csv
 from pathlib import Path
 import uuid
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 import datetime
 from fastapi import Depends
 from sqlalchemy.orm import Session
 from core.database import db_manager
 from core.database.db_manager import get_db, ProcessedData, InvoiceItem, init_db, engine, Base, get_cambodia_time
+from openpyxl.utils.cell import coordinate_from_string, column_index_from_string, range_boundaries
 
 # Initialize logging FIRST before any other core imports
 from core.system_config import sys_config, ConfigurationError
@@ -1181,13 +1182,12 @@ async def view_template(name: str, bundle: Optional[str] = None):
 
 
 class CellOverrideRequest(BaseModel):
-    """Request body for saving a mode-dependent cell override."""
+    """Request body for saving mode-dependent cell overrides."""
     template_name: str
     bundle_name: str = ""
     sheet_name: str
-    cell_address: str   # e.g. "A1"
-    mode: str           # "daf", "standard", etc.
-    value: str          # new value for this mode
+    cell_address: str           # e.g. "A1"
+    overrides: Dict[str, str]   # e.g. {"daf": "DAF", "standard": "INVOICE"}
 
 
 class TemplateNotesRequest(BaseModel):
@@ -1242,11 +1242,11 @@ async def update_template_notes(req: TemplateNotesRequest):
 @app.patch("/api/template/cell")
 async def update_template_cell(req: CellOverrideRequest):
     """
-    Save a mode-dependent override for a header cell.
+    Save mode-dependent overrides for a header cell.
     
     Converts the cell value from a plain string to a dict like:
-        {"default": "INVOICE", "daf": "DAF"}
-    If the cell is already a dict, just updates the specified mode key.
+        {"default": "INVOICE", "daf": "DAF", "standard": "VAT INVOICE"}
+    If the cell is already a dict, updates the specified mode keys.
     """
     bundled_dir = sys_config.bundled_dir
     safe_name = Path(req.template_name).name
@@ -1277,37 +1277,111 @@ async def update_template_cell(req: CellOverrideRequest):
     template_layout = data.get("template_layout", {})
     if req.sheet_name not in template_layout:
         return JSONResponse(status_code=404, content={"error": f"Sheet '{req.sheet_name}' not found in template"})
-
     sheet_data = template_layout[req.sheet_name]
     header_content = sheet_data.get("header_content", {})
-    current = header_content.get(req.cell_address)
+    footer_rows = sheet_data.get("footer_rows", [])
+    header_merges = sheet_data.get("header_merges", [])
 
-    # Build the mode-dependent value
-    if isinstance(current, dict):
-        # Already a mode map — update the mode key
-        current[req.mode] = req.value
-    elif current is not None:
-        # Plain string — convert to mode map with 'default' as the original
-        header_content[req.cell_address] = {"default": current, req.mode: req.value}
+    # Helper: Calculate max header row to determine where footer starts in the Inspector grid
+    def get_max_header_row(content, merges):
+        max_r = 0
+        for addr in content.keys():
+            try:
+                _, r = coordinate_from_string(addr)
+                if r > max_r: max_r = r
+            except: pass
+        
+        # Check merges (can be list of strings or dict of { "A1:B2": ... })
+        m_list = merges if isinstance(merges, list) else merges.keys() if isinstance(merges, dict) else []
+        for m_str in m_list:
+            try:
+                _, _, _, max_r_m = range_boundaries(m_str)
+                if max_r_m > max_r: max_r = max_r_m
+            except: pass
+        return max_r
+
+    header_max_row = get_max_header_row(header_content, header_merges)
+    
+    try:
+        col_letter, row_val = coordinate_from_string(req.cell_address)
+        col_idx = column_index_from_string(col_letter)
+    except:
+        return JSONResponse(status_code=400, content={"error": "Invalid cell address format"})
+
+    # Determine if this is a header or footer edit
+    is_footer = row_val > header_max_row
+
+    if is_footer:
+        rel_idx = row_val - header_max_row - 1
+        # Find or create target row
+        target_row = next((r for r in footer_rows if r.get('relative_index') == rel_idx), None)
+        if not target_row:
+            target_row = {"relative_index": rel_idx, "cells": [], "merges": []}
+            footer_rows.append(target_row)
+            sheet_data["footer_rows"] = sorted(footer_rows, key=lambda x: x.get('relative_index', 0))
+        
+        cells = target_row.get("cells", [])
+        target_cell = next((c for c in cells if c.get('col_index') == col_idx), None)
+        
+        if not target_cell:
+            target_cell = {"col_index": col_idx, "value": ""}
+            cells.append(target_cell)
+            target_row["cells"] = sorted(cells, key=lambda x: x.get('col_index', 1))
+
+        current = target_cell.get("value")
+        current_map = current if isinstance(current, dict) else {"default": str(current) if current is not None else ""}
+        
+        # Apply overrides (remove key if empty string or None)
+        for mode, val in req.overrides.items():
+            if val is None or (isinstance(val, str) and not val.strip()):
+                if mode in current_map:
+                    del current_map[mode]
+            else:
+                current_map[mode] = val
+            
+        # Cleanup: if only 'default' remains, convert back to plain string
+        if len(current_map) == 1 and "default" in current_map:
+            target_cell["value"] = current_map["default"]
+        elif not current_map:
+            target_cell["value"] = ""
+        else:
+            target_cell["value"] = current_map
+        logger.info(f"Updated footer cell at rel_idx {rel_idx}, col {col_idx}")
     else:
-        # Cell doesn't exist yet — create with just the mode key
-        header_content[req.cell_address] = {"default": "", req.mode: req.value}
+        # Standard Header Edit
+        current = header_content.get(req.cell_address)
+        current_map = current if isinstance(current, dict) else {"default": str(current) if current is not None else ""}
+        
+        # Apply overrides (remove key if empty string or None)
+        for mode, val in req.overrides.items():
+            if val is None or (isinstance(val, str) and not val.strip()):
+                if mode in current_map:
+                    del current_map[mode]
+            else:
+                current_map[mode] = val
 
-    sheet_data["header_content"] = header_content
+        # Cleanup: if only 'default' remains, convert back to plain string
+        if len(current_map) == 1 and "default" in current_map:
+            header_content[req.cell_address] = current_map["default"]
+        elif not current_map:
+            # Delete cell from header_content if completely empty
+            if req.cell_address in header_content:
+                del header_content[req.cell_address]
+        else:
+            header_content[req.cell_address] = current_map
+        
+        sheet_data["header_content"] = header_content
 
     # Save back
     try:
         with open(template_path, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
-        return {"status": "success", "cell": req.cell_address, "value": header_content[req.cell_address]}
+        return {"status": "success", "cell": req.cell_address, "is_footer": is_footer, "value": current_map}
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"Failed to save template: {str(e)}"})
 
 @app.delete("/api/template/{name}")
 async def delete_template(name: str, bundle: Optional[str] = None):
-    """
-    Delete a specific template bundle.
-    """
     bundled_dir = sys_config.bundled_dir
     
     if bundle:
