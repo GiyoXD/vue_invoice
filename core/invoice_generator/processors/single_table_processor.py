@@ -96,6 +96,10 @@ class SingleTableProcessor(SheetProcessor):
             traceback.print_exc()
             return False
         
+        # self.is_global_unique_desc is already calculated by BaseProcessor (scanning data + fallbacks)
+        layout_config['is_global_unique_desc'] = self.is_global_unique_desc
+        logger.info(f"SingleTableProcessor: is_global_unique_desc={self.is_global_unique_desc}")
+
         # Use LayoutBuilder to orchestrate the entire layout construction
         layout_builder = LayoutBuilder(
             self.output_workbook,

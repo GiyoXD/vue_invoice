@@ -376,60 +376,38 @@ class LayoutBuilder:
                 if not self.skip_data_table_builder:
                     logger.info("LayoutBuilder: Building data table...")
                     
-                    # NEW: Determine global uniqueness of descriptions across ALL tables
-                    is_global_unique_desc = False
-                    if self.invoice_data:
+                    # NEW: Determine global uniqueness of descriptions.
+                    # Prefer the value passed from the Processor (who has the sheet-wide context).
+                    is_global_unique_desc = self.layout_config.get('is_global_unique_desc')
+                    
+                    if is_global_unique_desc is None:
+                        # Fallback: Calculate from currently resolved data (useful for SingleTableProcessor)
+                        logger.info("LayoutBuilder: is_global_unique_desc not provided, calculating from resolved_data.")
                         all_descriptions = set()
+                        resolved_data = self.layout_config.get('resolved_data', {})
+                        data_rows = resolved_data.get('data_rows', [])
                         
-                        # 1. Check multi_table (List of Lists of Dicts)
-                        multi_table = self.invoice_data.get('multi_table', [])
-                        if isinstance(multi_table, list):
-                            for table in multi_table:
-                                if isinstance(table, list):
-                                    for row in table:
-                                        desc = str(row.get('col_desc', "")).strip()
-                                        if desc: all_descriptions.add(desc)
+                        # Find col_desc index
+                        col_id_map = self.header_info.get('column_id_map', {})
+                        desc_idx = col_id_map.get('col_desc')
                         
-                        # 2. Check single_table (Dict of Aggregations)
-                        single_table = self.invoice_data.get('single_table', {})
-                        if isinstance(single_table, dict):
-                            # Check standard aggregation
-                            agg = single_table.get('aggregation', [])
-                            if isinstance(agg, list):
-                                for row in agg:
-                                    desc = str(row.get('col_desc', "")).strip()
-                                    if desc: all_descriptions.add(desc)
-                            
-                            # Check custom aggregation
-                            agg_cust = single_table.get('aggregation_custom', [])
-                            if isinstance(agg_cust, list):
-                                for row in agg_cust:
-                                    desc = str(row.get('col_desc', "")).strip()
-                                    if desc: all_descriptions.add(desc)
-                                    
-                            # Check DAF aggregation
-                            agg_daf = single_table.get('aggregation_DAF', [])
-                            if isinstance(agg_daf, list):
-                                for row in agg_daf:
-                                    desc = str(row.get('col_desc', "")).strip()
-                                    if desc: all_descriptions.add(desc)
-
-                        # Final Check: If 1 unique description, or 0 (all empty), we merge
-                        if len(all_descriptions) <= 1:
-                            is_global_unique_desc = True
-                            if len(all_descriptions) == 1:
-                                logger.info(f"LayoutBuilder: Globally unique description detected: {list(all_descriptions)[0]}")
-                            else:
-                                logger.info("LayoutBuilder: Globally empty descriptions detected. Merging allowed.")
-                        elif len(all_descriptions) > 1:
-                            logger.info(f"LayoutBuilder: Globally mixed descriptions detected ({len(all_descriptions)} types).")
+                        if desc_idx:
+                            for row in data_rows:
+                                val = row.get(desc_idx)
+                                if val and str(val).strip():
+                                    all_descriptions.add(str(val).strip())
+                        
+                        is_global_unique_desc = (len(all_descriptions) <= 1)
+                        logger.info(f"LayoutBuilder: Calculated table-level uniqueness: {is_global_unique_desc} ({len(all_descriptions)} types)")
+                    else:
+                        logger.info(f"LayoutBuilder: Using pre-calculated global uniqueness: {is_global_unique_desc}")
                     
                     merge_cols = ['col_pallet_count']
                     data_source_type = self.layout_config.get('data_source_type', 'aggregation')
                     allow_col_desc_merge = self.layout_config.get('allow_col_desc_merge', True)
                     
-                    # Disable col_desc vertical merging for aggregation sheets where static columns force artificial row padding
-                    if allow_col_desc_merge and not data_source_type.startswith('aggregation'):
+                    # Enable col_desc vertical merging if allowed by config
+                    if allow_col_desc_merge:
                         merge_cols.append('col_desc')
                         
                     data_builder = DataTableBuilder(

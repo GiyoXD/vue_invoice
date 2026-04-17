@@ -74,6 +74,56 @@ class SheetProcessor(ABC):
              raise ConfigurationError(f"CRITICAL: No 'header_row' found in configuration for sheet '{self.sheet_name}'. "
                                     f"Please ensure layout_config -> structure -> header_row is defined in your JSON.")
 
+        # --- GLOBAL UNIQUENESS SCAN (Invoice Scope) ---
+        # Calculate once in BaseProcessor so all children share the same authority.
+        self.all_global_descriptions = set()
+        
+        # 1. Scan raw data
+        if self.invoice_data:
+            # Check multi_table
+            multi_table = self.invoice_data.get('multi_table', [])
+            if isinstance(multi_table, list):
+                for table in multi_table:
+                    if isinstance(table, list):
+                        for row in table:
+                            d = str(row.get('col_desc', "")).strip()
+                            if d: self.all_global_descriptions.add(d)
+            
+            # Check single_table
+            single_table = self.invoice_data.get('single_table', {})
+            if isinstance(single_table, dict):
+                for agg_key in ['aggregation', 'aggregation_custom', 'aggregation_DAF']:
+                    agg_data = single_table.get(agg_key, [])
+                    if isinstance(agg_data, list):
+                        for row in agg_data:
+                            d = str(row.get('col_desc', "")).strip()
+                            if d: self.all_global_descriptions.add(d)
+
+        # 2. Scan Fallbacks in Configuration (Truth if data is empty)
+        if self.config_loader:
+            raw_config = self.config_loader.get_raw_config()
+            layout_bundle = raw_config.get('layout_bundle', {})
+            for sheet_name, sheet_conf in layout_bundle.items():
+                if not isinstance(sheet_conf, dict):
+                    continue
+                    
+                # Check data_flow -> mappings -> col_desc
+                mappings = sheet_conf.get('data_flow', {}).get('mappings', {})
+                col_desc_rule = mappings.get('col_desc', {})
+                if isinstance(col_desc_rule, dict):
+                    fallback = col_desc_rule.get('fallback')
+                    if isinstance(fallback, dict):
+                        # Modern nested format
+                        for mode_val in fallback.values():
+                            if isinstance(mode_val, str) and mode_val.strip():
+                                self.all_global_descriptions.add(mode_val.strip())
+                    elif isinstance(fallback, str) and fallback.strip():
+                        self.all_global_descriptions.add(fallback.strip())
+        
+        # Determine global uniqueness flag
+        self.is_global_unique_desc = (len(self.all_global_descriptions) <= 1)
+        # ---------------------------------------------
+
     @abstractmethod
     def process(self) -> bool:
         """

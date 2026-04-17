@@ -275,11 +275,14 @@ def merge_vertical_cells_in_range(worksheet: Worksheet, scan_col: int, start_row
                 
         # Only verify if we found a description
         if buffer_value is not None:
+            baseline = str(buffer_value).strip().lower()
             for row_idx in range(start_row, end_row + 1):
                 val = worksheet.cell(row=row_idx, column=scan_col).value
                 # If we find actual text that differs from our baseline, abort
-                if val and val != buffer_value:
-                    return
+                if val:
+                    current = str(val).strip().lower()
+                    if current != baseline:
+                        return
 
     # Walk through the column, tracking contiguous groups
     group_start = start_row
