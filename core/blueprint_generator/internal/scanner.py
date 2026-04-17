@@ -377,20 +377,8 @@ class ExcelLayoutScanner:
             
             self.logger.info(f"    Header row: {header_row}")
             
-            # Analyze columns
-            columns = self._analyze_columns(worksheet, header_row, header_cells, mapping_config)
-            self.logger.info(f"    Found {len(columns)} columns")
-            # DETAILED DEBUG LOGGING (Commented out for speed)
-            # self.logger.info(f"    --- Column Analysis for {sheet_name} ---")
-            # for col in columns:
-            #     self.logger.info(f"      [Col {col.col_index}] ID={col.id} Header='{col.header}' Width={col.width:.1f} Format='{col.format}'")
-            # self.logger.info(f"    ----------------------------------------")
-            
-            # Determine data source type
-            data_source = self._determine_data_source(sheet_name, columns, mapping_config)
-            self.logger.info(f"    Data source: {data_source}")
-            
-            # Check for multi-row headers and determine data start row
+            # [Smart Feature] Check for multi-row headers and determine data start row early
+            # This is critical for accurate data sampling and style extraction.
             has_multi_row = self._check_multi_row_header(worksheet, header_row)
             data_start_row = header_row + 1
             if has_multi_row:
@@ -399,7 +387,15 @@ class ExcelLayoutScanner:
                      if merged.min_row == header_row:
                          data_start_row = max(data_start_row, merged.max_row + 1)
             
-            self.logger.info(f"    Data starts at row: {data_start_row}")
+            self.logger.info(f"    Header type: {'Multi-row' if has_multi_row else 'Single-row'}. Data starts at row: {data_start_row}")
+
+            # Analyze columns
+            columns = self._analyze_columns(worksheet, header_row, header_cells, data_start_row, mapping_config)
+            self.logger.info(f"    Found {len(columns)} columns")
+            
+            # Determine data source type
+            data_source = self._determine_data_source(sheet_name, columns, mapping_config)
+            self.logger.info(f"    Data source: {data_source}")
             
             # Extract font info
             header_font = self._extract_font_info(worksheet, header_row, 1)
@@ -453,6 +449,7 @@ class ExcelLayoutScanner:
 
     def _analyze_columns(self, worksheet: Worksheet, header_row: int, 
                          header_cells: List[Tuple[int, str]],
+                         data_start_row: int,
                          mapping_config: Optional[Dict[str, Any]] = None) -> List[ColumnInfo]:
         """Analyze columns from header row."""
         columns = []
@@ -532,7 +529,8 @@ class ExcelLayoutScanner:
                     break
             
             # [Smart Feature] Determine format: Check data first, then Rules
-            format_str = self._sample_column_format(worksheet, col, header_row + 1)
+            # We use the calculated data_start_row which accounts for multi-row headers.
+            format_str = self._sample_column_format(worksheet, col, data_start_row)
             if not format_str or format_str == "General":
                 # Fallback to rules if no data or general format
                 format_str = self._determine_format(col_id, value)
@@ -602,21 +600,45 @@ class ExcelLayoutScanner:
         
         return columns
 
-    def _sample_column_format(self, worksheet: Worksheet, col: int, start_row: int, max_rows: int = 10) -> Optional[str]:
+    def _sample_column_format(self, worksheet: Worksheet, col: int, start_row: int, max_rows: int = 15) -> Optional[str]:
         """
         Sample data rows to find the most common number format.
-        Ported from NumberFormatExtractor.
+        
+        [User Suggested Logic]:
+        1. Start from start_row (after header).
+        2. Scan until we find the first row that actually contains numeric data.
+        3. Extract the format from that row and subsequent data rows.
         """
         formats = []
-        for row in range(start_row, min(start_row + max_rows, worksheet.max_row + 1)):
-            cell = worksheet.cell(row=row, column=col)
-            if cell.value is not None and cell.number_format != 'General':
-                # Only care about numeric formats
-                try:
-                    if isinstance(cell.value, (int, float)):
+        current_row = start_row
+        rows_to_scan = min(start_row + 100, worksheet.max_row + 1) # Scan up to 100 rows to find start of data
+        
+        data_found_at = None
+        
+        # Step 1: Find the first row with a numeric value in this column
+        for r in range(start_row, rows_to_scan):
+            cell = worksheet.cell(row=r, column=col)
+            if cell.value is not None:
+                # Check if it's numeric (the real indicator of a data row for amounts/qtys)
+                # Exclude booleans which are technically ints in Python
+                if isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool):
+                    data_found_at = r
+                    break
+
+        if not data_found_at:
+             # Fallback: if no numeric data found, try sampling empty cells for their pre-set format
+             # This handles cases where a template is blank but the cells are formatted.
+             for r in range(start_row, min(start_row + 5, worksheet.max_row + 1)):
+                 cell = worksheet.cell(row=r, column=col)
+                 if cell.number_format and cell.number_format != 'General':
+                     formats.append(cell.number_format)
+        else:
+            # Step 2: Sample up to max_rows starting from the first data row
+            for r in range(data_found_at, min(data_found_at + max_rows, worksheet.max_row + 1)):
+                cell = worksheet.cell(row=r, column=col)
+                if cell.value is not None and cell.number_format and cell.number_format != 'General':
+                    if isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool):
                         formats.append(cell.number_format)
-                except:
-                    pass
         
         if not formats:
             return None
@@ -647,7 +669,8 @@ class ExcelLayoutScanner:
 
                 format_str = self._determine_format(col_id, value)
                 col_letter = get_column_letter(col)
-                width = worksheet.column_dimensions[col_letter].width or 10
+                dim = worksheet.column_dimensions.get(col_letter)
+                width = dim.width if dim and dim.width is not None else 10.0
                 
                 children.append(ColumnInfo(
                     id=col_id,
