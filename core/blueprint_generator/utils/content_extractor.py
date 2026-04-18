@@ -139,6 +139,11 @@ def find_total_label_cell(worksheet: Worksheet, start_row: int, end_row: int, ma
             logger_instance.warning(f"    ⚠ [{sheet_name}] No footer keywords configured. Cannot detect footer row!")
         return None
     
+    # Sort keywords by length descending to match most specific first (prevents "TOTAL" shadowing "GRAND TOTAL")
+    total_keywords.sort(key=len, reverse=True)
+    
+    best_match = None
+    
     for row in range(start_row, end_row + 1):
         for col in range(1, min(worksheet.max_column + 1, 20)):
             cell = worksheet.cell(row=row, column=col)
@@ -146,12 +151,16 @@ def find_total_label_cell(worksheet: Worksheet, start_row: int, end_row: int, ma
             if not val:
                 continue
                 
-            val_upper = val.upper()
+            val_upper = val.upper().strip()
             for kw in total_keywords:
-                if kw in val_upper:
-                    is_exact = (kw == val_upper)
-                    return cell, is_exact
-    return None
+                if kw == val_upper:
+                    # Found exact match: immediate return, confirmed.
+                    return cell, True
+                if kw in val_upper and not best_match:
+                    # Found partial match: save as candidate if no exact match found later.
+                    best_match = (cell, False)
+    
+    return best_match if best_match else None
 
 def find_pallet_count_column(worksheet: Worksheet, footer_row: int, columns: List['ColumnInfo'], find_col_id_func, logger_instance: logging.Logger, sheet_name: str = "Unknown") -> Optional[str]:
     """

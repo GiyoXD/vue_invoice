@@ -260,6 +260,7 @@ export default {
         const activeMappingType = ref("header_text_mappings");
         const newMappingKey = ref("");
         const newMappingVal = ref("");
+        const footerKeywords = ref([]);
 
         // Data
         const fileTokens = ref([]); // Array of { filename, missingHeaders }
@@ -304,6 +305,19 @@ export default {
             }
         };
         fetchMappings();
+
+        const fetchFooterMappings = async () => {
+            try {
+                const res = await fetch(`/api/blueprint/mappings?mapping_type=footer_label_mappings`);
+                if (res.ok) {
+                    const data = await res.json();
+                    footerKeywords.value = Object.keys(data).map(k => k.toUpperCase());
+                }
+            } catch (e) {
+                console.error("Failed to fetch footer mappings", e);
+            }
+        };
+        fetchFooterMappings();
 
         const filteredMappings = computed(() => {
             if (!mappingSearch.value) return globalMappings.value;
@@ -360,6 +374,10 @@ export default {
             mappingStatusMessage.value = "";
             newMappingKey.value = "";
             newMappingVal.value = type === 'footer_label_mappings' ? 'Footer Keyword' : '';
+            
+            if (type === 'footer_label_mappings') {
+                footerKeywords.value = Object.keys(globalMappings.value).map(k => k.toUpperCase());
+            }
         };
 
         const saveMappings = async () => {
@@ -378,6 +396,11 @@ export default {
                 if (res.ok) {
                     mappingStatusMessage.value = "Mappings saved successfully!";
                     mappingStatusType.value = "success";
+                    
+                    if (activeMappingType.value === 'footer_label_mappings') {
+                        footerKeywords.value = Object.keys(globalMappings.value).map(k => k.toUpperCase());
+                    }
+                    
                     setTimeout(() => { mappingStatusMessage.value = ""; }, 3000);
                 } else {
                     const data = await res.json();
@@ -429,6 +452,9 @@ export default {
             allMissingFooters.value = [];
             fileTokens.value = [];
 
+            // Refresh footer mappings before analysis to prevent stale keywords
+            await fetchFooterMappings();
+
             try {
                 const headerSet = new Set();
                 const footerSet = new Set();
@@ -456,9 +482,17 @@ export default {
                         headerSet.add(h.text);
                     }
                     
-                    // Collect missing footers
+                    // Collect missing footers with case-insensitive deduplication
                     for (const f of (data.missing_footers || [])) {
-                        footerSet.add(f);
+                        const fUpper = f.toUpperCase().trim();
+                        // Only add if not already in global mappings
+                        if (!footerKeywords.value.includes(fUpper)) {
+                            // Check if already in our current set (case-insensitive)
+                            const exists = Array.from(footerSet).some(existing => existing.toUpperCase().trim() === fUpper);
+                            if (!exists) {
+                                footerSet.add(f);
+                            }
+                        }
                     }
 
                     // Collect proactive warnings
