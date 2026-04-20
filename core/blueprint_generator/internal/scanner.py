@@ -745,13 +745,29 @@ class ExcelLayoutScanner:
         return "aggregation" # default   
     
     def _extract_font_info(self, worksheet: Worksheet, row: int, col: int) -> Dict[str, Any]:
-        """Extract font information from a cell."""
+        """
+        Extract font information from a cell.
+        
+        Note: We avoid hard-coded fallbacks like 'Times New Roman' or '12'.
+        If the font is missing, it should lead to an error so the user can fix the template.
+        """
         cell = worksheet.cell(row=row, column=col)
         font = cell.font
-        
+
+        if not font:
+            raise ValueError(f"No font detected at Row {row}, Col {col}. Please ensure the template cell has explicit styling.")
+
+        name = font.name
+        size = font.size
+
+        # OpenPyXL often returns None for default Excel fonts (Calibri 11)
+        # If it is None, we treat it as Calibri 11 (Standard Excel default)
+        if name is None: name = "Calibri"
+        if size is None: size = 11.0
+
         return {
-            "name": font.name or "Times New Roman",
-            "size": font.size or 12,
+            "name": name,
+            "size": size,
             "bold": font.bold or False,
             "italic": font.italic or False
         }

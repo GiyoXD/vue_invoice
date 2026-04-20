@@ -524,12 +524,17 @@ class ExcelTemplateSanitizer:
             # Filter out default font props to save space
             font_data = {}
             
-            # If cell is empty, we DON'T care about Font Name/Size (User preference)
-            # We only care if it's explicitly styled (Bold, Italic, Color)
-            if not is_empty:
-                if cell.font.name and cell.font.name not in ["Calibri", "Arial"]: # Capture non-standard fonts
-                    font_data["name"] = cell.font.name
-                if cell.font.size and cell.font.size not in [11.0, 11, 10.0, 10]: # Capture non-standard sizes
+            # 1. Capture font name if not default (Calibri/Arial)
+            if cell.font.name and cell.font.name not in ["Calibri", "Arial"]:
+                font_data["name"] = cell.font.name
+            
+            # 2. Capture font size if it's NOT (Calibri 11)
+            # User wants to detect all sizes, but ignore Calibri 11 specifically.
+            if cell.font.size:
+                is_calibri = (cell.font.name == "Calibri")
+                is_size_11 = (cell.font.size in [11.0, 11])
+                
+                if not (is_calibri and is_size_11):
                     font_data["size"] = cell.font.size
             
             if cell.font.bold: font_data["bold"] = True

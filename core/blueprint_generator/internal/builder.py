@@ -141,25 +141,34 @@ class ConfigBuilder:
                 sheet_styling["columns"][child.id] = child_style
         
         # Build row context styles
+        # Enforce strict style extraction - no guesses.
+        h_size = sheet.header_font.get("size")
+        h_name = sheet.header_font.get("name")
+        d_size = sheet.data_font.get("size")
+        d_name = sheet.data_font.get("name")
+
+        if any(v is None for v in [h_size, h_name, d_size, d_name]):
+             raise ValueError(f"Sheet '{sheet.name}' is missing mandatory font information. Check template styling.")
+
         sheet_styling["row_contexts"] = {
             "header": {
                 "bold": True,
-                "font_size": sheet.header_font.get("size", 12),
-                "font_name": sheet.header_font.get("name", "Times New Roman"),
+                "font_size": h_size,
+                "font_name": h_name,
                 "border_style": "thin",
                 "row_height": sheet.row_heights.get("header", 35)
             },
             "data": {
                 "bold": False,
-                "font_size": sheet.data_font.get("size", 12),
-                "font_name": sheet.data_font.get("name", "Times New Roman"),
+                "font_size": d_size,
+                "font_name": d_name,
                 "border_style": "thin",
                 "row_height": sheet.row_heights.get("data", 27)
             },
             "footer": {
                 "bold": True,
-                "font_size": sheet.header_font.get("size", 12),
-                "font_name": sheet.header_font.get("name", "Times New Roman"),
+                "font_size": h_size, # Usually matches header
+                "font_name": h_name,
                 "border_style": "thin",
                 "row_height": sheet.row_heights.get("footer", 35)
             }
