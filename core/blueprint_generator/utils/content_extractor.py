@@ -97,9 +97,9 @@ def extract_global_hs_code(worksheet: Worksheet, max_row: int = 150, max_col: in
                     return hs_code
     return None
 
-def find_footer_hs_code(worksheet: Worksheet, start_row: int, end_row: int) -> Tuple[Optional[str], int]:
+def find_footer_hs_code(worksheet: Worksheet, start_row: int, end_row: int) -> Tuple[Optional[str], int, Optional[int]]:
     """
-    Scan specifically in the footer bounds for HS Code to determine if it's there and its colspan.
+    Scan specifically in the footer bounds for HS Code to determine if it's there, its colspan, and its column.
     """
     hs_keywords = {"HS.CODE", "HS CODE", "HS-CODE"}
     
@@ -118,9 +118,9 @@ def find_footer_hs_code(worksheet: Worksheet, start_row: int, end_row: int) -> T
                     if merged.min_row <= cell.row <= merged.max_row and merged.min_col <= cell.column <= merged.max_col:
                         colspan = merged.max_col - merged.min_col + 1
                         break
-                return val, colspan
+                return val, colspan, col
                 
-    return None, 1
+    return None, 1, None
 
 
 # --- 3. FOOTER ELEMENTS (PALLET & TOTAL LABELS) ---

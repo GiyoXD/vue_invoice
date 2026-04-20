@@ -25,6 +25,7 @@ class FooterInfo:
     has_hs_code: bool = False
     hs_code_text: Optional[str] = None
     hs_code_colspan: int = 1
+    hs_code_col_id: Optional[str] = None
     is_exact: bool = True
 
 
@@ -88,7 +89,10 @@ def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo]
     pallet_col_id = find_pallet_count_column(worksheet, found_cell.row, columns, find_column_id_by_index, logger, sheet_name)
     
     # --- Step 5: Find HS Code row ---
-    hs_code_text, hs_code_colspan = find_footer_hs_code(worksheet, start_scan, end_scan)
+    hs_code_text, hs_code_colspan, hs_code_col_idx = find_footer_hs_code(worksheet, start_scan, end_scan)
+    hs_code_col_id = None
+    if hs_code_col_idx:
+        hs_code_col_id = find_column_id_by_index(hs_code_col_idx, columns)
 
     return FooterInfo(
         row_num=found_cell.row,
@@ -99,6 +103,7 @@ def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo]
         has_hs_code=bool(hs_code_text),
         hs_code_text=hs_code_text,
         hs_code_colspan=hs_code_colspan,
+        hs_code_col_id=hs_code_col_id,
         is_exact=is_exact
     )
 

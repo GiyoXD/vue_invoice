@@ -414,18 +414,21 @@ class ConfigBuilder:
         has_hs_code = False
         hs_code_text = "HS.CODE: 4107.12.00"
         hs_code_colspan = 1
+        hs_code_col_id = "col_po" # Default fallback
 
         if sheet.footer_info:
             has_hs_code = sheet.footer_info.has_hs_code
             if sheet.footer_info.hs_code_text:
                 hs_code_text = sheet.footer_info.hs_code_text
             hs_code_colspan = sheet.footer_info.hs_code_colspan
+            if sheet.footer_info.hs_code_col_id:
+                hs_code_col_id = sheet.footer_info.hs_code_col_id
             
         is_contract = "contract" in sheet.name.lower()
             
         add_ons["before_footer"] = {
             "enabled": not is_contract,
-            "column_id": "col_po",
+            "column_id": hs_code_col_id,
             "text": hs_code_text
         }
         
@@ -433,10 +436,14 @@ class ConfigBuilder:
             add_ons["before_footer"]["merge"] = hs_code_colspan
         
         # weight_summary
+        # Usually placed at col_no for labels and col_item/col_desc for values
+        label_col = "col_no" if "col_no" in [c.id for c in sheet.columns] else "col_po"
+        value_col = "col_item" if "col_item" in [c.id for c in sheet.columns] else "col_desc"
+
         add_ons["weight_summary"] = {
             "enabled": sheet.data_source == "aggregation",
-            "label_col_id": "col_po",
-            "value_col_id": "col_item",
+            "label_col_id": label_col,
+            "value_col_id": value_col,
             "mode": ["daf", "standard"]
         }
         
