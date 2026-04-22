@@ -90,24 +90,27 @@ def generate_invoice(request: GenerateRequest):
         if not mode_tasks:
              return JSONResponse(status_code=400, content={"error": "No invoice type selected."})
 
-        # Determine variant tasks
+        # Determine variant tasks — KH is the default variant
         variant_tasks = []
-        if request.generate_kh or request.generate_vn:
-            from core.invoice_generator.resolvers import InvoiceAssetResolver
-            resolver = InvoiceAssetResolver(
-                base_config_dir=sys_config.registry_dir,
-                base_template_dir=sys_config.templates_dir
-            )
-            all_variants = resolver.resolve_all_variants(str(json_path_obj))
-            variant_map = {v["suffix"]: v for v in all_variants}
-            
-            if request.generate_kh and "_KH" in variant_map:
-                variant_tasks.append(variant_map["_KH"])
-            if request.generate_vn and "_VN" in variant_map:
-                variant_tasks.append(variant_map["_VN"])
+        from core.invoice_generator.resolvers import InvoiceAssetResolver
+        resolver = InvoiceAssetResolver(
+            base_config_dir=sys_config.registry_dir,
+            base_template_dir=sys_config.templates_dir
+        )
+        all_variants = resolver.resolve_all_variants(str(json_path_obj))
+        variant_map = {v["suffix"]: v for v in all_variants}
         
+        if request.generate_kh and "_KH" in variant_map:
+            variant_tasks.append(variant_map["_KH"])
+        if request.generate_vn and "_VN" in variant_map:
+            variant_tasks.append(variant_map["_VN"])
+        
+        # Default to KH variant when no variant explicitly selected
         if not variant_tasks:
-            variant_tasks = [{"suffix": "", "config_path": None, "template_path": None}]
+            if "_KH" in variant_map:
+                variant_tasks.append(variant_map["_KH"])
+            else:
+                variant_tasks = [{"suffix": "", "config_path": None, "template_path": None}]
 
         # Final loop
         for variant in variant_tasks:

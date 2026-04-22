@@ -420,7 +420,7 @@ export default {
         const handleFileUpload = (e) => {
             const files = Array.from(e.target.files).slice(0, 2);
             selectedFiles.value = files;
-            singleFileSuffix.value = "";
+            singleFileSuffix.value = "_KH";
             statusMessage.value = "";
         };
 
@@ -618,7 +618,7 @@ export default {
         const resetFlow = () => {
             currentStep.value = 1;
             selectedFiles.value = [];
-            singleFileSuffix.value = "";
+            singleFileSuffix.value = "_KH";
             filePrefix.value = "";
             allMissingHeaders.value = [];
             statusMessage.value = "";

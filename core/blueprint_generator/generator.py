@@ -238,7 +238,11 @@ class BlueprintGenerator:
         
         dir_name = bundle_dir_name if bundle_dir_name else effective_prefix
         config_dir = output_base / dir_name
-        config_file = config_dir / f"{effective_prefix}_config.json"
+        
+        # Default to _KH suffix unless prefix already ends with a variant suffix
+        variant_suffixes = ("_KH", "_VN")
+        file_prefix = effective_prefix if effective_prefix.upper().endswith(variant_suffixes) else f"{effective_prefix}_KH"
+        config_file = config_dir / f"{file_prefix}_config.json"
         
         # Create directory
         config_dir.mkdir(parents=True, exist_ok=True)
@@ -250,7 +254,7 @@ class BlueprintGenerator:
             )
             
             # SAVE SEPARATE TEMPLATE CONFIG
-            template_config_file = config_dir / f"{effective_prefix}_template.json"
+            template_config_file = config_dir / f"{file_prefix}_template.json"
             
             # [Preserve User Overrides]
             # If an old template JSON exists, carry over any mode-dependent
@@ -378,7 +382,10 @@ class BlueprintGenerator:
         effective_prefix = custom_prefix if custom_prefix else analysis.customer_code
         
         # Target template file path
-        template_file = output_dir / f"{effective_prefix}.xlsx"
+        # Use file_prefix (with variant suffix) if available, otherwise default to _KH
+        variant_suffixes = ("_KH", "_VN")
+        file_prefix = effective_prefix if effective_prefix.upper().endswith(variant_suffixes) else f"{effective_prefix}_KH"
+        template_file = output_dir / f"{file_prefix}.xlsx"
         
         # Load and sanitize the template
         sanitizer = ExcelTemplateSanitizer()

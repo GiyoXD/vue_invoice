@@ -386,8 +386,8 @@ class TableFooterBuilder(BundleAccessor):
             logger.warning(f"before_footer missing column_id or text: {before_footer_config}")
             return
         
-        # Resolve column index
-        col_idx = self._resolve_column_index(column_id, column_map_by_id)
+        # Resolve column inde        col_idx = self._resolve_column_index(column_id, column_map_by_id)
+         
         if not col_idx:
             logger.error(f"before_footer column_id '{column_id}' not found in column_map")
             return

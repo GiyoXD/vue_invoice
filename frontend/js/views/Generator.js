@@ -428,7 +428,7 @@ export default {
                     generate_standard: includeStandard.value,
                     generate_custom: includeCustom.value,
                     generate_daf: includeDAF.value,
-                    generate_kh: selectedVariants.value.includes('_KH'),
+                    generate_kh: true,  // KH is the default variant
                     generate_vn: selectedVariants.value.includes('_VN')
                 };
 
