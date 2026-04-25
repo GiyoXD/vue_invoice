@@ -1,0 +1,73 @@
+/* ============================================
+   EXCEL / TEMPLATE INSPECTOR STYLES
+   Spreadsheet-like preview grid & sheet tabs
+   ============================================ */
+
+.template-viewer {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.excel-grid-container {
+    background: #c8ced6;
+    padding: 0;
+    border-radius: 4px;
+    box-shadow: inset 0 1px 4px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.excel-grid-container::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.excel-grid-container::-webkit-scrollbar-track {
+    background: #e2e8f0;
+    border-radius: 4px;
+}
+
+.excel-grid-container::-webkit-scrollbar-thumb {
+    background: #94a3b8;
+    border-radius: 4px;
+}
+
+.excel-grid-container::-webkit-scrollbar-thumb:hover {
+    background: #64748b;
+}
+
+.excel-grid {
+    display: grid;
+    background: #fff;
+    position: relative;
+    user-select: text;
+}
+
+.excel-cell {
+    overflow: visible;
+    box-sizing: border-box;
+    min-width: 0;
+}
+
+.excel-cell:hover {
+    outline: 2px solid #3b82f6;
+    outline-offset: -1px;
+    z-index: 10;
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.15);
+}
+
+.sheet-tabs {
+    display: flex;
+    gap: 0.5rem;
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+}
+
+.btn-primary {
+    background: #3b82f6;
+    color: white;
+    border-color: #2563eb;
+}
+
+.btn-primary:hover {
+    background: #2563eb;
+}

@@ -114,7 +114,7 @@ export default {
                         </div>
                         
                         <!-- Excel Grid -->
-                        <div class="excel-grid-container" style="overflow: auto; border: 1px solid #e2e8f0; max-height: 600px; position: relative;">
+                        <div class="excel-grid-container" style="overflow: auto; max-height: 75vh; position: relative;">
                             <div class="excel-grid" :style="gridStyle">
                                 <!-- Render Cells -->
                                 <div v-for="cell in gridCells" :key="cell.id"
@@ -180,7 +180,7 @@ export default {
         const selectedTemplateName = ref(null);
         const currentTemplate = ref(null);
         const currentSheetName = ref(null);
-        const zoomLevel = ref(1.0);
+        const zoomLevel = ref(0.6);
         const showFullText = ref(false);
 
         // Client Notes state
@@ -377,6 +377,36 @@ export default {
         };
 
         /**
+         * Convert Excel ARGB color string ("FF4472C4" or "4472C4") to CSS hex.
+         */
+        const excelColorToCss = (colorStr) => {
+            if (!colorStr || typeof colorStr !== 'string') return null;
+            let hex = colorStr.replace(/^#/, '');
+            if (hex.length === 8) hex = hex.substring(2); // Strip alpha
+            if (hex.length === 6 && /^[0-9A-Fa-f]{6}$/.test(hex)) return `#${hex}`;
+            return null;
+        };
+
+        /**
+         * Map Excel border style name to CSS border string.
+         */
+        const excelBorderToCss = (style) => {
+            const map = {
+                'thin': '1px solid #000',
+                'medium': '2px solid #000',
+                'thick': '3px solid #000',
+                'double': '3px double #000',
+                'dashed': '1px dashed #555',
+                'dotted': '1px dotted #555',
+                'hair': '1px solid #bbb',
+                'mediumDashed': '2px dashed #000',
+                'dashDot': '1px dashed #555',
+                'mediumDashDot': '2px dashed #000'
+            };
+            return map[style] || '1px solid #ccc';
+        };
+
+        /**
          * Flattens the grouped style map into a per-cell lookup.
          * Supports both new grouped format {hashId: [coords]} and legacy per-cell format {coord: styleDict}.
          */
@@ -402,27 +432,126 @@ export default {
 
         /**
          * Builds a CSS style object for a grid cell given its position, style dict, and merge info.
+         * Now renders borders, fill colors, and font colors from the style palette.
          */
-        const buildCellCss = (r, c, cellStyle, mergeInfo) => {
+        const buildCellCss = (r, c, cellStyle, mergeInfo, isEmpty) => {
+            // --- Borders ---
+            const defaultBorder = '1px solid #e2e8f0';
+            let borderTop = defaultBorder;
+            let borderRight = defaultBorder;
+            let borderBottom = defaultBorder;
+            let borderLeft = defaultBorder;
+
+            if (cellStyle.border) {
+                if (cellStyle.border.top) borderTop = excelBorderToCss(cellStyle.border.top);
+                if (cellStyle.border.right) borderRight = excelBorderToCss(cellStyle.border.right);
+                if (cellStyle.border.bottom) borderBottom = excelBorderToCss(cellStyle.border.bottom);
+                if (cellStyle.border.left) borderLeft = excelBorderToCss(cellStyle.border.left);
+            }
+
+            // --- Fill / Background Color ---
+            // Empty cells without explicit fill get transparent bg so overflow text shows through
+            let bgColor = (isEmpty && !cellStyle.fill?.color) ? 'transparent' : '#fff';
+            if (cellStyle.fill?.color) {
+                const parsed = excelColorToCss(cellStyle.fill.color);
+                if (parsed) bgColor = parsed;
+            }
+
+            // --- Font Color ---
+            let fontColor = '#000';
+            if (cellStyle.font?.color) {
+                const parsed = excelColorToCss(cellStyle.font.color);
+                if (parsed) fontColor = parsed;
+            }
+
+            // --- Alignment (flex-based since .excel-cell is display:flex) ---
+            const hAlignMap = { left: 'flex-start', center: 'center', right: 'flex-end', general: 'flex-start', justify: 'flex-start' };
+            const vAlignMap = { top: 'flex-start', center: 'center', bottom: 'flex-end' };
+            const hAlign = cellStyle.alignment?.horizontal || 'left';
+            const vAlign = cellStyle.alignment?.vertical || 'bottom';
+
             return {
                 gridColumnStart: c + 1,
                 gridColumnEnd: mergeInfo ? c + 1 + mergeInfo.colspan : c + 2,
                 gridRowStart: r + 1,
                 gridRowEnd: mergeInfo ? r + 1 + mergeInfo.rowspan : r + 2,
-                border: '1px solid #cbd5e1',
-                padding: '4px',
+                display: 'flex',
+                justifyContent: hAlignMap[hAlign] || 'flex-start',
+                alignItems: vAlignMap[vAlign] || 'flex-end',
+                textAlign: hAlign === 'center' ? 'center' : (hAlign === 'right' ? 'right' : 'left'),
+                borderTop,
+                borderRight,
+                borderBottom,
+                borderLeft,
+                padding: '3px 4px',
                 fontSize: (cellStyle.font?.size || 11) + 'pt',
                 fontWeight: cellStyle.font?.bold ? 'bold' : 'normal',
-                fontFamily: cellStyle.font?.name || 'Arial',
-                textAlign: cellStyle.alignment?.horizontal || 'left',
-                verticalAlign: cellStyle.alignment?.vertical || 'bottom',
-                backgroundColor: '#fff',
+                fontStyle: cellStyle.font?.italic ? 'italic' : 'normal',
+                fontFamily: cellStyle.font?.name || 'Arial, sans-serif',
+                backgroundColor: bgColor,
                 whiteSpace: (showFullText.value || cellStyle.alignment?.wrap_text) ? 'normal' : 'nowrap',
-                overflow: showFullText.value ? 'visible' : 'hidden',
-                wordBreak: showFullText.value ? 'break-word' : 'normal',
-                color: '#000'
+                wordBreak: (showFullText.value || cellStyle.alignment?.wrap_text) ? 'break-word' : 'normal',
+                color: fontColor,
+                lineHeight: '1.2'
             };
         };
+
+        /**
+         * Shared computed: scans sheet data once to determine grid dimensions.
+         * Both gridCells and gridStyle reference this to avoid duplicated bounds scanning.
+         */
+        const sheetBounds = computed(() => {
+            const sheet = currentSheetData.value;
+            if (!sheet) return { maxRow: 0, maxCol: 0, headerMaxRow: 0, footerBaseRow: 0 };
+
+            const content = sheet.header_content || {};
+            const stylePalette = sheet.style_palette || {};
+            const styles = flattenStyles(sheet.header_styles || {}, stylePalette);
+            const mergesRaw = sheet.header_merges || {};
+            const merges = Array.isArray(mergesRaw) ? mergesRaw : Object.keys(mergesRaw);
+            const footerRows = sheet.footer_rows || [];
+
+            // Header extent
+            let headerMaxRow = 0;
+            let maxCol = 0;
+            Object.keys(content).forEach(addr => {
+                const { row, col } = parseAddress(addr);
+                if (row > headerMaxRow) headerMaxRow = row;
+                if (col > maxCol) maxCol = col;
+            });
+            Object.keys(styles).forEach(addr => {
+                const { row, col } = parseAddress(addr);
+                if (row > headerMaxRow) headerMaxRow = row;
+                if (col > maxCol) maxCol = col;
+            });
+            merges.forEach(range => {
+                const parts = range.split(":");
+                if (parts.length === 2) {
+                    const e = parseAddress(parts[1]);
+                    if (e.row > headerMaxRow) headerMaxRow = e.row;
+                    if (e.col > maxCol) maxCol = e.col;
+                }
+            });
+
+            const footerBaseRow = headerMaxRow + 1;
+            let maxRow = headerMaxRow;
+
+            // Footer extent
+            footerRows.forEach(rowDict => {
+                const absRow = footerBaseRow + (rowDict.relative_index ?? 0);
+                if (absRow > maxRow) maxRow = absRow;
+                for (const cellDict of (rowDict.cells || [])) {
+                    const ci = (cellDict.col_index || 1) - 1;
+                    if (ci > maxCol) maxCol = ci;
+                }
+                for (const m of (rowDict.merges || [])) {
+                    const mc = (m.max_col || 1) - 1;
+                    if (mc > maxCol) maxCol = mc;
+                }
+            });
+
+            return { maxRow: maxRow + 2, maxCol: maxCol + 2, headerMaxRow, footerBaseRow };
+        });
 
         const gridCells = computed(() => {
             if (!currentSheetData.value) return [];
@@ -442,26 +571,7 @@ export default {
             const footerMergeRanges = []; // strings like "A10:C10"
             const footerRows = sheet.footer_rows || [];
 
-            // We place footer rows right after the last header row
-            // First determine header extent to set footer offset
-            let headerMaxRow = 0;
-            Object.keys(content).forEach(addr => {
-                const { row } = parseAddress(addr);
-                if (row > headerMaxRow) headerMaxRow = row;
-            });
-            Object.keys(styles).forEach(addr => {
-                const { row } = parseAddress(addr);
-                if (row > headerMaxRow) headerMaxRow = row;
-            });
-            merges.forEach(range => {
-                const parts = range.split(":");
-                if (parts.length === 2) {
-                    const e = parseAddress(parts[1]);
-                    if (e.row > headerMaxRow) headerMaxRow = e.row;
-                }
-            });
-
-            const footerBaseRow = headerMaxRow + 1; // 0-indexed row for first footer row
+            const { maxRow, maxCol, footerBaseRow } = sheetBounds.value;
 
             footerRows.forEach(rowDict => {
                 const relIdx = rowDict.relative_index ?? 0;
@@ -483,10 +593,10 @@ export default {
                 // Process merges
                 for (const mDict of (rowDict.merges || [])) {
                     const minCol = mDict.min_col; // 1-based
-                    const maxCol = mDict.max_col;
+                    const maxColM = mDict.max_col;
                     const rowSpan = mDict.row_span || 1;
                     const startAddr = `${colToLetter(minCol - 1)}${absRow + 1}`;
-                    const endAddr = `${colToLetter(maxCol - 1)}${absRow + rowSpan}`;
+                    const endAddr = `${colToLetter(maxColM - 1)}${absRow + rowSpan}`;
                     footerMergeRanges.push(`${startAddr}:${endAddr}`);
                 }
             });
@@ -495,35 +605,6 @@ export default {
             const allContent = { ...content, ...footerContent };
             const allStyles = { ...styles, ...footerStyles };
             const allMerges = [...merges, ...footerMergeRanges];
-
-            // Determine grid bounds
-            let maxRow = 0;
-            let maxCol = 0;
-
-            Object.keys(allContent).forEach(addr => {
-                const { row, col } = parseAddress(addr);
-                if (row > maxRow) maxRow = row;
-                if (col > maxCol) maxCol = col;
-            });
-
-            Object.keys(allStyles).forEach(addr => {
-                const { row, col } = parseAddress(addr);
-                if (row > maxRow) maxRow = row;
-                if (col > maxCol) maxCol = col;
-            });
-
-            allMerges.forEach(range => {
-                const parts = range.split(":");
-                if (parts.length === 2) {
-                    const s = parseAddress(parts[0]);
-                    const e = parseAddress(parts[1]);
-                    if (e.row > maxRow) maxRow = e.row;
-                    if (e.col > maxCol) maxCol = e.col;
-                }
-            });
-
-            maxRow += 2;
-            maxCol += 2;
 
             const cells = [];
             const occupied = new Set();
@@ -566,7 +647,7 @@ export default {
                         rawContent: cellContent,
                         hasOverride: typeof cellContent === 'object' && cellContent !== null,
                         currentOverrides: (typeof cellContent === 'object' && cellContent !== null) ? cellContent : null,
-                        style: { ...buildCellCss(r, c, cellStyle, mergeInfo), position: 'relative', cursor: 'pointer' },
+                        style: { ...buildCellCss(r, c, cellStyle, mergeInfo, !cellContent), position: 'relative', cursor: 'pointer' },
                         isFormula: typeof cellContent === 'string' && cellContent.startsWith('=')
                     });
                 }
@@ -575,18 +656,48 @@ export default {
         });
 
         const gridStyle = computed(() => {
-            // We could define dynamic row heights/col widths here if we parse them
-            // For now, let's just use auto.
-            return {
+            const sheet = currentSheetData.value;
+            const base = {
                 display: 'grid',
-                // Use repeat(auto-fill, minmax(...)) or just a large grid
-                // Better to set specific row heights if available
                 gap: '0',
                 backgroundColor: '#f1f5f9',
                 transform: `scale(${zoomLevel.value})`,
                 transformOrigin: 'top left',
-                width: 'fit-content' // Ensure grid doesn't stretch weirdly when zoomed out
+                width: 'fit-content'
             };
+            if (!sheet) return base;
+
+            const { maxRow, maxCol, footerBaseRow } = sheetBounds.value;
+            const colWidthsMap = sheet.col_widths || {};
+            const rowHeightsMap = sheet.header_row_heights || {};
+            const footerRows = sheet.footer_rows || [];
+
+            // --- Column widths (Excel char units → px: width * 7.5) ---
+            const cols = [];
+            for (let c = 0; c <= maxCol; c++) {
+                const letter = colToLetter(c);
+                const w = colWidthsMap[letter];
+                cols.push(w ? Math.max(Math.round(w * 7.5), 20) + 'px' : '64px');
+            }
+            base.gridTemplateColumns = cols.join(' ');
+
+            // --- Row heights (Excel points → px: pt * 1.333) ---
+            const footerHeightLookup = {};
+            footerRows.forEach(rowDict => {
+                if (rowDict.height != null) {
+                    footerHeightLookup[footerBaseRow + (rowDict.relative_index ?? 0)] = rowDict.height;
+                }
+            });
+            const rows = [];
+            for (let r = 0; r <= maxRow; r++) {
+                const hdrH = rowHeightsMap[String(r + 1)];
+                const ftrH = footerHeightLookup[r];
+                const h = hdrH || ftrH;
+                rows.push(h ? Math.max(Math.round(h * 1.333), 14) + 'px' : '20px');
+            }
+            base.gridTemplateRows = rows.join(' ');
+
+            return base;
         });
 
         // Helper Time
