@@ -52,6 +52,12 @@ def generate_invoice(request: GenerateRequest):
         try:
             with open(json_path_obj, 'r', encoding='utf-8') as f:
                 full_data = json.load(f)
+        except json.JSONDecodeError as jde:
+             return JSONResponse(status_code=422, content={
+                 "error": f"The processed data file is corrupt or incomplete (truncated JSON). Please re-upload the source Excel file.",
+                 "step": "Load Parsed Data",
+                 "details": [f"File: {json_path_obj.name}", f"Parse error: {str(jde)}"]
+             })
         except Exception as e:
              return JSONResponse(status_code=500, content={"error": f"Failed to load JSON data: {str(e)}"})
 
@@ -118,8 +124,36 @@ def generate_invoice(request: GenerateRequest):
         
         # PERSIST changes to disk
         try:
-            with open(json_path_obj, 'w', encoding='utf-8') as f:
-                json.dump(full_data, f, indent=4)
+            import decimal
+            import datetime
+            import tempfile
+            import os
+            import shutil
+
+            def custom_serializer(obj):
+                if isinstance(obj, decimal.Decimal):
+                    return str(obj)
+                if isinstance(obj, (datetime.datetime, datetime.date)):
+                    return obj.isoformat()
+                if isinstance(obj, set):
+                    return list(obj)
+                raise TypeError(f"Type {type(obj)} not serializable")
+
+            # Atomic write to prevent truncation
+            temp_fd, temp_path = tempfile.mkstemp(
+                suffix='.json.tmp', dir=str(json_path_obj.parent)
+            )
+            try:
+                with os.fdopen(temp_fd, 'w', encoding='utf-8') as f:
+                    json.dump(full_data, f, indent=4, default=custom_serializer)
+                    f.flush()
+                    os.fsync(f.fileno())
+                
+                shutil.move(temp_path, str(json_path_obj))
+            except Exception:
+                if os.path.exists(temp_path):
+                    os.unlink(temp_path)
+                raise
         except Exception as e:
             logger.warning(f"Failed to persist updated JSON to {json_path_obj}: {e}")
         

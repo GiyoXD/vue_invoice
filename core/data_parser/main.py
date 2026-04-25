@@ -843,9 +843,38 @@ def run_invoice_automation(
 
             logging.info(f"Determined output JSON path: {output_json_path}")
             try:
-                with open(output_json_path, 'w', encoding='utf-8') as f_json:
-                     f_json.write(json_output_string)
-                logging.info(f"Successfully saved JSON output to '{output_json_path}'")
+                # --- Atomic Write: write to temp file, verify, then rename ---
+                # This prevents truncated/corrupt JSON from being visible to consumers.
+                import tempfile
+                temp_fd, temp_path = tempfile.mkstemp(
+                    suffix='.json.tmp', dir=str(output_json_path.parent)
+                )
+                try:
+                    with os.fdopen(temp_fd, 'w', encoding='utf-8') as f_json:
+                        f_json.write(json_output_string)
+                        f_json.flush()
+                        os.fsync(f_json.fileno())  # Force write to disk
+                    
+                    # Post-write integrity check: read back and parse to verify
+                    with open(temp_path, 'r', encoding='utf-8') as f_verify:
+                        json.load(f_verify)  # Will raise JSONDecodeError if truncated/corrupt
+                    
+                    # Verification passed — atomically replace the target file
+                    import shutil
+                    shutil.move(temp_path, str(output_json_path))
+                    logging.info(f"Successfully saved JSON output to '{output_json_path}' (verified)")
+                except Exception:
+                    # Clean up temp file on any failure
+                    if os.path.exists(temp_path):
+                        os.unlink(temp_path)
+                    raise
+            except json.JSONDecodeError as verify_err:
+                logging.error(f"CRITICAL: JSON integrity check failed after write — output would be truncated/corrupt: {verify_err}")
+                raise RuntimeError(
+                    f"JSON output verification failed: the generated data could not be re-parsed. "
+                    f"This usually means the data is too large or contains unserializable values. "
+                    f"Details: {verify_err}"
+                )
             except IOError as io_err:
                 logging.error(f"Failed to write JSON output to file '{output_json_path}': {io_err}")
                 raise io_err

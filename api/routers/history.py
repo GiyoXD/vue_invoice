@@ -93,6 +93,11 @@ async def view_history_item(filename: str, source: str = "run_log"):
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             return json.load(f)
+    except json.JSONDecodeError as jde:
+        return JSONResponse(status_code=422, content={
+            "error": f"Data file '{filename}' is corrupt or incomplete (truncated JSON). Please re-upload the source Excel file.",
+            "details": str(jde)
+        })
     except Exception as e:
         return JSONResponse(status_code=500, content={"error": f"Could not read file: {str(e)}"})
 
@@ -109,6 +114,12 @@ async def accept_invoice(req: HistoryRequest, db: Session = Depends(get_db)):
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
+    except json.JSONDecodeError as jde:
+        return JSONResponse(status_code=422, content={
+            "error": f"Cannot accept: data file '{req.filename}' is corrupt or incomplete. Please re-upload and re-process.",
+            "details": str(jde)
+        })
+    try:
         db.query(InvoiceItem).filter(InvoiceItem.invoice_id == req.filename).delete()
         
         items_to_add = []

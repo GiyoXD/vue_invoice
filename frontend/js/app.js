@@ -1,10 +1,10 @@
 import { createApp, ref } from 'vue';
-import GeneratorView from './views/Generator.js?v=4';
-import InspectorView from './views/Inspector.js?v=4';
-import TemplateExtractorView from './views/TemplateExtractor.js?v=4';
-import TemplateInspectorView from './views/TemplateInspector.js?v=4';
-import LogViewerView from './views/LogViewer.js?v=4';
-import ExportDataView from './views/ExportData.js?v=4';
+import GeneratorView from './views/Generator.js?v=5';
+import InspectorView from './views/Inspector.js?v=5';
+import TemplateExtractorView from './views/TemplateExtractor.js?v=5';
+import TemplateInspectorView from './views/TemplateInspector.js?v=5';
+import LogViewerView from './views/LogViewer.js?v=5';
+import ExportDataView from './views/ExportData.js?v=5';
 
 const App = {
     components: {
@@ -19,12 +19,12 @@ const App = {
         <div class="container fade-in">
             <!-- Navigation -->
             <div class="nav-bar">
-                <button class="nav-btn" :class="{ active: currentView === 'home' }" @click="currentView = 'home'">Generator</button>
-                <button class="nav-btn" :class="{ active: currentView === 'inspector' }" @click="currentView = 'inspector'">Data Inspector</button>
-                <button class="nav-btn" :class="{ active: currentView === 'export' }" @click="currentView = 'export'">Data Export</button>
-                <button class="nav-btn" :class="{ active: currentView === 'template_inspector' }" @click="currentView = 'template_inspector'">Inspect Template</button>
-                <button class="nav-btn" :class="{ active: currentView === 'extractor' }" @click="currentView = 'extractor'">New Template</button>
-                <button class="nav-btn" :class="{ active: currentView === 'logs' }" @click="currentView = 'logs'">Logs</button>
+                <button class="nav-btn" :class="{ active: currentView === 'home' }" @click="currentView = 'home'">⚡ Generator</button>
+                <button class="nav-btn" :class="{ active: currentView === 'inspector' }" @click="currentView = 'inspector'">🔍 Inspector</button>
+                <button class="nav-btn" :class="{ active: currentView === 'export' }" @click="currentView = 'export'">📦 Export</button>
+                <button class="nav-btn" :class="{ active: currentView === 'template_inspector' }" @click="currentView = 'template_inspector'">📐 Templates</button>
+                <button class="nav-btn" :class="{ active: currentView === 'extractor' }" @click="currentView = 'extractor'">✨ New Template</button>
+                <button class="nav-btn" :class="{ active: currentView === 'logs' }" @click="currentView = 'logs'">📋 Logs</button>
             </div>
 
             <!-- HOME VIEW: Generator -->

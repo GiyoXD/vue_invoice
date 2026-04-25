@@ -88,6 +88,7 @@ export default {
                                 <div style="color: #64748b; font-weight: 500;">HS Code:</div>
                                 <div style="color: #e2e8f0;">{{ currentTemplate.table_info.hs_code || 'None' }}</div>
                             </div>
+                        </div>
 
                         <!-- Sheet Selector -->
                         <div class="sheet-tabs" style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
