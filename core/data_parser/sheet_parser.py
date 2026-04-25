@@ -349,34 +349,30 @@ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[
 @loop_profiler.watch("find_all_header_rows")
 def find_all_header_rows(sheet, search_pattern, row_range, col_range, start_after_row: int = 0) -> List[int]:
     """
-    Finds all 1-indexed row numbers containing a header based on a pattern,
-    optionally starting the search after a specific row.
+    Finds all 1-indexed row numbers containing a header.
+    Utilizes the smart _process_row logic to prevent false positives from generic data matching.
     """
     found_rows: set[int] = set()
     try:
-        regex = re.compile(search_pattern, re.IGNORECASE)
         start_row = max(row_range[0], start_after_row + 1)
         max_row_to_search = min(row_range[1], sheet.max_row)
-        max_col_to_search = min(col_range[1], sheet.max_column)
 
         if start_row > max_row_to_search:
              return []
 
         logging.info(
-            f"[find_all_header_rows] Searching for additional headers using pattern '{search_pattern}' "
+            f"[find_all_header_rows] Searching for additional headers using smart row scoring "
             f"in rows {start_row}-{max_row_to_search}"
         )
 
         for r_idx in range(start_row, max_row_to_search + 1):
             tick("find_all_header_rows", sub="rows_scanned")
-            for c_idx in range(col_range[0], max_col_to_search + 1):
-                tick("find_all_header_rows", sub="cells_checked")
-                cell = sheet.cell(row=r_idx, column=c_idx)
-                if cell.value is not None:
-                    cell_value_str = str(cell.value).strip()
-                    if regex.search(cell_value_str):
-                        found_rows.add(r_idx)
-                        break
+            # Reuse the smart logic that checks for multiple mapped columns
+            potential_mapping, score = _process_row(sheet, r_idx)
+            
+            # If a row has at least 3 recognizable headers and a decent score, it's a header row
+            if len(potential_mapping) >= 3 and score >= 15:
+                found_rows.add(r_idx)
         
         if not found_rows:
             return []
