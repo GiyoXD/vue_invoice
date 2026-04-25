@@ -67,6 +67,15 @@ def upload_excel(file: UploadFile = File(...)):
             asset_status["config_path"] = str(assets.config_path)
             asset_status["template_path"] = str(assets.template_path)
             asset_status["message"] = "Ready to generate invoice."
+            
+            # Read pricing_mode from config for frontend
+            try:
+                with open(assets.config_path, 'r', encoding='utf-8') as cf:
+                    config_data = json.load(cf)
+                asset_status["pricing_mode"] = config_data.get("_meta", {}).get("pricing_mode", "standard")
+            except Exception as pm_err:
+                logger.warning(f"Could not read pricing_mode from config: {pm_err}")
+                asset_status["pricing_mode"] = "standard"
         else:
             prefix = identifier[:2] if len(identifier) >= 2 else identifier
             asset_status["message"] = (

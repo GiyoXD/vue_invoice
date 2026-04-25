@@ -76,6 +76,18 @@ export default {
                     </div>
                 </div>
 
+                <!-- PRICING MODE SELECTOR -->
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label>Pricing Mode</label>
+                    <select v-model="pricingMode" class="input-field" style="width: 280px;">
+                        <option value="standard">Standard (SQFT × Unit Price)</option>
+                        <option value="net">Net Weight (Global Price per kg)</option>
+                    </select>
+                    <p v-if="pricingMode === 'net'" style="color: #10b981; font-size: 0.8rem; margin-top: 0.25rem;">
+                        ⚖️ Generator will ask for a global unit price at invoice time.
+                    </p>
+                </div>
+
                 <div v-if="allMissingHeaders.length === 0" class="status-box success">
                     ✅ All headers recognized automatically!
                 </div>
@@ -273,6 +285,7 @@ export default {
         const proactiveWarnings = ref([]); // warnings from analysis
         const bundlePath = ref("");
         const generatedPrefixes = ref([]);
+        const pricingMode = ref('standard'); // 'standard' or 'net'
 
         const systemOptions = ref([]);
 
@@ -565,7 +578,8 @@ export default {
                                 user_mappings: finalMappings,
                                 temp_filename: fileTokens.value[i].filename,
                                 bundle_dir_name: baseName,
-                                confirmed_footers: confirmedFooters.value
+                                confirmed_footers: confirmedFooters.value,
+                                pricing_mode: pricingMode.value
                             })
                         });
                         const data = await res.json();
@@ -593,7 +607,8 @@ export default {
                             user_mappings: finalMappings,
                             temp_filename: fileTokens.value[0].filename,
                             bundle_dir_name: useBundleDir,
-                            confirmed_footers: confirmedFooters.value
+                            confirmed_footers: confirmedFooters.value,
+                            pricing_mode: pricingMode.value
                         })
                     });
                     const data = await res.json();
@@ -673,7 +688,8 @@ export default {
             newMappingKey,
             newMappingVal,
             addNewMapping,
-            proactiveWarnings
+            proactiveWarnings,
+            pricingMode
         };
     }
 };

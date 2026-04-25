@@ -28,6 +28,7 @@ class GenerateRequest(BaseModel):
     customer_code: str # e.g. "CLW"
     mappings: Dict[str, str] = {} # {"Unknown Header": "col_remark"}
     footer_mappings: List[str] = []
+    pricing_mode: str = "standard"  # 'standard' or 'net'
 
 class GenerateResult(BaseModel):
     status: str
@@ -137,7 +138,8 @@ async def generate_config(request: GenerateRequest):
             output_dir=sys_config.bundled_dir,
             custom_prefix=request.customer_code,
             # User mappings passed here!
-            runtime_mappings=request.mappings 
+            runtime_mappings=request.mappings,
+            pricing_mode=request.pricing_mode
         )
         
         return GenerateResult(

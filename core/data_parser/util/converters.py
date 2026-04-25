@@ -77,7 +77,7 @@ class DataConverter:
                 logging.warning(f"{prefix} Could not convert float '{value}' to Decimal {context}: {e}")
                 return None
         
-        value_str = str(value).strip()
+        value_str = str(value).strip().replace(',', '')
         if not value_str:
             return None
         try:

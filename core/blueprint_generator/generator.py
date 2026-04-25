@@ -88,7 +88,8 @@ class BlueprintGenerator:
                  dry_run: bool = False, monitor: Optional[PipelineMonitor] = None,
                  custom_prefix: Optional[str] = None,
                  runtime_mappings: Optional[Dict[str, str]] = None,
-                 bundle_dir_name: Optional[str] = None) -> Optional[Path]:
+                 bundle_dir_name: Optional[str] = None,
+                 pricing_mode: str = "standard") -> Optional[Path]:
         """
         Generate bundle config from template.
         
@@ -101,6 +102,7 @@ class BlueprintGenerator:
             runtime_mappings: Optional dict of {header_text: col_id} to override/add to global mappings
             bundle_dir_name: Optional folder name override. When set, output folder uses this name
                            instead of the prefix (e.g. folder='MOTO' but files='MOTO_KH_config.json')
+            pricing_mode: Pricing calculation mode. 'standard' (sqft × price) or 'net' (net_weight × global price)
             
         Returns:
             Path to generated config file, or None if dry_run
@@ -208,6 +210,10 @@ class BlueprintGenerator:
         # Update bundle metadata with effective prefix
         if custom_prefix and "_meta" in bundle:
             bundle["_meta"]["customer"] = custom_prefix
+        
+        # Write pricing_mode to _meta
+        if "_meta" in bundle:
+            bundle["_meta"]["pricing_mode"] = pricing_mode
 
         # Step 2b: Validate Config Structure
         self.logger.info("\n[Step 2b] Validating config structure...")

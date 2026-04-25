@@ -24,6 +24,9 @@ class GenerateRequest(BaseModel):
     generate_kh: bool = False
     generate_vn: bool = False
     price_adjustment: Optional[List[List[Any]]] = None
+    global_unit_price: Optional[float] = None  # For 'net' pricing mode (shipping lists)
+    pricing_net_weight: bool = False
+    auto_fit: bool = True
 
 @router.post("/generate")
 def generate_invoice(request: GenerateRequest):
@@ -65,6 +68,53 @@ def generate_invoice(request: GenerateRequest):
         price_adj = request.price_adjustment
         if price_adj:
             full_data = apply_aggregation_adjustment(full_data, price_adj)
+
+        # Net Weight Pricing Mode: inject computed columns if global_unit_price is provided
+        if request.global_unit_price is not None:
+            from core.data_parser.data_processor import inject_net_weight_pricing, aggregate_standard_by_po_item_price, aggregate_custom_by_po_item
+            from core.data_parser.main import perform_DAF_compounding
+            from core.data_parser.data_processor import format_aggregation_as_list
+            
+            # Inject pricing flag into metadata for downstream template generation
+            if "metadata" not in full_data:
+                full_data["metadata"] = {}
+            full_data["metadata"]["pricing_net_weight"] = True
+            
+            # 1. Inject prices into base raw data (this sets col_qty_sf and calculates amounts)
+            raw_multi = full_data.get("multi_table", [])
+            full_data["multi_table"] = inject_net_weight_pricing(raw_multi, request.global_unit_price)
+            
+            # Since pricing was added, we MUST recalculate all aggregations from scratch
+            # to ensure mathematical accuracy across Custom, Standard, and DAF modes.
+            from core.data_parser.data_processor import (
+                aggregate_standard_by_po_item_price, 
+                aggregate_custom_by_po_item,
+                format_aggregation_as_list,
+                aggregate_per_po_with_pallets
+            )
+            merged_data = []
+            tables = full_data.get("multi_table", [])
+            for t in tables:
+                if isinstance(t, list): merged_data.extend(t)
+            
+            std_map = {}
+            cust_map = {}
+            aggregate_standard_by_po_item_price(merged_data, std_map)
+            aggregate_custom_by_po_item(merged_data, cust_map)
+            
+            single = full_data.get("single_table", {})
+            single["aggregation"] = format_aggregation_as_list(std_map, mode='standard')
+            single["aggregation_custom"] = format_aggregation_as_list(cust_map, mode='custom')
+            
+            # Recalculate DAF Compounding based on the mode used originally
+            daf_mode = full_data.get("metadata", {}).get("DAF_compounding_input_mode", "standard")
+            daf_source = cust_map if daf_mode == "custom" else std_map
+            single["aggregation_DAF"] = perform_DAF_compounding(daf_source, daf_mode)
+            
+            single["manifest_by_pallet_per_po"] = aggregate_per_po_with_pallets(merged_data)
+            full_data["single_table"] = single
+            
+            logger.info(f"Net weight pricing: Recalculated all aggregations with unit_price={request.global_unit_price}")
         
         # PERSIST changes to disk
         try:
@@ -78,14 +128,14 @@ def generate_invoice(request: GenerateRequest):
         generated_files = []
         processed_any = False
 
-        # Define mode tasks
+        # Define mode tasks — typed arguments instead of CLI flag strings
         mode_tasks = []
         if request.generate_standard:
-            mode_tasks.append({"suffix": "", "flags": [], "name": "Standard Invoice"})
+            mode_tasks.append({"suffix": "", "daf_mode": False, "custom_mode": False, "name": "Standard Invoice"})
         if request.generate_custom:
-            mode_tasks.append({"suffix": "_Custom", "flags": ["--custom"], "name": "Custom Invoice"})
+            mode_tasks.append({"suffix": "_Custom", "daf_mode": False, "custom_mode": True, "name": "Custom Invoice"})
         if request.generate_daf:
-            mode_tasks.append({"suffix": "_DAF", "flags": ["--DAF"], "name": "DAF Invoice"})
+            mode_tasks.append({"suffix": "_DAF", "daf_mode": True, "custom_mode": False, "name": "DAF Invoice"})
 
         if not mode_tasks:
              return JSONResponse(status_code=400, content={"error": "No invoice type selected."})
@@ -120,19 +170,17 @@ def generate_invoice(request: GenerateRequest):
                     filename = f"{request.identifier}_Invoice{variant_suffix}{task['suffix']}.xlsx"
                     output_path = base_output_dir / filename
 
-                    flags = list(task['flags'])
-                    if variant.get("config_path"):
-                        flags.extend(["--config", str(variant["config_path"])])
-                    if variant.get("template_path"):
-                        flags.extend(["--template", str(variant["template_path"])])
-
                     result = orchestrator.generate_invoice(
                         json_path=json_path_obj,
                         output_path=output_path,
                         template_dir=template_dir,
                         config_dir=config_dir,
+                        daf_mode=task["daf_mode"],
+                        custom_mode=task["custom_mode"],
+                        enable_auto_fit=request.auto_fit,
+                        explicit_config_path=Path(variant["config_path"]) if variant.get("config_path") else None,
+                        explicit_template_path=Path(variant["template_path"]) if variant.get("template_path") else None,
                         input_data_dict=full_data,
-                        flags=flags,
                         return_bytes=True
                     )
                     

@@ -143,12 +143,14 @@ def perform_DAF_compounding(
         buffalo_descriptions = set()
         buffalo_sqft = decimal.Decimal(0)
         buffalo_amount = decimal.Decimal(0)
+        buffalo_net = decimal.Decimal(0)
         # Initialize accumulators for NON-BUFFALO group ("2")
         non_buffalo_pos = set()
         non_buffalo_items = set()
         non_buffalo_descriptions = set()
         non_buffalo_sqft = decimal.Decimal(0)
         non_buffalo_amount = decimal.Decimal(0)
+        non_buffalo_net = decimal.Decimal(0)
 
         logging.debug(f"{prefix} Processing {len(initial_results)} entries for BUFFALO split.")
         for key, sums_dict in initial_results.items():
@@ -178,6 +180,7 @@ def perform_DAF_compounding(
              # Use new col_ keys for sums
              sqft_sum = sums_dict.get('col_qty_sf', decimal.Decimal(0))
              amount_sum = sums_dict.get('col_amount', decimal.Decimal(0))
+             net_sum = sums_dict.get('net_sum', decimal.Decimal(0))
              
              # Fallback for legacy keys if not found (just in case)
              if sqft_sum == 0 and 'sqft_sum' in sums_dict: sqft_sum = sums_dict.get('sqft_sum', decimal.Decimal(0))
@@ -185,6 +188,7 @@ def perform_DAF_compounding(
 
              if not isinstance(sqft_sum, decimal.Decimal): sqft_sum = decimal.Decimal(0)
              if not isinstance(amount_sum, decimal.Decimal): amount_sum = decimal.Decimal(0)
+             if not isinstance(net_sum, decimal.Decimal): net_sum = decimal.Decimal(0)
 
              if is_buffalo:
                  buffalo_pos.add(po_str)
@@ -192,12 +196,14 @@ def perform_DAF_compounding(
                  buffalo_descriptions.add(desc_str)
                  buffalo_sqft += sqft_sum
                  buffalo_amount += amount_sum
+                 buffalo_net += net_sum
              else:
                  non_buffalo_pos.add(po_str)
                  non_buffalo_items.add(item_str)
                  if desc_str: non_buffalo_descriptions.add(desc_str)
                  non_buffalo_sqft += sqft_sum
                  non_buffalo_amount += amount_sum
+                 non_buffalo_net += net_sum
 
         logging.debug(f"{prefix} Finished processing entries for BUFFALO split.")
 
@@ -210,7 +216,8 @@ def perform_DAF_compounding(
             'col_item': format_chunks(sorted_buffalo_items, DAF_CHUNK_SIZE, DAF_INTRA_CHUNK_SEPARATOR, DAF_INTER_CHUNK_SEPARATOR),
             'col_desc': format_chunks(sorted_buffalo_descriptions, 1, "", "\n"),
             'col_qty_sf': buffalo_sqft,
-            'col_amount': buffalo_amount
+            'col_amount': buffalo_amount,
+            'col_net': buffalo_net
         }
         # Format NON-BUFFALO Group ("2")
         sorted_non_buffalo_pos = sorted(list(non_buffalo_pos))
@@ -221,7 +228,8 @@ def perform_DAF_compounding(
             'col_item': format_chunks(sorted_non_buffalo_items, DAF_CHUNK_SIZE, DAF_INTRA_CHUNK_SEPARATOR, DAF_INTER_CHUNK_SEPARATOR),
             'col_desc': format_chunks(sorted_non_buffalo_descriptions, 1, "", "\n"),
             'col_qty_sf': non_buffalo_sqft,
-            'col_amount': non_buffalo_amount
+            'col_amount': non_buffalo_amount,
+            'col_net': non_buffalo_net
         }
         # Construct Final Result LIST for BUFFALO Split Case
         final_buffalo_split_result: FinalDAFResultType = [
@@ -255,6 +263,7 @@ def perform_DAF_compounding(
              # Use new col_ keys
              sqft_sum = sums_dict.get('col_qty_sf', decimal.Decimal(0))
              amount_sum = sums_dict.get('col_amount', decimal.Decimal(0))
+             net_sum = sums_dict.get('net_sum', decimal.Decimal(0))
              
              # Fallback
              if sqft_sum == 0 and 'sqft_sum' in sums_dict: sqft_sum = sums_dict.get('sqft_sum', decimal.Decimal(0))
@@ -262,11 +271,13 @@ def perform_DAF_compounding(
 
              if not isinstance(sqft_sum, decimal.Decimal): sqft_sum = decimal.Decimal(0)
              if not isinstance(amount_sum, decimal.Decimal): amount_sum = decimal.Decimal(0)
+             if not isinstance(net_sum, decimal.Decimal): net_sum = decimal.Decimal(0)
 
              if po_str not in po_data_aggregation:
-                 po_data_aggregation[po_str] = {'sqft_total': decimal.Decimal(0), 'amount_total': decimal.Decimal(0), 'items': set()}
+                 po_data_aggregation[po_str] = {'sqft_total': decimal.Decimal(0), 'amount_total': decimal.Decimal(0), 'net_total': decimal.Decimal(0), 'items': set()}
              po_data_aggregation[po_str]['sqft_total'] += sqft_sum # type: ignore
              po_data_aggregation[po_str]['amount_total'] += amount_sum # type: ignore
+             po_data_aggregation[po_str]['net_total'] += net_sum # type: ignore
              po_data_aggregation[po_str]['items'].add(item_str) # type: ignore
 
         if not po_data_aggregation:
@@ -296,6 +307,7 @@ def perform_DAF_compounding(
             # Calculate totals and collect items for THIS conceptual chunk
             chunk_sqft_total = decimal.Decimal(0)
             chunk_amount_total = decimal.Decimal(0)
+            chunk_net_total = decimal.Decimal(0)
             chunk_items = set()
             po_list_for_formatting = [] # Collect POs in this chunk for formatting
 
@@ -304,6 +316,7 @@ def perform_DAF_compounding(
                 if po_agg_data:
                     chunk_sqft_total += po_agg_data.get('sqft_total', decimal.Decimal(0)) # type: ignore
                     chunk_amount_total += po_agg_data.get('amount_total', decimal.Decimal(0)) # type: ignore
+                    chunk_net_total += po_agg_data.get('net_total', decimal.Decimal(0)) # type: ignore
                     chunk_items.update(po_agg_data.get('items', set())) # type: ignore
                     po_list_for_formatting.append(po_str) # Add the PO itself to the list for formatting
                 else:
@@ -322,11 +335,12 @@ def perform_DAF_compounding(
                 'col_item': formatted_item_chunk,
                 'col_desc': '', # No descriptions in this path
                 'col_qty_sf': chunk_sqft_total,    # Use CHUNK total (calculated based on group of 8)
-                'col_amount': chunk_amount_total   # Use CHUNK total (calculated based on group of 8)
+                'col_amount': chunk_amount_total,   # Use CHUNK total (calculated based on group of 8)
+                'col_net': chunk_net_total
             }
             chunk_index_str = str(i + 1)
             final_po_count_split_result.append(chunk_result)
-            logging.debug(f"{prefix} Created output chunk {chunk_index_str}: {len(conceptual_po_chunk)} POs contributed totals, SQFT={chunk_sqft_total}, Amount={chunk_amount_total}")
+            logging.debug(f"{prefix} Created output chunk {chunk_index_str}: {len(conceptual_po_chunk)} POs contributed totals, SQFT={chunk_sqft_total}, Amount={chunk_amount_total}, Net={chunk_net_total}")
 
         logging.info(f"{prefix} PO count split DAF Compounding complete ({len(final_po_count_split_result)} chunks created).")
         return final_po_count_split_result
@@ -537,6 +551,10 @@ def run_invoice_automation(
                 validate_data(current_table_data, table_id_str, column_mapping, monitor=monitor, phase='presence')
                 
                 try:
+                    # 5a.0 Normalize pallet count format
+                    # Converts 'x-y' format (e.g. '1-39', '2-39') to simple 1/0 integers
+                    data_processor.normalize_pallet_count(current_table_data)
+                    
                     # 5a. CBM
                     data_after_cbm = data_processor.process_cbm_column(current_table_data)
                     

@@ -72,7 +72,8 @@ class TableDataAdapter:
         custom_mode: bool = False,
         table_key: Optional[str] = None,
         static_content: Optional[Dict[str, Any]] = None,
-        footer_data: Optional[Dict[str, Any]] = None
+        footer_data: Optional[Dict[str, Any]] = None,
+        pricing_net_weight: bool = False
     ):
         """
         Initialize the table data resolver.
@@ -88,6 +89,7 @@ class TableDataAdapter:
             table_key: Optional table key for multi-table data sources
             static_content: Static content from layout_bundle (e.g., col_static values)
             footer_data: Pre-calculated footer data from data parser (table_totals + grand_total)
+            pricing_net_weight: Whether Net Weight Pricing Mode is active
         """
         self.data_source_type = data_source_type
         self.data_source = data_source
@@ -98,6 +100,7 @@ class TableDataAdapter:
         self.table_key = table_key
         self.static_content = static_content or {}
         self.footer_data = footer_data or {}
+        self.pricing_net_weight = pricing_net_weight
         
         # Extract helper maps from header_info
         self.column_id_map = header_info.get('column_id_map', {})
@@ -138,7 +141,8 @@ class TableDataAdapter:
             static_value_map=parsed['static_value_map'],
             DAF_mode=self.DAF_mode,
             custom_mode=self.custom_mode,
-            parent_column_ids=self.parent_column_ids
+            parent_column_ids=self.parent_column_ids,
+            pricing_net_weight=self.pricing_net_weight
         )
         
         logger.debug(f"[DEBUG-RESOLVE] Parsed Rules: {parsed['dynamic_mapping_rules'].keys()}")
@@ -354,6 +358,15 @@ class TableDataAdapter:
         static_content = {}
         if layout_config:
             static_content = layout_config.get('static_content', {})
+            
+        # Determine pricing_net_weight from metadata
+        invoice_data = context_config.get('invoice_data') or {}
+        metadata = invoice_data.get('metadata')
+        
+        if metadata is None:
+            raise TableDataAdapterError("CRITICAL: Invoice 'metadata' is missing or null in the provided JSON data.")
+            
+        pricing_net_weight = metadata.get('pricing_net_weight', False)
         
         return TableDataAdapter(
             data_source_type=data_config.get('data_source_type', 'aggregation'),
@@ -364,7 +377,8 @@ class TableDataAdapter:
             custom_mode=custom_mode,
             table_key=data_config.get('table_key'),
             static_content=static_content,
-            footer_data=data_config.get('footer_data', {})
+            footer_data=data_config.get('footer_data', {}),
+            pricing_net_weight=pricing_net_weight
         )
 
 

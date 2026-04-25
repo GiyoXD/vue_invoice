@@ -21,6 +21,7 @@ class TemplateConfig(BaseModel):
     temp_filename: str
     bundle_dir_name: str = ""
     confirmed_footers: List[str] = []
+    pricing_mode: str = "standard"  # 'standard' or 'net'
 
 class CellOverrideRequest(BaseModel):
     template_name: str
@@ -61,7 +62,9 @@ def get_missing_headers(analysis_file_path: str):
                 if col_id.startswith("col_unknown"):
                     missing_headers.append({"text": header_text, "suggestion": get_header_suggestions(header_text)})
         return missing_headers
-    except: return []
+    except Exception:
+        logger.exception("Failed to read missing headers from %s", analysis_file_path)
+        return []
 
 def get_missing_footers(analysis_file_path: str):
     try:
@@ -72,7 +75,9 @@ def get_missing_footers(analysis_file_path: str):
             uf = sheet.get("unconfirmed_footer")
             if uf: missing_footers.append(uf)
         return list(set(missing_footers))
-    except: return []
+    except Exception:
+        logger.exception("Failed to read missing footers from %s", analysis_file_path)
+        return []
 
 def update_mapping_config(new_mappings: dict):
     try:
@@ -88,7 +93,9 @@ def update_mapping_config(new_mappings: dict):
             with open(mapping_path, 'w', encoding='utf-8') as f:
                 json.dump(mapping_data, f, indent=2, ensure_ascii=False)
         return True
-    except: return False
+    except Exception:
+        logger.exception("Failed to update mapping config")
+        return False
 
 def read_table_info_from_config(template_dir: Path) -> dict:
     result = {}
@@ -106,7 +113,8 @@ def read_table_info_from_config(template_dir: Path) -> dict:
             if bf.get("enabled") and bf.get("text"):
                 result["hs_code"] = bf["text"]
                 break
-    except: pass
+    except Exception:
+        logger.exception("Failed to read table info from config in %s", template_dir)
     return result
 
 # --- Routes ---
@@ -156,7 +164,8 @@ def generate_template(config: TemplateConfig):
             output_dir=sys_config.bundled_dir,
             custom_prefix=config.file_prefix,
             runtime_mappings=config.user_mappings,
-            bundle_dir_name=config.bundle_dir_name or None
+            bundle_dir_name=config.bundle_dir_name or None,
+            pricing_mode=config.pricing_mode
         )
         return {"status": "success", "bundle_path": str(result_path.parent)}
     except Exception as e: return JSONResponse(status_code=500, content={"error": str(e)})
@@ -180,7 +189,8 @@ async def list_templates():
                             "modified": datetime.datetime.fromtimestamp(stats.st_mtime).isoformat(),
                             "source_file": source
                         })
-                    except: pass
+                    except Exception:
+                        logger.exception("Failed to read template %s", t_json)
     return templates
 
 @router.get("/template/view")

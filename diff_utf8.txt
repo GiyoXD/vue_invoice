@@ -1,0 +1,1506 @@
+﻿diff --git a/core/blueprint_generator/generator.py b/core/blueprint_generator/generator.py
+index 0669159..db40e04 100644
+--- a/core/blueprint_generator/generator.py
++++ b/core/blueprint_generator/generator.py
+@@ -88,7 +88,8 @@ class BlueprintGenerator:
+                  dry_run: bool = False, monitor: Optional[PipelineMonitor] = None,
+                  custom_prefix: Optional[str] = None,
+                  runtime_mappings: Optional[Dict[str, str]] = None,
+-                 bundle_dir_name: Optional[str] = None) -> Optional[Path]:
++                 bundle_dir_name: Optional[str] = None,
++                 pricing_mode: str = "standard") -> Optional[Path]:
+         """
+         Generate bundle config from template.
+         
+@@ -101,6 +102,7 @@ class BlueprintGenerator:
+             runtime_mappings: Optional dict of {header_text: col_id} to override/add to global mappings
+             bundle_dir_name: Optional folder name override. When set, output folder uses this name
+                            instead of the prefix (e.g. folder='MOTO' but files='MOTO_KH_config.json')
++            pricing_mode: Pricing calculation mode. 'standard' (sqft 脳 price) or 'net' (net_weight 脳 global price)
+             
+         Returns:
+             Path to generated config file, or None if dry_run
+@@ -208,6 +210,10 @@ class BlueprintGenerator:
+         # Update bundle metadata with effective prefix
+         if custom_prefix and "_meta" in bundle:
+             bundle["_meta"]["customer"] = custom_prefix
++        
++        # Write pricing_mode to _meta
++        if "_meta" in bundle:
++            bundle["_meta"]["pricing_mode"] = pricing_mode
+ 
+         # Step 2b: Validate Config Structure
+         self.logger.info("\n[Step 2b] Validating config structure...")
+diff --git a/core/data_parser/config.py b/core/data_parser/config.py
+index f7bb837..156ad77 100644
+--- a/core/data_parser/config.py
++++ b/core/data_parser/config.py
+@@ -12,9 +12,10 @@ SHEET_NAME = "Invoice"
+ # Adjusted to a more realistic range to improve performance and avoid matching stray text.
+ HEADER_SEARCH_ROW_RANGE = (1, 50)
+ HEADER_SEARCH_COL_RANGE = (1, 30) # Increased range slightly, adjust if many columns
+-# A pattern (string or regex) to identify a cell within the header row
+-# This pattern helps find *any* header row, the mapping below specifies exact matches
+-HEADER_IDENTIFICATION_PATTERN = r"^(鎵规鍙穦璁㈠崟鍙穦鐗╂枡浠ｇ爜|鎬诲紶鏁皘鍑€閲峾姣涢噸|po|item|pcs|net|gross|TTX缂栧彿)$" # Broadened slightly
++# A pattern (string or regex) to identify a cell within the header row.
++# Built dynamically from col_po keywords in TARGET_HEADERS_MAP after loading.
++# PO column is the universal anchor 鈥?every table header has it.
++HEADER_IDENTIFICATION_PATTERN = r"(po)"  # Fallback; rebuilt by load_and_update_mappings()
+ 
+ 
+ EXPECTED_HEADER_DATA_TYPES = {
+@@ -53,50 +54,10 @@ EXPECTED_HEADER_DATA_TYPES = {
+ }
+ 
+ # --- Column Mapping Configuration ---
+-# Canonical Name -> List containing header variations (case-insensitive match)
+-TARGET_HEADERS_MAP = {
+-    # priority first
+-    "col_production_order_no": ["production order number", "鐢熶骇鍗曞彿", "po", "鍏ュ簱鍗曞彿", "PO", "PO NO.", "璁㈠崟鍙?, "TTX缂栧彿"], # Primary English: 'production order number', Primary Chinese: '鐢熶骇鍗曞彿'
+-    "col_unit_price": ["unit price", "鍗曚环", "price", "USD", "usd", "鍗曚环USD", "浠锋牸", "鍗曚环 USD"],          # Primary English: 'unit price', Primary Chinese: '鍗曚环'
+-    # --- Core Logic Canonical Names ---
+-    "col_po": ["PO NO.", "po", "PO", "Po", "璁㈠崟鍙?, "order number", "order no", "Po Nb", "灏烘暟", "PO NB", "Po Nb", "瀹㈡埛璁㈠崟鍙?, "璁㈠崟鍙?, "P.O N潞", "P.O NO", "PO N潞"],                 # Primary English: 'po', Primary Chinese: '璁㈠崟鍙?
+-    "col_item": ["鐗╂枡浠ｇ爜","item no", "ITEM NO.",  'item', "Item No", "ITEM NO", "Item No", "瀹㈡埛鍝佸悕", "鐗╂枡缂栫爜", "浜у搧缂栧彿", "ITEM N潞", "Item N潞"],        # Primary English: 'item no', Primary Chinese: '鐗╂枡浠ｇ爜'
+-    "col_qty_pcs": ["pcs", "鎬诲紶鏁?, "寮犳暟", "PCS"],                # Primary English: 'pcs', Primary Chinese: '鎬诲紶鏁?
+-    "col_net": ["NW", "net weight", "鍑€閲峩g", "鍑€閲?, "net", "鍑€閲岾G", "N.W (kgs)", "N.W", "Net Weight"],          # Primary English: 'net weight', Primary Chinese: '鍑€閲?
+-    "col_gross": ["GW", "gross weight", "姣涢噸", "gross", "Gross", "gross weight", "Gross Weight", "姣涢噸閲廗G", "閲嶉噺KG", "閲嶉噺", "姣涢噸", "姣涢噸KG", "G.W(kgs)", "G.W", "Gross Weight"],       # Primary English: 'gross weight', Primary Chinese: '姣涢噸'
+-    "col_qty_sf": ["sqft", "鍑鸿揣鏁伴噺 (sf)", "灏烘暟", "SF", "鍑鸿揣鏁伴噺(sf)", "鍑鸿揣鏁伴噺(SF)", "鍑鸿揣鏁伴噺 SF", "灏虹爜", "鍑鸿揣鏁伴噺锛圫F锛?, "Quantity", "Qty"],      # Primary English: 'sqft', Primary Chinese: '鍑鸿揣鏁伴噺 (sf)' (Assuming this specific text)
+-    "col_amount": ["閲戦 USD","閲戦USD", "閲戦", "USD","amount", "鎬讳环", "usd", "Amount", "Total Amount", "total", "total amount"],            # Primary English: 'amount', Primary Chinese: '閲戦' # Ensure this is present and mapped
+-    "col_hs_code": ["hs code", "h.s. code", "commodity code", "h.s.code", "hs_code", "hs-code", "绋庡彿", "娴峰叧缂栫爜"],
+-
+-    # --- Less Certain Canonical Names ---
+-    "col_date_recipt": ["鍏ュ簱鏃堕棿", "鍏ュ簱鏃ユ湡", "date receipt", "Date Receipt", "date receipt", "Date Receipt", "date receipt"],
+-    "col_cbm": ["cbm", "鏉愮Н", "CBM"],          # Primary English: 'cbm', Primary Chinese: '鏉愮Н'
+-    "col_desc": ["description","浜у搧鍚嶇О", "鍝佸悕瑙勬牸", "鎻忚堪", "desc", "DESCRIPTION"],      # Primary English: 'description', Primary Chinese: '鍝佸悕瑙勬牸'
+-    "col_inv_no": ["invoice no", "鍙戠エ鍙风爜", "INV NO", "INV NO", "inv no", "INV NO", "inv no", "INVOICE NO"],    # Primary English: 'invoice no', Primary Chinese: '鍙戠エ鍙风爜'
+-    "col_inv_date": ["invoice date", "鍙戠エ鏃ユ湡", "INV DATE", "INV DATE", "inv date", "INV DATE", "inv date", "INVOICE DATE", "invoice date"], # Primary English: 'invoice date', Primary Chinese: '鍙戠エ鏃ユ湡'
+-    "col_inv_ref": ["ref", "invoice ref", "ref no", "REF NO", "REF NO", "ref no", "inv ref", "INV REF", "INVOICE REF"],
+-
+-    "col_remarks": ["remarks", "澶囨敞", "Remark", 'remark', '浣?, "REMARKS", "REMARK"],          # Primary English: 'remarks', Primary Chinese: '澶囨敞'
+-    # --- Other Found Headers ---
+-    "col_no": ["no.", "NO", "No.", "NO.", "no"],
+-    "col_static": ["mark & n潞", "mark & n掳", "mark & note", "MARK & NOTE", "Mark & Note"],
+-    "col_sqm": ["sqm", "m2", "M2", "square meter", "骞虫柟绫?, "sqm锛圡虏锛?],
+-    "col_qty_header": ["Quantity (SF)", "Quantity(SF)", "Quantity(SF)\nS峄?l瓢峄g(SF)"],
+-    "col_container_no": ["container no", "闆嗚绠卞彿", "Container No", "CONTAINER NO", "container no", "CONTAINER NO", "container no", "CONTAINER NO", "container"],
+-    "col_unit_sf": ["unit/sf", "unit sf", "unit(sf)", "UNIT/SF", "Unit/SF"],
+-    "col_dc": ["鎵规鍙?, "DC", "dc"],
+-    "col_batch_no": ["batch number", "鎵规鍙?],  # Primary English: 'batch number', Primary Chinese: '鎵规鍙?
+-    "col_line_no": ["line no", "琛屽彿"],           # Primary English: 'line no', Primary Chinese: '琛屽彿'
+-    "col_direction": ["direction", "鍐呭悜"],      # Primary English: 'direction', Primary Chinese: '鍐呭悜' (Meaning still unclear)
+-    "col_production_date": ["production date", "鐢熶骇鏃ユ湡"], # Primary English: 'production date', Primary Chinese: '鐢熶骇鏃ユ湡'
+-    "col_reference_code": ["reference code", "ttx缂栧彿", "鐢熶骇鍚嶇О"], # Primary English: 'reference code', Primary Chinese: 'ttx缂栧彿' (Verify 'ttx缂栧彿')
+-    "col_level": ["grade", "绛夌骇"],              # Primary English: 'grade', Primary Chinese: '绛夌骇'
+-    "col_pallet_count": ["pallet count", "鎷栨暟", "PALLET", "浠舵暟", "PALLET COUNT", "pallet count", "鎵樻暟"],# Primary English: 'pallet count', Primary Chinese: '鎷栨暟'
+-    "col_manual_no": ["manual number", "鎵嬪唽鍙?], # Primary English: 'manual number', Primary Chinese: '鎵嬪唽鍙?
+-    # 'amount' is already defined above
+-
+-    # Add any other essential headers here following the variations list format
+-}
++# TARGET_HEADERS_MAP is populated at import time by load_and_update_mappings()
++# which reads from mapping_config.json (the single source of truth).
++# Editable via the TemplateExtractor UI 鈫?"Manage Global Mappings".
++TARGET_HEADERS_MAP = {}
+ 
+ # --- Header Validation Configuration ---
+ EXPECTED_HEADER_PATTERNS = {
+@@ -125,6 +86,11 @@ HEADERLESS_COLUMN_PATTERNS = {
+     'col_cbm': [
+         r'^\d+(\.\d+)?\*\d+(\.\d+)?\*\d+(\.\d+)?$',
+     ],
++    # TTX PO strong data pattern. Even if the header is generic (like "PO"), 
++    # matching this data pattern will override it and map to col_production_order_no
++    'col_production_order_no': [
++        r'^(25|26|27)\d{5}-\d{2}$',
++    ],
+ 
+ 
+     # You can add other rules here in the future, for example:
+@@ -201,6 +167,26 @@ def load_and_update_mappings():
+                 else:
+                     TARGET_HEADERS_MAP[col_id] = [keyword]
+ 
++        # --- Rebuild HEADER_IDENTIFICATION_PATTERN from core anchor keywords ---
++        # We combine keywords from multiple essential columns to guarantee we catch any header row.
++        global HEADER_IDENTIFICATION_PATTERN
++        anchor_cols = ['col_po', 'col_net', 'col_gross', 'col_pallet_count', 'col_qty_pcs', 'col_qty_sf', 'col_item']
++        all_keywords = []
++        
++        for col in anchor_cols:
++            all_keywords.extend(TARGET_HEADERS_MAP.get(col, []))
++            
++        # Remove duplicates, escape regex special chars, and build pattern
++        import re as _re
++        unique_keywords = list(set(all_keywords))
++        # Filter out empty strings just in case
++        unique_keywords = [kw for kw in unique_keywords if kw.strip()]
++        escaped = [_re.escape(kw) for kw in unique_keywords]
++        
++        # If we found keywords, build the pattern; otherwise fallback
++        if escaped:
++            HEADER_IDENTIFICATION_PATTERN = r"(" + "|".join(escaped) + r")"
++        
+     except json.JSONDecodeError:
+         print("Warning: Could not decode mapping_config.json. Check for syntax errors. Using default TARGET_HEADERS_MAP.")
+     except Exception as e:
+diff --git a/core/data_parser/data_processor.py b/core/data_parser/data_processor.py
+index 4f632b5..2430d89 100644
+--- a/core/data_parser/data_processor.py
++++ b/core/data_parser/data_processor.py
+@@ -110,6 +110,148 @@ def _calculate_single_cbm(cbm_value: Any, row_index: int) -> Optional[decimal.De
+         logging.error(f"{prefix} Unexpected error calculating CBM from '{cbm_str}': {e}. {log_context}", exc_info=True)
+         return None
+ 
++
++def inject_net_weight_pricing(tables: List[List[Dict[str, Any]]], global_unit_price: float) -> List[List[Dict[str, Any]]]:
++    """
++    For 'net' pricing mode: injects col_unit_price, col_amount, and col_qty_sf
++    from col_net and the user-provided global unit price.
++    
++    This allows shipping lists that only have Net Weight (no sqft/price/amount)
++    to flow through the standard aggregation and invoice generation pipeline.
++    
++    Args:
++        tables: List of tables, each a list of row dicts (the 'multi_table' structure).
++        global_unit_price: The user-provided unit price (USD per kg).
++    
++    Returns:
++        The same tables with injected columns.
++    """
++    prefix = "[inject_net_weight_pricing]"
++    price = decimal.Decimal(str(global_unit_price))
++    injected_count = 0
++
++    for table in tables:
++        if not isinstance(table, list):
++            continue
++        for row in table:
++            if not isinstance(row, dict):
++                continue
++            net_val = row.get('col_net')
++            if net_val is not None:
++                net_dec = _convert_to_decimal(net_val)
++                if net_dec is not None and net_dec > 0:
++                    row['col_unit_price'] = float(price)
++                    row['col_amount'] = float((net_dec * price).quantize(
++                        decimal.Decimal('0.01'), rounding=decimal.ROUND_HALF_UP
++                    ))
++                    # Use net weight as quantity basis if sqft is missing
++                    if row.get('col_qty_sf') is None:
++                        row['col_qty_sf'] = float(net_dec)
++                    injected_count += 1
++
++
++    logging.info(f"{prefix} Injected unit_price={price} into {injected_count} rows across {len(tables)} tables.")
++    return tables
++
++
++def inject_flat_net_weight_pricing(rows: List[Dict[str, Any]], global_unit_price: float) -> List[Dict[str, Any]]:
++    """
++    Applies net weight pricing to a flat list of dicts (like aggregated results).
++    Re-calculates col_amount and col_qty_sf based on col_net sum.
++    """
++    import decimal
++    price = decimal.Decimal(str(global_unit_price))
++    for row in rows:
++        if not isinstance(row, dict): continue
++        net_val = row.get('col_net')
++        if net_val is not None:
++            net_dec = _convert_to_decimal(net_val)
++            if net_dec is not None and net_dec > 0:
++                row['col_unit_price'] = float(price)
++                row['col_amount'] = float((net_dec * price).quantize(
++                    decimal.Decimal('0.01'), rounding=decimal.ROUND_HALF_UP
++                ))
++                # For aggregated output from main.py, missing sf might be 0 or "0"
++                if row.get('col_qty_sf') is None or row.get('col_qty_sf') in [0, "0", 0.0, "0.0"]:
++                    row['col_qty_sf'] = float(net_dec)
++    return rows
++
++
++def normalize_pallet_count(table_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
++    """
++    Normalizes pallet count values from 'x-y' format (e.g. '1-39', '2-39')
++    into simple integers (1 or 0).
++    
++    Logic:
++    - Parse 'x-y' to extract pallet number x.
++    - First occurrence of a new x 鈫?1 (new pallet)
++    - Subsequent consecutive rows with same x 鈫?0 (continuation row)
++    - Values that are already plain integers are left as-is.
++    
++    Args:
++        table_data: List of row dicts from a single extracted table.
++    
++    Returns:
++        The same list with col_pallet_count normalized in-place.
++    """
++    prefix = "[normalize_pallet_count]"
++    pallet_key = 'col_pallet_count'
++    
++    if not table_data:
++        return table_data
++    
++    # Check if any value is in 'x-y' format
++    sample_val = None
++    for row in table_data:
++        v = row.get(pallet_key)
++        if v is not None and str(v).strip():
++            sample_val = str(v).strip()
++            break
++    
++    if sample_val is None:
++        return table_data
++    
++    # Only activate if the format is 'x-y' (contains a dash with digits on both sides)
++    import re
++    if not re.match(r'^\d+-\d+$', sample_val):
++        logging.debug(f"{prefix} Pallet values are not in 'x-y' format (sample: '{sample_val}'). Skipping.")
++        return table_data
++    
++    logging.info(f"{prefix} Detected 'x-y' pallet format (sample: '{sample_val}'). Normalizing...")
++    
++    last_pallet_num = None
++    normalized_count = 0
++    
++    for row in table_data:
++        raw_val = row.get(pallet_key)
++        if raw_val is None or not str(raw_val).strip():
++            row[pallet_key] = 0
++            continue
++        
++        raw_str = str(raw_val).strip()
++        match = re.match(r'^(\d+)-(\d+)$', raw_str)
++        
++        if match:
++            pallet_num = int(match.group(1))
++            
++            if pallet_num != last_pallet_num:
++                # New pallet
++                row[pallet_key] = 1
++                last_pallet_num = pallet_num
++                normalized_count += 1
++            else:
++                # Continuation row (same pallet)
++                row[pallet_key] = 0
++        else:
++            # Not x-y format, try plain int conversion
++            try:
++                row[pallet_key] = int(float(raw_str))
++            except (ValueError, TypeError):
++                row[pallet_key] = 0
++    
++    logging.info(f"{prefix} Normalized {len(table_data)} rows 鈫?{normalized_count} unique pallets detected.")
++    return table_data
++
+ # process_cbm_column function remains unchanged...
+ def process_cbm_column(raw_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+     """
+@@ -609,15 +751,20 @@ def aggregate_standard_by_po_item_price(
+ 
+         # logging.debug(f"{log_row_context}: Converted values - SQFT='{sqft_dec}', Amount='{amount_dec}'") # Reduced verbosity
+ 
+-        # --- Add to the global aggregate sums (SQFT & Amount) ---
+-        current_sums = aggregated_results.get(key, {'sqft_sum': decimal.Decimal(0), 'amount_sum': decimal.Decimal(0)})
+-
+-        # logging.debug(f"{log_row_context}: Sums for key {key} BEFORE add = {current_sums}") # Reduced verbosity
++        # --- Add to the global aggregate sums (SQFT, Amount, Net) ---
++        current_sums = aggregated_results.get(key, {'sqft_sum': decimal.Decimal(0), 'amount_sum': decimal.Decimal(0), 'net_sum': decimal.Decimal(0)})
+ 
+         # Update the sums
+         current_sums['sqft_sum'] += sqft_dec
+         current_sums['amount_sum'] += amount_dec
+         
++        # Aggregate Net Weight if present
++        net_val = row.get('col_net')
++        if net_val is not None:
++            net_dec = _convert_to_decimal(net_val, f"{log_row_context} Net")
++            if net_dec is not None:
++                current_sums['net_sum'] += net_dec
++        
+         # Track col_cbm_raw specifically
+         raw_cbm_val = row.get('col_cbm_raw')
+         if raw_cbm_val:
+@@ -726,13 +873,20 @@ def aggregate_custom_by_po_item(
+         else:
+             successful_conversions_amount +=1
+ 
+-        # --- Add to the global aggregate sums (SQFT & Amount) ---
+-        current_sums = aggregated_results.get(key, {'sqft_sum': decimal.Decimal(0), 'amount_sum': decimal.Decimal(0)})
++        # --- Add to the global aggregate sums ---
++        current_sums = aggregated_results.get(key, {'sqft_sum': decimal.Decimal(0), 'amount_sum': decimal.Decimal(0), 'net_sum': decimal.Decimal(0)})
+ 
+         # Update the sums
+         current_sums['sqft_sum'] += sqft_dec
+         current_sums['amount_sum'] += amount_dec
+         
++        # Aggregate Net Weight if present
++        net_val = row.get('col_net')
++        if net_val is not None:
++            net_dec = _convert_to_decimal(net_val, f"{log_row_context} Net")
++            if net_dec is not None:
++                current_sums['net_sum'] += net_dec
++        
+         # Track col_cbm_raw specifically
+         raw_cbm_val = row.get('col_cbm_raw')
+         if raw_cbm_val:
+@@ -1097,14 +1251,18 @@ def format_aggregation_as_list(
+                 row_dict['col_po'] = str(key_tuple[0]) if len(key_tuple) > 0 else ""
+                 row_dict['col_item'] = str(key_tuple[1]) if len(key_tuple) > 1 else ""
+ 
+-        # Extract summed values (already using col_ keys internally, but safe get)
+-        # Handle both new col_ keys and potential legacy keys if any remain
+-        row_dict['col_qty_sf'] = values.get('col_qty_sf', values.get('sqft_sum', decimal.Decimal(0)))
+-        row_dict['col_amount'] = values.get('col_amount', values.get('amount_sum', decimal.Decimal(0)))
++        # Extract aggregated values
++        sqft_sum = values.get('sqft_sum', decimal.Decimal(0))
++        amount_sum = values.get('amount_sum', decimal.Decimal(0))
++        net_sum = values.get('net_sum', decimal.Decimal(0))
++        
++        row_dict['col_qty_sf'] = float(sqft_sum) if isinstance(sqft_sum, decimal.Decimal) else sqft_sum
++        row_dict['col_amount'] = float(amount_sum) if isinstance(amount_sum, decimal.Decimal) else amount_sum
++        row_dict['col_net'] = float(net_sum) if isinstance(net_sum, decimal.Decimal) else net_sum
+         
+         if 'col_cbm_raw' in values:
+             row_dict['col_cbm_raw'] = values['col_cbm_raw']
+-        
++            
+         flattened_list.append(row_dict)
+         
+     return flattened_list
+\ No newline at end of file
+diff --git a/core/data_parser/main.py b/core/data_parser/main.py
+index 17ac006..e4f3492 100644
+--- a/core/data_parser/main.py
++++ b/core/data_parser/main.py
+@@ -143,12 +143,14 @@ def perform_DAF_compounding(
+         buffalo_descriptions = set()
+         buffalo_sqft = decimal.Decimal(0)
+         buffalo_amount = decimal.Decimal(0)
++        buffalo_net = decimal.Decimal(0)
+         # Initialize accumulators for NON-BUFFALO group ("2")
+         non_buffalo_pos = set()
+         non_buffalo_items = set()
+         non_buffalo_descriptions = set()
+         non_buffalo_sqft = decimal.Decimal(0)
+         non_buffalo_amount = decimal.Decimal(0)
++        non_buffalo_net = decimal.Decimal(0)
+ 
+         logging.debug(f"{prefix} Processing {len(initial_results)} entries for BUFFALO split.")
+         for key, sums_dict in initial_results.items():
+@@ -178,6 +180,7 @@ def perform_DAF_compounding(
+              # Use new col_ keys for sums
+              sqft_sum = sums_dict.get('col_qty_sf', decimal.Decimal(0))
+              amount_sum = sums_dict.get('col_amount', decimal.Decimal(0))
++             net_sum = sums_dict.get('net_sum', decimal.Decimal(0))
+              
+              # Fallback for legacy keys if not found (just in case)
+              if sqft_sum == 0 and 'sqft_sum' in sums_dict: sqft_sum = sums_dict.get('sqft_sum', decimal.Decimal(0))
+@@ -185,6 +188,7 @@ def perform_DAF_compounding(
+ 
+              if not isinstance(sqft_sum, decimal.Decimal): sqft_sum = decimal.Decimal(0)
+              if not isinstance(amount_sum, decimal.Decimal): amount_sum = decimal.Decimal(0)
++             if not isinstance(net_sum, decimal.Decimal): net_sum = decimal.Decimal(0)
+ 
+              if is_buffalo:
+                  buffalo_pos.add(po_str)
+@@ -192,12 +196,14 @@ def perform_DAF_compounding(
+                  buffalo_descriptions.add(desc_str)
+                  buffalo_sqft += sqft_sum
+                  buffalo_amount += amount_sum
++                 buffalo_net += net_sum
+              else:
+                  non_buffalo_pos.add(po_str)
+                  non_buffalo_items.add(item_str)
+                  if desc_str: non_buffalo_descriptions.add(desc_str)
+                  non_buffalo_sqft += sqft_sum
+                  non_buffalo_amount += amount_sum
++                 non_buffalo_net += net_sum
+ 
+         logging.debug(f"{prefix} Finished processing entries for BUFFALO split.")
+ 
+@@ -210,7 +216,8 @@ def perform_DAF_compounding(
+             'col_item': format_chunks(sorted_buffalo_items, DAF_CHUNK_SIZE, DAF_INTRA_CHUNK_SEPARATOR, DAF_INTER_CHUNK_SEPARATOR),
+             'col_desc': format_chunks(sorted_buffalo_descriptions, 1, "", "\n"),
+             'col_qty_sf': buffalo_sqft,
+-            'col_amount': buffalo_amount
++            'col_amount': buffalo_amount,
++            'col_net': buffalo_net
+         }
+         # Format NON-BUFFALO Group ("2")
+         sorted_non_buffalo_pos = sorted(list(non_buffalo_pos))
+@@ -221,7 +228,8 @@ def perform_DAF_compounding(
+             'col_item': format_chunks(sorted_non_buffalo_items, DAF_CHUNK_SIZE, DAF_INTRA_CHUNK_SEPARATOR, DAF_INTER_CHUNK_SEPARATOR),
+             'col_desc': format_chunks(sorted_non_buffalo_descriptions, 1, "", "\n"),
+             'col_qty_sf': non_buffalo_sqft,
+-            'col_amount': non_buffalo_amount
++            'col_amount': non_buffalo_amount,
++            'col_net': non_buffalo_net
+         }
+         # Construct Final Result LIST for BUFFALO Split Case
+         final_buffalo_split_result: FinalDAFResultType = [
+@@ -255,6 +263,7 @@ def perform_DAF_compounding(
+              # Use new col_ keys
+              sqft_sum = sums_dict.get('col_qty_sf', decimal.Decimal(0))
+              amount_sum = sums_dict.get('col_amount', decimal.Decimal(0))
++             net_sum = sums_dict.get('net_sum', decimal.Decimal(0))
+              
+              # Fallback
+              if sqft_sum == 0 and 'sqft_sum' in sums_dict: sqft_sum = sums_dict.get('sqft_sum', decimal.Decimal(0))
+@@ -262,11 +271,13 @@ def perform_DAF_compounding(
+ 
+              if not isinstance(sqft_sum, decimal.Decimal): sqft_sum = decimal.Decimal(0)
+              if not isinstance(amount_sum, decimal.Decimal): amount_sum = decimal.Decimal(0)
++             if not isinstance(net_sum, decimal.Decimal): net_sum = decimal.Decimal(0)
+ 
+              if po_str not in po_data_aggregation:
+-                 po_data_aggregation[po_str] = {'sqft_total': decimal.Decimal(0), 'amount_total': decimal.Decimal(0), 'items': set()}
++                 po_data_aggregation[po_str] = {'sqft_total': decimal.Decimal(0), 'amount_total': decimal.Decimal(0), 'net_total': decimal.Decimal(0), 'items': set()}
+              po_data_aggregation[po_str]['sqft_total'] += sqft_sum # type: ignore
+              po_data_aggregation[po_str]['amount_total'] += amount_sum # type: ignore
++             po_data_aggregation[po_str]['net_total'] += net_sum # type: ignore
+              po_data_aggregation[po_str]['items'].add(item_str) # type: ignore
+ 
+         if not po_data_aggregation:
+@@ -296,6 +307,7 @@ def perform_DAF_compounding(
+             # Calculate totals and collect items for THIS conceptual chunk
+             chunk_sqft_total = decimal.Decimal(0)
+             chunk_amount_total = decimal.Decimal(0)
++            chunk_net_total = decimal.Decimal(0)
+             chunk_items = set()
+             po_list_for_formatting = [] # Collect POs in this chunk for formatting
+ 
+@@ -304,6 +316,7 @@ def perform_DAF_compounding(
+                 if po_agg_data:
+                     chunk_sqft_total += po_agg_data.get('sqft_total', decimal.Decimal(0)) # type: ignore
+                     chunk_amount_total += po_agg_data.get('amount_total', decimal.Decimal(0)) # type: ignore
++                    chunk_net_total += po_agg_data.get('net_total', decimal.Decimal(0)) # type: ignore
+                     chunk_items.update(po_agg_data.get('items', set())) # type: ignore
+                     po_list_for_formatting.append(po_str) # Add the PO itself to the list for formatting
+                 else:
+@@ -322,11 +335,12 @@ def perform_DAF_compounding(
+                 'col_item': formatted_item_chunk,
+                 'col_desc': '', # No descriptions in this path
+                 'col_qty_sf': chunk_sqft_total,    # Use CHUNK total (calculated based on group of 8)
+-                'col_amount': chunk_amount_total   # Use CHUNK total (calculated based on group of 8)
++                'col_amount': chunk_amount_total,   # Use CHUNK total (calculated based on group of 8)
++                'col_net': chunk_net_total
+             }
+             chunk_index_str = str(i + 1)
+             final_po_count_split_result.append(chunk_result)
+-            logging.debug(f"{prefix} Created output chunk {chunk_index_str}: {len(conceptual_po_chunk)} POs contributed totals, SQFT={chunk_sqft_total}, Amount={chunk_amount_total}")
++            logging.debug(f"{prefix} Created output chunk {chunk_index_str}: {len(conceptual_po_chunk)} POs contributed totals, SQFT={chunk_sqft_total}, Amount={chunk_amount_total}, Net={chunk_net_total}")
+ 
+         logging.info(f"{prefix} PO count split DAF Compounding complete ({len(final_po_count_split_result)} chunks created).")
+         return final_po_count_split_result
+@@ -537,6 +551,10 @@ def run_invoice_automation(
+                 validate_data(current_table_data, table_id_str, column_mapping, monitor=monitor, phase='presence')
+                 
+                 try:
++                    # 5a.0 Normalize pallet count format
++                    # Converts 'x-y' format (e.g. '1-39', '2-39') to simple 1/0 integers
++                    data_processor.normalize_pallet_count(current_table_data)
++                    
+                     # 5a. CBM
+                     data_after_cbm = data_processor.process_cbm_column(current_table_data)
+                     
+diff --git a/core/data_parser/second_layer_main.py b/core/data_parser/second_layer_main.py
+deleted file mode 100644
+index 17d61b0..0000000
+--- a/core/data_parser/second_layer_main.py
++++ /dev/null
+@@ -1,220 +0,0 @@
+-import logging
+-import json
+-import argparse
+-from decimal import Decimal, InvalidOperation
+-from pathlib import Path
+-import sys
+-import os
+-
+-# Add the parent directory to the Python path so we can import modules from the root
+-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+-
+-from .excel_handler import ExcelHandler
+-from . import sheet_parser
+-from .config import SHEET_NAME, STOP_EXTRACTION_ON_EMPTY_COLUMN
+-from .util.converters import DataConverter
+-
+-# Use centralized logger - no basicConfig here
+-logger = logging.getLogger(__name__)
+-
+-def extract_all_tables(sheet):
+-    """
+-    Extracts all data tables from a given sheet, assuming a single header
+-    and multiple data blocks separated by empty rows.
+-    """
+-    # First, find the single header for the entire sheet.
+-    sheet_parser.HEADER_SEARCH_ROW_RANGE = (1, sheet.max_row)
+-    header_info = sheet_parser.find_and_map_smart_headers(sheet)
+-    
+-    if not header_info:
+-        logging.error("Could not find a valid header row in the sheet.")
+-        return {}
+-
+-    header_row, column_mapping = header_info
+-    logging.info(f"Found header at row {header_row} with mapping: {column_mapping}")
+-
+-    all_tables_data = {}
+-    table_count = 0
+-    current_row = header_row + 1
+-
+-    while current_row <= sheet.max_row:
+-        # Extract a single table starting from the current row
+-        extracted_data = sheet_parser.extract_multiple_tables(sheet, [current_row -1], column_mapping)
+-
+-        if extracted_data and extracted_data[1].get(STOP_EXTRACTION_ON_EMPTY_COLUMN):
+-            table_count += 1
+-            logging.info(f"Found data block {table_count} starting at row {current_row}")
+-            
+-            table_content = extracted_data[1]
+-            all_tables_data[table_count] = table_content
+-            
+-            # Advance current_row past the block we just extracted
+-            num_rows_in_table = len(table_content.get(STOP_EXTRACTION_ON_EMPTY_COLUMN, []))
+-            current_row += num_rows_in_table
+-        else:
+-            # If no data is found or the block is empty, move to the next row to continue scanning
+-            current_row += 1
+-            
+-    if not all_tables_data:
+-        logging.warning("Extraction finished, but no data blocks were found under the header.")
+-
+-    return all_tables_data
+-
+-def process_raw_data(all_tables_data):
+-    """Performs post-extraction processing, like parsing CBM values."""
+-    logging.info("--- Parsing CBM values in raw data ---")
+-    for table_id, table_data in all_tables_data.items():
+-        if 'cbm' in table_data:
+-            calculated_cbm_list = [sheet_parser.parse_and_calculate_cbm(cbm_str) for cbm_str in table_data['cbm']]
+-            all_tables_data[table_id]['cbm'] = calculated_cbm_list
+-    return all_tables_data
+-
+-def _sum_fields(all_tables_data, fields_to_sum):
+-    """Helper function to sum specified numerical fields from extracted data."""
+-    final_totals = {field: Decimal('0') for field in fields_to_sum}
+-    for table_data in all_tables_data.values():
+-        for field in fields_to_sum:
+-            for value in table_data.get(field, []):
+-                try:
+-                    if value is not None and str(value).strip():
+-                        final_totals[field] += Decimal(str(value))
+-                except (InvalidOperation, TypeError):
+-                    continue
+-    return final_totals
+-
+-def _collect_string_fields(all_tables_data, fields_to_collect):
+-    """Helper function to collect unique string values from specified fields."""
+-    final_strings = {field: set() for field in fields_to_collect}
+-    for table_data in all_tables_data.values():
+-        for field in fields_to_collect:
+-            for value in table_data.get(field, []):
+-                if value is not None and str(value).strip():
+-                    final_strings[field].add(str(value))
+-    return final_strings
+-
+-def _count_pallets(all_tables_data, field_to_count):
+-    """Helper function to count pallets using the converter."""
+-    pallet_count = 0
+-    for table_data in all_tables_data.values():
+-        pallet_entries = table_data.get(field_to_count, [])
+-        pallet_count += sum(DataConverter.convert_pallet_string(entry) for entry in pallet_entries)
+-    return pallet_count
+-
+-def aggregate_extracted_data(all_tables_data):
+-    """Aggregates data to create a summary view."""
+-    fields_to_sum = {'net', 'gross', 'cbm'}
+-    fields_to_collect = ['po', 'item', 'desc']
+-    field_to_count = 'pallet_count'
+-
+-    final_totals = _sum_fields(all_tables_data, fields_to_sum)
+-    final_strings = _collect_string_fields(all_tables_data, fields_to_collect)
+-    pallet_count = _count_pallets(all_tables_data, field_to_count)
+-
+-    aggregated_summary = {field: float(total) for field, total in final_totals.items()}
+-    for field, value_set in final_strings.items():
+-        aggregated_summary[field] = ", ".join(sorted(list(value_set)))
+-    
+-    aggregated_summary['pallet_count'] = pallet_count
+-    
+-    return aggregated_summary
+-
+-def calculate_footer_data(all_tables_data):
+-    """
+-    Calculates footer totals from all extracted tables.
+-    Returns both per-table totals, grand total, and add_ons (leather_summary).
+-    This moves footer calculation from frontend to data parser.
+-    """
+-    from . import data_processor
+-    
+-    # Calculate per-table totals
+-    table_totals = []
+-    for table_id, table_data in all_tables_data.items():
+-        table_totals.append(data_processor.calculate_footer_totals(table_data))
+-    
+-    # Merge all table data for grand total calculation
+-    merged_data = {
+-        "pcs": [], "sqft": [], "net": [], "gross": [], 
+-        "cbm": [], "amount": [], "pallet_count": [],
+-        "description": [], "desc": [],  # Include both description field names for leather_summary calculation
+-        "po": [], "item": []  # Include fields for aggregate_per_po_with_pallets
+-    }
+-    
+-    for table_data in all_tables_data.values():
+-        for key in merged_data:
+-            if key in table_data:
+-                merged_data[key].extend(table_data[key])
+-    
+-    # Calculate grand total
+-    grand_total = data_processor.calculate_footer_totals(merged_data)
+-    
+-    # Calculate leather summary (BUFFALO vs COW) across all tables
+-    leather_summary = data_processor.calculate_leather_summary(merged_data)
+-    
+-    # Calculate normal aggregate per PO with pallets (group by PO + Item)
+-    normal_aggregate_per_po = data_processor.aggregate_per_po_with_pallets(merged_data)
+-    
+-    return {
+-        "table_totals": table_totals,
+-        "grand_total": grand_total,
+-        "add_ons": {
+-            "leather_summary_addon": leather_summary,  # BUFFALO vs COW summary
+-            "normal_aggregate_per_po_with_pallets": normal_aggregate_per_po  # PO+Item aggregation
+-        }
+-    }
+-
+-def write_output_json(raw_data, aggregated_summary, footer_data, output_filepath):
+-    """Generates and saves the final JSON output."""
+-    final_output = {
+-        "raw_data": raw_data, 
+-        "aggregated_summary": aggregated_summary,
+-        "footer_data": footer_data
+-    }
+-    output_json = json.dumps(final_output, indent=4, default=str)
+-
+-    logging.info("--- Aggregation Complete! ---")
+-    print("\nFinal JSON Output:")
+-    print(output_json)
+-
+-    with open(output_filepath, "w") as f:
+-        f.write(output_json)
+-    logging.info(f"Saved output to {output_filepath}")
+-
+-def run_final_extraction(input_filepath, output_filepath):
+-    """
+-    Orchestrates the extraction, processing, and aggregation of data from an
+-    Excel file to generate a final JSON output.
+-    """
+-    logging.info(f"--- Starting Extraction for {input_filepath} ---")
+-    handler = ExcelHandler(input_filepath)
+-    sheet = handler.load_sheet(sheet_name=SHEET_NAME)
+-    if not sheet:
+-        logging.error("Failed to load the sheet. Exiting.")
+-        return
+-
+-    # 1. Extraction
+-    raw_data = extract_all_tables(sheet)
+-    handler.close()
+-    if not raw_data:
+-        error_message = "Extraction failed: No data tables could be found in the Excel sheet. Please check the file format and content."
+-        logging.error(error_message)
+-        print(error_message, file=sys.stderr) # Also print to stderr for visibility in subprocess
+-        sys.exit(1) # Exit with an error code
+-
+-    # 2. Post-Extraction Processing
+-    processed_data = process_raw_data(raw_data)
+-
+-    # 3. Aggregation
+-    aggregated_summary = aggregate_extracted_data(processed_data)
+-    
+-    # 4. Calculate Footer Data (moved from frontend)
+-    footer_data = calculate_footer_data(processed_data)
+-
+-    # 5. Finalize and Output JSON
+-    write_output_json(processed_data, aggregated_summary, footer_data, output_filepath)
+-
+-if __name__ == "__main__":
+-    parser = argparse.ArgumentParser(description="Extract and process data from an Excel invoice file.")
+-    parser.add_argument("input_file", help="Path to the input Excel file (e.g., JF.xlsx).")
+-    parser.add_argument("-o", "--output", default="output.json", help="Path for the output JSON file (default: output.json).")
+-    args = parser.parse_args()
+-    run_final_extraction(args.input_file, args.output)
+\ No newline at end of file
+diff --git a/core/data_parser/sheet_parser.py b/core/data_parser/sheet_parser.py
+index 17125ec..b0d6c9b 100644
+--- a/core/data_parser/sheet_parser.py
++++ b/core/data_parser/sheet_parser.py
+@@ -72,137 +72,177 @@ def _matches_any_pattern(value: Any, patterns: Union[str, List[str]]) -> bool:
+     return False
+ 
+ 
+-# --- THE NEW SMART HEADER DETECTION FUNCTION ---
++# --- SMART HEADER DETECTION (3-function decomposition) ---
++
++def _score_cell(canonical_name: str, data_value: Any, row_num: int, col_num: int) -> Optional[int]:
++    """
++    Score a single cell's data value against a candidate canonical column name.
++    
++    Returns:
++        int score (>0 if valid candidate), or None if hard-rejected.
++        - 25: Exact value match (e.g. pallet_count == 1)
++        - 15: Regex pattern match (e.g. CBM matches L*W*H)
++        -  5: Type match (numeric/string as expected)
++        -  4: Headerless pattern match (e.g. empty header but data looks like CBM)
++        -  1: Mercy rule (empty data or fallback string)
++        - None: Hard reject (pattern defined but data failed)
++    """
++    score = 0
++    used_strict_value_check = False
++
++    # Priority 1: Exact value check (e.g. col_pallet_count must be 1)
++    allowed_values = EXPECTED_HEADER_VALUES.get(canonical_name)
++    if allowed_values is not None:
++        used_strict_value_check = True
++        processed_data_value = int(data_value) if isinstance(data_value, str) and data_value.isdigit() else data_value
++        if processed_data_value in allowed_values:
++            score = 25
++
++    # Priority 2: Pattern or type check
++    if not used_strict_value_check:
++        patterns_to_check = EXPECTED_HEADER_PATTERNS.get(canonical_name)
++        if patterns_to_check:
++            if _matches_any_pattern(data_value, patterns_to_check):
++                score = 15
++            else:
++                # Pattern was defined but data FAILED 鈥?hard reject.
++                logging.debug(
++                    f"[score_cell] Row {row_num} Col {col_num}: '{canonical_name}' "
++                    f"pattern check FAILED for data '{data_value}'. Hard reject."
++                )
++                return None
++        else:
++            allowed_types = EXPECTED_HEADER_DATA_TYPES.get(canonical_name, ['string', 'numeric'])
++            if ('numeric' in allowed_types and _is_numeric(data_value)) or \
++               ('string' in allowed_types and _is_string_like(data_value)):
++                score = 5
++
++    # Priority 3: Mercy rule 鈥?don't let empty cells kill valid header matches
++    if score == 0:
++        if data_value is None or (isinstance(data_value, str) and not data_value.strip()):
++            score = 1
++        else:
++            allowed_types = EXPECTED_HEADER_DATA_TYPES.get(canonical_name, ['string', 'numeric'])
++            if 'string' in allowed_types:
++                score = 1
++
++    return score
++
++
++def _process_row(sheet: Worksheet, row_num: int) -> Tuple[Dict[str, str], int]:
++    """
++    Process a single row: scan all columns, score candidates, resolve ties.
++    
++    Returns:
++        Tuple of (column_mapping dict, total_row_score).
++        column_mapping: {canonical_name: column_letter, ...}
++    """
++    all_column_candidates: Dict[int, List[Dict]] = {}
++
++    # --- Phase 1: Score every column in this row ---
++    for col_num in range(HEADER_SEARCH_COL_RANGE[0], HEADER_SEARCH_COL_RANGE[1] + 1):
++        header_cell = sheet.cell(row=row_num, column=col_num)
++        header_value = str(header_cell.value or '').strip().upper()
++        data_value = sheet.cell(row=row_num + 1, column=col_num).value
++        
++        col_scores = []
++
++        if header_value:
++            # Find which canonical names this header text could match
++            candidate_canonicals = [
++                canonical for canonical, aliases in TARGET_HEADERS_MAP.items()
++                if header_value in [str(a).upper() for a in aliases]
++            ]
++            for canonical_name in candidate_canonicals:
++                score = _score_cell(canonical_name, data_value, row_num, col_num)
++                if score is not None and score > 0:
++                    col_scores.append({'score': score, 'name': canonical_name})
++
++        # ALWAYS check strong data patterns (formerly just headerless), even if there's a header.
++        # This prevents generic headers (like "PO" -> col_po) from stealing TTX PO data (25xxxxxx).
++        for canonical_name, patterns in HEADERLESS_COLUMN_PATTERNS.items():
++            if _matches_any_pattern(data_value, patterns):
++                existing = next((c for c in col_scores if c['name'] == canonical_name), None)
++                if existing:
++                    existing['score'] = max(existing['score'], 15)
++                else:
++                    col_scores.append({'score': 14, 'name': canonical_name})
++
++        if col_scores:
++            all_column_candidates[col_num] = col_scores
++
++    # --- Phase 2: Resolve candidates into a mapping ---
++    potential_mapping: Dict[str, str] = {}
++    current_row_score = 0
++    processed_canonicals: set = set()
++
++    # Tie-breaking: unit_price vs amount (both numeric, same score)
++    unit_amt_tie_cols = [
++        col for col, candidates in all_column_candidates.items()
++        if {c['name'] for c in candidates} == {'col_unit_price', 'col_amount'}
++        and all(c['score'] == 5 for c in candidates)
++    ]
++    if len(unit_amt_tie_cols) == 2:
++        col1, col2 = sorted(unit_amt_tie_cols)
++        # Heuristic: Unit Price is usually to the left of Amount
++        potential_mapping['col_unit_price'] = get_column_letter(col1)
++        potential_mapping['col_amount'] = get_column_letter(col2)
++        processed_canonicals.update(['col_unit_price', 'col_amount'])
++        current_row_score += 10  # Bonus for resolving tie
++        del all_column_candidates[col1], all_column_candidates[col2]
++
++    # Greedy selection for remaining columns
++    for col_num, candidates in sorted(all_column_candidates.items()):
++        valid_candidates = [c for c in candidates if c['name'] not in processed_canonicals]
++        if not valid_candidates:
++            continue
++
++        best_candidate = sorted(valid_candidates, key=lambda x: x['score'], reverse=True)[0]
++        potential_mapping[best_candidate['name']] = get_column_letter(col_num)
++        processed_canonicals.add(best_candidate['name'])
++        current_row_score += best_candidate['score']
++
++    return potential_mapping, current_row_score
++
++
+ def find_and_map_smart_headers(sheet: Worksheet) -> Optional[Tuple[int, Dict[str, str]]]:
+     """
+-    Finds and maps headers using a scoring system. It now evaluates all rows
+-    in the search range and selects the one with the highest cumulative score,
+-    making it robust against stray keywords outside the main table.
++    Finds and maps headers using a scoring system. Evaluates all rows in the
++    search range and selects the one with the highest cumulative score.
++    
++    Delegates to:
++        - _score_cell(): Scores a single canonical candidate against cell data.
++        - _process_row(): Scans all columns in a row, resolves ties, returns mapping.
++    
++    Returns:
++        Tuple of (header_row_number, column_mapping) or None if no valid row found.
+     """
+-    prefix = "[find_and_map_smart_headers_v12]" # Version increment
++    prefix = "[find_and_map_smart_headers]"
+     logging.info(f"{prefix} Starting best-fit header search...")
+ 
+     best_result: Optional[Tuple[int, Dict[str, str]]] = None
+     highest_row_score = 0
+ 
+     for row_num in range(HEADER_SEARCH_ROW_RANGE[0], HEADER_SEARCH_ROW_RANGE[1] + 1):
+-        if row_num + 1 > sheet.max_row: continue
+-
+-        all_column_candidates: Dict[int, List[Dict]] = {}
+-        for col_num in range(HEADER_SEARCH_COL_RANGE[0], HEADER_SEARCH_COL_RANGE[1] + 1):
+-            header_cell = sheet.cell(row=row_num, column=col_num)
+-            header_value = str(header_cell.value or '').strip().upper()
+-
+-            if header_value:
+-                candidate_canonicals = [
+-                    canonical for canonical, aliases in TARGET_HEADERS_MAP.items()
+-                    if header_value in [str(a).upper() for a in aliases]
+-                ]
+-                if not candidate_canonicals: continue
+-
+-                col_scores = []
+-                for canonical_name in candidate_canonicals:
+-                    data_cell = sheet.cell(row=row_num + 1, column=col_num)
+-                    data_value = data_cell.value
+-                    score = 0
+-                    used_strict_value_check = False
+-
+-                    # --- START: MODIFIED SCORING LOGIC ---
+-                    allowed_values = EXPECTED_HEADER_VALUES.get(canonical_name)
+-                    if allowed_values is not None:
+-                        used_strict_value_check = True
+-                        processed_data_value = int(data_value) if isinstance(data_value, str) and data_value.isdigit() else data_value
+-                        if processed_data_value in allowed_values:
+-                            score = 25 # Increased score for specific value matches
+-                    
+-                    if not used_strict_value_check:
+-                        patterns_to_check = EXPECTED_HEADER_PATTERNS.get(canonical_name)
+-                        if patterns_to_check:
+-                            if _matches_any_pattern(data_value, patterns_to_check):
+-                                score = 15 # Increased score for pattern matches
+-                        else:
+-                            allowed_types = EXPECTED_HEADER_DATA_TYPES.get(canonical_name, ['string', 'numeric'])
+-                            if ('numeric' in allowed_types and _is_numeric(data_value)) or \
+-                               ('string' in allowed_types and _is_string_like(data_value)):
+-                                score = 5 # Kept as the baseline score
+-                    # --- END: MODIFIED SCORING LOGIC ---
+-                    
+-                    if score == 0:
+-                        # --- NEW MERCY RULE ---
+-                        # If data is empty (None or blank), give a minimal score.
+-                        # We rely on the Header Keyword Match being strong.
+-                        if data_value is None or (isinstance(data_value, str) and not data_value.strip()):
+-                            score = 1
+-                        else:
+-                            # If data exists but failed type/pattern check, allow if string is permitted
+-                            allowed_types = EXPECTED_HEADER_DATA_TYPES.get(canonical_name, ['string', 'numeric'])
+-                            if 'string' in allowed_types:
+-                                score = 1 # A minimal "mercy" score to prevent it from being ignored
+-
+-                    if score > 0:
+-                        col_scores.append({'score': score, 'name': canonical_name})
+-                
+-                if col_scores:
+-                    all_column_candidates[col_num] = col_scores
+-            else:
+-                data_cell = sheet.cell(row=row_num + 1, column=col_num)
+-                data_value = data_cell.value
+-                for canonical_name, patterns in HEADERLESS_COLUMN_PATTERNS.items():
+-                    if _matches_any_pattern(data_value, patterns):
+-                        all_column_candidates[col_num] = [{'score': 4, 'name': canonical_name}]
+-
+-        # --- Process candidates for this row ---
+-        potential_mapping: Dict[str, str] = {}
+-        current_row_score = 0
+-        processed_canonicals = set()
+-        
+-        # Tie-breaking for unit price vs amount (both numeric)
+-        unit_amt_tie_cols = [
+-            col for col, candidates in all_column_candidates.items()
+-            if {c['name'] for c in candidates} == {'col_unit_price', 'col_amount'} and all(c['score'] == 5 for c in candidates)
+-        ]
+-        if len(unit_amt_tie_cols) == 2:
+-            col1, col2 = sorted(unit_amt_tie_cols)
+-            # Heuristic: Unit Price is usually to the left of Amount
+-            potential_mapping['col_unit_price'] = get_column_letter(col1)
+-            potential_mapping['col_amount'] = get_column_letter(col2)
+-            processed_canonicals.update(['col_unit_price', 'col_amount'])
+-            current_row_score += 10 # Bonus for resolving tie
+-            del all_column_candidates[col1], all_column_candidates[col2]
+-        
+-        # Greedy selection for remaining columns
+-        for col_num, candidates in sorted(all_column_candidates.items()):
+-            valid_candidates = [c for c in candidates if c['name'] not in processed_canonicals]
+-            if not valid_candidates: continue
+-            
+-            # Pick the highest scoring candidate for this column
+-            best_candidate = sorted(valid_candidates, key=lambda x: x['score'], reverse=True)[0]
+-            potential_mapping[best_candidate['name']] = get_column_letter(col_num)
+-            processed_canonicals.add(best_candidate['name'])
+-            current_row_score += best_candidate['score']
++        if row_num + 1 > sheet.max_row:
++            continue
++
++        potential_mapping, current_row_score = _process_row(sheet, row_num)
+ 
+-        # --- NEW LOGGING LINE FOR DIAGNOSTICS ---
+-        logging.debug(f"{prefix} Evaluated Row {row_num} | Score: {current_row_score} | Mapping: {potential_mapping}")
++        logging.debug(f"{prefix} Row {row_num} | Score: {current_row_score} | Mapping: {potential_mapping}")
+ 
+         if len(potential_mapping) >= 3 and current_row_score > highest_row_score:
+             highest_row_score = current_row_score
+             best_result = (row_num, potential_mapping)
+-            logging.info(f"{prefix} Found new best candidate row at {row_num} with score {highest_row_score}.")
++            logging.info(f"{prefix} New best candidate row at {row_num} with score {highest_row_score}.")
+ 
+     if best_result:
+-        logging.info(f"{prefix} SUCCESS: Confirmed header row at {best_result[0]} with final score {highest_row_score}.")
++        logging.info(f"{prefix} SUCCESS: Header row confirmed at {best_result[0]} with score {highest_row_score}.")
+         return best_result
+ 
+-    logging.error(f"{prefix} FAILED: Could not find any row that passed smart validation.")
++    logging.error(f"{prefix} FAILED: No row passed smart validation.")
+     return None
+ 
+-def map_columns_to_headers(sheet, header_row: int, col_range: int) -> Dict[str, int]:
+-    """
+-    DEPRECATED in favor of find_and_map_smart_headers for primary mapping,
+-    but can be kept for diagnostics or simple cases.
+-    """
+-    pass
+-
+ 
+ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[str, str]) -> List[List[Dict[str, Any]]]:
+     """
+@@ -324,53 +364,3 @@ def find_all_header_rows(sheet, search_pattern, row_range, col_range, start_afte
+         logging.error(f"[find_all_header_rows] Error finding header rows: {e}", exc_info=True)
+         return []
+ 
+-# --- NEWLY ADDED FUNCTION ---
+-def parse_and_calculate_cbm(cbm_value: Any) -> Optional[Decimal]:
+-    """
+-    Parses a CBM value which can be a direct number, a string representation of a number,
+-    or a string with dimensions separated by 'x' or '*'.
+-    
+-    Args:
+-        cbm_value: The value to parse, e.g., 1.23, "1.23", "1.2*0.8*0.5".
+-
+-    Returns:
+-        The calculated CBM as a Decimal, or None if parsing fails.
+-    """
+-    if cbm_value is None:
+-        return None
+-
+-    # If it's already a number, convert to Decimal and return
+-    if isinstance(cbm_value, (int, float, Decimal)):
+-        return Decimal(cbm_value)
+-
+-    # If it's a string, process it
+-    if isinstance(cbm_value, str):
+-        cbm_str = cbm_value.strip().lower() # Standardize to lowercase
+-        if not cbm_str:
+-            return None
+-            
+-        # Try direct conversion first for simple cases like "1.23"
+-        try:
+-            return Decimal(cbm_str)
+-        except InvalidOperation:
+-            # If direct conversion fails, it might be a calculation string
+-            pass
+-
+-        # Check for multiplication patterns (e.g., "1.2*0.8*0.5" or "1.2 x 0.8 x 0.5")
+-        try:
+-            # Split by 'x' or '*'
+-            parts = re.split(r'\s*[x*]\s*', cbm_str)
+-            if len(parts) > 1:
+-                total_cbm = Decimal('1')
+-                for part in parts:
+-                    total_cbm *= Decimal(part)
+-                return total_cbm
+-        except (InvalidOperation, TypeError):
+-            logging.warning(f"Could not parse CBM expression: '{cbm_value}'")
+-            return None
+-
+-    # Log a warning if the type is unexpected or parsing failed
+-    logging.warning(f"Unexpected type or format for CBM value: '{cbm_value}'")
+-    return None
+-
+-# --- END OF FULL REFACTORED FILE: sheet_parser.py ---
+diff --git a/core/data_parser/validation.py b/core/data_parser/validation.py
+index 30f1fa7..7a7cf52 100644
+--- a/core/data_parser/validation.py
++++ b/core/data_parser/validation.py
+@@ -26,10 +26,15 @@ def validate_table_data_presence(
+     Validates that the first row of the table contains valid values for all required columns.
+     If a required column is missing its value on the first row, throw DataValidationError.
+     """
+-    # The canonical names of columns that MUST contain data for a valid invoice processing
+-    REQUIRED_DATA_COLUMNS = [
+-        'col_po', 'col_item', 'col_amount', 'col_unit_price', 
+-        'col_qty_sf', 'col_qty_pcs', 'col_net', 'col_gross', 'col_cbm'
++    # Columns that MUST always be present in every valid table
++    ALWAYS_REQUIRED = [
++        'col_po', 'col_item', 'col_qty_pcs', 'col_net', 'col_gross', 'col_cbm'
++    ]
++    
++    # Pricing columns 鈥?only required if the scanner actually found them.
++    # Shipping lists (net-weight mode) won't have these; they get injected later.
++    PRICING_COLUMNS = [
++        'col_amount', 'col_unit_price', 'col_qty_sf'
+     ]
+     
+     if not current_table_data:
+@@ -39,7 +44,13 @@ def validate_table_data_presence(
+     first_row = current_table_data[0]
+     missing_data_cols = []
+     
+-    for col_name in REQUIRED_DATA_COLUMNS:
++    # Build the actual required list: always-required + pricing cols IF mapped
++    required_cols = list(ALWAYS_REQUIRED)
++    for pc in PRICING_COLUMNS:
++        if pc in column_mapping:
++            required_cols.append(pc)
++    
++    for col_name in required_cols:
+         # 1. Check mapping first (did we even find the header?)
+         if col_name not in column_mapping:
+             missing_data_cols.append(f"{col_name} (Missing Header)")
+diff --git a/core/invoice_generator/builders/footer_builder.py b/core/invoice_generator/builders/footer_builder.py
+index 6f955f3..b70c0c5 100644
+--- a/core/invoice_generator/builders/footer_builder.py
++++ b/core/invoice_generator/builders/footer_builder.py
+@@ -386,7 +386,8 @@ class TableFooterBuilder(BundleAccessor):
+             logger.warning(f"before_footer missing column_id or text: {before_footer_config}")
+             return
+         
+-        # Resolve column inde        col_idx = self._resolve_column_index(column_id, column_map_by_id)
++        # Resolve column index
++        col_idx = self._resolve_column_index(column_id, column_map_by_id)
+          
+         if not col_idx:
+             logger.error(f"before_footer column_id '{column_id}' not found in column_map")
+diff --git a/core/invoice_generator/builders/layout_builder.py b/core/invoice_generator/builders/layout_builder.py
+index 96ffb4a..2cc4abd 100644
+--- a/core/invoice_generator/builders/layout_builder.py
++++ b/core/invoice_generator/builders/layout_builder.py
+@@ -312,7 +312,7 @@ class LayoutBuilder:
+             except Exception as e:
+                 logger.error(f"HeaderBuilder crashed for sheet '{self.sheet_name}'")
+                 logger.error(f"Error: {e}", exc_info=True)
+-                logger.error(f"header_row_for_builder={header_row_for_builder}, header_to_write={header_to_write}, bundled_columns={len(bundled_columns) if bundled_columns else 0}")
++                logger.error(f"header_row_for_builder={header_row_for_builder}, bundled_columns={len(bundled_columns) if bundled_columns else 0}")
+                 return False
+         else:
+             logger.info(f"Skipping header builder (skip_header_builder=True)")
+@@ -598,35 +598,64 @@ class LayoutBuilder:
+             self.next_row_after_footer = footer_row_position
+         
+         # 6b. Auto-fit column widths and row heights based on actual cell content
+-        from ..utils.layout import auto_fit_dimensions
+-        _af_header_start = self.header_info.get('second_row_index', 1) + 1
+-        _af_data_end = self.next_row_after_footer - 1
+-        _af_num_cols = self.header_info.get('num_columns', 0)
+-        _af_header_row_start = self.header_info.get('first_row_index', None)
+-        _af_header_row_end = self.header_info.get('second_row_index', None)
+-        
+-        # Calculate template boundaries for last-column scanning
+-        _af_template_top_end = _af_header_row_start - 1 if _af_header_row_start else None
+-        _af_template_bottom_start = self.next_row_after_footer
+-        _af_max_row = self.worksheet.max_row
+-        
+-        logger.info(f"auto_fit_dimensions CALL: header_start={_af_header_start}, data_end={_af_data_end}, num_columns={_af_num_cols}, header_rows={_af_header_row_start}-{_af_header_row_end}, template_top_end={_af_template_top_end}, template_bottom_start={_af_template_bottom_start}, max_row={_af_max_row}")
+-        try:
+-            auto_fit_dimensions(
+-                worksheet=self.worksheet,
+-                header_start_row=_af_header_start,
+-                data_end_row=_af_data_end,
+-                num_columns=_af_num_cols,
+-                padding=7,
+-                line_height=20.0,
+-                header_row_start=_af_header_row_start,
+-                header_row_end=_af_header_row_end,
+-                template_top_end_row=_af_template_top_end,
+-                template_bottom_start_row=_af_template_bottom_start,
+-                max_row=_af_max_row
+-            )
+-        except Exception as e:
+-            logger.error(f"auto_fit_dimensions FAILED: {e}", exc_info=True)
++        if getattr(self.args, 'enable_auto_fit', True):
++            from ..utils.layout import auto_fit_dimensions
++            _af_header_start = self.header_info.get('second_row_index', 1) + 1
++            _af_data_end = self.next_row_after_footer - 1
++            _af_num_cols = self.header_info.get('num_columns', 0)
++            _af_header_row_start = self.header_info.get('first_row_index', None)
++            _af_header_row_end = self.header_info.get('second_row_index', None)
++            
++            # Calculate template boundaries for last-column scanning
++            _af_template_top_end = _af_header_row_start - 1 if _af_header_row_start else None
++            _af_template_bottom_start = self.next_row_after_footer
++            _af_max_row = self.worksheet.max_row
++            
++            logger.info(f"auto_fit_dimensions CALL: header_start={_af_header_start}, data_end={_af_data_end}, num_columns={_af_num_cols}, header_rows={_af_header_row_start}-{_af_header_row_end}, template_top_end={_af_template_top_end}, template_bottom_start={_af_template_bottom_start}, max_row={_af_max_row}")
++            try:
++                auto_fit_dimensions(
++                    worksheet=self.worksheet,
++                    header_start_row=_af_header_start,
++                    data_end_row=_af_data_end,
++                    num_columns=_af_num_cols,
++                    padding=7,
++                    line_height=20.0,
++                    header_row_start=_af_header_row_start,
++                    header_row_end=_af_header_row_end,
++                    template_top_end_row=_af_template_top_end,
++                    template_bottom_start_row=_af_template_bottom_start,
++                    max_row=_af_max_row
++                )
++            except Exception as e:
++                logger.error(f"auto_fit_dimensions FAILED: {e}", exc_info=True)
++        else:
++            logger.info("Skipping auto_fit_dimensions (enable_auto_fit=False) - Applying static config widths instead")
++            try:
++                from ..utils.layout import apply_column_widths
++                # Map column IDs to their physical column indices
++                col_id_to_idx = self.header_info.get('column_id_map', {})
++                # Create a map of column letter to column ID for apply_column_widths
++                from openpyxl.utils import get_column_letter
++                header_map = {}
++                for col_id, col_idx in col_id_to_idx.items():
++                    # The function expects { header_text: width }, but we can just pass a dummy map 
++                    # Actually, wait, let's check what apply_column_widths expects.
++                    # It expects a styling config.
++                    pass
++                
++                # Apply static widths from the styling registry
++                if hasattr(self, 'styling_config') and self.styling_config:
++                    # New style registry format stores widths in the columns dict
++                    columns_config = self.styling_config.get('columns', {}) if isinstance(self.styling_config, dict) else {}
++                    for col_id, col_idx in col_id_to_idx.items():
++                        col_cfg = columns_config.get(col_id, {})
++                        width = col_cfg.get('width')
++                        if width:
++                            col_letter = get_column_letter(col_idx)
++                            self.worksheet.column_dimensions[col_letter].width = float(width)
++                            logger.debug(f"Applied static width {width} to {col_id} ({col_letter})")
++            except Exception as e:
++                logger.error(f"Failed to apply static column widths: {e}", exc_info=True)
+ 
+         # 7. Template Footer Restoration
+         # This restores the static content (signatures, etc.) from the JSON template
+diff --git a/core/invoice_generator/config/table_value_adapter.py b/core/invoice_generator/config/table_value_adapter.py
+index 6ea5e5b..484be2f 100644
+--- a/core/invoice_generator/config/table_value_adapter.py
++++ b/core/invoice_generator/config/table_value_adapter.py
+@@ -72,7 +72,8 @@ class TableDataAdapter:
+         custom_mode: bool = False,
+         table_key: Optional[str] = None,
+         static_content: Optional[Dict[str, Any]] = None,
+-        footer_data: Optional[Dict[str, Any]] = None
++        footer_data: Optional[Dict[str, Any]] = None,
++        pricing_net_weight: bool = False
+     ):
+         """
+         Initialize the table data resolver.
+@@ -88,6 +89,7 @@ class TableDataAdapter:
+             table_key: Optional table key for multi-table data sources
+             static_content: Static content from layout_bundle (e.g., col_static values)
+             footer_data: Pre-calculated footer data from data parser (table_totals + grand_total)
++            pricing_net_weight: Whether Net Weight Pricing Mode is active
+         """
+         self.data_source_type = data_source_type
+         self.data_source = data_source
+@@ -98,6 +100,7 @@ class TableDataAdapter:
+         self.table_key = table_key
+         self.static_content = static_content or {}
+         self.footer_data = footer_data or {}
++        self.pricing_net_weight = pricing_net_weight
+         
+         # Extract helper maps from header_info
+         self.column_id_map = header_info.get('column_id_map', {})
+@@ -138,7 +141,8 @@ class TableDataAdapter:
+             static_value_map=parsed['static_value_map'],
+             DAF_mode=self.DAF_mode,
+             custom_mode=self.custom_mode,
+-            parent_column_ids=self.parent_column_ids
++            parent_column_ids=self.parent_column_ids,
++            pricing_net_weight=self.pricing_net_weight
+         )
+         
+         logger.debug(f"[DEBUG-RESOLVE] Parsed Rules: {parsed['dynamic_mapping_rules'].keys()}")
+@@ -354,6 +358,11 @@ class TableDataAdapter:
+         static_content = {}
+         if layout_config:
+             static_content = layout_config.get('static_content', {})
++            
++        # Determine pricing_net_weight from metadata
++        invoice_data = context_config.get('invoice_data') or {}
++        metadata = invoice_data.get('metadata', {})
++        pricing_net_weight = metadata.get('pricing_net_weight', False)
+         
+         return TableDataAdapter(
+             data_source_type=data_config.get('data_source_type', 'aggregation'),
+@@ -364,7 +373,8 @@ class TableDataAdapter:
+             custom_mode=custom_mode,
+             table_key=data_config.get('table_key'),
+             static_content=static_content,
+-            footer_data=data_config.get('footer_data', {})
++            footer_data=data_config.get('footer_data', {}),
++            pricing_net_weight=pricing_net_weight
+         )
+ 
+ 
+diff --git a/core/invoice_generator/data/data_preparer.py b/core/invoice_generator/data/data_preparer.py
+index 7d008e0..982b60e 100644
+--- a/core/invoice_generator/data/data_preparer.py
++++ b/core/invoice_generator/data/data_preparer.py
+@@ -270,7 +270,8 @@ def _build_row_dict(
+     parent_column_ids: List[str],
+     static_value_map: Dict[int, Any],
+     DAF_mode: bool,
+-    custom_mode: bool
++    custom_mode: bool,
++    pricing_net_weight: bool = False
+ ) -> Dict[int, Any]:
+     """
+     Build a single row dictionary by applying mapping rules, formulas, fallbacks, and static values.
+@@ -284,6 +285,7 @@ def _build_row_dict(
+         static_value_map: Static values to inject into each row.
+         DAF_mode: Whether DAF mode is active.
+         custom_mode: Whether custom mode is active.
++        pricing_net_weight: Whether Net Weight Pricing Mode is active.
+ 
+     Returns:
+         A dictionary mapping column indices to their resolved values.
+@@ -313,14 +315,27 @@ def _build_row_dict(
+         # Formula-First Resolution: formula always wins over raw data
+         mode_formula = _resolve_mode_formula(rule, DAF_mode, custom_mode)
+         if mode_formula:
++            # Business Rule: If the template formula asks for col_qty_sf, but the user explicitly requested 
++            # Net Weight Pricing Mode, dynamically swap the formula variable to col_net to avoid unknown bugs.
++            if pricing_net_weight and '{col_qty_sf}' in mode_formula:
++                mode_formula = mode_formula.replace('{col_qty_sf}', '{col_net}')
++                
+             parsed_formula = _parse_formula_def(mode_formula)
+             if parsed_formula:
+-                row_dict[target_col_idx] = {
+-                    'type': 'formula',
+-                    'template': parsed_formula['template'],
+-                    'inputs': parsed_formula.get('inputs', [])
+-                }
+-                continue  # Formula applied, skip fallback
++                # Validate that all formula inputs actually exist in the layout
++                inputs = parsed_formula.get('inputs', [])
++                missing_inputs = [inp for inp in inputs if inp not in column_id_map]
++                
++                if not missing_inputs:
++                    row_dict[target_col_idx] = {
++                        'type': 'formula',
++                        'template': parsed_formula['template'],
++                        'inputs': inputs
++                    }
++                    continue  # Formula applied, skip fallback
++                else:
++                    logger.warning(f"Skipping formula '{mode_formula}' for {target_id} because inputs {missing_inputs} are missing from the layout.")
++                    # Let it fall through to use the raw backend value (or fallback)
+ 
+         # No formula for this mode 鈥?apply text fallback if value is empty
+         if row_dict.get(target_col_idx) in [None, ""]:
+@@ -352,7 +367,8 @@ def prepare_data_rows(
+     static_value_map: Dict[int, Any],
+     DAF_mode: bool,
+     custom_mode: bool = False,
+-    parent_column_ids: List[str] = None
++    parent_column_ids: List[str] = None,
++    pricing_net_weight: bool = False
+ ) -> Tuple[List[Dict[int, Any]], List[int], int]:
+     """
+     Prepares data rows by applying mapping rules to the data source.
+@@ -371,6 +387,7 @@ def prepare_data_rows(
+         'static_value_map': static_value_map,
+         'DAF_mode': DAF_mode,
+         'custom_mode': custom_mode,
++        'pricing_net_weight': pricing_net_weight,
+     }
+ 
+     # Path A: Column-Oriented (Dict of Lists) - e.g., processed_tables
+diff --git a/core/invoice_generator/generate_invoice.py b/core/invoice_generator/generate_invoice.py
+index 8a1250f..a71c2c8 100644
+--- a/core/invoice_generator/generate_invoice.py
++++ b/core/invoice_generator/generate_invoice.py
+@@ -58,7 +58,8 @@ def run_invoice_generation(
+     explicit_config_path: Optional[Path] = None,
+     explicit_template_path: Optional[Path] = None,
+     input_data_dict: Optional[Dict[str, Any]] = None,
+-    return_bytes: bool = False
++    return_bytes: bool = False,
++    enable_auto_fit: bool = True
+ ):
+     """
+     Library entry point for invoice generation. 
+@@ -79,7 +80,7 @@ def run_invoice_generation(
+     # 2. Initialize Context
+     ctx = _initialize_context(
+         input_data_path, output_path, template_dir, config_dir,
+-        daf_mode, custom_mode, explicit_config_path, explicit_template_path, input_data_dict
++        daf_mode, custom_mode, enable_auto_fit, explicit_config_path, explicit_template_path, input_data_dict
+     )
+ 
+     # === CORE GENERATION LOGIC WITH MONITOR ===
+@@ -167,6 +168,7 @@ class GeneratorContext:
+         # Flags
+         self.daf_mode = False
+         self.custom_mode = False
++        self.enable_auto_fit = True
+         
+         # Derived
+         self.final_grand_total_pallets = 0
+@@ -175,7 +177,7 @@ class GeneratorContext:
+ def _initialize_context(
+     input_path: Path, output_path: Path, 
+     template_dir: Path, config_dir: Path,
+-    daf_mode: bool, custom_mode: bool,
++    daf_mode: bool, custom_mode: bool, enable_auto_fit: bool,
+     manual_config: Optional[Path], manual_template: Optional[Path],
+     data_dict: Optional[Dict]
+ ) -> GeneratorContext:
+@@ -188,6 +190,7 @@ def _initialize_context(
+     ctx.config_dir = config_dir
+     ctx.daf_mode = daf_mode
+     ctx.custom_mode = custom_mode
++    ctx.enable_auto_fit = enable_auto_fit
+     
+     # Pre-resolve known manual paths
+     if manual_config: ctx.paths['config'] = manual_config.resolve()
+@@ -224,8 +227,8 @@ def _load_resources(ctx: GeneratorContext):
+ 
+     # C. Calculate Grand Total Pallets
+     # Read the pre-calculated total from footer_data.grand_total (set by data_parser)
+-    footer_data = ctx.invoice_data.get('footer_data', {})
+-    grand_total = footer_data.get('grand_total', {})
++    footer_data = ctx.invoice_data.get('footer_data', {}) or {}
++    grand_total = footer_data.get('grand_total', {}) or {}
+     gt_pallets = grand_total.get('col_pallet_count', 0)
+     
+     if gt_pallets:
+@@ -282,11 +285,12 @@ def _process_sheets(ctx: GeneratorContext, session: GenerationSession):
+     # Mock args for processors (removing argparse dependency logic)
+     # Processors expect an object with .DAF and .custom flags
+     class ProcessorFlags:
+-        def __init__(self, daf, custom):
++        def __init__(self, daf, custom, enable_auto_fit):
+             self.DAF = daf
+             self.custom = custom
++            self.enable_auto_fit = enable_auto_fit
+     
+-    proc_args = ProcessorFlags(ctx.daf_mode, ctx.custom_mode)
++    proc_args = ProcessorFlags(ctx.daf_mode, ctx.custom_mode, ctx.enable_auto_fit)
+ 
+     for sheet_name in sheets_to_process:
+         logger.info(f"Processing sheet '{sheet_name}'")
+@@ -643,6 +647,7 @@ def main():
+     parser.add_argument("--template", help="Explicit path to template file")
+     parser.add_argument("--DAF", action="store_true", help="DAF mode")
+     parser.add_argument("--custom", action="store_true", help="Custom mode")
++    parser.add_argument("--no-auto-fit", action="store_true", help="Disable auto-fit column dimensions")
+     parser.add_argument("--debug", action="store_true", help="Debug logging")
+     
+     args = parser.parse_args()
+@@ -680,6 +685,7 @@ def main():
+             config_dir=Path(args.configdir) if args.configdir else None,
+             daf_mode=args.DAF,
+             custom_mode=args.custom,
++            enable_auto_fit=not args.no_auto_fit,
+             explicit_config_path=Path(args.config) if args.config else None,
+             explicit_template_path=Path(args.template) if args.template else None,
+             input_data_dict=cli_data
+diff --git a/core/orchestrator.py b/core/orchestrator.py
+index 1c16290..7236738 100644
+--- a/core/orchestrator.py
++++ b/core/orchestrator.py
+@@ -63,6 +63,7 @@ class Orchestrator:
+         # Convert legacy CLI flags to function arguments
+         daf_mode = "--DAF" in flags
+         custom_mode = "--custom" in flags
++        enable_auto_fit = "--no-auto-fit" not in flags
+         
+         explicit_config_path = None
+         explicit_template_path = None
+@@ -93,6 +94,7 @@ class Orchestrator:
+                 config_dir=config_dir,
+                 daf_mode=daf_mode,
+                 custom_mode=custom_mode,
++                enable_auto_fit=enable_auto_fit,
+                 explicit_config_path=explicit_config_path,
+                 explicit_template_path=explicit_template_path,
+                 input_data_dict=input_data_dict,
+@@ -131,7 +133,8 @@ class Orchestrator:
+                                 output_dir: Path, 
+                                 custom_prefix: str = None,
+                                 runtime_mappings: Dict[str, str] = None,
+-                                bundle_dir_name: str = None) -> Path:
++                                bundle_dir_name: str = None,
++                                pricing_mode: str = "standard") -> Path:
+         """
+         Wraps BlueprintGenerator.generate.
+         Generates the config and clean template bundle.
+@@ -147,7 +150,8 @@ class Orchestrator:
+                 dry_run=False,
+                 custom_prefix=custom_prefix,
+                 runtime_mappings=runtime_mappings,
+-                bundle_dir_name=bundle_dir_name
++                bundle_dir_name=bundle_dir_name,
++                pricing_mode=pricing_mode
+             )
+             
+             return result_path

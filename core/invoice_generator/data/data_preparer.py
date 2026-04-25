@@ -1,7 +1,9 @@
 from typing import Any, Union, Dict, List, Tuple, Optional
 from decimal import Decimal
 import logging
+import re
 logger = logging.getLogger(__name__)
+
 
 def parse_mapping_rules(
     mapping_rules: Dict[str, Any],
@@ -164,7 +166,7 @@ def _apply_fallback(
         row_dict[target_col_idx] = fallback_config
         return
 
-import re
+
 
 def _parse_formula_def(formula_def: Union[str, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     """
@@ -270,7 +272,8 @@ def _build_row_dict(
     parent_column_ids: List[str],
     static_value_map: Dict[int, Any],
     DAF_mode: bool,
-    custom_mode: bool
+    custom_mode: bool,
+    pricing_net_weight: bool = False
 ) -> Dict[int, Any]:
     """
     Build a single row dictionary by applying mapping rules, formulas, fallbacks, and static values.
@@ -284,6 +287,7 @@ def _build_row_dict(
         static_value_map: Static values to inject into each row.
         DAF_mode: Whether DAF mode is active.
         custom_mode: Whether custom mode is active.
+        pricing_net_weight: Whether Net Weight Pricing Mode is active.
 
     Returns:
         A dictionary mapping column indices to their resolved values.
@@ -313,14 +317,28 @@ def _build_row_dict(
         # Formula-First Resolution: formula always wins over raw data
         mode_formula = _resolve_mode_formula(rule, DAF_mode, custom_mode)
         if mode_formula:
+            # Business Rule: If the template formula asks for col_qty_sf, but the user explicitly requested 
+            # Net Weight Pricing Mode, dynamically swap the formula variable to col_net to avoid unknown bugs.
+            if pricing_net_weight and re.search(r'\{\s*col_qty_sf\s*\}', mode_formula):
+                mode_formula = re.sub(r'\{\s*col_qty_sf\s*\}', '{col_net}', mode_formula)
+
+                
             parsed_formula = _parse_formula_def(mode_formula)
             if parsed_formula:
-                row_dict[target_col_idx] = {
-                    'type': 'formula',
-                    'template': parsed_formula['template'],
-                    'inputs': parsed_formula.get('inputs', [])
-                }
-                continue  # Formula applied, skip fallback
+                # Validate that all formula inputs actually exist in the layout
+                inputs = parsed_formula.get('inputs', [])
+                missing_inputs = [inp for inp in inputs if inp not in column_id_map]
+                
+                if not missing_inputs:
+                    row_dict[target_col_idx] = {
+                        'type': 'formula',
+                        'template': parsed_formula['template'],
+                        'inputs': inputs
+                    }
+                    continue  # Formula applied, skip fallback
+                else:
+                    logger.warning(f"Skipping formula '{mode_formula}' for {target_id} because inputs {missing_inputs} are missing from the layout.")
+                    # Let it fall through to use the raw backend value (or fallback)
 
         # No formula for this mode — apply text fallback if value is empty
         if row_dict.get(target_col_idx) in [None, ""]:
@@ -352,7 +370,8 @@ def prepare_data_rows(
     static_value_map: Dict[int, Any],
     DAF_mode: bool,
     custom_mode: bool = False,
-    parent_column_ids: List[str] = None
+    parent_column_ids: List[str] = None,
+    pricing_net_weight: bool = False
 ) -> Tuple[List[Dict[int, Any]], List[int], int]:
     """
     Prepares data rows by applying mapping rules to the data source.
@@ -371,6 +390,7 @@ def prepare_data_rows(
         'static_value_map': static_value_map,
         'DAF_mode': DAF_mode,
         'custom_mode': custom_mode,
+        'pricing_net_weight': pricing_net_weight,
     }
 
     # Path A: Column-Oriented (Dict of Lists) - e.g., processed_tables

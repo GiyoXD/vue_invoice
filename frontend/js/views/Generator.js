@@ -117,6 +117,10 @@ export default {
                             <input type="checkbox" v-model="includeDAF" accent-color="#2563eb" /> 
                             <span>DAF Mode</span>
                         </label>
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; border-left: 1px solid #e2e8f0; padding-left: 1.5rem; margin-left: 0.5rem;">
+                            <input type="checkbox" v-model="enableAutoFit" accent-color="#2563eb" /> 
+                            <span>Auto-Fit Dimensions</span>
+                        </label>
                     </div>
                     
                     <!-- KH/VN Variant Options -->
@@ -127,6 +131,22 @@ export default {
                             <span>{{ v.suffix.replace('_', '') }} version</span>
                         </label>
                     </div>
+                </div>
+
+                <!-- NET WEIGHT PRICING MODE -->
+                <div v-if="isNetMode" class="form-group" style="margin-top: 1rem; padding: 1rem; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px;">
+                    <label style="display: flex; align-items: center; gap: 0.5rem;">
+                        <span style="color: #10b981; font-weight: bold;">⚖️ Net Weight Mode</span>
+                    </label>
+                    <p style="color: #94a3b8; font-size: 0.8rem; margin: 0.25rem 0 0.75rem 0;">
+                        This template uses Net Weight as the pricing basis. Enter the unit price to calculate amounts.
+                    </p>
+                    <label>Unit Price (USD/kg)</label>
+                    <input type="number" v-model="globalUnitPrice" step="0.01" min="0" class="input-field"
+                           placeholder="e.g. 1.25" style="max-width: 200px;" />
+                    <p style="color: #6b7280; font-size: 0.75rem; margin-top: 0.25rem;">
+                        Amount = Net Weight × Unit Price
+                    </p>
                 </div>
 
                 <div class="form-group" style="margin-top: 1rem;">
@@ -265,9 +285,14 @@ export default {
         const includeCustom = ref(false);
         const includeDAF = ref(false);
         const selectedVariants = ref([]);
+        const enableAutoFit = ref(true);
 
         const priceAdjustments = ref([]); // List of { description: '', value: '' }
         const adjustmentError = ref('');
+        const globalUnitPrice = ref(''); // For 'net' pricing mode
+
+        // Computed: is this template using net weight pricing?
+        const isNetMode = computed(() => assetStatus.value?.pricing_mode === 'net');
 
         const isGenerating = ref(false);
         const generationStatus = ref(null);
@@ -429,8 +454,14 @@ export default {
                     generate_custom: includeCustom.value,
                     generate_daf: includeDAF.value,
                     generate_kh: true,  // KH is the default variant
-                    generate_vn: selectedVariants.value.includes('_VN')
+                    generate_vn: selectedVariants.value.includes('_VN'),
+                    auto_fit: enableAutoFit.value
                 };
+
+                // Net weight pricing mode: include global unit price
+                if (isNetMode.value && globalUnitPrice.value) {
+                    basePayload.global_unit_price = parseFloat(globalUnitPrice.value);
+                }
 
                 if (validAdjustments.length > 0) {
                     basePayload.price_adjustment = validAdjustments;
@@ -572,6 +603,7 @@ export default {
             includeStandard,
             includeCustom,
             includeDAF,
+            enableAutoFit,
             handleFileUpload,
             uploadFile,
             isGenerating,
@@ -593,7 +625,9 @@ export default {
             validationWarnings,
             priceAdjustments,
             addAdjustment,
-            removeAdjustment
+            removeAdjustment,
+            globalUnitPrice,
+            isNetMode
         };
     }
 };

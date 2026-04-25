@@ -1,5 +1,7 @@
 import json
 import os
+import re
+
 
 # --- File Configuration ---
 INPUT_EXCEL_FILE = "JF.xlsx" # Or specific name for this format, e.g., "JF_Data_2024.xlsx"
@@ -12,9 +14,10 @@ SHEET_NAME = "Invoice"
 # Adjusted to a more realistic range to improve performance and avoid matching stray text.
 HEADER_SEARCH_ROW_RANGE = (1, 50)
 HEADER_SEARCH_COL_RANGE = (1, 30) # Increased range slightly, adjust if many columns
-# A pattern (string or regex) to identify a cell within the header row
-# This pattern helps find *any* header row, the mapping below specifies exact matches
-HEADER_IDENTIFICATION_PATTERN = r"^(批次号|订单号|物料代码|总张数|净重|毛重|po|item|pcs|net|gross|TTX编号)$" # Broadened slightly
+# A pattern (string or regex) to identify a cell within the header row.
+# Built dynamically from col_po keywords in TARGET_HEADERS_MAP after loading.
+# PO column is the universal anchor — every table header has it.
+HEADER_IDENTIFICATION_PATTERN = r"(po)"  # Fallback; rebuilt by load_and_update_mappings()
 
 
 EXPECTED_HEADER_DATA_TYPES = {
@@ -53,50 +56,10 @@ EXPECTED_HEADER_DATA_TYPES = {
 }
 
 # --- Column Mapping Configuration ---
-# Canonical Name -> List containing header variations (case-insensitive match)
-TARGET_HEADERS_MAP = {
-    # priority first
-    "col_production_order_no": ["production order number", "生产单号", "po", "入库单号", "PO", "PO NO.", "订单号", "TTX编号"], # Primary English: 'production order number', Primary Chinese: '生产单号'
-    "col_unit_price": ["unit price", "单价", "price", "USD", "usd", "单价USD", "价格", "单价 USD"],          # Primary English: 'unit price', Primary Chinese: '单价'
-    # --- Core Logic Canonical Names ---
-    "col_po": ["PO NO.", "po", "PO", "Po", "订单号", "order number", "order no", "Po Nb", "尺数", "PO NB", "Po Nb", "客户订单号", "订单号", "P.O Nº", "P.O NO", "PO Nº"],                 # Primary English: 'po', Primary Chinese: '订单号'
-    "col_item": ["物料代码","item no", "ITEM NO.",  'item', "Item No", "ITEM NO", "Item No", "客户品名", "物料编码", "产品编号", "ITEM Nº", "Item Nº"],        # Primary English: 'item no', Primary Chinese: '物料代码'
-    "col_qty_pcs": ["pcs", "总张数", "张数", "PCS"],                # Primary English: 'pcs', Primary Chinese: '总张数'
-    "col_net": ["NW", "net weight", "净重kg", "净重", "net", "净重KG", "N.W (kgs)", "N.W", "Net Weight"],          # Primary English: 'net weight', Primary Chinese: '净重'
-    "col_gross": ["GW", "gross weight", "毛重", "gross", "Gross", "gross weight", "Gross Weight", "毛重量KG", "重量KG", "重量", "毛重", "毛重KG", "G.W(kgs)", "G.W", "Gross Weight"],       # Primary English: 'gross weight', Primary Chinese: '毛重'
-    "col_qty_sf": ["sqft", "出货数量 (sf)", "尺数", "SF", "出货数量(sf)", "出货数量(SF)", "出货数量 SF", "尺码", "出货数量（SF）", "Quantity", "Qty"],      # Primary English: 'sqft', Primary Chinese: '出货数量 (sf)' (Assuming this specific text)
-    "col_amount": ["金额 USD","金额USD", "金额", "USD","amount", "总价", "usd", "Amount", "Total Amount", "total", "total amount"],            # Primary English: 'amount', Primary Chinese: '金额' # Ensure this is present and mapped
-    "col_hs_code": ["hs code", "h.s. code", "commodity code", "h.s.code", "hs_code", "hs-code", "税号", "海关编码"],
-
-    # --- Less Certain Canonical Names ---
-    "col_date_recipt": ["入库时间", "入库日期", "date receipt", "Date Receipt", "date receipt", "Date Receipt", "date receipt"],
-    "col_cbm": ["cbm", "材积", "CBM"],          # Primary English: 'cbm', Primary Chinese: '材积'
-    "col_desc": ["description","产品名称", "品名规格", "描述", "desc", "DESCRIPTION"],      # Primary English: 'description', Primary Chinese: '品名规格'
-    "col_inv_no": ["invoice no", "发票号码", "INV NO", "INV NO", "inv no", "INV NO", "inv no", "INVOICE NO"],    # Primary English: 'invoice no', Primary Chinese: '发票号码'
-    "col_inv_date": ["invoice date", "发票日期", "INV DATE", "INV DATE", "inv date", "INV DATE", "inv date", "INVOICE DATE", "invoice date"], # Primary English: 'invoice date', Primary Chinese: '发票日期'
-    "col_inv_ref": ["ref", "invoice ref", "ref no", "REF NO", "REF NO", "ref no", "inv ref", "INV REF", "INVOICE REF"],
-
-    "col_remarks": ["remarks", "备注", "Remark", 'remark', '低', "REMARKS", "REMARK"],          # Primary English: 'remarks', Primary Chinese: '备注'
-    # --- Other Found Headers ---
-    "col_no": ["no.", "NO", "No.", "NO.", "no"],
-    "col_static": ["mark & nº", "mark & n°", "mark & note", "MARK & NOTE", "Mark & Note"],
-    "col_sqm": ["sqm", "m2", "M2", "square meter", "平方米", "sqm（M²）"],
-    "col_qty_header": ["Quantity (SF)", "Quantity(SF)", "Quantity(SF)\nSố lượng(SF)"],
-    "col_container_no": ["container no", "集装箱号", "Container No", "CONTAINER NO", "container no", "CONTAINER NO", "container no", "CONTAINER NO", "container"],
-    "col_unit_sf": ["unit/sf", "unit sf", "unit(sf)", "UNIT/SF", "Unit/SF"],
-    "col_dc": ["批次号", "DC", "dc"],
-    "col_batch_no": ["batch number", "批次号"],  # Primary English: 'batch number', Primary Chinese: '批次号'
-    "col_line_no": ["line no", "行号"],           # Primary English: 'line no', Primary Chinese: '行号'
-    "col_direction": ["direction", "内向"],      # Primary English: 'direction', Primary Chinese: '内向' (Meaning still unclear)
-    "col_production_date": ["production date", "生产日期"], # Primary English: 'production date', Primary Chinese: '生产日期'
-    "col_reference_code": ["reference code", "ttx编号", "生产名称"], # Primary English: 'reference code', Primary Chinese: 'ttx编号' (Verify 'ttx编号')
-    "col_level": ["grade", "等级"],              # Primary English: 'grade', Primary Chinese: '等级'
-    "col_pallet_count": ["pallet count", "拖数", "PALLET", "件数", "PALLET COUNT", "pallet count", "托数"],# Primary English: 'pallet count', Primary Chinese: '拖数'
-    "col_manual_no": ["manual number", "手册号"], # Primary English: 'manual number', Primary Chinese: '手册号'
-    # 'amount' is already defined above
-
-    # Add any other essential headers here following the variations list format
-}
+# TARGET_HEADERS_MAP is populated at import time by load_and_update_mappings()
+# which reads from mapping_config.json (the single source of truth).
+# Editable via the TemplateExtractor UI → "Manage Global Mappings".
+TARGET_HEADERS_MAP = {}
 
 # --- Header Validation Configuration ---
 EXPECTED_HEADER_PATTERNS = {
@@ -124,6 +87,11 @@ HEADERLESS_COLUMN_PATTERNS = {
     # map it as the 'col_cbm' column.
     'col_cbm': [
         r'^\d+(\.\d+)?\*\d+(\.\d+)?\*\d+(\.\d+)?$',
+    ],
+    # TTX PO strong data pattern. Even if the header is generic (like "PO"), 
+    # matching this data pattern will override it and map to col_production_order_no
+    'col_production_order_no': [
+        r'^(25|26|27)\d{5}-\d{2}$',
     ],
 
 
@@ -201,6 +169,25 @@ def load_and_update_mappings():
                 else:
                     TARGET_HEADERS_MAP[col_id] = [keyword]
 
+        # --- Rebuild HEADER_IDENTIFICATION_PATTERN from core anchor keywords ---
+        # We combine keywords from multiple essential columns to guarantee we catch any header row.
+        global HEADER_IDENTIFICATION_PATTERN
+        anchor_cols = ['col_po', 'col_net', 'col_gross', 'col_pallet_count', 'col_qty_pcs', 'col_qty_sf', 'col_item']
+        all_keywords = []
+        
+        for col in anchor_cols:
+            all_keywords.extend(TARGET_HEADERS_MAP.get(col, []))
+            
+        # Remove duplicates, escape regex special chars, and build pattern
+        unique_keywords = list(set(all_keywords))
+        # Filter out empty strings just in case
+        unique_keywords = [kw for kw in unique_keywords if kw.strip()]
+        escaped = [re.escape(kw) for kw in unique_keywords]
+        
+        # If we found keywords, build the pattern; otherwise fallback
+        if escaped:
+            HEADER_IDENTIFICATION_PATTERN = r"(" + "|".join(escaped) + r")"
+        
     except json.JSONDecodeError:
         print("Warning: Could not decode mapping_config.json. Check for syntax errors. Using default TARGET_HEADERS_MAP.")
     except Exception as e:

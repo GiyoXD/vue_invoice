@@ -2,7 +2,7 @@
 import sys
 import os
 from pathlib import Path
-from typing import List, Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 # Import the logic directly!
 from core.invoice_generator.generate_invoice import run_invoice_generation
@@ -50,40 +50,17 @@ class Orchestrator:
                         output_path: Path, 
                         template_dir: Path, 
                         config_dir: Path, 
-                        flags: List[str] = None,
+                        daf_mode: bool = False,
+                        custom_mode: bool = False,
+                        enable_auto_fit: bool = True,
+                        explicit_config_path: Path = None,
+                        explicit_template_path: Path = None,
                         input_data_dict: Dict = None,
                         return_bytes: bool = False):
         """
         Directly calls the Invoice Generator library function.
         No more subprocess overhead or serialization issues.
         """
-        flags = flags or []
-        
-        
-        # Convert legacy CLI flags to function arguments
-        daf_mode = "--DAF" in flags
-        custom_mode = "--custom" in flags
-        
-        explicit_config_path = None
-        explicit_template_path = None
-        
-        # Simple parser for value flags
-        if "--config" in flags:
-            try:
-                idx = flags.index("--config")
-                if idx + 1 < len(flags):
-                    explicit_config_path = Path(flags[idx + 1])
-            except ValueError:
-                pass
-                
-        if "--template" in flags:
-            try:
-                idx = flags.index("--template")
-                if idx + 1 < len(flags):
-                    explicit_template_path = Path(flags[idx + 1])
-            except ValueError:
-                pass
-
         try:
             # CALLING DIRECTLY
             result = run_invoice_generation(
@@ -93,6 +70,7 @@ class Orchestrator:
                 config_dir=config_dir,
                 daf_mode=daf_mode,
                 custom_mode=custom_mode,
+                enable_auto_fit=enable_auto_fit,
                 explicit_config_path=explicit_config_path,
                 explicit_template_path=explicit_template_path,
                 input_data_dict=input_data_dict,
@@ -131,7 +109,8 @@ class Orchestrator:
                                 output_dir: Path, 
                                 custom_prefix: str = None,
                                 runtime_mappings: Dict[str, str] = None,
-                                bundle_dir_name: str = None) -> Path:
+                                bundle_dir_name: str = None,
+                                pricing_mode: str = "standard") -> Path:
         """
         Wraps BlueprintGenerator.generate.
         Generates the config and clean template bundle.
@@ -147,7 +126,8 @@ class Orchestrator:
                 dry_run=False,
                 custom_prefix=custom_prefix,
                 runtime_mappings=runtime_mappings,
-                bundle_dir_name=bundle_dir_name
+                bundle_dir_name=bundle_dir_name,
+                pricing_mode=pricing_mode
             )
             
             return result_path

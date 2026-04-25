@@ -26,10 +26,15 @@ def validate_table_data_presence(
     Validates that the first row of the table contains valid values for all required columns.
     If a required column is missing its value on the first row, throw DataValidationError.
     """
-    # The canonical names of columns that MUST contain data for a valid invoice processing
-    REQUIRED_DATA_COLUMNS = [
-        'col_po', 'col_item', 'col_amount', 'col_unit_price', 
-        'col_qty_sf', 'col_qty_pcs', 'col_net', 'col_gross', 'col_cbm'
+    # Columns that MUST always be present in every valid table
+    ALWAYS_REQUIRED = [
+        'col_po', 'col_item', 'col_qty_pcs', 'col_net', 'col_gross', 'col_cbm'
+    ]
+    
+    # Pricing columns — only required if the scanner actually found them.
+    # Shipping lists (net-weight mode) won't have these; they get injected later.
+    PRICING_COLUMNS = [
+        'col_amount', 'col_unit_price', 'col_qty_sf'
     ]
     
     if not current_table_data:
@@ -39,7 +44,13 @@ def validate_table_data_presence(
     first_row = current_table_data[0]
     missing_data_cols = []
     
-    for col_name in REQUIRED_DATA_COLUMNS:
+    # Build the actual required list: always-required + pricing cols IF mapped
+    required_cols = list(ALWAYS_REQUIRED)
+    for pc in PRICING_COLUMNS:
+        if pc in column_mapping:
+            required_cols.append(pc)
+    
+    for col_name in required_cols:
         # 1. Check mapping first (did we even find the header?)
         if col_name not in column_mapping:
             missing_data_cols.append(f"{col_name} (Missing Header)")

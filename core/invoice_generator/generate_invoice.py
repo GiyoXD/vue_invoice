@@ -58,7 +58,8 @@ def run_invoice_generation(
     explicit_config_path: Optional[Path] = None,
     explicit_template_path: Optional[Path] = None,
     input_data_dict: Optional[Dict[str, Any]] = None,
-    return_bytes: bool = False
+    return_bytes: bool = False,
+    enable_auto_fit: bool = True
 ):
     """
     Library entry point for invoice generation. 
@@ -79,7 +80,7 @@ def run_invoice_generation(
     # 2. Initialize Context
     ctx = _initialize_context(
         input_data_path, output_path, template_dir, config_dir,
-        daf_mode, custom_mode, explicit_config_path, explicit_template_path, input_data_dict
+        daf_mode, custom_mode, enable_auto_fit, explicit_config_path, explicit_template_path, input_data_dict
     )
 
     # === CORE GENERATION LOGIC WITH MONITOR ===
@@ -95,7 +96,11 @@ def run_invoice_generation(
         logger.info("=== Starting Invoice Generation (Orchestrated) ===")
         
         # 3. Execution Pipeline
-        _load_resources(ctx)
+        try:
+            _load_resources(ctx)
+        except ValueError as e:
+            logger.error(f"[_load_resources] Failed to load resources: {e}")
+            raise
         monitor_paths = {
             'template': str(ctx.paths.get('template', 'unknown')),
             'config': str(ctx.paths.get('config', 'unknown'))
@@ -167,6 +172,7 @@ class GeneratorContext:
         # Flags
         self.daf_mode = False
         self.custom_mode = False
+        self.enable_auto_fit = True
         
         # Derived
         self.final_grand_total_pallets = 0
@@ -175,7 +181,7 @@ class GeneratorContext:
 def _initialize_context(
     input_path: Path, output_path: Path, 
     template_dir: Path, config_dir: Path,
-    daf_mode: bool, custom_mode: bool,
+    daf_mode: bool, custom_mode: bool, enable_auto_fit: bool,
     manual_config: Optional[Path], manual_template: Optional[Path],
     data_dict: Optional[Dict]
 ) -> GeneratorContext:
@@ -188,6 +194,7 @@ def _initialize_context(
     ctx.config_dir = config_dir
     ctx.daf_mode = daf_mode
     ctx.custom_mode = custom_mode
+    ctx.enable_auto_fit = enable_auto_fit
     
     # Pre-resolve known manual paths
     if manual_config: ctx.paths['config'] = manual_config.resolve()
@@ -224,8 +231,12 @@ def _load_resources(ctx: GeneratorContext):
 
     # C. Calculate Grand Total Pallets
     # Read the pre-calculated total from footer_data.grand_total (set by data_parser)
-    footer_data = ctx.invoice_data.get('footer_data', {})
-    grand_total = footer_data.get('grand_total', {})
+    footer_data = ctx.invoice_data.get('footer_data', {}) or {}
+    grand_total = footer_data.get('grand_total')
+    
+    if not grand_total or 'col_pallet_count' not in grand_total:
+        raise ValueError("CRITICAL: Missing grand total pallet count in parsed data. Cannot generate invoice.")
+        
     gt_pallets = grand_total.get('col_pallet_count', 0)
     
     if gt_pallets:
@@ -282,11 +293,12 @@ def _process_sheets(ctx: GeneratorContext, session: GenerationSession):
     # Mock args for processors (removing argparse dependency logic)
     # Processors expect an object with .DAF and .custom flags
     class ProcessorFlags:
-        def __init__(self, daf, custom):
+        def __init__(self, daf, custom, enable_auto_fit):
             self.DAF = daf
             self.custom = custom
+            self.enable_auto_fit = enable_auto_fit
     
-    proc_args = ProcessorFlags(ctx.daf_mode, ctx.custom_mode)
+    proc_args = ProcessorFlags(ctx.daf_mode, ctx.custom_mode, ctx.enable_auto_fit)
 
     for sheet_name in sheets_to_process:
         logger.info(f"Processing sheet '{sheet_name}'")
@@ -643,6 +655,7 @@ def main():
     parser.add_argument("--template", help="Explicit path to template file")
     parser.add_argument("--DAF", action="store_true", help="DAF mode")
     parser.add_argument("--custom", action="store_true", help="Custom mode")
+    parser.add_argument("--no-auto-fit", action="store_true", help="Disable auto-fit column dimensions")
     parser.add_argument("--debug", action="store_true", help="Debug logging")
     
     args = parser.parse_args()
@@ -680,6 +693,7 @@ def main():
             config_dir=Path(args.configdir) if args.configdir else None,
             daf_mode=args.DAF,
             custom_mode=args.custom,
+            enable_auto_fit=not args.no_auto_fit,
             explicit_config_path=Path(args.config) if args.config else None,
             explicit_template_path=Path(args.template) if args.template else None,
             input_data_dict=cli_data
