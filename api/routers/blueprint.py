@@ -262,8 +262,14 @@ async def update_mappings(request: MappingsUpdateRequest):
         try:
             from core.data_parser.config import load_and_update_mappings
             load_and_update_mappings()
+            # Rebuild sheet_parser's pre-computed alias lookup after config change
+            from core.data_parser.sheet_parser import _build_alias_lookup, _ALIAS_REVERSE_LOOKUP
+            import core.data_parser.sheet_parser as _sp_module
+            _sp_module._ALIAS_REVERSE_LOOKUP = _build_alias_lookup()
+            
             from core.blueprint_generator.rules import BlueprintRules
             BlueprintRules._load_from_config()
+            BlueprintRules._rebuild_keyword_index()  # Rebuild index after config reload
         except Exception as e:
             logger.warning(f"Could not automatically reload mappings: {e}")
 

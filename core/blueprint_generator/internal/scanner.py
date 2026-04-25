@@ -20,6 +20,7 @@ from openpyxl.utils import get_column_letter
 
 from ..rules import BlueprintRules
 from core.utils.snitch import snitch
+from core.utils.loop_profiler import loop_profiler, tick
 from ..utils.footer_scanner import FooterInfo, scan_footer
 from ..utils.content_extractor import detect_static_description_label
 
@@ -155,10 +156,12 @@ class ExcelLayoutScanner:
         candidates = []
         
         for row in range(1, min(worksheet.max_row + 1, max_rows)):
+            tick("scanner._find_header_row", sub="structural_rows_scanned")
             cells = []
             max_col_idx = 0
             # Cap structural scan at 50 columns
             for col in range(1, min(worksheet.max_column + 1, 50)):
+                tick("scanner._find_header_row", sub="structural_cells_checked")
                 cell = worksheet.cell(row=row, column=col)
                 if cell.value is not None and str(cell.value).strip():
                     cells.append(cell)
@@ -203,6 +206,7 @@ class ExcelLayoutScanner:
         best_header_cells = []
         
         for row in range(1, min(worksheet.max_row + 1, max_scan_rows)):
+            tick("scanner._find_header_row", sub="rows_scanned")
             matches = 0
             text_count = 0
             header_cells = []
@@ -210,6 +214,7 @@ class ExcelLayoutScanner:
             has_content = False
             # Cap header scan at 25 (Col Y)
             for col in range(1, min(worksheet.max_column + 1, 26)):
+                tick("scanner._find_header_row", sub="cells_checked")
                 cell = worksheet.cell(row=row, column=col)
                 value = self._get_cell_value(cell)
                 if value:
@@ -223,12 +228,15 @@ class ExcelLayoutScanner:
                     clean_val = "".join(value.lower().split())
                     if mapping_config:
                          mappings = mapping_config.get('header_text_mappings', {}).get('mappings', {})
+                         tick("scanner._find_header_row", sub="user_mapping_checks")
                          if value in mappings or any("".join(m.lower().split()) == clean_val for m in mappings):
                              is_match = True
                     
                     # 2. Check system rules
-                    if not is_match and BlueprintRules.get_column_by_keyword(value):
-                        is_match = True
+                    if not is_match:
+                        tick("scanner._find_header_row", sub="rules_keyword_lookups")
+                        if BlueprintRules.get_column_by_keyword(value):
+                            is_match = True
                         
                     if is_match:
                         matches += 1
@@ -459,6 +467,7 @@ class ExcelLayoutScanner:
         # Used for colspan/rowspan detection of actual table header columns.
         merged_ranges = []
         for merged in worksheet.merged_cells.ranges:
+            tick("scanner._analyze_columns", sub="merge_scan_header")
             if merged.min_row == header_row:
                 merged_ranges.append(merged)
         
@@ -466,6 +475,7 @@ class ExcelLayoutScanner:
         # Used for resolving cell values within merged regions.
         all_merges_at_header = []
         for merged in worksheet.merged_cells.ranges:
+            tick("scanner._analyze_columns", sub="merge_scan_overlap")
             if merged.min_row <= header_row <= merged.max_row:
                 all_merges_at_header.append(merged)
         
@@ -570,6 +580,7 @@ class ExcelLayoutScanner:
                     # Look if this cell is the start of a merge covering the whole parent area
                     is_full_width_merge = False
                     for merged in worksheet.merged_cells.ranges:
+                        tick("scanner._analyze_columns", sub="child_merge_scan")
                         if merged.min_row == header_row + 1 and merged.min_col == col and merged.max_col == col + colspan - 1:
                             is_full_width_merge = True
                             break

@@ -17,6 +17,8 @@ import re
 from dataclasses import dataclass, field
 from typing import List, Dict, Set, Optional
 
+from core.utils.loop_profiler import tick
+
 logger = logging.getLogger(__name__)
 
 @dataclass
@@ -165,29 +167,52 @@ class BlueprintRules:
         ),
     }
 
+    # Pre-built keyword index: {keyword_lower: ColumnDefinition}
+    # Built once by _rebuild_keyword_index(), called after _load_from_config()
+    _KEYWORD_INDEX: Dict[str, 'ColumnDefinition'] = {}
+
     @classmethod
     def get_column_by_keyword(cls, header_text: str) -> Optional[ColumnDefinition]:
         """
         Identify a column definition based on header text.
         Returns the Best Match (or None).
+        
+        Uses pre-built _KEYWORD_INDEX for O(1) lookup instead of
+        linear scan through all COLUMNS × keywords.
         """
         if not header_text:
             return None
             
         header_lower = header_text.lower().strip()
-        header_clean = re.sub(r'[^a-z0-9]', '', header_lower)
         
-        # 1. Exact match check (using keywords list)
-        for col_def in cls.COLUMNS.values():
-            for keyword in col_def.keywords:
-                if keyword == header_lower:
-                    return col_def
+        # 1. O(1) exact match via pre-built index
+        result = cls._KEYWORD_INDEX.get(header_lower)
+        if result:
+            tick("rules.get_column_by_keyword", sub="index_hits")
+            return result
+        
+        tick("rules.get_column_by_keyword", sub="index_misses")
         
         # 2. Smart fallback for HS Code (regex-like: both 'hs' and 'code' present)
+        header_clean = re.sub(r'[^a-z0-9]', '', header_lower)
         if 'hs' in header_clean and 'code' in header_clean:
             return cls.COLUMNS.get("col_hs_code")
                     
         return None
+
+    @classmethod
+    def _rebuild_keyword_index(cls) -> None:
+        """
+        Builds {keyword_lower: ColumnDefinition} from all COLUMNS.
+        Must be called after _load_from_config() to include JSON-defined columns.
+        """
+        cls._KEYWORD_INDEX = {}
+        for col_def in cls.COLUMNS.values():
+            for keyword in col_def.keywords:
+                # First keyword wins (hardcoded takes priority since loaded first)
+                if keyword not in cls._KEYWORD_INDEX:
+                    cls._KEYWORD_INDEX[keyword] = col_def
+        logger.info(f"[BlueprintRules] Keyword index built: {len(cls._KEYWORD_INDEX)} entries.")
 
     @classmethod
     def get_format_for_id(cls, col_id: str) -> str:
@@ -268,3 +293,5 @@ class BlueprintRules:
 
 # Load JSON-defined columns once at module import time.
 BlueprintRules._load_from_config()
+# Build keyword index AFTER all columns (hardcoded + JSON) are loaded.
+BlueprintRules._rebuild_keyword_index()

@@ -14,6 +14,9 @@ from typing import Dict, List, Any, Optional, Tuple, Union
 import time # Added for timing operations
 import copy # For deep-copying raw table data before processing mutates it
 
+# --- Loop Profiler (non-invasive measurement) ---
+from core.utils.loop_profiler import loop_profiler
+
 # Import from our refactored modules
 try:
     from . import config as cfg # Keep config for fallback and other settings
@@ -859,6 +862,10 @@ def run_invoice_automation(
         # --- End JSON Generation ---
 
         logging.info(f"📁 Processed file: {input_filename}")
+
+        # --- Profiler Report (non-invasive) ---
+        loop_profiler.report(title=f"Sheet Parser Profiler — {input_filename}")
+        loop_profiler.reset()
         
         return output_json_path, input_stem
 

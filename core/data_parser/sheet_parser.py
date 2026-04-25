@@ -7,6 +7,9 @@ from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.utils import get_column_letter
 from decimal import Decimal, InvalidOperation
 
+# --- Loop Profiler (non-invasive measurement) ---
+from core.utils.loop_profiler import loop_profiler, tick
+
 # Import config values, now including the new pattern-matching configs
 from .config import (
     TARGET_HEADERS_MAP,
@@ -23,6 +26,23 @@ from .config import (
     HEADERLESS_COLUMN_PATTERNS,
     EXPECTED_HEADER_VALUES,
 )
+
+
+# --- PRE-COMPUTED: Reverse alias lookup (built once at import time) ---
+# Maps UPPERCASED alias text → list of canonical names it could match.
+# This replaces the O(N×M) per-cell scan with O(1) dict lookup.
+def _build_alias_lookup() -> Dict[str, List[str]]:
+    """Build {ALIAS_UPPER: [canonical_name, ...]} from TARGET_HEADERS_MAP."""
+    lookup: Dict[str, List[str]] = {}
+    for canonical, aliases in TARGET_HEADERS_MAP.items():
+        for alias in aliases:
+            key = str(alias).upper()
+            if key not in lookup:
+                lookup[key] = []
+            lookup[key].append(canonical)
+    return lookup
+
+_ALIAS_REVERSE_LOOKUP = _build_alias_lookup()
 
 
 # --- NEW: Helper functions for smart validation ---
@@ -129,6 +149,7 @@ def _score_cell(canonical_name: str, data_value: Any, row_num: int, col_num: int
     return score
 
 
+@loop_profiler.watch("_process_row")
 def _process_row(sheet: Worksheet, row_num: int) -> Tuple[Dict[str, str], int]:
     """
     Process a single row: scan all columns, score candidates, resolve ties.
@@ -148,11 +169,9 @@ def _process_row(sheet: Worksheet, row_num: int) -> Tuple[Dict[str, str], int]:
         col_scores = []
 
         if header_value:
-            # Find which canonical names this header text could match
-            candidate_canonicals = [
-                canonical for canonical, aliases in TARGET_HEADERS_MAP.items()
-                if header_value in [str(a).upper() for a in aliases]
-            ]
+            # O(1) lookup via pre-built reverse alias dict (was O(N×M) per cell)
+            candidate_canonicals = _ALIAS_REVERSE_LOOKUP.get(header_value, [])
+            tick("_process_row", sub="alias_lookups")
             for canonical_name in candidate_canonicals:
                 score = _score_cell(canonical_name, data_value, row_num, col_num)
                 if score is not None and score > 0:
@@ -205,6 +224,7 @@ def _process_row(sheet: Worksheet, row_num: int) -> Tuple[Dict[str, str], int]:
     return potential_mapping, current_row_score
 
 
+@loop_profiler.watch("find_and_map_smart_headers")
 def find_and_map_smart_headers(sheet: Worksheet) -> Optional[Tuple[int, Dict[str, str]]]:
     """
     Finds and maps headers using a scoring system. Evaluates all rows in the
@@ -227,6 +247,7 @@ def find_and_map_smart_headers(sheet: Worksheet) -> Optional[Tuple[int, Dict[str
         if row_num + 1 > sheet.max_row:
             continue
 
+        tick("find_and_map_smart_headers", sub="rows_scanned")
         potential_mapping, current_row_score = _process_row(sheet, row_num)
 
         logging.debug(f"{prefix} Row {row_num} | Score: {current_row_score} | Mapping: {potential_mapping}")
@@ -244,6 +265,7 @@ def find_and_map_smart_headers(sheet: Worksheet) -> Optional[Tuple[int, Dict[str
     return None
 
 
+@loop_profiler.watch("extract_multiple_tables")
 def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[str, str]) -> List[List[Dict[str, Any]]]:
     """
     Extracts data for multiple tables defined by header_rows using the validated column_mapping.
@@ -277,23 +299,23 @@ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[
 
         logging.info(f"{prefix} Table {table_index}: Extracting Data Rows {start_data_row} to {end_data_row - 1}")
         current_table_data: List[Dict[str, Any]] = []
+
+        # HOISTED: These never change per-row — build once per table
+        col_letter_to_canonical = {v: k for k, v in column_mapping.items()}
+        _NUMERIC_COLS_TO_CLEAN = {
+            'col_amount', 'col_unit_price', 'col_qty_sf',
+            'col_net', 'col_gross', 'col_cbm',
+        }
         
         for current_row in range(start_data_row, end_data_row):
+            tick("extract_multiple_tables", sub="rows_iterated")
             if stop_col_letter:
                 stop_cell_value = sheet[f"{stop_col_letter}{current_row}"].value
                 if stop_cell_value is None or (isinstance(stop_cell_value, str) and not stop_cell_value.strip()):
                     logging.info(f"{prefix} Stopping extraction for Table {table_index} at row {current_row}: Empty cell in stop column '{STOP_EXTRACTION_ON_EMPTY_COLUMN}'.")
                     break
 
-            col_letter_to_canonical = {v: k for k, v in column_mapping.items()}
             row_dict: Dict[str, Any] = {}
-            # Columns that can carry Excel-computed float noise (e.g. qty * price).
-            # We round these to 10 decimal places to strip the ...0000001 artifact
-            # while preserving all meaningful precision.
-            _NUMERIC_COLS_TO_CLEAN = {
-                'col_amount', 'col_unit_price', 'col_qty_sf',
-                'col_net', 'col_gross', 'col_cbm',
-            }
 
             for col_letter, canonical_name in col_letter_to_canonical.items():
                 cell_value = sheet[f"{col_letter}{current_row}"].value
@@ -324,6 +346,7 @@ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[
     return all_tables_data
 
 
+@loop_profiler.watch("find_all_header_rows")
 def find_all_header_rows(sheet, search_pattern, row_range, col_range, start_after_row: int = 0) -> List[int]:
     """
     Finds all 1-indexed row numbers containing a header based on a pattern,
@@ -345,7 +368,9 @@ def find_all_header_rows(sheet, search_pattern, row_range, col_range, start_afte
         )
 
         for r_idx in range(start_row, max_row_to_search + 1):
+            tick("find_all_header_rows", sub="rows_scanned")
             for c_idx in range(col_range[0], max_col_to_search + 1):
+                tick("find_all_header_rows", sub="cells_checked")
                 cell = sheet.cell(row=r_idx, column=c_idx)
                 if cell.value is not None:
                     cell_value_str = str(cell.value).strip()

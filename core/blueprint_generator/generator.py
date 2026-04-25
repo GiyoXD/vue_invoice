@@ -23,6 +23,7 @@ from .internal.builder import ConfigBuilder
 from .internal.validator import ConfigValidator
 from core.utils.pipeline_monitor import PipelineMonitor
 from core.utils.snitch import snitch
+from core.utils.loop_profiler import loop_profiler
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,13 @@ class BlueprintGenerator:
         analysis = self.scanner.scan_template(str(template_path), mapping_config=mapping_config)
         
         # Currently, legacy_format is always assumed or the output format is identical
-        return json.dumps(analysis.to_legacy_dict(), indent=2, ensure_ascii=False)
+        result = json.dumps(analysis.to_legacy_dict(), indent=2, ensure_ascii=False)
+        
+        # --- Profiler Report ---
+        loop_profiler.report(title=f"Blueprint Analyze Profiler — {template_path.name}")
+        loop_profiler.reset()
+        
+        return result
     
     def generate(self, template_path: str, output_dir: Optional[str] = None,
                  dry_run: bool = False, monitor: Optional[PipelineMonitor] = None,
@@ -353,6 +360,10 @@ class BlueprintGenerator:
         self.logger.info(f"✅ Config saved successfully!")
         self.logger.info(f"   Directory: {config_dir}")
         self.logger.info(f"   File: {config_file.name}")
+        
+        # --- Profiler Report ---
+        loop_profiler.report(title=f"Blueprint Generate Profiler — {template_path.name}")
+        loop_profiler.reset()
         
         return config_file
 
