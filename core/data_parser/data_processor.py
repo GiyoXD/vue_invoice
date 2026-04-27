@@ -144,9 +144,9 @@ def inject_net_weight_pricing(tables: List[List[Dict[str, Any]]], global_unit_pr
                     row['col_amount'] = float((net_dec * price).quantize(
                         decimal.Decimal('0.01'), rounding=decimal.ROUND_HALF_UP
                     ))
-                    # Use net weight as quantity basis if sqft is missing
+                    # Guarantee column exists for aggregation without faking the value
                     if row.get('col_qty_sf') is None:
-                        row['col_qty_sf'] = float(net_dec)
+                        row['col_qty_sf'] = 0.0
                     injected_count += 1
 
 
@@ -154,26 +154,7 @@ def inject_net_weight_pricing(tables: List[List[Dict[str, Any]]], global_unit_pr
     return tables
 
 
-def inject_flat_net_weight_pricing(rows: List[Dict[str, Any]], global_unit_price: float) -> List[Dict[str, Any]]:
-    """
-    Applies net weight pricing to a flat list of dicts (like aggregated results).
-    Re-calculates col_amount and col_qty_sf based on col_net sum.
-    """
-    price = decimal.Decimal(str(global_unit_price))
-    for row in rows:
-        if not isinstance(row, dict): continue
-        net_val = row.get('col_net')
-        if net_val is not None:
-            net_dec = _convert_to_decimal(net_val)
-            if net_dec is not None and net_dec > 0:
-                row['col_unit_price'] = float(price)
-                row['col_amount'] = float((net_dec * price).quantize(
-                    decimal.Decimal('0.01'), rounding=decimal.ROUND_HALF_UP
-                ))
-                # For aggregated output from main.py, missing sf might be 0 or "0"
-                if row.get('col_qty_sf') is None or row.get('col_qty_sf') in [0, "0", 0.0, "0.0"]:
-                    row['col_qty_sf'] = float(net_dec)
-    return rows
+
 
 
 def normalize_pallet_count(table_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

@@ -29,6 +29,7 @@ class ProcessedData(Base):
     timestamp = Column(DateTime, default=get_cambodia_time)
     item_count = Column(Integer)
     total_sqft = Column(Float)
+    total_net = Column(Float)
     total_amount = Column(Float)
     total_pallets = Column(Float)
     # Storing the full JSON payload
@@ -77,6 +78,9 @@ def init_db():
             if columns and "total_pallets" not in columns:
                 conn.execute(text("ALTER TABLE processed_data ADD COLUMN total_pallets FLOAT"))
                 print("Successfully added total_pallets column.")
+            if columns and "total_net" not in columns:
+                conn.execute(text("ALTER TABLE processed_data ADD COLUMN total_net FLOAT"))
+                print("Successfully added total_net column.")
     except Exception as e:
         pass
 

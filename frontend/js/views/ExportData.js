@@ -49,6 +49,7 @@ export default {
                                 <th style="padding: 0.75rem; text-align: left;">Accepted At</th>
                                 <th style="padding: 0.75rem; text-align: center;">Items</th>
                                 <th style="padding: 0.75rem; text-align: right;">Total SQFT</th>
+                                <th style="padding: 0.75rem; text-align: right;">Total Net</th>
                                 <th style="padding: 0.75rem; text-align: right;">Total Pallets</th>
                                 <th style="padding: 0.75rem; text-align: right;">Total Amount</th>
                             </tr>
@@ -59,11 +60,12 @@ export default {
                                 <td style="padding: 0.75rem;">{{ formatDate(item.timestamp) }}</td>
                                 <td style="padding: 0.75rem; text-align: center;">{{ item.item_count }}</td>
                                 <td style="padding: 0.75rem; text-align: right; font-family: monospace;">{{ item.total_sqft?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00' }}</td>
+                                <td style="padding: 0.75rem; text-align: right; font-family: monospace;">{{ item.total_net?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00' }} kg</td>
                                 <td style="padding: 0.75rem; text-align: right; font-family: monospace;">{{ item.total_pallets?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00' }}</td>
                                 <td style="padding: 0.75rem; text-align: right; font-family: monospace;">$ {{ item.total_amount?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00' }}</td>
                             </tr>
                             <tr v-if="recentInvoices.length === 0">
-                                <td colspan="6" style="padding: 2rem; text-align: center; color: rgba(255, 255, 255, 0.4);">No invoices found in registry.</td>
+                                <td colspan="7" style="padding: 2rem; text-align: center; color: rgba(255, 255, 255, 0.4);">No invoices found in registry.</td>
                             </tr>
                         </tbody>
                     </table>

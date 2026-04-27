@@ -125,6 +125,7 @@ async def accept_invoice(req: HistoryRequest, db: Session = Depends(get_db)):
         items_to_add = []
         item_count = 0
         total_sqft = 0.0
+        total_net = 0.0
         total_amount = 0.0
         total_pallets = 0.0
         
@@ -134,25 +135,24 @@ async def accept_invoice(req: HistoryRequest, db: Session = Depends(get_db)):
                 return float(val) if val is not None and str(val).strip() != "" else 0.0
             except: return 0.0
 
-        try:
-            grand_total = data.get("footer_data", {}).get("grand_total", {})
-            total_pallets = to_float(grand_total.get("col_pallet_count", 0))
-            total_sqft = to_float(grand_total.get("col_qty_sf", 0))
-            total_amount = to_float(grand_total.get("col_amount", 0))
-        except:
-            pass
+        footer_data = data.get("footer_data")
+        if not footer_data or "grand_total" not in footer_data:
+            return JSONResponse(status_code=422, content={"error": f"Cannot accept: missing footer_data or grand_total in '{req.filename}'"})
+
+        grand_total = footer_data["grand_total"]
+        total_pallets = to_float(grand_total.get("col_pallet_count", 0))
+        total_sqft = to_float(grand_total.get("col_qty_sf", 0))
+        total_net = to_float(grand_total.get("col_net", 0))
+        total_amount = to_float(grand_total.get("col_amount", 0))
         
-        source_tables = data.get("raw_data") or data.get("multi_table") or []
+        # Prioritize multi_table so parsed values (like pallets and CBM) are accurately tracked
+        source_tables = data.get("multi_table") or data.get("raw_data") or []
         for table in source_tables:
             if isinstance(table, list):
                 for row in table:
                     sqft_val = to_float(row.get("col_qty_sf"))
                     amount_val = to_float(row.get("col_amount"))
                     item_count += 1
-                    
-                    if not data.get("footer_data", {}).get("grand_total"):
-                        total_sqft += sqft_val
-                        total_amount += amount_val
 
                     item = InvoiceItem(
                         invoice_id=req.filename,
@@ -200,10 +200,10 @@ async def accept_invoice(req: HistoryRequest, db: Session = Depends(get_db)):
         if items_to_add: db.add_all(items_to_add)
         existing = db.query(ProcessedData).filter(ProcessedData.filename == req.filename).first()
         if existing:
-            existing.item_count, existing.total_sqft, existing.total_amount, existing.total_pallets = item_count, total_sqft, total_amount, total_pallets
+            existing.item_count, existing.total_sqft, existing.total_net, existing.total_amount, existing.total_pallets = item_count, total_sqft, total_net, total_amount, total_pallets
             existing.data_payload, existing.timestamp = data, get_cambodia_time()
         else:
-            db.add(ProcessedData(filename=req.filename, item_count=item_count, total_sqft=total_sqft, total_amount=total_amount, total_pallets=total_pallets, data_payload=data))
+            db.add(ProcessedData(filename=req.filename, item_count=item_count, total_sqft=total_sqft, total_net=total_net, total_amount=total_amount, total_pallets=total_pallets, data_payload=data))
         db.commit()
         file_path.unlink()
         return {"status": "success", "message": f"Invoice {req.filename} accepted."}
@@ -241,6 +241,7 @@ async def export_registry(start_date: Optional[str] = None, end_date: Optional[s
         ])
         
         total_sqft = 0.0
+        total_net = 0.0
         total_pallets = 0.0
         total_amount = 0.0
         
@@ -273,6 +274,7 @@ async def export_registry(start_date: Optional[str] = None, end_date: Optional[s
             ])
             
             total_sqft += float(row.col_qty_sf or 0.0)
+            total_net += float(row.col_net or 0.0)
             total_pallets += float(row.col_pallet_count or 0.0)
             total_amount += float(row.col_amount or 0.0)
             
@@ -281,6 +283,7 @@ async def export_registry(start_date: Optional[str] = None, end_date: Optional[s
         summary_row[1] = "TOTAL"
         summary_row[15] = round(total_sqft, 2)
         summary_row[16] = round(total_pallets, 2)
+        summary_row[17] = round(total_net, 2)
         summary_row[22] = round(total_amount, 2)
         
         writer.writerow([])
@@ -303,6 +306,7 @@ async def list_registry(db: Session = Depends(get_db)):
                 "timestamp": r.timestamp.isoformat() if r.timestamp else None, 
                 "item_count": r.item_count, 
                 "total_sqft": r.total_sqft,
+                "total_net": getattr(r, "total_net", 0.0),
                 "total_pallets": getattr(r, "total_pallets", 0.0),
                 "total_amount": r.total_amount
             } for r in results

@@ -13,7 +13,8 @@ from core.data_parser.data_processor import (
     aggregate_standard_by_po_item_price, 
     aggregate_custom_by_po_item,
     format_aggregation_as_list,
-    aggregate_per_po_with_pallets
+    aggregate_per_po_with_pallets,
+    calculate_footer_totals
 )
 from core.data_parser.main import perform_DAF_compounding
 
@@ -94,12 +95,26 @@ def generate_invoice(request: GenerateRequest):
             raw_multi = full_data.get("multi_table", [])
             full_data["multi_table"] = inject_net_weight_pricing(raw_multi, request.global_unit_price)
             
+            # ALSO inject into raw_data because the database export (history.py) relies on it
+            if "raw_data" in full_data:
+                full_data["raw_data"] = inject_net_weight_pricing(full_data.get("raw_data", []), request.global_unit_price)
+            
             # Since pricing was added, we MUST recalculate all aggregations from scratch
             # to ensure mathematical accuracy across Custom, Standard, and DAF modes.
             merged_data = []
             tables = full_data.get("multi_table", [])
             for t in tables:
                 if isinstance(t, list): merged_data.extend(t)
+            
+            # Recalculate footers for database export accurate grand totals
+            grand_total_footer = calculate_footer_totals(merged_data)
+            footer_data = full_data.get("footer_data")
+            if not footer_data or "grand_total" not in footer_data:
+                return JSONResponse(status_code=422, content={"error": "Missing footer_data or grand_total in parsed data. Cannot process pricing."})
+                
+            gt = footer_data["grand_total"]
+            gt["col_amount"] = str(grand_total_footer.get("col_amount", 0))
+            gt["col_qty_sf"] = str(grand_total_footer.get("col_qty_sf", 0))
             
             std_map = {}
             cust_map = {}
