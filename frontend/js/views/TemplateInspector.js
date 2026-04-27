@@ -143,13 +143,15 @@ export default {
                                 </div>
 
                                 <div style="margin-bottom: 0.75rem;">
-                                    <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.25rem;">Standard value override:</label>
-                                    <input type="text" v-model="editStandardValue" class="input-field" placeholder="Enter standard value..." style="width: 100%;" @keyup.enter="saveCellOverrides" />
+                                    <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.25rem;">Base Value <span style="color: #60a5fa; font-size: 0.75rem;">(applies to ALL modes)</span></label>
+                                    <input type="text" v-model="editStandardValue" class="input-field" placeholder="Enter value for standard, custom, DAF..." style="width: 100%;" @keyup.enter="saveCellOverrides" />
+                                    <p style="color: #64748b; font-size: 0.7rem; margin: 0.25rem 0 0 0;">This value will be used in Standard, Custom, DAF, and any other mode.</p>
                                 </div>
 
                                 <div style="margin-bottom: 0.75rem;">
-                                    <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.25rem;">DAF value override:</label>
-                                    <input type="text" v-model="editDafValue" class="input-field" placeholder="Enter DAF value..." style="width: 100%;" @keyup.enter="saveCellOverrides" />
+                                    <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.25rem;">DAF Override <span style="color: #fbbf24; font-size: 0.75rem;">(takes priority in DAF mode)</span></label>
+                                    <input type="text" v-model="editDafValue" class="input-field" placeholder="Leave empty to use base value" style="width: 100%;" @keyup.enter="saveCellOverrides" />
+                                    <p style="color: #64748b; font-size: 0.7rem; margin: 0.25rem 0 0 0;">Only used when generating in DAF mode. If empty, the base value is used.</p>
                                 </div>
 
                                 <div v-if="editingCell.currentOverrides" style="margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.2); border-radius: 4px; font-size: 0.8rem;">
@@ -266,9 +268,11 @@ export default {
             }
         };
 
-        const loadTemplate = async (t) => {
+        const loadTemplate = async (t, preserveState = false) => {
             selectedTemplateName.value = t.name;
-            currentTemplate.value = null; // Clear immediately to prevent showing old data while loading
+            if (!preserveState) {
+                currentTemplate.value = null; // Clear immediately to prevent showing old data while loading
+            }
             try {
                 const url = t.bundle_name 
                     ? `/api/template/view?name=${encodeURIComponent(t.name)}&bundle=${encodeURIComponent(t.bundle_name)}&_t=${Date.now()}`
@@ -277,9 +281,13 @@ export default {
                 const res = await fetch(url);
                 if (res.ok) {
                     currentTemplate.value = await res.json();
-                    // Default to first sheet
                     const sheets = Object.keys(currentTemplate.value?.template_layout || {});
-                    if (sheets.length > 0) currentSheetName.value = sheets[0];
+                    
+                    // Default to first sheet, unless preserving state and current sheet is still valid
+                    if (!preserveState || !currentSheetName.value || !sheets.includes(currentSheetName.value)) {
+                        if (sheets.length > 0) currentSheetName.value = sheets[0];
+                        else currentSheetName.value = null;
+                    }
                 }
             } catch (e) {
                 console.error("Failed to load template", e);
@@ -755,10 +763,10 @@ export default {
                 if (res.ok) {
                     editorMessage.value = "Saved!";
                     editorMessageType.value = "success";
-                    // Reload the template to reflect changes
+                    // Reload the template to reflect changes while preserving state
                     setTimeout(async () => {
                         closeEditor();
-                        if (t) await loadTemplate(t);
+                        if (t) await loadTemplate(t, true);
                     }, 500);
                 } else {
                     editorMessage.value = data.error || "Save failed";

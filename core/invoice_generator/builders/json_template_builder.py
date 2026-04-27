@@ -572,9 +572,14 @@ class JsonTemplateStateBuilder:
         """
         Resolves a cell value that may be mode-dependent.
         
-        If raw_value is a dict (e.g. {'default': 'INVOICE', 'daf': 'DAF'}),
-        picks the mode-specific key first, then falls back to 'default'.
-        If raw_value is a plain string/number, returns it as-is.
+        Resolution priority (highest to lowest):
+            1. Exact mode-specific override (e.g., 'daf' key when mode='daf')
+            2. 'standard' — the UNIVERSAL base value that applies to ALL modes
+            3. 'default' — the original/fallback value
+        
+        This means 'standard' is NOT mode-specific; it acts as a universal
+        override that applies to standard, custom, DAF, and any future mode.
+        Only a mode-specific key (e.g., 'daf') can take priority over it.
         
         Args:
             raw_value: The raw value from header_content (str, number, or dict).
@@ -584,15 +589,17 @@ class JsonTemplateStateBuilder:
             The resolved scalar value.
         """
         if isinstance(raw_value, dict):
-            # 1. Exact mode match
-            if mode in raw_value:
+            # 1. Exact mode-specific override (e.g., 'daf' key when mode='daf')
+            #    This does NOT match 'standard' key when mode='standard' — that's
+            #    handled by step 2 as the universal base.
+            if mode != "standard" and mode in raw_value:
                 return raw_value[mode]
             
-            # 2. 'standard' fallback (for 'custom' or any other future mode)
-            if mode != "daf" and "standard" in raw_value:
+            # 2. 'standard' = universal base value (applies to ALL modes)
+            if "standard" in raw_value:
                 return raw_value["standard"]
                 
-            # 3. 'default' fallback
+            # 3. 'default' fallback (original template value)
             return raw_value.get('default', next(iter(raw_value.values()), None))
             
         return raw_value
