@@ -1,5 +1,6 @@
 import logging
 import json
+import tempfile
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -7,6 +8,14 @@ from typing import List, Optional, Any
 from pathlib import Path
 from core.system_config import sys_config
 from core.orchestrator import Orchestrator
+from core.data_parser.data_processor import (
+    inject_net_weight_pricing, 
+    aggregate_standard_by_po_item_price, 
+    aggregate_custom_by_po_item,
+    format_aggregation_as_list,
+    aggregate_per_po_with_pallets
+)
+from core.data_parser.main import perform_DAF_compounding
 
 router = APIRouter(prefix="/api", tags=["generate"])
 logger = logging.getLogger(__name__)
@@ -40,10 +49,8 @@ def generate_invoice(request: GenerateRequest):
         if not json_path_obj.exists():
              return JSONResponse(status_code=404, content={"error": "JSON file not found. Please upload again."})
 
-        # Define base output path
-        output_dir = sys_config.output_dir
-        base_output_dir = output_dir / request.identifier
-
+        # Define base output path (used temporarily by orchestrator for filename generation)
+        # Will be created inside the loop context securely
         # Default Template/Config dirs
         template_dir = sys_config.bundled_dir
         config_dir = sys_config.bundled_dir
@@ -77,9 +84,6 @@ def generate_invoice(request: GenerateRequest):
 
         # Net Weight Pricing Mode: inject computed columns if global_unit_price is provided
         if request.global_unit_price is not None:
-            from core.data_parser.data_processor import inject_net_weight_pricing, aggregate_standard_by_po_item_price, aggregate_custom_by_po_item
-            from core.data_parser.main import perform_DAF_compounding
-            from core.data_parser.data_processor import format_aggregation_as_list
             
             # Inject pricing flag into metadata for downstream template generation
             if "metadata" not in full_data:
@@ -92,12 +96,6 @@ def generate_invoice(request: GenerateRequest):
             
             # Since pricing was added, we MUST recalculate all aggregations from scratch
             # to ensure mathematical accuracy across Custom, Standard, and DAF modes.
-            from core.data_parser.data_processor import (
-                aggregate_standard_by_po_item_price, 
-                aggregate_custom_by_po_item,
-                format_aggregation_as_list,
-                aggregate_per_po_with_pallets
-            )
             merged_data = []
             tables = full_data.get("multi_table", [])
             for t in tables:
@@ -126,7 +124,6 @@ def generate_invoice(request: GenerateRequest):
         try:
             import decimal
             import datetime
-            import tempfile
             import os
             import shutil
 
@@ -197,35 +194,37 @@ def generate_invoice(request: GenerateRequest):
                 variant_tasks = [{"suffix": "", "config_path": None, "template_path": None}]
 
         # Final loop
-        for variant in variant_tasks:
-            variant_suffix = variant["suffix"]
-            for task in mode_tasks:
-                try:
-                    filename = f"{request.identifier}_Invoice{variant_suffix}{task['suffix']}.xlsx"
-                    output_path = base_output_dir / filename
-
-                    result = orchestrator.generate_invoice(
-                        json_path=json_path_obj,
-                        output_path=output_path,
-                        template_dir=template_dir,
-                        config_dir=config_dir,
-                        daf_mode=task["daf_mode"],
-                        custom_mode=task["custom_mode"],
-                        enable_auto_fit=request.auto_fit,
-                        explicit_config_path=Path(variant["config_path"]) if variant.get("config_path") else None,
-                        explicit_template_path=Path(variant["template_path"]) if variant.get("template_path") else None,
-                        input_data_dict=full_data,
-                        return_bytes=True
-                    )
-                    
-                    if result:
-                        fname, fbytes = result
-                        results.append(fname)
-                        generated_files.append((fname, fbytes))
-                        processed_any = True
-                except Exception as e:
-                    task_name = f"{variant_suffix.lstrip('_')} {task['name']}" if variant_suffix else task['name']
-                    errors.append(f"Failed to generate {task_name}: {str(e)}")
+        with tempfile.TemporaryDirectory(prefix="invoice_gen_tmp_") as tmpdir:
+            base_output_dir = Path(tmpdir)
+            for variant in variant_tasks:
+                variant_suffix = variant["suffix"]
+                for task in mode_tasks:
+                    try:
+                        filename = f"{request.identifier}_Invoice{variant_suffix}{task['suffix']}.xlsx"
+                        output_path = base_output_dir / filename
+    
+                        result = orchestrator.generate_invoice(
+                            json_path=json_path_obj,
+                            output_path=output_path,
+                            template_dir=template_dir,
+                            config_dir=config_dir,
+                            daf_mode=task["daf_mode"],
+                            custom_mode=task["custom_mode"],
+                            enable_auto_fit=request.auto_fit,
+                            explicit_config_path=Path(variant["config_path"]) if variant.get("config_path") else None,
+                            explicit_template_path=Path(variant["template_path"]) if variant.get("template_path") else None,
+                            input_data_dict=full_data,
+                            return_bytes=True
+                        )
+                        
+                        if result:
+                            fname, fbytes = result
+                            results.append(fname)
+                            generated_files.append((fname, fbytes))
+                            processed_any = True
+                    except Exception as e:
+                        task_name = f"{variant_suffix.lstrip('_')} {task['name']}" if variant_suffix else task['name']
+                        errors.append(f"Failed to generate {task_name}: {str(e)}")
 
         if not processed_any and errors:
              status_code = 500

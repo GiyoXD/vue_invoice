@@ -22,7 +22,6 @@ class SystemConfig:
     REQUIRED_ENV_VARS: List[str] = [
         "BLUEPRINTS_ROOT",
         "BUNDLED_DIR",
-        "OUTPUT_DIR",
     ]
 
     def __new__(cls):
@@ -96,10 +95,6 @@ class SystemConfig:
     def mapping_config_path(self) -> Path:
         # This one is a file path, not directory usually, but logic is same
         return self._resolve_path("mapping_config", "database/blueprints/mapper/mapping_config.json", env_key="MAPPING_CONFIG")
-
-    @property
-    def output_dir(self) -> Path:
-        return self._resolve_path("output", "database/generated_invoices", env_key="OUTPUT_DIR")
     
     @property
     def temp_uploads_dir(self) -> Path:

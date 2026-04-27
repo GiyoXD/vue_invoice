@@ -170,7 +170,6 @@ async def accept_invoice(req: HistoryRequest, db: Session = Depends(get_db)):
                         col_qty_pcs=to_float(row.get("col_qty_pcs")),
                         col_qty_sf=sqft_val,
                         col_pallet_count=to_float(row.get("col_pallet_count")),
-                        col_pallet_count_raw=str(row.get("col_pallet_count_raw", "")),
                         col_net=to_float(row.get("col_net")),
                         col_gross=to_float(row.get("col_gross")),
                         col_cbm_raw=str(row.get("col_cbm_raw", row.get("col_cbm", ""))),
@@ -237,7 +236,7 @@ async def export_registry(start_date: Optional[str] = None, end_date: Optional[s
             "ID", "Invoice ID", "Timestamp", "DC", "PO", "Production Order No", 
             "Production Date", "Line No", "Direction", "Item", "Reference Code", 
             "Description", "Level", "Grade", "Qty (PCS)", "Qty (SF)", "Pallet Count", 
-            "Pallet Count Raw", "Net Weight", "Gross Weight", "CBM Raw", 
+            "Net Weight", "Gross Weight", "CBM Raw", 
             "HS Code", "Unit Price", "Amount", "Is Adjustment"
         ])
         
@@ -264,7 +263,6 @@ async def export_registry(start_date: Optional[str] = None, end_date: Optional[s
                 row.col_qty_pcs,
                 row.col_qty_sf,
                 row.col_pallet_count,
-                row.col_pallet_count_raw,
                 row.col_net,
                 row.col_gross,
                 row.col_cbm_raw,
@@ -279,11 +277,11 @@ async def export_registry(start_date: Optional[str] = None, end_date: Optional[s
             total_amount += float(row.col_amount or 0.0)
             
         # Write Summary Row
-        summary_row = [""] * 25
+        summary_row = [""] * 24
         summary_row[1] = "TOTAL"
         summary_row[15] = round(total_sqft, 2)
         summary_row[16] = round(total_pallets, 2)
-        summary_row[23] = round(total_amount, 2)
+        summary_row[22] = round(total_amount, 2)
         
         writer.writerow([])
         writer.writerow(summary_row)

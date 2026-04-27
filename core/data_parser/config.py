@@ -182,7 +182,7 @@ def load_and_update_mappings():
         unique_keywords = list(set(all_keywords))
         # Filter out empty strings just in case
         unique_keywords = [kw for kw in unique_keywords if kw.strip()]
-        escaped = [re.escape(kw) for kw in unique_keywords]
+        escaped = [r"\b" + re.escape(kw) + r"\b" for kw in unique_keywords]
         
         # If we found keywords, build the pattern; otherwise fallback
         if escaped:

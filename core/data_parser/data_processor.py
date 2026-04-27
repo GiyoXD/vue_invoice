@@ -178,20 +178,24 @@ def inject_flat_net_weight_pricing(rows: List[Dict[str, Any]], global_unit_price
 
 def normalize_pallet_count(table_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Normalizes pallet count values from 'x-y' format (e.g. '1-39', '2-39')
-    into simple integers (1 or 0).
+    Normalizes ALL pallet count values to binary 1/0.
     
-    Logic:
-    - Parse 'x-y' to extract pallet number x.
-    - First occurrence of a new x → 1 (new pallet)
-    - Subsequent consecutive rows with same x → 0 (continuation row)
-    - Values that are already plain integers are left as-is.
+    Any non-zero pallet value becomes 1 (marks a new pallet boundary).
+    Zero or empty values become 0 (continuation row within a pallet).
+    
+    Handles multiple input formats:
+    - 'x-y' format (e.g. '1-39', '2-39'): first occurrence of new x → 1, same x → 0
+    - Plain integers (e.g. 1, 2, 3): any value >= 1 → 1
+    - Empty/None: → 0
+    
+    The x-y display format (e.g. "3-19") is NOT produced here.
+    It will be reconstructed downstream in the invoice generator UI.
     
     Args:
         table_data: List of row dicts from a single extracted table.
     
     Returns:
-        The same list with col_pallet_count normalized in-place.
+        The same list with col_pallet_count normalized in-place to 1/0.
     """
     prefix = "[normalize_pallet_count]"
     pallet_key = 'col_pallet_count'
@@ -199,56 +203,70 @@ def normalize_pallet_count(table_data: List[Dict[str, Any]]) -> List[Dict[str, A
     if not table_data:
         return table_data
     
-    # Check if any value is in 'x-y' format
-    sample_val = None
+    # Check if pallet column exists at all
+    has_pallet = any(row.get(pallet_key) is not None for row in table_data)
+    if not has_pallet:
+        return table_data
+    
+    # Detect if data is in 'x-y' format by checking the first non-empty value
+    is_xy_format = False
     for row in table_data:
         v = row.get(pallet_key)
         if v is not None and str(v).strip():
-            sample_val = str(v).strip()
+            if re.match(r'^\d+-\d+$', str(v).strip()):
+                is_xy_format = True
             break
     
-    if sample_val is None:
-        return table_data
-    
-    # Only activate if the format is 'x-y' (contains a dash with digits on both sides)
-    import re
-    if not re.match(r'^\d+-\d+$', sample_val):
-        logging.debug(f"{prefix} Pallet values are not in 'x-y' format (sample: '{sample_val}'). Skipping.")
-        return table_data
-    
-    logging.info(f"{prefix} Detected 'x-y' pallet format (sample: '{sample_val}'). Normalizing...")
-    
-    last_pallet_num = None
     normalized_count = 0
     
-    for row in table_data:
-        raw_val = row.get(pallet_key)
-        if raw_val is None or not str(raw_val).strip():
-            row[pallet_key] = 0
-            continue
+    if is_xy_format:
+        # x-y format: first occurrence of a new x → 1, same x → 0
+        logging.info(f"{prefix} Detected 'x-y' pallet format. Normalizing to 1/0...")
+        last_pallet_num = None
         
-        raw_str = str(raw_val).strip()
-        match = re.match(r'^(\d+)-(\d+)$', raw_str)
-        
-        if match:
-            pallet_num = int(match.group(1))
-            
-            if pallet_num != last_pallet_num:
-                # New pallet
-                row[pallet_key] = 1
-                last_pallet_num = pallet_num
-                normalized_count += 1
-            else:
-                # Continuation row (same pallet)
+        for row in table_data:
+            raw_val = row.get(pallet_key)
+            if raw_val is None or not str(raw_val).strip():
                 row[pallet_key] = 0
-        else:
-            # Not x-y format, try plain int conversion
+                continue
+            
+            raw_str = str(raw_val).strip()
+            match = re.match(r'^(\d+)-(\d+)$', raw_str)
+            
+            if match:
+                pallet_num = int(match.group(1))
+                if pallet_num != last_pallet_num:
+                    row[pallet_key] = 1
+                    last_pallet_num = pallet_num
+                    normalized_count += 1
+                else:
+                    row[pallet_key] = 0
+            else:
+                # Mixed format fallback
+                try:
+                    row[pallet_key] = 1 if int(float(raw_str)) >= 1 else 0
+                    if row[pallet_key] == 1:
+                        normalized_count += 1
+                except (ValueError, TypeError):
+                    row[pallet_key] = 0
+    else:
+        # Plain numeric format: any value >= 1 → 1, else 0
+        logging.info(f"{prefix} Normalizing plain pallet values to 1/0...")
+        for row in table_data:
+            raw_val = row.get(pallet_key)
+            if raw_val is None or not str(raw_val).strip():
+                row[pallet_key] = 0
+                continue
+            
             try:
-                row[pallet_key] = int(float(raw_str))
+                int_val = int(float(str(raw_val).strip()))
+                row[pallet_key] = 1 if int_val >= 1 else 0
+                if row[pallet_key] == 1:
+                    normalized_count += 1
             except (ValueError, TypeError):
                 row[pallet_key] = 0
     
-    logging.info(f"{prefix} Normalized {len(table_data)} rows → {normalized_count} unique pallets detected.")
+    logging.info(f"{prefix} Normalized {len(table_data)} rows → {normalized_count} pallet boundaries detected.")
     return table_data
 
 # process_cbm_column function remains unchanged...
@@ -1040,10 +1058,8 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
              if converted:
                  aggregation_map[key]['col_amount'] += converted
 
-        # Sum pallet_count — prefer col_pallet_count_raw (integer backup)
-        # because col_pallet_count may already be an "x-y" format string
-        # after main.py's pallet order conversion.
-        pallet_val = row.get('col_pallet_count_raw', row.get('col_pallet_count'))
+        # Sum pallet_count — values are always 1/0 integers after normalize_pallet_count
+        pallet_val = row.get('col_pallet_count')
         if pallet_val is not None:
              try:
                  aggregation_map[key]['col_pallet_count'] += int(float(pallet_val))

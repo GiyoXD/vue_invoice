@@ -89,7 +89,7 @@ export default {
                                         <th>PCS</th>
                                         <th>SQFT</th>
                                         <th>Pallets</th>
-                                        <th>Raw Pallets</th>
+
                                         <th>Net</th>
                                         <th>Gross</th>
                                         <th>CBM</th>
@@ -113,7 +113,7 @@ export default {
                                         <td contenteditable="true" spellcheck="false">{{ row.col_qty_pcs || row.pcs }}</td>
                                         <td contenteditable="true" spellcheck="false">{{ row.col_qty_sf || row.sqft }}</td>
                                         <td contenteditable="true" spellcheck="false">{{ row.col_pallet_count || row.pallet_count }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.col_pallet_count_raw !== undefined ? row.col_pallet_count_raw : '' }}</td>
+
                                         <td contenteditable="true" spellcheck="false">
                                             <span v-if="!row.is_adjustment">{{ row.col_net || row.net }}</span>
                                         </td>

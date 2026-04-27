@@ -718,56 +718,16 @@ def run_invoice_automation(
 
         logging.info(f"Grand Total Footer: {grand_total_footer}")
 
-        # --- Convert pallet_count to "x-y" pallet order format (AFTER aggregation) ---
-        # Must happen AFTER aggregate_per_po_with_pallets which needs integer pallet values.
-        # x = sequential pallet number, y = total pallets in this table
-        # Rows with pallet_count=0 stay as 0
-        for table_index, table_data in enumerate(processed_tables):
-            if not isinstance(table_data, list):
-                continue
-            
-            # Count total pallets in this table (values are already int from extraction)
-            total_pallets = sum(
-                int(float(row.get('col_pallet_count', 0))) for row in table_data
-                if row.get('col_pallet_count') is not None and int(float(row.get('col_pallet_count', 0))) >= 1
-            )
-            
-            # Assign sequential pallet order "x-y" for rows with pallet >= 1
-            pallet_order = 0
-            for row in table_data:
-                try:
-                    pallet_val = int(float(row.get('col_pallet_count', 0)))
-                except (ValueError, TypeError):
-                    pallet_val = 0
-                
-                row['col_pallet_count_raw'] = pallet_val
-                
-                if pallet_val >= 1:
-                    pallet_order += 1
-                    row['col_pallet_count'] = f"{pallet_order}-{total_pallets}"
-                else:
-                    row['col_pallet_count'] = 0
-            
-            logging.info(f"Table {table_index + 1}: Assigned pallet order 1-{total_pallets} to {pallet_order} rows ({total_pallets} total pallets)")
-            
-            # Pass 3: Fill-from-above — rows with pallet_count=0 adopt the value
-            # from the pallet row above them. This allows vertical merging
-            # to group loose pieces with the pallet they belong to.
-            # Walk top-to-bottom, carrying the last seen non-zero value downward.
-            carry_value = 0
-            for row in table_data:
-                if row.get('col_pallet_count', 0) != 0:
-                    carry_value = row['col_pallet_count']
-                else:
-                    if carry_value != 0:
-                        row['col_pallet_count'] = carry_value
-
-        # Log the converted pallet_count
+        # Pallet values are already normalized to 1/0 by normalize_pallet_count().
+        # The x-y display format (e.g. "3-19") is NOT produced here.
+        # It will be reconstructed downstream in the invoice generator UI.
         for table_index, table_data in enumerate(processed_tables):
             if isinstance(table_data, list):
-                counts = [row.get('col_pallet_count') for row in table_data if 'col_pallet_count' in row]
-                if counts:
-                    logging.info(f"Final pallet_count in table {table_index + 1}: {counts[:10]}{'...' if len(counts) > 10 else ''}")
+                pallet_sum = sum(
+                    row.get('col_pallet_count', 0) for row in table_data
+                    if isinstance(row.get('col_pallet_count'), (int, float))
+                )
+                logging.info(f"Table {table_index + 1}: {pallet_sum} pallet boundaries (1/0 format)")
 
         # --- 8. Generate JSON Output ---
         logging.info("--- Preparing Data for JSON Output ---")

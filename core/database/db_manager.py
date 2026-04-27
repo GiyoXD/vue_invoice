@@ -54,7 +54,6 @@ class InvoiceItem(Base):
     col_qty_pcs = Column(Float)
     col_qty_sf = Column(Float)
     col_pallet_count = Column(Float)
-    col_pallet_count_raw = Column(String)
     col_net = Column(Float)
     col_gross = Column(Float)
     col_cbm_raw = Column(String)

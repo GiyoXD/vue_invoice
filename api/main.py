@@ -42,8 +42,7 @@ async def health_check():
     return {"status": "ok"}
 
 # 6. Global Setup
-sys_config.temp_uploads_dir.mkdir(exist_ok=True)
-sys_config.output_dir.mkdir(exist_ok=True)
+sys_config.temp_uploads_dir.mkdir(parents=True, exist_ok=True)
 
 if __name__ == "__main__":
     import uvicorn

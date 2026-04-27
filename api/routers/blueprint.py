@@ -142,6 +142,13 @@ async def generate_config(request: GenerateRequest):
             pricing_mode=request.pricing_mode
         )
         
+        # Clean up the uploaded Excel file now that the blueprint is generated
+        try:
+            if file_path.exists():
+                file_path.unlink()
+        except Exception as cleanup_err:
+            logger.warning(f"Failed to delete temporary blueprint file {file_path}: {cleanup_err}")
+        
         return GenerateResult(
             status="success",
             config_path=str(result_path),

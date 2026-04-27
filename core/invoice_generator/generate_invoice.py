@@ -670,11 +670,11 @@ def main():
     if args.output:
         output_path = Path(args.output)
     else:
-        # Derive from input stem
+        # Derive from input stem, output to current working directory
         input_stem = Path(args.input_data_file).stem
-        output_path = sys_config.output_dir / f"{input_stem}.xlsx"
-        # Ensure output dir exists
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path = Path.cwd() / f"{input_stem}.xlsx"
+    # Ensure output dir exists
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     
     try:
         # Load data for CLI usage

@@ -167,6 +167,13 @@ def generate_template(config: TemplateConfig):
             bundle_dir_name=config.bundle_dir_name or None,
             pricing_mode=config.pricing_mode
         )
+        
+        try:
+            if temp_path.exists():
+                temp_path.unlink()
+        except Exception as cleanup_err:
+            logger.warning(f"Failed to delete temporary blueprint file {temp_path}: {cleanup_err}")
+            
         return {"status": "success", "bundle_path": str(result_path.parent)}
     except Exception as e: return JSONResponse(status_code=500, content={"error": str(e)})
 
