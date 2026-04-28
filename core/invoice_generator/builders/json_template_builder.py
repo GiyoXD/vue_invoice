@@ -138,27 +138,27 @@ class JsonTemplateStateBuilder:
 
         # 2. Parse Header State
         # 'header_content' is {"A1": {...}, "B1": {...}}
-        header_content = self.layout_data.get('header_content', {})
-        header_styles_raw = self.layout_data.get('header_styles', {})
+        header_content = self.layout_data.get('template_header_content') or self.layout_data.get('header_content', {})
+        header_styles_raw = self.layout_data.get('template_header_styles') or self.layout_data.get('header_styles', {})
         header_styles = _flatten_grouped_styles(header_styles_raw)
         
         self.style_palette = self.layout_data.get('style_palette', {}) # Option B Support
-        header_merges_raw = self.layout_data.get('header_merges', [])
+        header_merges_raw = self.layout_data.get('template_header_merges') or self.layout_data.get('header_merges', [])
         self.header_merged_cells = list(header_merges_raw.keys()) if isinstance(header_merges_raw, dict) else header_merges_raw
         
         self.header_state, self.header_end_row = self._build_state_grid(header_content, header_styles, is_header=True)
         
         # Load header row heights
-        header_row_heights = self.layout_data.get('header_row_heights', {})
+        header_row_heights = self.layout_data.get('template_header_row_heights') or self.layout_data.get('header_row_heights', {})
         for r_str, h in header_row_heights.items():
             self.row_heights[int(r_str)] = h
 
-        # 3. Parse Footer State
-        self.footer_rows = self.layout_data.get('footer_rows')
+        # 3. Parse Template Footer State
+        self.template_footer_rows = self.layout_data.get('template_footer_rows') or self.layout_data.get('footer_rows')
         
-        if self.footer_rows is not None:
+        if self.template_footer_rows is not None:
             # --- NEW GRID-ROW FORMAT ---
-            logger.info(f"[JsonTemplateStateBuilder] Using new footer_rows grid format ({len(self.footer_rows)} rows)")
+            logger.info(f"[JsonTemplateStateBuilder] Using new template_footer_rows grid format ({len(self.template_footer_rows)} rows)")
             
             if self.header_end_row <= 0:
                 logger.error(
@@ -169,11 +169,11 @@ class JsonTemplateStateBuilder:
                 self.template_footer_start_row = -1
             else:
                 self.template_footer_start_row = self.header_end_row + 1
-            max_rel_idx = max((r.get('relative_index', 0) for r in self.footer_rows), default=-1)
+            max_rel_idx = max((r.get('relative_index', 0) for r in self.template_footer_rows), default=-1)
             self.template_footer_end_row = (self.template_footer_start_row + max_rel_idx) if max_rel_idx >= 0 else -1
             
             # Update max_col based on new footer cells
-            for r_dict in self.footer_rows:
+            for r_dict in self.template_footer_rows:
                 for c_dict in r_dict.get('cells', []):
                     c_idx = c_dict.get('col_index', 1)
                     if not hasattr(self, 'max_col') or c_idx > self.max_col:
@@ -205,7 +205,8 @@ class JsonTemplateStateBuilder:
                     try:
                         _, r = coordinate_from_string(k)
                         if r < min_r: min_r = r
-                    except: pass
+                    except Exception as e:
+                        logger.warning(f"[JsonTemplateStateBuilder] Bad coordinate key '{k}' in old footer format: {e}")
                     
                 # Check merged cells
                 from openpyxl.utils.cell import range_boundaries
@@ -213,7 +214,8 @@ class JsonTemplateStateBuilder:
                     try:
                         _, min_row, _, _ = range_boundaries(merge)
                         if min_row < min_r: min_r = min_row
-                    except: pass
+                    except Exception as e:
+                        logger.warning(f"[JsonTemplateStateBuilder] Bad merge range '{merge}' in old footer format: {e}")
                     
                 # Prevent overlap
                 minimum_safe_footer_row = (self.header_end_row + 1) if self.header_end_row > 0 else 1
@@ -243,7 +245,8 @@ class JsonTemplateStateBuilder:
                         if r >= self.template_footer_start_row:
                             rel_r = r - self.template_footer_start_row
                             self.relative_footer_row_heights[rel_r] = h
-                    except ValueError: pass
+                    except ValueError:
+                        logger.warning(f"[JsonTemplateStateBuilder] Non-integer row key '{r_str}' in footer_row_heights — skipped.")
                     
                 from openpyxl.utils.cell import range_boundaries
                 for merge in self.footer_merged_cells:
@@ -253,7 +256,8 @@ class JsonTemplateStateBuilder:
                             rel_min = min_row - self.template_footer_start_row
                             rel_max = max_row - self.template_footer_start_row
                             self.relative_footer_merges.append((min_col, rel_min, max_col, rel_max))
-                    except ValueError: pass
+                    except ValueError as e:
+                        logger.warning(f"[JsonTemplateStateBuilder] Bad merge range '{merge}' in relative_footer_merges: {e}")
             
         # Update max_col
         if self.column_widths:
@@ -301,7 +305,8 @@ class JsonTemplateStateBuilder:
                 c, r = coordinate_from_string(coord)
                 rows.add(r)
                 cols.add(column_index_from_string(c))
-            except:
+            except Exception as e:
+                logger.warning(f"[JsonTemplateStateBuilder] _build_state_grid: bad coordinate '{coord}': {e}")
                 continue
                 
         if not rows: return [], 0
@@ -469,21 +474,22 @@ class JsonTemplateStateBuilder:
         logger.info(f"[JsonTemplateStateBuilder] Restoring Footer to '{target_worksheet.title}' at row {footer_start_row} (mode={mode})")
 
         # --- NEW GRID-ROW FORMAT ---
-        if hasattr(self, 'footer_rows') and self.footer_rows is not None:
-            if not self.footer_rows:
-                logger.warning(f"[JsonTemplateStateBuilder] Footer rows is empty for '{target_worksheet.title}'.")
+        if hasattr(self, 'template_footer_rows') and self.template_footer_rows is not None:
+            if not self.template_footer_rows:
+                logger.warning(f"[JsonTemplateStateBuilder] Template footer rows is empty for '{target_worksheet.title}'.")
                 return
                 
             skip_count = 0
-            for row_dict in self.footer_rows:
+            for row_dict in self.template_footer_rows:
+                # Backward-compat: old JSONs may still have is_dynamic_footer=True on the TOTAL row
+                # (relative_index=0). New JSONs never include it — sanitizer now starts capture at
+                # table_footer_row+1, so skip_count stays 0 for new JSONs and math is identical.
                 if row_dict.get('is_dynamic_footer'):
                     skip_count += 1
-                    continue  # Skip dynamic footer (TOTAL row) — TableFooterBuilder handles it
-                    
+                    continue
+
                 rel_idx = row_dict.get('relative_index', 0)
-                # Only offset if we actually skipped rows (backward-compatible with old templates)
-                adjusted_rel_idx = rel_idx - skip_count
-                actual_row = footer_start_row + adjusted_rel_idx
+                actual_row = footer_start_row + rel_idx - skip_count
                 
                 # 1. Restore Row Height
                 h = row_dict.get('height')
@@ -535,7 +541,7 @@ class JsonTemplateStateBuilder:
                         try:
                             target_worksheet.merge_cells(new_range)
                         except ValueError:
-                            pass
+                            logger.warning(f"[JsonTemplateStateBuilder] Skipped overlapping merge {new_range} on '{target_worksheet.title}'.")
             return
             
         # --- OLD COORDINATE FORMAT (Fallback) ---
