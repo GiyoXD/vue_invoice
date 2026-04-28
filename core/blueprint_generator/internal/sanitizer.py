@@ -18,7 +18,8 @@ from openpyxl.cell.cell import Cell, MergedCell
 from openpyxl.utils import get_column_letter
 
 from .scanner import TemplateAnalysisResult, SheetAnalysis
-from ..utils.content_extractor import extract_global_hs_code, extract_table_fallback_description
+from ..utils.content_extractor import extract_table_fallback_description
+from core.utils.loop_profiler import tick
 
 logger = logging.getLogger(__name__)
 
@@ -69,42 +70,7 @@ class ExcelTemplateSanitizer:
                 
         return workbook, layout_metadata
 
-    def _clean_sheet(self, ws: Worksheet, analysis: SheetAnalysis) -> Dict[str, Any]:
-        """Clean a single sheet: strip data rows, inject placeholders."""
-        self.logger.info(f"  Cleaning sheet: {analysis.name}")
-        
-        preserved_layout = {
-            "header_merges": {},
-            "header_row_heights": {},
-            "header_content": {},
-            "header_styles": {},
-            "footer_rows": [],
-            "style_palette": {},
-            "col_widths": {},
-            "header_images": [],
-            "footer_images": []
-        }
-        
-        # Local palette cache mapping hash string -> actual style dict
-        # This will be injected into preserved_layout
-        local_style_palette = {}
-        
-        def process_and_store_style(style_dict: Dict[str, Any]) -> str:
-            """Hashes a style dict and adds it to the palette if new. Returns the hash ID."""
-            # Sort keys so the hash is deterministic
-            style_str = json.dumps(style_dict, sort_keys=True)
-            style_hash = "style_" + hashlib.md5(style_str.encode('utf-8')).hexdigest()[:8]
-            
-            if style_hash not in local_style_palette:
-                local_style_palette[style_hash] = style_dict
-                
-            return style_hash
-        
-        
-        # Determine strict max column based on BOTH table and header content.
-        # The header area may extend wider than the table (e.g. Ref No, Date cells).
-        
-        # Step 1: Get table column boundary
+    def _determine_safe_max_column(self, ws, analysis) -> int:
         table_cur_max = 0
         if analysis.columns:
             for col in analysis.columns:
@@ -112,171 +78,128 @@ class ExcelTemplateSanitizer:
                 if end_col > table_cur_max:
                     table_cur_max = end_col
         
-        # Step 2: Pre-scan header rows to find actual rightmost content column
-        # Capped at 25 to prevent runaway from phantom-formatted cells
         header_max_col = 0
         if analysis.header_row > 1:
-            for row in ws.iter_rows(min_row=1, max_row=analysis.header_row - 1,
-                                    min_col=1, max_col=25):
+            for row in ws.iter_rows(min_row=1, max_row=analysis.header_row - 1, min_col=1, max_col=40):
                 for cell in row:
                     if cell.value is not None and cell.column > header_max_col:
                         header_max_col = cell.column
         
-        # Step 3: Combine — use the wider of table vs header, +1 buffer, hard cap at 25
         dynamic_limit = max(table_cur_max, header_max_col) + 1
-        safe_max_column = min(ws.max_column, 25, dynamic_limit)
-            
+        safe_max_column = min(ws.max_column, 40, dynamic_limit)
         self.logger.info(f"    Dynamic Column Scan Limit: {safe_max_column} (Table Max: {table_cur_max}, Header Max: {header_max_col})")
-        
-        
-        # --- CAPTURE GLOBAL LAYOUT (Column Widths) ---
+        return safe_max_column
 
+    def _capture_global_layout(self, ws, safe_max_column: int, preserved_layout: dict, analysis, table_footer_row: Optional[int]):
         for c in range(1, safe_max_column + 1):
             letter = get_column_letter(c)
             if letter in ws.column_dimensions:
                 w = ws.column_dimensions[letter].width
-                # width can be None for default
                 if w is not None:
                      preserved_layout["col_widths"][letter] = w
         
-        # --- [Smart Feature] Global Search for HS Code ---
-        # Search for "HS.CODE" substring anywhere in the sheet, ignoring table boundaries.
-        hs_code = extract_global_hs_code(ws)
-
-        # --- [Smart Feature] Extract Fallback Description (Data Table Only) ---
         fallback_description = None
         col_desc_index = None
-
         for col in analysis.columns:
             if col.id == "col_desc":
                 col_desc_index = col.col_index
                 break
         
-        if col_desc_index and analysis.header_row > 0:
-            footer_row = self._find_footer_start(ws, analysis.header_row + 1, analysis)
+        if col_desc_index is not None and analysis.header_row > 0:
             data_start = analysis.header_row + 1
-            data_end = footer_row - 1 if footer_row else ws.max_row
-            
+            data_end = table_footer_row - 1 if table_footer_row else ws.max_row
             fallback_description = extract_table_fallback_description(ws, data_start, data_end, col_desc_index)
 
         preserved_layout["fallback_description"] = fallback_description
-        preserved_layout["hs_code"] = hs_code
 
-        # --- CAPTURE HEADER LAYOUT & CONTENT ---
-        # Capture strictly ABOVE the header row (Metadata area)
-        
-        # 1. Header Merges
-
+    def _capture_template_header_layout(self, ws, analysis, safe_max_column: int, preserved_layout: dict, process_and_store_style):
         for merged_range in ws.merged_cells:
             if merged_range.max_row < analysis.header_row:
                  range_str = str(merged_range)
-                 # Extract value from top-left cell to act as key
                  top_left_cell = ws.cell(row=merged_range.min_row, column=merged_range.min_col)
                  val = str(top_left_cell.value) if top_left_cell.value is not None else ""
-                 # Clean up newlines for cleaner JSON
-                 val_clean = val.replace('\n', ' ').strip()
-                 preserved_layout["header_merges"][range_str] = val_clean
+                 val_clean = val.strip()
+                 preserved_layout["template_header_merges"][range_str] = val_clean
                  
-        # 2. Header Row Heights
         for r in range(1, analysis.header_row):
             if r in ws.row_dimensions:
                 h = ws.row_dimensions[r].height
                 if h is not None:
-                    preserved_layout["header_row_heights"][str(r)] = h
+                    preserved_layout["template_header_row_heights"][str(r)] = h
                     
-        # 3. Header Content & Styles
-        # Use iter_rows for speed
         if analysis.header_row > 1:
             for row in ws.iter_rows(min_row=1, max_row=analysis.header_row-1, min_col=1, max_col=safe_max_column):
                 for cell in row:
                     coord = cell.coordinate
                     is_empty = (cell.value is None)
                     
-                    # Content
                     if not is_empty:
                          val_str = str(cell.value)
-                         # Strip external workbook refs [N] from formulas
-                         # Excel converts =DeepSheet!B1 to =[1]DeepSheet!B1 when the sheet doesn't exist
                          if val_str.startswith('='):
                              val_str = re.sub(r'\[\d+\]', '', val_str)
-                         preserved_layout["header_content"][coord] = val_str
+                         preserved_layout["template_header_content"][coord] = val_str
                     
-                    # Style - skip empty cells with default dimensions
-                    if is_empty and not self._should_record_empty_cell(ws, cell.row, cell.column):
+                    style_data = self._capture_cell_style(cell, is_empty=is_empty)
+                    
+                    if is_empty and not style_data and not self._should_record_empty_cell(ws, cell.row, cell.column):
                         continue
                         
-                    style_data = self._capture_cell_style(cell, is_empty=is_empty)
                     if style_data:
                         style_id = process_and_store_style(style_data)
-                        if style_id not in preserved_layout["header_styles"]:
-                            preserved_layout["header_styles"][style_id] = []
-                        preserved_layout["header_styles"][style_id].append(coord)
-        
-        # 1. Find Footer (Total Row) FIRST, before messing with indices?
-        # Actually indices are stable if we haven't deleted yet.
-        # Scan bottom-up for "Total" + "=SUM"
-        # We search from header_row + 1
-        footer_start_row = self._find_footer_start(ws, analysis.header_row + 1, analysis)
-        
-        if not footer_start_row:
-             self.logger.warning(f"    Footer not detected in {analysis.name}. Assuming this is a Form/Static sheet (no dynamic table body).")
-             self.logger.warning("    Skipping row deletion to preserve content.")
-             # Set end_delete to header_row - 1 so rows_to_delete becomes 0
-             end_delete = analysis.header_row - 1
-             footer_start_row = ws.max_row # Treat end of sheet as footer start for image capture purposes
-        else:
-             end_delete = footer_start_row
+                        if style_id not in preserved_layout["template_header_styles"]:
+                            preserved_layout["template_header_styles"][style_id] = []
+                        preserved_layout["template_header_styles"][style_id].append(coord)
 
-        # 2. Delete ENTIRE Table (Header to Footer inclusive)
-        # User requested: "remove from the header to the footer entirely"
-        # This removes Header, Data Body, and the Footer row found.
-        # Remaining content (like Signature) will shift up.
-        
-        start_delete = analysis.header_row
-        
-        if end_delete < start_delete:
-            rows_to_delete = 0
+    def _delete_data_rows_and_capture_template_footer(self, ws, analysis, safe_max_column: int, preserved_layout: dict, process_and_store_style, table_footer_row: Optional[int]):
+        if table_footer_row is None:
+            self.logger.warning(
+                f"    [SKIP] Sheet '{analysis.name}': table footer (TOTAL row) not found "
+                f"(scanned from row {analysis.header_row + 1} to end-of-sheet). "
+                f"Treating as Form/Static sheet — no rows deleted."
+            )
+            return
         else:
-            rows_to_delete = end_delete - start_delete + 1
+            end_delete = table_footer_row
+
+        start_delete = analysis.header_row
+        rows_to_delete = end_delete - start_delete + 1 if end_delete >= start_delete else 0
         
-        
-        # 3. SKIP Image Capture - was causing corruption
-        # Images are cleared in sanitize_template() before saving
-        preserved_layout["header_images"] = []
-        preserved_layout["footer_images"] = []
+        preserved_layout["template_header_images"] = []
+        preserved_layout["template_footer_images"] = []
         
         if rows_to_delete > 0:
             self.logger.info(f"    Deleting ENTIRE TABLE: {rows_to_delete} rows (Rows {start_delete}-{end_delete} | Header {start_delete} to Footer {end_delete})")
             
-            # --- PRE-DELETION MERGE HANDLING ---
-            # 1. Ranges IN the deletion zone: Destroy them.
-            # 2. Ranges BELOW the deletion zone (Footer): Store & Destroy, then Restore after deletion (to prevent corruption).
+            template_footer_merges = []
+            footer_merge_map_by_row = {}
             
-            footer_merges_to_restore = []
-            
-            # Iterate over a copy of the list because we modify it
             for merged_range in list(ws.merged_cells):
                 m_min_row, m_min_col, m_max_row, m_max_col = merged_range.min_row, merged_range.min_col, merged_range.max_row, merged_range.max_col
                 
-                # Case A: Merge intersects deletion zone -> Destroy (Ghost Merge Prevention)
-                if (m_min_row <= end_delete and m_max_row >= start_delete):
-                    self.logger.info(f"    Unmerging intersecting range {merged_range} before deletion.")
+                # Cross-boundary: starts in delete zone, bleeds into footer — must unmerge
+                # or delete_rows will corrupt the surviving footer rows.
+                if m_min_row <= end_delete and m_max_row > end_delete:
+                    self.logger.info(f"    Unmerging cross-boundary range {merged_range} before deletion.")
                     ws.unmerge_cells(str(merged_range))
-                    
-                # Case B: Merge is strictly BELOW deletion zone (Footer) -> Store & Unmerge
+                # Entirely in footer zone: save and temporarily unmerge so delete_rows
+                # doesn't shift row indices underneath a live merge.
                 elif m_min_row > end_delete:
-                    self.logger.info(f"    Storing & Temporarily Unmerging footer range {merged_range} to preserve format.")
-                    footer_merges_to_restore.append((m_min_row, m_min_col, m_max_row, m_max_col))
+                    self.logger.info(f"    Storing & Temporarily Unmerging template footer range {merged_range} to preserve format.")
+                    merge_tuple = (m_min_row, m_min_col, m_max_row, m_max_col)
+                    template_footer_merges.append(merge_tuple)
+                    if m_min_row not in footer_merge_map_by_row:
+                        footer_merge_map_by_row[m_min_row] = []
+                    footer_merge_map_by_row[m_min_row].append(merge_tuple)
                     ws.unmerge_cells(str(merged_range))
+                # else: entirely in delete zone — delete_rows removes them, no action needed.
 
-            # Case C: Capture Row Heights, Content, Styles, and Merges as Row Objects
-            footer_heights_to_restore = []
-            footer_rows = []
-            
+            template_footer_heights = []
+            template_footer_rows = []
             current_max_row = ws.max_row
             
             for r in range(end_delete + 1, current_max_row + 1):
-                rel_r = r - (end_delete + 1) # 0-indexed relative to footer block start
+                tick("sanitizer._delete_data_rows", sub="rows_processed")
+                rel_r = r - (end_delete + 1)
                 row_dict = {
                     "relative_index": rel_r,
                     "height": None,
@@ -284,20 +207,17 @@ class ExcelTemplateSanitizer:
                     "cells": []
                 }
                 
-                # 1. Capture Height
                 if r in ws.row_dimensions:
                     h = ws.row_dimensions[r].height
                     if h is not None:
                         row_dict["height"] = h
-                        footer_heights_to_restore.append((r, h))
+                        template_footer_heights.append((r, h))
                         
-                # 2. Capture Merges specifically starting on this row
-                for (old_min_r, min_c, old_max_r, max_c) in footer_merges_to_restore:
-                    if old_min_r == r:
-                        # Find the top-left cell value if any (mimicking old logic)
+                if r in footer_merge_map_by_row:
+                    for (old_min_r, min_c, old_max_r, max_c) in footer_merge_map_by_row[r]:
                         top_left_cell = ws.cell(row=r, column=min_c)
                         val = str(top_left_cell.value) if top_left_cell.value is not None else ""
-                        val_clean = val.replace('\n', ' ').strip()
+                        val_clean = val.strip()
                         
                         row_dict["merges"].append({
                             "min_col": min_c,
@@ -306,13 +226,14 @@ class ExcelTemplateSanitizer:
                             "value": val_clean
                         })
                         
-                # 3. Capture Content & Styles
                 has_content_or_style = False
                 for c in range(1, safe_max_column + 1):
                     cell = ws.cell(row=r, column=c)
                     is_empty = (cell.value is None)
                     
-                    if is_empty and not self._should_record_empty_cell(ws, r, c):
+                    style_data = self._capture_cell_style(cell, is_empty=is_empty)
+                    
+                    if is_empty and not style_data and not self._should_record_empty_cell(ws, r, c):
                         continue
                         
                     cell_dict = {"col_index": c}
@@ -320,66 +241,95 @@ class ExcelTemplateSanitizer:
                     
                     if not is_empty:
                         val_str = str(cell.value)
-                        # Strip external workbook refs [N] from formulas
                         if val_str.startswith('='):
                             val_str = re.sub(r'\[\d+\]', '', val_str)
                         cell_dict["value"] = val_str
                         
-                    style_data = self._capture_cell_style(cell, is_empty=is_empty)
                     if style_data:
                         style_id = process_and_store_style(style_data)
                         cell_dict["style_id"] = style_id
                         
                     row_dict["cells"].append(cell_dict)
                     
-                # Store the row if it bears ANY layout information
                 if row_dict["height"] is not None or row_dict["merges"] or has_content_or_style:
-                    footer_rows.append(row_dict)
+                    template_footer_rows.append(row_dict)
                     
-            preserved_layout["footer_rows"] = footer_rows
+            preserved_layout["template_footer_rows"] = template_footer_rows
 
-            # --- DELETION ---
             ws.delete_rows(start_delete, amount=rows_to_delete)
             
-            # --- RESTORE FOOTER MERGES ---
-            # Shift rows up by rows_to_delete
-            for (old_min_r, min_c, old_max_r, max_c) in footer_merges_to_restore:
+            for (old_min_r, min_c, old_max_r, max_c) in template_footer_merges:
                 new_min_r = old_min_r - rows_to_delete
                 new_max_r = old_max_r - rows_to_delete
                 
-                # Sanity check
-                if new_min_r < 1: 
+                if new_min_r < 1:
                     continue
                     
                 self.logger.info(f"    Restoring footer merge at rows {new_min_r}-{new_max_r} (was {old_min_r}-{old_max_r})")
                 ws.merge_cells(start_row=new_min_r, start_column=min_c, end_row=new_max_r, end_column=max_c)
                 
-                # (Value extraction now happens in the row loop above)
-
-            # --- RESTORE FOOTER ROW HEIGHTS ---
-            for (old_r, height) in footer_heights_to_restore:
+            for (old_r, height) in template_footer_heights:
                 new_r = old_r - rows_to_delete
-                if new_r < 1: continue
-                
-                # self.logger.info(f"    Restoring footer row height {height} at row {new_r} (was {old_r})")
+                if new_r < 1:
+                    continue
                 ws.row_dimensions[new_r].height = height
 
-        else:
-            self.logger.warning("    Row calculation result <= 0? Check header/footer detection.")
+    def _clean_sheet(self, ws: Worksheet, analysis: SheetAnalysis) -> Dict[str, Any]:
+        """Clean a single sheet: strip data rows, inject placeholders."""
+        self.logger.info(f"  Cleaning sheet: {analysis.name}")
         
-        # Inject the final populated palette back into the layout
+        preserved_layout = {
+            "template_header_merges": {},
+            "template_header_row_heights": {},
+            "template_header_content": {},
+            "template_header_styles": {},
+            "template_footer_rows": [],
+            "style_palette": {},
+            "col_widths": {},
+            "template_header_images": [],
+            "template_footer_images": []
+        }
+        
+        local_style_palette = {}
+        
+        def process_and_store_style(style_dict: Dict[str, Any]) -> str:
+            style_str = json.dumps(style_dict, sort_keys=True)
+            style_hash = "style_" + hashlib.md5(style_str.encode('utf-8')).hexdigest()[:8]
+            if style_hash not in local_style_palette:
+                local_style_palette[style_hash] = style_dict
+            return style_hash
+            
+        safe_max_column = self._determine_safe_max_column(ws, analysis)
+        table_footer_row = self._find_table_footer_row(ws, analysis.header_row + 1, analysis, safe_max_column)
+        self._capture_global_layout(ws, safe_max_column, preserved_layout, analysis, table_footer_row)
+        self._capture_template_header_layout(ws, analysis, safe_max_column, preserved_layout, process_and_store_style)
+        self._delete_data_rows_and_capture_template_footer(ws, analysis, safe_max_column, preserved_layout, process_and_store_style, table_footer_row)
+        
         preserved_layout["style_palette"] = local_style_palette
-        
         return preserved_layout
 
 
 
-    def _find_footer_start(self, ws: Worksheet, search_start_row: int, analysis: Optional[SheetAnalysis] = None) -> Optional[int]:
+    def _build_merge_map(self, ws: Worksheet) -> Dict[str, Tuple[int, int]]:
+        """
+        Build a coord -> (anchor_row, anchor_col) dict for all merged ranges.
+        O(total cells covered by merges) — call once per sheet, not per cell.
+        """
+        merge_map: Dict[str, Tuple[int, int]] = {}
+        for merged_range in ws.merged_cells.ranges:
+            anchor = (merged_range.min_row, merged_range.min_col)
+            for row in range(merged_range.min_row, merged_range.max_row + 1):
+                for col in range(merged_range.min_col, merged_range.max_col + 1):
+                    coord = f"{get_column_letter(col)}{row}"
+                    merge_map[coord] = anchor
+        return merge_map
+
+    def _find_table_footer_row(self, ws: Worksheet, search_start_row: int, analysis: Optional[SheetAnalysis] = None, safe_max_column: int = 20) -> Optional[int]:
         """
         Find the footer row by scanning for =SUM or =SUBTOTAL formula adjacency.
 
         Algorithm:
-            1. Scan bottom-up from max_row to search_start_row.
+            1. Scan top-down from search_start_row to max_row (capped at 500 rows).
             2. For each row, collect column indices where cell value starts with '=SUM' or '=SUBTOTAL'.
                Skip any cell not starting with '=' for speed.
             3. If 2+ adjacent (consecutive) column indices have =SUM/=SUBTOTAL, mark row as candidate.
@@ -395,16 +345,26 @@ class ExcelTemplateSanitizer:
         Returns:
             The 1-based row number of the footer, or None if not found.
         """
+        if search_start_row > ws.max_row:
+            return None
         end_scan = min(ws.max_row, search_start_row + 500)
-        max_col = min(ws.max_column + 1, 20)
+        if end_scan < ws.max_row:
+            self.logger.warning(
+                f"    [_find_table_footer_row] Scan capped at {end_scan} "
+                f"(sheet has {ws.max_row} rows). Table footer may be missed if sheet is unusually large."
+            )
+        max_col = safe_max_column
         last_candidate = None  # Highest row with 2+ adjacent formula cells
+        merge_map = self._build_merge_map(ws)  # Build once — O(merged cells)
 
         for row in range(search_start_row, end_scan + 1):
+            tick("sanitizer._find_table_footer_row", sub="rows_scanned")
             formula_cols = []  # Column indices with =SUM or =SUBTOTAL in this row
 
             for col in range(1, max_col):
+                tick("sanitizer._find_table_footer_row", sub="cells_checked")
                 cell = ws.cell(row=row, column=col)
-                value = self._get_cell_value(cell)
+                value = self._get_cell_value(cell, merge_map)
 
                 if not value:
                     continue
@@ -412,7 +372,7 @@ class ExcelTemplateSanitizer:
                 if not value.startswith("="):
                     continue
                 upper_val = value.upper()
-                if upper_val.startswith("=SUM(") or upper_val.startswith("=SUBTOTAL("):
+                if "=SUM(" in upper_val or "=SUBTOTAL(" in upper_val:
                     formula_cols.append(col)
 
             # Check adjacency: need 2+ consecutive column indices
@@ -431,10 +391,13 @@ class ExcelTemplateSanitizer:
         # --- FALLBACK 2: Original 'TOTAL' keyword scan (bottom-up), but strict ---
         self.logger.info("    Formula adjacency scan and scanner info found nothing. Falling back to strict TOTAL keyword scan.")
         fallback_candidate = None
-        for row in range(ws.max_row, search_start_row, -1):
+        scan_limit_bottom_up = max(search_start_row, ws.max_row - 500)
+        for row in range(ws.max_row, scan_limit_bottom_up - 1, -1):
+            tick("sanitizer._find_table_footer_row", sub="fallback_rows_scanned")
             for col in range(1, max_col):
+                tick("sanitizer._find_table_footer_row", sub="fallback_cells_checked")
                 cell = ws.cell(row=row, column=col)
-                value = self._get_cell_value(cell)
+                value = self._get_cell_value(cell, merge_map)
                 if value:
                     val_upper = value.upper().strip()
                     # Use exact/near-exact match to prevent picking up random sentence "Total Net Weight"
@@ -463,20 +426,35 @@ class ExcelTemplateSanitizer:
                 return True
         return False
 
-    def _get_cell_value(self, cell) -> Optional[str]:
-        # If the cell is a part of a merged range, its value might be stored in the top-left cell.
-        # openpyxl represents non-top-left cells as MergedCell which usually have .value == None
+    def _get_cell_value(self, cell, merge_map: Optional[Dict[str, Tuple[int, int]]] = None) -> Optional[str]:
+        """
+        Return the string value of a cell, resolving merged-cell anchors.
+
+        Args:
+            cell: The openpyxl Cell or MergedCell to read.
+            merge_map: Optional pre-built coord->anchor dict from _build_merge_map.
+                       When supplied, anchor lookup is O(1). Without it, falls back
+                       to the original O(ranges) linear scan (safe for one-off calls).
+        """
         if isinstance(cell, MergedCell) or cell.value is None:
-            # We must check if this cell belongs to any merged range to pull the text from the anchor
             ws = cell.parent
+            coord = cell.coordinate
+            if merge_map is not None:
+                # O(1) lookup via pre-built map
+                anchor = merge_map.get(coord)
+                if anchor:
+                    top_left = ws.cell(row=anchor[0], column=anchor[1])
+                    if top_left.value is not None:
+                        return str(top_left.value)
+                return None
+            # Fallback: original O(ranges) scan for one-off callers
             for merged_range in ws.merged_cells.ranges:
-                if cell.coordinate in merged_range:
-                    # Get the top-left cell of the merged range
+                if coord in merged_range:
                     top_left_cell = ws.cell(row=merged_range.min_row, column=merged_range.min_col)
                     if top_left_cell.value is not None:
                         return str(top_left_cell.value)
             return None
-            
+
         return str(cell.value)
 
     def _should_record_empty_cell(self, ws: Worksheet, row: int, col: int) -> bool:
@@ -524,24 +502,25 @@ class ExcelTemplateSanitizer:
             # Filter out default font props to save space
             font_data = {}
             
-            # 1. Capture font name if not default (Calibri/Arial)
-            if cell.font.name and cell.font.name not in ["Calibri", "Arial"]:
-                font_data["name"] = cell.font.name
-            
-            # 2. Capture font size if it's NOT (Calibri 11)
-            # User wants to detect all sizes, but ignore Calibri 11 specifically.
-            if cell.font.size:
-                is_calibri = (cell.font.name == "Calibri")
-                is_size_11 = (cell.font.size in [11.0, 11])
-                
-                if not (is_calibri and is_size_11):
-                    font_data["size"] = cell.font.size
+            # "Setup" styles (name, size) are invisible on empty cells — skip them.
+            # Bold/italic are visible modifiers kept regardless.
+            if not is_empty:
+                # 1. Capture font name if not default (Calibri/Arial)
+                if cell.font.name and cell.font.name not in ["Calibri", "Arial"]:
+                    font_data["name"] = cell.font.name
+
+                # 2. Capture font size if it's NOT (Calibri 11)
+                if cell.font.size is not None:
+                    is_calibri = (cell.font.name == "Calibri")
+                    is_size_11 = (cell.font.size in [11.0, 11])
+                    if not (is_calibri and is_size_11):
+                        font_data["size"] = cell.font.size
             
             if cell.font.bold: font_data["bold"] = True
             if cell.font.italic: font_data["italic"] = True
             if cell.font.color and hasattr(cell.font.color, "rgb"): # Capture colors
                  color_val = self._serialize_color(cell.font.color)
-                 if color_val and color_val != "00000000": # Skip black/auto
+                 if color_val and color_val not in ("00000000", "FF000000"): # Skip black/auto
                      font_data["color"] = color_val
 
             if font_data:
@@ -567,7 +546,7 @@ class ExcelTemplateSanitizer:
         if cell.fill and hasattr(cell.fill, "start_color"):
              color_val = self._serialize_color(cell.fill.start_color)
              # Skip default "none" or white fills
-             if color_val and color_val not in ["00000000", "FFFFFFFF", None]:
+             if color_val and color_val not in ["00000000", "FFFFFFFF"]:
                  style["fill"] = {
                      "type": cell.fill.fill_type,
                      "color": color_val
@@ -604,11 +583,13 @@ class ExcelTemplateSanitizer:
 
     def _serialize_color(self, color) -> Optional[str]:
         """Try to extract RGB hex string from Color object."""
-        if not color: return None
+        if color is None: return None
         if hasattr(color, "rgb") and color.rgb:
             # openpyxl rgb is usually "AARRGGBB" or "RRGGBB"
             # We treat it as string
             if isinstance(color.rgb, str):
                 return color.rgb
+        if hasattr(color, "theme") and color.theme is not None:
+            return f"theme-{color.theme}"
         return None
 
