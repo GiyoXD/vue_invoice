@@ -160,7 +160,15 @@ class JsonTemplateStateBuilder:
             # --- NEW GRID-ROW FORMAT ---
             logger.info(f"[JsonTemplateStateBuilder] Using new footer_rows grid format ({len(self.footer_rows)} rows)")
             
-            self.template_footer_start_row = (self.header_end_row + 1) if self.header_end_row > 0 else 1
+            if self.header_end_row <= 0:
+                logger.error(
+                    "[JsonTemplateStateBuilder] header_end_row is 0 or negative — "
+                    "cannot safely place footer. template_footer_start_row set to -1. "
+                    "Check that header_content is non-empty in the layout JSON."
+                )
+                self.template_footer_start_row = -1
+            else:
+                self.template_footer_start_row = self.header_end_row + 1
             max_rel_idx = max((r.get('relative_index', 0) for r in self.footer_rows), default=-1)
             self.template_footer_end_row = (self.template_footer_start_row + max_rel_idx) if max_rel_idx >= 0 else -1
             
@@ -466,9 +474,16 @@ class JsonTemplateStateBuilder:
                 logger.warning(f"[JsonTemplateStateBuilder] Footer rows is empty for '{target_worksheet.title}'.")
                 return
                 
+            skip_count = 0
             for row_dict in self.footer_rows:
+                if row_dict.get('is_dynamic_footer'):
+                    skip_count += 1
+                    continue  # Skip dynamic footer (TOTAL row) — TableFooterBuilder handles it
+                    
                 rel_idx = row_dict.get('relative_index', 0)
-                actual_row = footer_start_row + rel_idx
+                # Only offset if we actually skipped rows (backward-compatible with old templates)
+                adjusted_rel_idx = rel_idx - skip_count
+                actual_row = footer_start_row + adjusted_rel_idx
                 
                 # 1. Restore Row Height
                 h = row_dict.get('height')
@@ -599,8 +614,11 @@ class JsonTemplateStateBuilder:
             if "standard" in raw_value:
                 return raw_value["standard"]
                 
-            # 3. 'default' fallback (original template value)
-            return raw_value.get('default', next(iter(raw_value.values()), None))
+            # 3. 'default' fallback (original template value).
+            # Return None if no 'default' key — means "no override for this mode,
+            # keep whatever the template had." Do NOT leak another mode's value (e.g.
+            # a daf-only dict must not apply its value when mode='standard').
+            return raw_value.get('default', None)
             
         return raw_value
 
