@@ -10,9 +10,13 @@ FROM python:3.12-slim
 # Set working directory
 WORKDIR /app
 
+# Update OS packages to patch system vulnerabilities (tar, glibc, etc.)
+RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies first (layer caching)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Copy application source code
 COPY api/ ./api/

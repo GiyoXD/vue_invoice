@@ -513,12 +513,12 @@ export default {
             const sheet = currentSheetData.value;
             if (!sheet) return { maxRow: 0, maxCol: 0, headerMaxRow: 0, footerBaseRow: 0 };
 
-            const content = sheet.header_content || {};
+            const content = sheet.template_header_content || sheet.header_content || {};
             const stylePalette = sheet.style_palette || {};
-            const styles = flattenStyles(sheet.header_styles || {}, stylePalette);
-            const mergesRaw = sheet.header_merges || {};
+            const styles = flattenStyles(sheet.template_header_styles || sheet.header_styles || {}, stylePalette);
+            const mergesRaw = sheet.template_header_merges || sheet.header_merges || {};
             const merges = Array.isArray(mergesRaw) ? mergesRaw : Object.keys(mergesRaw);
-            const footerRows = sheet.footer_rows || [];
+            const footerRows = sheet.template_footer_rows || sheet.footer_rows || [];
 
             // Header extent
             let headerMaxRow = 0;
@@ -566,19 +566,19 @@ export default {
             if (!currentSheetData.value) return [];
 
             const sheet = currentSheetData.value;
-            const content = sheet.header_content || {};
+            const content = sheet.template_header_content || sheet.header_content || {};
             const stylePalette = sheet.style_palette || {};
-            const styles = flattenStyles(sheet.header_styles || {}, stylePalette);
+            const styles = flattenStyles(sheet.template_header_styles || sheet.header_styles || {}, stylePalette);
 
             // Normalize merges: support both dict {"A1:B2": "val"} and array ["A1:B2"]
-            const mergesRaw = sheet.header_merges || {};
+            const mergesRaw = sheet.template_header_merges || sheet.header_merges || {};
             const merges = Array.isArray(mergesRaw) ? mergesRaw : Object.keys(mergesRaw);
 
             // --- Collect footer content into the same coordinate maps ---
             const footerContent = {};
             const footerStyles = {};
             const footerMergeRanges = []; // strings like "A10:C10"
-            const footerRows = sheet.footer_rows || [];
+            const footerRows = sheet.template_footer_rows || sheet.footer_rows || [];
 
             const { maxRow, maxCol, footerBaseRow } = sheetBounds.value;
 
@@ -678,8 +678,8 @@ export default {
 
             const { maxRow, maxCol, footerBaseRow } = sheetBounds.value;
             const colWidthsMap = sheet.col_widths || {};
-            const rowHeightsMap = sheet.header_row_heights || {};
-            const footerRows = sheet.footer_rows || [];
+            const rowHeightsMap = sheet.template_header_row_heights || sheet.header_row_heights || {};
+            const footerRows = sheet.template_footer_rows || sheet.footer_rows || [];
 
             // --- Column widths (Excel char units → px: width * 7.5) ---
             const cols = [];
