@@ -356,17 +356,38 @@ class JsonTemplateStateBuilder:
         logger.debug(f"[JsonTemplateStateBuilder] _build_state_grid OUTPUT: grid_rows={len(grid)}, max_r={max_r}")
         return grid, max_r
 
-    # --- Style Factory Methods ---
+    def _parse_color(self, c_val) -> Optional[str]:
+        if not c_val: return None
+        if isinstance(c_val, dict):
+            if 'rgb' in c_val:
+                c_val = c_val['rgb']
+            else:
+                return None
+        
+        if isinstance(c_val, str):
+            if c_val.startswith("theme-"):
+                return None
+            if c_val.lower() == 'auto' or c_val == '00000000':
+                return None
+            
+            # Clean and normalize hex
+            c_val = c_val.lstrip('#')
+            # Handle standard RGB (e.g. openpyxl might spit out 6 chars or users might enter it)
+            if len(c_val) == 6:
+                return 'FF' + c_val
+            if len(c_val) == 8:
+                # Basic check for hex characters
+                try:
+                    int(c_val, 16)
+                    return c_val
+                except ValueError:
+                    return None
+        return None
+
     def _create_font(self, d: Dict) -> Optional[Font]:
         if not d: return None
-        # Handle color dict/str
-        color = d.get('color')
-        # If color is dict (RGB), extract rgb
-        if isinstance(color, dict) and 'rgb' in color:
-             color = color['rgb']
-        elif isinstance(color, dict) and 'theme' in color:
-             # Simplify theme colors to None or black for now unless we look up theme
-             color = None
+        # Handle color dict/str safely
+        color = self._parse_color(d.get('color'))
              
         return Font(
             name=d.get('name'),
@@ -381,12 +402,8 @@ class JsonTemplateStateBuilder:
     def _create_fill(self, d: Dict) -> Optional[PatternFill]:
         if not d: return None
         if not d.get('type'): return None
-        # Simplification: mostly dealing with solid fills usually
-        # The serializer saves 'color' as '00000000' usually for transparent
-        # We need check how sanitizer saves it. 
-        # For now, instantiate basic PatternFill
-        fgColor = d.get('color')
-        if fgColor == '00000000': fgColor = None # Transparent
+        
+        fgColor = self._parse_color(d.get('color'))
         
         return PatternFill(
             fill_type=d.get('type'),

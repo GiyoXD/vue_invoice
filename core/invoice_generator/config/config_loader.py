@@ -291,6 +291,10 @@ class BundledConfigLoader:
         """Get the loaded sibling template JSON config if available."""
         return getattr(self, 'template_json_config', None)
     
+    def has_static_sheets(self) -> bool:
+        """Check if the config explicitly indicates presence of static sheets."""
+        return self.raw_config.get('has_static_sheets', False)
+
     def is_bundled_config(self) -> bool:
         """Check if this is a bundled config (v2.1+)."""
         return self.version.startswith('2.1')

@@ -51,6 +51,7 @@ class ConfigBuilder:
         
         bundle = {
             "_meta": self._build_meta(analysis),
+            "has_static_sheets": analysis.has_static_sheets,
             "data_preparation_module_hint": self._build_data_prep_hints(),
             "processing": self._build_processing(analysis),
             "styling_bundle": self._build_styling_bundle(analysis),

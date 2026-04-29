@@ -92,13 +92,15 @@ class TemplateAnalysisResult:
     customer_code: str
     sheets: List[SheetAnalysis]
     warnings: List[str] = field(default_factory=list)
+    has_static_sheets: bool = False
 
     def to_legacy_dict(self) -> Dict[str, Any]:
         """Convert to legacy JSON format for frontend compatibility."""
         return {
             "file_path": self.file_path,
             "sheets": [sheet.to_legacy_dict() for sheet in self.sheets],
-            "warnings": self.warnings
+            "warnings": self.warnings,
+            "has_static_sheets": self.has_static_sheets
         }
     
 
@@ -148,6 +150,7 @@ class ExcelLayoutScanner:
         # If more than 30% of cells are numeric, it's likely a data row
         return (numeric_count / total_count) <= 0.3
 
+    @loop_profiler.watch("scanner._find_header_row_structural")
     def _find_header_row_structural(self, worksheet: Worksheet, max_rows: int = 50) -> Optional[int]:
         """
         Legacy Structural Header Detection (Fallback).
@@ -196,6 +199,7 @@ class ExcelLayoutScanner:
         
         return best['row_num']
  
+    @loop_profiler.watch("scanner._find_header_row")
     def _find_header_row(self, worksheet: Worksheet, mapping_config: Optional[Dict[str, Any]] = None) -> Tuple[Optional[int], List[Tuple[int, str]]]:
         """Find the header row by looking for known column keywords."""
         max_scan_rows = 50
@@ -205,6 +209,13 @@ class ExcelLayoutScanner:
         best_row = None
         best_header_cells = []
         
+        # Pre-build normalized user mappings for O(1) exact match lookup
+        normalized_mappings = set()
+        if mapping_config:
+             mappings = mapping_config.get('header_text_mappings', {}).get('mappings', {})
+             for m in mappings:
+                 normalized_mappings.add("".join(m.lower().split()))
+                 
         for row in range(1, min(worksheet.max_row + 1, max_scan_rows)):
             tick("scanner._find_header_row", sub="rows_scanned")
             matches = 0
@@ -229,7 +240,8 @@ class ExcelLayoutScanner:
                     if mapping_config:
                          mappings = mapping_config.get('header_text_mappings', {}).get('mappings', {})
                          tick("scanner._find_header_row", sub="user_mapping_checks")
-                         if value in mappings or any("".join(m.lower().split()) == clean_val for m in mappings):
+                         # Fast O(1) set lookup for normalized match, or O(1) exact match dict lookup
+                         if value in mappings or clean_val in normalized_mappings:
                              is_match = True
                     
                     # 2. Check system rules
@@ -320,14 +332,62 @@ class ExcelLayoutScanner:
         
         sheets = []
         warnings = []
+        
+        global_desc = None
+        global_hs_code = None
+        global_hs_colspan = 1
+        global_hs_col_id = None
+        
+        supported_sheet_names = set()
         for sheet_name in workbook.sheetnames:
             worksheet = workbook[sheet_name]
-            analysis = self._analyze_sheet(worksheet, sheet_name, mapping_config)
+            analysis = self._analyze_sheet(
+                worksheet, 
+                sheet_name, 
+                mapping_config,
+                skip_desc_scan=bool(global_desc),
+                skip_hs_scan=bool(global_hs_code)
+            )
             if analysis:
                 sheets.append(analysis)
+                supported_sheet_names.add(sheet_name)
                 # Collect proactive warnings
                 if hasattr(analysis, "_temp_warning"):
                     warnings.append(getattr(analysis, "_temp_warning"))
+                    
+                # Harvest globals
+                if analysis.static_content_hints and analysis.static_content_hints.get("description_fallback"):
+                    global_desc = analysis.static_content_hints.get("description_fallback")
+                
+                if analysis.footer_info and analysis.footer_info.has_hs_code:
+                    global_hs_code = analysis.footer_info.hs_code_text
+                    global_hs_colspan = analysis.footer_info.hs_code_colspan
+                    global_hs_col_id = analysis.footer_info.hs_code_col_id
+
+        # Strict Validation: Must have Description Fallback and HS Code
+        if not global_desc:
+            raise ValueError(f"Missing Description Fallback! Ensure at least one sheet has a label like 'DES: ...' in the template: {path.name}")
+            
+        if not global_hs_code:
+            raise ValueError(f"Missing HS Code! Ensure at least one sheet footer has 'HS.CODE' in the template: {path.name}")
+
+        # Detect static sheets (sheets in workbook but not supported/analyzed)
+        has_static = any(s not in supported_sheet_names for s in workbook.sheetnames)
+
+        # Apply globals to all sheets
+        for sheet in sheets:
+            if global_desc:
+                if not sheet.static_content_hints:
+                    sheet.static_content_hints = {}
+                if "description_fallback" not in sheet.static_content_hints:
+                    sheet.static_content_hints["description_fallback"] = global_desc
+            
+            if global_hs_code:
+                if sheet.footer_info and not sheet.footer_info.has_hs_code:
+                    sheet.footer_info.has_hs_code = True
+                    sheet.footer_info.hs_code_text = global_hs_code
+                    sheet.footer_info.hs_code_colspan = global_hs_colspan
+                    sheet.footer_info.hs_code_col_id = global_hs_col_id
 
         if not sheets:
              self.logger.warning(f"No valid sheets found in {template_path}. Ensure the file contains recognizable headers.")
@@ -337,12 +397,16 @@ class ExcelLayoutScanner:
             file_path=str(path.absolute()),
             customer_code=customer_code,
             sheets=sheets,
-            warnings=warnings
+            warnings=warnings,
+            has_static_sheets=has_static
         )
 
 
+    @loop_profiler.watch("scanner._analyze_sheet")
     def _analyze_sheet(self, worksheet: Worksheet, sheet_name: str, 
-                       mapping_config: Optional[Dict[str, Any]] = None) -> Optional[SheetAnalysis]:
+                       mapping_config: Optional[Dict[str, Any]] = None,
+                       skip_desc_scan: bool = False,
+                       skip_hs_scan: bool = False) -> Optional[SheetAnalysis]:
         """Analyze a single worksheet."""
         try:
             self.logger.info(f"  Analyzing sheet: {sheet_name}")
@@ -413,14 +477,14 @@ class ExcelLayoutScanner:
             row_heights = self._extract_row_heights(worksheet, header_row, data_source, data_start_row)
             
             # Detect static content hints (like "Mark & Nº" column content)
-            static_hints = self._detect_static_content(worksheet, header_row, columns)
+            static_hints = self._detect_static_content(worksheet, header_row, columns, skip_desc_scan)
             
             # Note: _extract_description_fallback was removed. 
             # Description is now only detected via label in _detect_static_content.
 
 
             # [Smart Feature] Dynamic Footer Analysis (Delegated to Utility)
-            footer_info = scan_footer(worksheet, header_row, columns, self.logger, sheet_name=sheet_name, mapping_config=mapping_config)
+            footer_info = scan_footer(worksheet, header_row, columns, self.logger, sheet_name=sheet_name, mapping_config=mapping_config, skip_hs_scan=skip_hs_scan)
             if footer_info:
                 self.logger.info(f"    Footer detected at row {footer_info.row_num}: '{footer_info.total_text}' (colspan={footer_info.merge_curr_colspan})")
             
@@ -455,6 +519,7 @@ class ExcelLayoutScanner:
             self.logger.error(f"    Error analyzing {sheet_name}: {e}")
             return None
 
+    @loop_profiler.watch("scanner._analyze_columns")
     def _analyze_columns(self, worksheet: Worksheet, header_row: int, 
                          header_cells: List[Tuple[int, str]],
                          data_start_row: int,
@@ -611,6 +676,7 @@ class ExcelLayoutScanner:
         
         return columns
 
+    @loop_profiler.watch("scanner._sample_column_format")
     def _sample_column_format(self, worksheet: Worksheet, col: int, start_row: int, max_rows: int = 15) -> Optional[str]:
         """
         Sample data rows to find the most common number format.
@@ -628,6 +694,7 @@ class ExcelLayoutScanner:
         
         # Step 1: Find the first row with a numeric value in this column
         for r in range(start_row, rows_to_scan):
+            tick("scanner._sample_column_format", sub="find_numeric_rows")
             cell = worksheet.cell(row=r, column=col)
             if cell.value is not None:
                 # Check if it's numeric (the real indicator of a data row for amounts/qtys)
@@ -640,12 +707,14 @@ class ExcelLayoutScanner:
              # Fallback: if no numeric data found, try sampling empty cells for their pre-set format
              # This handles cases where a template is blank but the cells are formatted.
              for r in range(start_row, min(start_row + 5, worksheet.max_row + 1)):
+                 tick("scanner._sample_column_format", sub="fallback_format_rows")
                  cell = worksheet.cell(row=r, column=col)
                  if cell.number_format and cell.number_format != 'General':
                      formats.append(cell.number_format)
         else:
             # Step 2: Sample up to max_rows starting from the first data row
             for r in range(data_found_at, min(data_found_at + max_rows, worksheet.max_row + 1)):
+                tick("scanner._sample_column_format", sub="sample_rows")
                 cell = worksheet.cell(row=r, column=col)
                 if cell.value is not None and cell.number_format and cell.number_format != 'General':
                     if isinstance(cell.value, (int, float)) and not isinstance(cell.value, bool):
@@ -832,21 +901,25 @@ class ExcelLayoutScanner:
             "footer": header_height  # Usually same as header
         }
     
+    @loop_profiler.watch("scanner._check_multi_row_header")
     def _check_multi_row_header(self, worksheet: Worksheet, header_row: int) -> bool:
         """Check if there's a multi-row header structure."""
         for merged in worksheet.merged_cells.ranges:
+            tick("scanner._check_multi_row_header", sub="merge_ranges_checked")
             if merged.min_row == header_row and merged.max_row > header_row:
                 return True
         return False
     
+    @loop_profiler.watch("scanner._detect_static_content")
     def _detect_static_content(self, worksheet: Worksheet, header_row: int, 
-                               columns: List[ColumnInfo]) -> Dict[str, List[str]]:
+                               columns: List[ColumnInfo], skip_desc_scan: bool = False) -> Dict[str, List[str]]:
         """Detect static content patterns in the data area."""
         hints = {}
         
-        desc_fallback = detect_static_description_label(worksheet, header_row, columns)
-        if desc_fallback:
-            hints["description_fallback"] = desc_fallback
+        if not skip_desc_scan:
+            desc_fallback = detect_static_description_label(worksheet, header_row, columns)
+            if desc_fallback:
+                hints["description_fallback"] = desc_fallback
         
         return hints
 

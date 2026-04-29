@@ -365,6 +365,11 @@ def _inject_unknown_sheets(ctx: GeneratorContext):
     maintaining their original visibility state (visible/hidden/veryHidden),
     cell values, styles, merged cells, and dimensions.
     """
+    # OPT-OUT: Skip if config explicitly says no static sheets
+    if ctx.config_loader and not ctx.config_loader.has_static_sheets():
+        logger.info("[Unknown Sheets] Static sheet injection skipped (has_static_sheets=false)")
+        return
+
     # Derive the bundle directory from the config path
     config_path = Path(ctx.paths.get('config', ''))
     if not config_path.exists():
