@@ -307,13 +307,9 @@ class ConfigBuilder:
                 self.logger.debug(f"    [Skipped]  {col.id} (Structural/Static)")
                 continue
             
-            # [Smart Feature] Inject Dynamic Description Fallback (sheet-specific override)
             if col.id == "col_desc" and sheet.static_content_hints:
                 dynamic_fallback = sheet.static_content_hints.get("description_fallback")
                 if dynamic_fallback:
-                    if dynamic_fallback == "LEATHER":
-                        dynamic_fallback = "COW LEATHER"
-                    
                     mappings[field_name] = {
                         "fallback": {
                             "standard": dynamic_fallback,
@@ -421,7 +417,7 @@ class ConfigBuilder:
         
         # before_footer (HS.CODE line)
         has_hs_code = False
-        hs_code_text = "HS.CODE: 4107.12.00"
+        hs_code_text = ""
         hs_code_colspan = 1
         hs_code_col_id = "col_po" # Default fallback
 
