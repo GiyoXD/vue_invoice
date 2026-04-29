@@ -11,7 +11,10 @@ __pycache__
 *.pyo
 
 # Data directories (mounted as volumes instead)
-database/
+database/generated_invoices/
+database/temp_uploads/
+database/*.db
+database/*.db-journal
 output/
 run_log/
 tmp/

@@ -22,6 +22,11 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY api/ ./api/
 COPY core/ ./core/
 COPY frontend/ ./frontend/
+COPY database/ ./default_database/
+
+# Copy and set up entrypoint script
+COPY docker_entrypoint.sh /app/
+RUN chmod +x /app/docker_entrypoint.sh
 
 # Set Python path so module imports resolve correctly
 ENV PYTHONPATH=.
@@ -29,5 +34,6 @@ ENV PYTHONPATH=.
 # Expose the FastAPI port
 EXPOSE 8000
 
-# Start the application
+# Start the application via entrypoint
+ENTRYPOINT ["/app/docker_entrypoint.sh"]
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
