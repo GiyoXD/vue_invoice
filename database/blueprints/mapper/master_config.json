@@ -251,8 +251,8 @@
           "col_item": {},
           "col_desc": {
             "fallback": {
-              "standard": "COW LEATHER",
-              "daf": "COW LEATHER"
+              "standard": "",
+              "daf": ""
             }
           },
           "col_qty_sf": {},
@@ -355,7 +355,7 @@
           "before_footer": {
             "enabled": false,
             "column_id": "col_po",
-            "text": "HS.CODE: 4107.12.00"
+            "text": ""
           },
           "weight_summary": {
             "enabled": true,
@@ -559,7 +559,7 @@
           "before_footer": {
             "enabled": true,
             "column_id": "col_po",
-            "text": "HS.CODE: 4107.12.00",
+            "text": "",
             "merge": 2
           },
           "weight_summary": {
