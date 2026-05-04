@@ -126,8 +126,10 @@ class InvoiceAssetResolver:
                     if len(name) == len(prefix):
                         is_match = True
                     else:
-                        boundary_char = name[len(prefix)]
-                        if not boundary_char.isalnum():
+                        suffix = name[len(prefix):]
+                        # Safest approach: only allow exact known fallback folder suffixes.
+                        # Prevent overlapping with clients that might happen to use an underscore.
+                        if suffix == '_config' or re.match(r'^_v\d+$', suffix):
                             is_match = True
                             
                     if is_match:
