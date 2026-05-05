@@ -214,6 +214,11 @@ class BlueprintGenerator:
         self.logger.info("\n[Step 2] Building blueprint config...")
         bundle = self.builder.build_config(analysis)
         
+        # Inject table_info as a top-level summary index for quick API access.
+        # The invoice renderer reads from the deep paths (data_flow, footer.add_ons);
+        # the API reads from this single flat key — no path-digging needed.
+        bundle["table_info"] = self._build_table_info(analysis)
+        
         # Update bundle metadata with effective prefix
         if custom_prefix and "_meta" in bundle:
             bundle["_meta"]["customer"] = custom_prefix
@@ -309,39 +314,12 @@ class BlueprintGenerator:
                 "created_at": datetime.now().isoformat()
             }
             
-            # [Table Info] - Extra metadata about the data table (e.g. fallback description)
-            # We extract this from the sheet metadata (usually 'Packing list').
-            table_info = {
-                "fallback_description": None,
-                "hs_code": None
-            }
-            
-            # Look for fallback_description and hs_code in any sheet (Packing list preferred)
-            # First check 'Packing list' if it exists
-            pl_sheet = layout_metadata.get("Packing list")
-            if pl_sheet:
-                if pl_sheet.get("fallback_description"):
-                    table_info["fallback_description"] = pl_sheet.get("fallback_description")
-                if pl_sheet.get("hs_code"):
-                    table_info["hs_code"] = pl_sheet.get("hs_code")
-            
-            # Fallback: Check any sheet that has it if not already found
-            if not table_info["fallback_description"] or not table_info["hs_code"]:
-                for sheet_name, sheet_meta in layout_metadata.items():
-                    if not table_info["fallback_description"]:
-                        fd = sheet_meta.get("fallback_description")
-                        if fd:
-                            table_info["fallback_description"] = fd
-                    if not table_info["hs_code"]:
-                        hc = sheet_meta.get("hs_code")
-                        if hc:
-                            table_info["hs_code"] = hc
+
             
             self.logger.info(f"   Saving Template Config: {template_config_file.name}")
             template_json_data = {
                 "fingerprint": fingerprint,
-                "template_layout": layout_metadata,
-                "table_info": table_info
+                "template_layout": layout_metadata
             }
             if preserved_notes:
                 template_json_data["notes"] = preserved_notes
@@ -436,6 +414,36 @@ class BlueprintGenerator:
             
         return template_file, layout_metadata
     
+    def _build_table_info(self, analysis: TemplateAnalysisResult) -> Dict[str, Any]:
+        """
+        Build the table_info summary index from the analysis result.
+        
+        This is a flat summary of key template metadata for quick API access.
+        The invoice renderer reads from the deep config paths; this index is only
+        for the API/UI layer.
+        """
+        fallback_description = None
+        hs_code = None
+
+        # Prefer 'Packing list' sheet, fall back to any sheet that has the values.
+        sheets_ordered = sorted(
+            analysis.sheets,
+            key=lambda s: s.name.lower() == "packing list",
+            reverse=True
+        )
+        for sheet in sheets_ordered:
+            if not fallback_description and sheet.static_content_hints:
+                fallback_description = sheet.static_content_hints.get("description_fallback")
+            if not hs_code and sheet.footer_info and sheet.footer_info.hs_code_text:
+                hs_code = sheet.footer_info.hs_code_text
+            if fallback_description and hs_code:
+                break
+
+        return {
+            "fallback_description": {"standard": fallback_description, "daf": fallback_description} if fallback_description else None,
+            "hs_code": hs_code
+        }
+
     def _print_analysis_summary(self, analysis: TemplateAnalysisResult):
         """Print summary of template analysis."""
         self.logger.info(f"\n   Customer Code: {analysis.customer_code}")
