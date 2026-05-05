@@ -42,6 +42,12 @@ class BlueprintRules:
     # Allowed search sheets: Union of all recognized sheet types that should be scanned
     ALLOWED_SEARCH_SHEETS: Set[str] = AGGREGATION_SHEETS | PROCESSED_TABLES_SHEETS
 
+    # Global column scan limit to prevent infinite loops on malformed sheets with ghost columns (e.g. 16384)
+    MAX_SCAN_COLUMN: int = 50
+    
+    # Footer Scanning Bounds (How far above/below the TOTAL row to search for the HS Code)
+    FOOTER_HS_SEARCH_WINDOW: int = 50
+
     # 2. Column Definitions
     # These replace the hardcoded HEADER_MAPPINGS in excel_scanner.py
     # and the hardcoded format checks.
