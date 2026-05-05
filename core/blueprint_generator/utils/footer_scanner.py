@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from openpyxl.worksheet.worksheet import Worksheet
 from typing import Dict, Any
 
-from .content_extractor import find_total_label_cell, find_pallet_count_column, find_footer_hs_code
+from .content_extractor import find_total_label_cell, find_pallet_count_column, find_footer_hs_code, get_cell_merge_colspan
+from core.utils.loop_profiler import loop_profiler, tick
 
 if TYPE_CHECKING:
     from core.blueprint_generator.excel_scanner import ColumnInfo
@@ -52,7 +53,8 @@ def find_column_id_by_index(col_index: int, columns: List[ColumnInfo]) -> Option
     return None
 
 
-def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo], logger: logging.Logger, sheet_name: str = "Unknown", mapping_config: Optional[Dict[str, Any]] = None) -> Optional[FooterInfo]:
+@loop_profiler.watch("footer_scanner.scan_footer")
+def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo], logger: logging.Logger, sheet_name: str = "Unknown", mapping_config: Optional[Dict[str, Any]] = None, skip_hs_scan: bool = False) -> Optional[FooterInfo]:
     """
     Analyze the footer structure by searching for 'TOTAL' and 'X PALLETS'.
     
@@ -63,6 +65,7 @@ def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo]
         logger: Logger instance for output.
         sheet_name: Name of the sheet being scanned (for log context).
         mapping_config: Optional global mapping config containing 'footer_label_mappings'.
+        skip_hs_scan: If True, skips the HS code scan.
         
     Returns:
         FooterInfo if found, or None.
@@ -78,7 +81,7 @@ def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo]
     found_cell, is_exact = result
     
     # --- Step 2: Determine merge colspan at the TOTAL cell ---
-    colspan = _get_cell_merge_colspan(worksheet, found_cell)
+    colspan = get_cell_merge_colspan(worksheet, found_cell)
     
     # --- Step 3: Map TOTAL cell position to column ID ---
     total_col_id = find_column_id_by_index(found_cell.column, columns)
@@ -89,7 +92,15 @@ def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo]
     pallet_col_id = find_pallet_count_column(worksheet, found_cell.row, columns, find_column_id_by_index, logger, sheet_name)
     
     # --- Step 5: Find HS Code row ---
-    hs_code_text, hs_code_colspan, hs_code_col_idx = find_footer_hs_code(worksheet, start_scan, end_scan)
+    hs_code_text, hs_code_colspan, hs_code_col_idx = None, 1, None
+    if not skip_hs_scan:
+        from core.blueprint_generator.rules import BlueprintRules
+        # HS code is a footer element — always near the TOTAL row, never in the data area.
+        # Anchor to found_cell.row ± window to avoid O(rows×cols) scan through all data rows.
+        hs_start_row = max(start_scan, found_cell.row - BlueprintRules.FOOTER_HS_SEARCH_WINDOW)
+        hs_end_row = min(end_scan, found_cell.row + BlueprintRules.FOOTER_HS_SEARCH_WINDOW)
+        hs_code_text, hs_code_colspan, hs_code_col_idx = find_footer_hs_code(worksheet, hs_start_row, hs_end_row)
+        
     hs_code_col_id = None
     if hs_code_col_idx:
         hs_code_col_id = find_column_id_by_index(hs_code_col_idx, columns)
@@ -106,22 +117,4 @@ def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo]
         hs_code_col_id=hs_code_col_id,
         is_exact=is_exact
     )
-
-
-
-
-
-def _get_cell_merge_colspan(worksheet: Worksheet, cell) -> int:
-    """
-    Check if a cell is part of a merged range and return the colspan.
-    
-    Returns:
-        The number of columns spanned (1 if not merged).
-    """
-    for merged in worksheet.merged_cells.ranges:
-        if merged.min_row <= cell.row <= merged.max_row:
-            if merged.min_col <= cell.column <= merged.max_col:
-                return merged.max_col - merged.min_col + 1
-    return 1
-
 
