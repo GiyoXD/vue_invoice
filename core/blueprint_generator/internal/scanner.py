@@ -22,7 +22,7 @@ from ..rules import BlueprintRules
 from core.utils.snitch import snitch
 from core.utils.loop_profiler import loop_profiler, tick
 from ..utils.footer_scanner import FooterInfo, scan_footer
-from ..utils.content_extractor import detect_static_description_label
+from ..utils.content_extractor import detect_static_description_label, extract_table_fallback_description
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +163,7 @@ class ExcelLayoutScanner:
             cells = []
             max_col_idx = 0
             # Cap structural scan at 50 columns
-            for col in range(1, min(worksheet.max_column + 1, 50)):
+            for col in range(1, min(worksheet.max_column + 1, BlueprintRules.MAX_SCAN_COLUMN)):
                 tick("scanner._find_header_row", sub="structural_cells_checked")
                 cell = worksheet.cell(row=row, column=col)
                 if cell.value is not None and str(cell.value).strip():
@@ -224,7 +224,7 @@ class ExcelLayoutScanner:
             
             has_content = False
             # Cap header scan at 25 (Col Y)
-            for col in range(1, min(worksheet.max_column + 1, 26)):
+            for col in range(1, min(worksheet.max_column + 1, BlueprintRules.MAX_SCAN_COLUMN)):
                 tick("scanner._find_header_row", sub="cells_checked")
                 cell = worksheet.cell(row=row, column=col)
                 value = self._get_cell_value(cell)
@@ -291,7 +291,7 @@ class ExcelLayoutScanner:
                  best_row = fallback_row
                  # Re-extract cells with CAP
                  best_header_cells = []
-                 for col in range(1, min(worksheet.max_column + 1, 50)):
+                 for col in range(1, min(worksheet.max_column + 1, BlueprintRules.MAX_SCAN_COLUMN)):
                      cell = worksheet.cell(row=fallback_row, column=col)
                      val = self._get_cell_value(cell)
                      if val:
@@ -364,12 +364,20 @@ class ExcelLayoutScanner:
                     global_hs_colspan = analysis.footer_info.hs_code_colspan
                     global_hs_col_id = analysis.footer_info.hs_code_col_id
 
-        # Strict Validation: Must have Description Fallback and HS Code
+        # Strict Validation: Both values are required for the blueprint to be complete.
+        # fallback_description → written into col_desc.fallback in the config (used by invoice renderer)
+        # hs_code → written into before_footer.text in the config (used by footer builder)
         if not global_desc:
-            raise ValueError(f"Missing Description Fallback! Ensure at least one sheet has a label like 'DES: ...' in the template: {path.name}")
-            
+            raise ValueError(
+                f"Missing Description Fallback! No 'DES: ...' label in col_static AND no descriptions "
+                f"found in col_desc data rows. Ensure the template has product descriptions: {path.name}"
+            )
+
         if not global_hs_code:
-            raise ValueError(f"Missing HS Code! Ensure at least one sheet footer has 'HS.CODE' in the template: {path.name}")
+            raise ValueError(
+                f"Missing HS Code! Ensure at least one sheet footer has an 'HS.CODE' row: {path.name}"
+            )
+
 
         # Detect static sheets (sheets in workbook but not supported/analyzed)
         has_static = any(s not in supported_sheet_names for s in workbook.sheetnames)
@@ -545,7 +553,7 @@ class ExcelLayoutScanner:
                 all_merges_at_header.append(merged)
         
         # Cap column analysis at 25 (Col Y)
-        safe_max = min(worksheet.max_column + 1, 26)
+        safe_max = min(worksheet.max_column + 1, BlueprintRules.MAX_SCAN_COLUMN)
         
         for col in range(1, safe_max):
             if col in processed_cols:
@@ -609,6 +617,10 @@ class ExcelLayoutScanner:
             if not format_str or format_str == "General":
                 # Fallback to rules if no data or general format
                 format_str = self._determine_format(col_id, value)
+                
+            # FORCE text format for identifiers to prevent scientific notation or leading zero loss
+            if col_id in ["col_po", "col_item", "col_no", "col_container_no", "col_hs_code", "col_pallet_count", "col_dc"]:
+                format_str = "@"
             
             # Check alignment
             alignment = "center"
@@ -688,7 +700,7 @@ class ExcelLayoutScanner:
         """
         formats = []
         current_row = start_row
-        rows_to_scan = min(start_row + 100, worksheet.max_row + 1) # Scan up to 100 rows to find start of data
+        rows_to_scan = min(start_row + 500, worksheet.max_row + 1) # Scan up to 500 rows to find start of data
         
         data_found_at = None
         
@@ -706,7 +718,7 @@ class ExcelLayoutScanner:
         if not data_found_at:
              # Fallback: if no numeric data found, try sampling empty cells for their pre-set format
              # This handles cases where a template is blank but the cells are formatted.
-             for r in range(start_row, min(start_row + 5, worksheet.max_row + 1)):
+             for r in range(start_row, min(start_row + 500, worksheet.max_row + 1)):
                  tick("scanner._sample_column_format", sub="fallback_format_rows")
                  cell = worksheet.cell(row=r, column=col)
                  if cell.number_format and cell.number_format != 'General':
@@ -748,6 +760,10 @@ class ExcelLayoutScanner:
                     pass
 
                 format_str = self._determine_format(col_id, value)
+                
+                # FORCE text format for identifiers to prevent scientific notation or leading zero loss
+                if col_id in ["col_po", "col_item", "col_no", "col_container_no", "col_hs_code", "col_pallet_count", "col_dc"]:
+                    format_str = "@"
                 col_letter = get_column_letter(col)
                 dim = worksheet.column_dimensions.get(col_letter)
                 width = dim.width if dim and dim.width is not None else 10.0
@@ -917,7 +933,21 @@ class ExcelLayoutScanner:
         hints = {}
         
         if not skip_desc_scan:
+            # Primary: look for 'DES: COW LEATHER' style label in col_static
             desc_fallback = detect_static_description_label(worksheet, header_row, columns)
+            
+            if not desc_fallback:
+                # Secondary: scan col_desc data rows for unique description values
+                col_desc_index = next((col.col_index for col in columns if col.id == "col_desc"), None)
+                if col_desc_index is not None:
+                    logger.info("    [Fallback] No static DES label found. Scanning col_desc data rows for description.")
+                    desc_fallback = extract_table_fallback_description(
+                        worksheet,
+                        data_start=header_row + 1,
+                        data_end=worksheet.max_row,
+                        col_desc_index=col_desc_index
+                    )
+            
             if desc_fallback:
                 hints["description_fallback"] = desc_fallback
         

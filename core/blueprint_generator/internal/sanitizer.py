@@ -18,7 +18,6 @@ from openpyxl.cell.cell import Cell, MergedCell
 from openpyxl.utils import get_column_letter
 
 from .scanner import TemplateAnalysisResult, SheetAnalysis
-from ..utils.content_extractor import extract_table_fallback_description
 from core.utils.loop_profiler import tick
 
 logger = logging.getLogger(__name__)
@@ -53,20 +52,17 @@ class ExcelTemplateSanitizer:
                 sheet_layout = self._clean_sheet(ws, sheet_analysis)
                 layout_metadata[sheet_analysis.name] = sheet_layout
         
-        # === FIX FOR CORRUPTION ===
-        # Clear images ONLY from cleaned sheets.
-        # Images in openpyxl can cause corruption when the workbook is saved
-        # after row deletions. We've already captured image data to metadata.
-        # Unknown sheets (not in analysis) are untouched, so they can keep their images.
+        # === NEW OPTIMIZATION ===
+        # Delete all mapped sheets from the workbook entirely!
+        # Since generation is 100% JSON-driven, the bundled XLSX only needs to contain 
+        # the "Unknown/Static" sheets (like Terms & Conditions). 
+        # By deleting the mapped sheets, we guarantee no customer data is leaked, 
+        # and we avoid all openpyxl row-shifting overhead.
         analyzed_sheet_names = {sheet.name for sheet in analysis.sheets}
-        
-        for sheet in workbook.worksheets:
-            if sheet.title in analyzed_sheet_names:
-                if hasattr(sheet, '_images'):
-                    sheet._images = []
-                # Also clear drawings which can cause issues
-                if hasattr(sheet, '_charts'):
-                    sheet._charts = []
+        for sheet_name in list(workbook.sheetnames):
+            if sheet_name in analyzed_sheet_names:
+                self.logger.info(f"Removing mapped sheet '{sheet_name}' from bundled XLSX (JSON-only mode)")
+                del workbook[sheet_name]
                 
         return workbook, layout_metadata
 
@@ -90,6 +86,8 @@ class ExcelTemplateSanitizer:
         self.logger.info(f"    Dynamic Column Scan Limit: {safe_max_column} (Table Max: {table_cur_max}, Header Max: {header_max_col})")
         return safe_max_column
 
+
+
     def _capture_global_layout(self, ws, safe_max_column: int, preserved_layout: dict, analysis, table_footer_row: Optional[int]):
         for c in range(1, safe_max_column + 1):
             letter = get_column_letter(c)
@@ -97,20 +95,6 @@ class ExcelTemplateSanitizer:
                 w = ws.column_dimensions[letter].width
                 if w is not None:
                      preserved_layout["col_widths"][letter] = w
-        
-        fallback_description = None
-        col_desc_index = None
-        for col in analysis.columns:
-            if col.id == "col_desc":
-                col_desc_index = col.col_index
-                break
-        
-        if col_desc_index is not None and analysis.header_row > 0:
-            data_start = analysis.header_row + 1
-            data_end = table_footer_row - 1 if table_footer_row else ws.max_row
-            fallback_description = extract_table_fallback_description(ws, data_start, data_end, col_desc_index)
-
-        preserved_layout["fallback_description"] = fallback_description
 
     def _capture_template_header_layout(self, ws, analysis, safe_max_column: int, preserved_layout: dict, process_and_store_style):
         for merged_range in ws.merged_cells:
@@ -150,130 +134,100 @@ class ExcelTemplateSanitizer:
                             preserved_layout["template_header_styles"][style_id] = []
                         preserved_layout["template_header_styles"][style_id].append(coord)
 
-    def _delete_data_rows_and_capture_template_footer(self, ws, analysis, safe_max_column: int, preserved_layout: dict, process_and_store_style, table_footer_row: Optional[int]):
+    def _capture_template_footer(self, ws, analysis, safe_max_column: int, preserved_layout: dict, process_and_store_style, table_footer_row: Optional[int]):
         if table_footer_row is None:
             self.logger.warning(
                 f"    [SKIP] Sheet '{analysis.name}': table footer (TOTAL row) not found "
                 f"(scanned from row {analysis.header_row + 1} to end-of-sheet). "
-                f"Treating as Form/Static sheet — no rows deleted."
+                f"Treating as Form/Static sheet."
             )
             return
         else:
             end_delete = table_footer_row
 
         start_delete = analysis.header_row
-        rows_to_delete = end_delete - start_delete + 1 if end_delete >= start_delete else 0
         
         preserved_layout["template_header_images"] = []
         preserved_layout["template_footer_images"] = []
         
-        if rows_to_delete > 0:
-            self.logger.info(f"    Deleting ENTIRE TABLE: {rows_to_delete} rows (Rows {start_delete}-{end_delete} | Header {start_delete} to Footer {end_delete})")
+        self.logger.info(f"    Capturing footer data (Rows {end_delete + 1} to EOF)")
+        
+        template_footer_merges = []
+        footer_merge_map_by_row = {}
+        # Capture merges for JSON metadata
+        for merged_range in list(ws.merged_cells):
+            m_min_row, m_min_col, m_max_row, m_max_col = merged_range.min_row, merged_range.min_col, merged_range.max_row, merged_range.max_col
             
-            template_footer_merges = []
-            footer_merge_map_by_row = {}
-            
-            for merged_range in list(ws.merged_cells):
-                m_min_row, m_min_col, m_max_row, m_max_col = merged_range.min_row, merged_range.min_col, merged_range.max_row, merged_range.max_col
-                
-                # Cross-boundary: starts in delete zone, bleeds into footer — must unmerge
-                # or delete_rows will corrupt the surviving footer rows.
-                if m_min_row <= end_delete and m_max_row > end_delete:
-                    self.logger.info(f"    Unmerging cross-boundary range {merged_range} before deletion.")
-                    ws.unmerge_cells(str(merged_range))
-                # Entirely in footer zone: save and temporarily unmerge so delete_rows
-                # doesn't shift row indices underneath a live merge.
-                elif m_min_row > end_delete:
-                    self.logger.info(f"    Storing & Temporarily Unmerging template footer range {merged_range} to preserve format.")
-                    merge_tuple = (m_min_row, m_min_col, m_max_row, m_max_col)
-                    template_footer_merges.append(merge_tuple)
-                    if m_min_row not in footer_merge_map_by_row:
-                        footer_merge_map_by_row[m_min_row] = []
-                    footer_merge_map_by_row[m_min_row].append(merge_tuple)
-                    ws.unmerge_cells(str(merged_range))
-                # else: entirely in delete zone — delete_rows removes them, no action needed.
+            if m_min_row > start_delete:
+                merge_tuple = (m_min_row, m_min_col, m_max_row, m_max_col)
+                if m_min_row not in footer_merge_map_by_row:
+                    footer_merge_map_by_row[m_min_row] = []
+                footer_merge_map_by_row[m_min_row].append(merge_tuple)
 
-            template_footer_heights = []
-            template_footer_rows = []
-            current_max_row = ws.max_row
+        template_footer_heights = []
+        template_footer_rows = []
+        # CAP THE FOOTER SCAN to prevent a corrupted max_row (e.g. 1,000,000) from hanging the loop.
+        # An invoice footer is rarely more than 100 rows.
+        current_max_row = min(ws.max_row, end_delete + 100)
+        
+        for r in range(end_delete + 1, current_max_row + 1):
+            tick("sanitizer._delete_data_rows", sub="rows_processed")
+            rel_r = r - (end_delete + 1)
+            row_dict = {
+                "relative_index": rel_r,
+                "height": None,
+                "merges": [],
+                "cells": []
+            }
             
-            for r in range(end_delete + 1, current_max_row + 1):
-                tick("sanitizer._delete_data_rows", sub="rows_processed")
-                rel_r = r - (end_delete + 1)
-                row_dict = {
-                    "relative_index": rel_r,
-                    "height": None,
-                    "merges": [],
-                    "cells": []
-                }
+            if r in ws.row_dimensions:
+                h = ws.row_dimensions[r].height
+                if h is not None:
+                    row_dict["height"] = h
+                    template_footer_heights.append((r, h))
+                    
+            if r in footer_merge_map_by_row:
+                for (old_min_r, min_c, old_max_r, max_c) in footer_merge_map_by_row[r]:
+                    top_left_cell = ws.cell(row=r, column=min_c)
+                    val = str(top_left_cell.value) if top_left_cell.value is not None else ""
+                    val_clean = val.strip()
+                    
+                    row_dict["merges"].append({
+                        "min_col": min_c,
+                        "max_col": max_c,
+                        "row_span": old_max_r - old_min_r + 1,
+                        "value": val_clean
+                    })
+                    
+            has_content_or_style = False
+            for c in range(1, safe_max_column + 1):
+                cell = ws.cell(row=r, column=c)
+                is_empty = (cell.value is None)
                 
-                if r in ws.row_dimensions:
-                    h = ws.row_dimensions[r].height
-                    if h is not None:
-                        row_dict["height"] = h
-                        template_footer_heights.append((r, h))
-                        
-                if r in footer_merge_map_by_row:
-                    for (old_min_r, min_c, old_max_r, max_c) in footer_merge_map_by_row[r]:
-                        top_left_cell = ws.cell(row=r, column=min_c)
-                        val = str(top_left_cell.value) if top_left_cell.value is not None else ""
-                        val_clean = val.strip()
-                        
-                        row_dict["merges"].append({
-                            "min_col": min_c,
-                            "max_col": max_c,
-                            "row_span": old_max_r - old_min_r + 1,
-                            "value": val_clean
-                        })
-                        
-                has_content_or_style = False
-                for c in range(1, safe_max_column + 1):
-                    cell = ws.cell(row=r, column=c)
-                    is_empty = (cell.value is None)
-                    
-                    style_data = self._capture_cell_style(cell, is_empty=is_empty)
-                    
-                    if is_empty and not style_data and not self._should_record_empty_cell(ws, r, c):
-                        continue
-                        
-                    cell_dict = {"col_index": c}
-                    has_content_or_style = True
-                    
-                    if not is_empty:
-                        val_str = str(cell.value)
-                        if val_str.startswith('='):
-                            val_str = re.sub(r'\[\d+\]', '', val_str)
-                        cell_dict["value"] = val_str
-                        
-                    if style_data:
-                        style_id = process_and_store_style(style_data)
-                        cell_dict["style_id"] = style_id
-                        
-                    row_dict["cells"].append(cell_dict)
-                    
-                if row_dict["height"] is not None or row_dict["merges"] or has_content_or_style:
-                    template_footer_rows.append(row_dict)
-                    
-            preserved_layout["template_footer_rows"] = template_footer_rows
-
-            ws.delete_rows(start_delete, amount=rows_to_delete)
-            
-            for (old_min_r, min_c, old_max_r, max_c) in template_footer_merges:
-                new_min_r = old_min_r - rows_to_delete
-                new_max_r = old_max_r - rows_to_delete
+                style_data = self._capture_cell_style(cell, is_empty=is_empty)
                 
-                if new_min_r < 1:
+                if is_empty and not style_data and not self._should_record_empty_cell(ws, r, c):
                     continue
                     
-                self.logger.info(f"    Restoring footer merge at rows {new_min_r}-{new_max_r} (was {old_min_r}-{old_max_r})")
-                ws.merge_cells(start_row=new_min_r, start_column=min_c, end_row=new_max_r, end_column=max_c)
+                cell_dict = {"col_index": c}
+                has_content_or_style = True
                 
-            for (old_r, height) in template_footer_heights:
-                new_r = old_r - rows_to_delete
-                if new_r < 1:
-                    continue
-                ws.row_dimensions[new_r].height = height
-
+                if not is_empty:
+                    val_str = str(cell.value)
+                    if val_str.startswith('='):
+                        val_str = re.sub(r'\[\d+\]', '', val_str)
+                    cell_dict["value"] = val_str
+                    
+                if style_data:
+                    style_id = process_and_store_style(style_data)
+                    cell_dict["style_id"] = style_id
+                    
+                row_dict["cells"].append(cell_dict)
+                
+            if row_dict["height"] is not None or row_dict["merges"] or has_content_or_style:
+                template_footer_rows.append(row_dict)
+                
+        preserved_layout["template_footer_rows"] = template_footer_rows
     def _clean_sheet(self, ws: Worksheet, analysis: SheetAnalysis) -> Dict[str, Any]:
         """Clean a single sheet: strip data rows, inject placeholders."""
         self.logger.info(f"  Cleaning sheet: {analysis.name}")
@@ -303,7 +257,7 @@ class ExcelTemplateSanitizer:
         table_footer_row = self._find_table_footer_row(ws, analysis.header_row + 1, analysis, safe_max_column)
         self._capture_global_layout(ws, safe_max_column, preserved_layout, analysis, table_footer_row)
         self._capture_template_header_layout(ws, analysis, safe_max_column, preserved_layout, process_and_store_style)
-        self._delete_data_rows_and_capture_template_footer(ws, analysis, safe_max_column, preserved_layout, process_and_store_style, table_footer_row)
+        self._capture_template_footer(ws, analysis, safe_max_column, preserved_layout, process_and_store_style, table_footer_row)
         
         preserved_layout["style_palette"] = local_style_palette
         return preserved_layout
