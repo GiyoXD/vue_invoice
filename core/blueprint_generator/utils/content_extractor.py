@@ -18,29 +18,76 @@ PALLET_PATTERN = re.compile(r'\d+\s*PALLETS?', re.IGNORECASE)
 # Pallet count formula pattern: matches "=SUM(...) & \" PALLETS\""
 PALLET_FORMULA_PATTERN = re.compile(r'PALLETS?', re.IGNORECASE)
 
+from core.utils.loop_profiler import tick, loop_profiler
+from core.blueprint_generator.rules import BlueprintRules
+
 # --- HELPER ---
+@loop_profiler.watch("content_extractor.get_cell_merge_colspan")
+def get_cell_merge_colspan(worksheet: Worksheet, cell) -> int:
+    """
+    Check if a cell is part of a merged range and return the colspan.
+    
+    Returns:
+        The number of columns spanned (1 if not merged).
+    """
+    for merged in worksheet.merged_cells.ranges:
+        tick("content_extractor.get_cell_merge_colspan", sub="merge_ranges_scanned")
+        if merged.min_row <= cell.row <= merged.max_row:
+            if merged.min_col <= cell.column <= merged.max_col:
+                return merged.max_col - merged.min_col + 1
+    return 1
+
+@loop_profiler.watch("content_extractor._get_cell_value_safe")
 def _get_cell_value_safe(worksheet: Worksheet, cell) -> Optional[str]:
-    """Safely get string value from a cell, handling MergedCells by checking the anchor."""
-    if isinstance(cell, MergedCell) or cell.value is None:
+    """Safely get string value from a cell, handling MergedCells using an O(1) cache."""
+    if cell.value is not None and not isinstance(cell, MergedCell):
+        return str(cell.value)
+
+    # Lazy-init a sparse column-indexed cache to avoid O(N*M) memory explosion
+    if not hasattr(worksheet, '_merged_cells_cache'):
+        cache = {} # col -> list of (min_row, max_row, val)
         for merged_range in worksheet.merged_cells.ranges:
-            if cell.coordinate in merged_range:
-                top_left_cell = worksheet.cell(row=merged_range.min_row, column=merged_range.min_col)
-                if top_left_cell.value is not None:
-                    return str(top_left_cell.value)
-        return None
-    return str(cell.value)
+            tick("content_extractor._get_cell_value_safe", sub="cache_build_iterations")
+            min_col, min_row, max_col, max_row = merged_range.bounds
+            # The top-left cell holds the actual value for the entire merged range
+            top_left_cell = worksheet.cell(row=min_row, column=min_col)
+            if top_left_cell.value is not None:
+                val = str(top_left_cell.value)
+                
+                # Clamp column boundary to prevent huge lateral scans
+                capped_max_col = min(max_col, max(50, BlueprintRules.MAX_SCAN_COLUMN))
+                
+                # Expand only the columns (max ~50 iterations per merge, instead of 100,000)
+                for c in range(min_col, capped_max_col + 1):
+                    if c not in cache:
+                        cache[c] = []
+                    cache[c].append((min_row, max_row, val))
+        worksheet._merged_cells_cache = cache
+    else:
+        tick("content_extractor._get_cell_value_safe", sub="cache_hits")
+
+    # Sparse lookup: O(K) where K is number of merges in this specific column
+    col_ranges = worksheet._merged_cells_cache.get(cell.column, [])
+    for min_r, max_r, val in col_ranges:
+        if min_r <= cell.row <= max_r:
+            return val
+            
+    return None
 
 
 # --- 1. FALLBACK DESCRIPTION EXTRACTION ---
 
+@loop_profiler.watch("content_extractor.detect_static_description_label")
 def detect_static_description_label(worksheet: Worksheet, header_row: int, columns: List['ColumnInfo'], max_sample_rows: int = 10) -> Optional[str]:
     """
     Detects the description label (e.g. "DES: COW LEATHER") from the static column.
     Uses regex for robust discovery.
     """
     for col in columns:
+        tick("content_extractor.detect_static_description_label", sub="columns_checked")
         if col.id == "col_static":
             for row in range(header_row + 1, min(header_row + max_sample_rows + 1, worksheet.max_row + 1)):
+                tick("content_extractor.detect_static_description_label", sub="rows_sampled")
                 cell = worksheet.cell(row=row, column=col.col_index)
                 value = _get_cell_value_safe(worksheet, cell)
                 if not value:
@@ -55,56 +102,71 @@ def detect_static_description_label(worksheet: Worksheet, header_row: int, colum
                         return desc_part
     return None
 
+
+# --- 2. TABLE DESCRIPTION FALLBACK (secondary path) ---
+
 def extract_table_fallback_description(worksheet: Worksheet, data_start: int, data_end: int, col_desc_index: int) -> Optional[str]:
     """
-    Extracts unique descriptions straight from the data table's description column.
+    Secondary fallback: finds description category labels from col_desc.
+
+    Strategy: look for vertically-merged cells in col_desc — these are category
+    labels (e.g. "Leather", "COW LEATHER") that span multiple data rows.
+    Single-row values are specific product names and are ignored.
+
+    Scans a bounded window (data_start → min(data_end, data_start+100)) and stops
+    at the first TOTAL/SUB-TOTAL-like row to avoid picking up footer content.
     """
-    unique_descs = []
-    seen_desc = set()
-    
-    if data_start <= data_end:
-        for r in range(data_start, data_end + 1):
-            val = _get_cell_value_safe(worksheet, worksheet.cell(row=r, column=col_desc_index))
-            if val:
-                val_str = str(val).strip()
-                if val_str and val_str not in seen_desc:
-                    unique_descs.append(val_str)
-                    seen_desc.add(val_str)
-    
-    if unique_descs:
-        fallback_description = " / ".join(unique_descs)
-        logger.info(f"    [Extracted] Fallback descriptions from data table: '{fallback_description}'")
-        return fallback_description
+    TOTAL_KEYWORDS = {"TOTAL", "SUBTOTAL", "SUB TOTAL", "GRAND TOTAL", "AMOUNT"}
+    MAX_SCAN = 100  # Cap to avoid reading bank info / legal text deep in the sheet
+
+    # Build a lookup of merged ranges in col_desc column
+    merged_spans: list[tuple[int, int, str]] = []  # (min_row, max_row, value)
+    for merged in worksheet.merged_cells.ranges:
+        if merged.min_col <= col_desc_index <= merged.max_col and merged.max_row > merged.min_row:
+            if merged.min_row >= data_start:
+                val = _get_cell_value_safe(worksheet, worksheet.cell(row=merged.min_row, column=col_desc_index))
+                if val:
+                    merged_spans.append((merged.min_row, merged.max_row, str(val).strip()))
+
+    # Sort by span length descending (longest = most prominent category)
+    merged_spans.sort(key=lambda x: x[1] - x[0], reverse=True)
+
+    # Filter: stop at footer boundary, skip very long text (bank info / legal notes)
+    scan_end = min(data_end, data_start + MAX_SCAN)
+    categories = []
+    seen = set()
+    for min_row, max_row, val in merged_spans:
+        if min_row > scan_end:
+            continue
+        upper = val.upper()
+        if any(kw in upper for kw in TOTAL_KEYWORDS):
+            continue
+        if len(val) > 80:  # skip long legal/bank text
+            continue
+        if val not in seen:
+            categories.append(val)
+            seen.add(val)
+
+    if categories:
+        result = " / ".join(categories)
+        logger.info(f"    [Extracted] Fallback description from merged col_desc cells: '{result}'")
+        return result
     return None
 
 
-# --- 2. HS CODE EXTRACTION ---
 
-def extract_global_hs_code(worksheet: Worksheet, max_row: int = 150, max_col: int = 25) -> Optional[str]:
-    """
-    Performs a global search for "HS.CODE" or "HSCODE" across the worksheet.
-    """
-    for row_cells in worksheet.iter_rows(max_row=max_row, max_col=max_col):
-        for cell in row_cells:
-            val = cell.value
-            if val and isinstance(val, (str, bytes)):
-                val_str = str(val)
-                # Remove spaces and uppercase to check
-                val_upper = val_str.upper().replace(" ", "")
-                if "HS.CODE" in val_upper or "HSCODE" in val_upper:
-                    hs_code = val_str.strip()
-                    logger.info(f"    [Global Search] HS Code cell found at {cell.coordinate}: '{hs_code}'")
-                    return hs_code
-    return None
 
+
+@loop_profiler.watch("content_extractor.find_footer_hs_code")
 def find_footer_hs_code(worksheet: Worksheet, start_row: int, end_row: int) -> Tuple[Optional[str], int, Optional[int]]:
     """
     Scan specifically in the footer bounds for HS Code to determine if it's there, its colspan, and its column.
     """
-    hs_keywords = {"HS.CODE", "HS CODE", "HS-CODE"}
+    hs_keywords = {"HS.CODE", "HS CODE", "HS-CODE", "H.S. CODE", "H.S CODE", "H.S.CODE", "HS. CODE"}
     
     for row in range(start_row, end_row + 1):
-        for col in range(1, min(worksheet.max_column + 1, 20)):
+        for col in range(1, min(worksheet.max_column + 1, BlueprintRules.MAX_SCAN_COLUMN)):
+            tick("content_extractor.find_footer_hs_code", sub="cells_scanned")
             cell = worksheet.cell(row=row, column=col)
             val = _get_cell_value_safe(worksheet, cell)
             if not val:
@@ -113,11 +175,7 @@ def find_footer_hs_code(worksheet: Worksheet, start_row: int, end_row: int) -> T
             upper_val = val.upper()
             if any(kw in upper_val for kw in hs_keywords):
                 # Calculate colspan
-                colspan = 1
-                for merged in worksheet.merged_cells.ranges:
-                    if merged.min_row <= cell.row <= merged.max_row and merged.min_col <= cell.column <= merged.max_col:
-                        colspan = merged.max_col - merged.min_col + 1
-                        break
+                colspan = get_cell_merge_colspan(worksheet, cell)
                 return val, colspan, col
                 
     return None, 1, None
@@ -125,6 +183,7 @@ def find_footer_hs_code(worksheet: Worksheet, start_row: int, end_row: int) -> T
 
 # --- 3. FOOTER ELEMENTS (PALLET & TOTAL LABELS) ---
 
+@loop_profiler.watch("content_extractor.find_total_label_cell")
 def find_total_label_cell(worksheet: Worksheet, start_row: int, end_row: int, mapping_config: Optional[Dict[str, Any]] = None, logger_instance: Optional[logging.Logger] = None, sheet_name: str = "Unknown"):
     """
     Scan rows for the first cell containing a TOTAL-like label.
@@ -145,7 +204,8 @@ def find_total_label_cell(worksheet: Worksheet, start_row: int, end_row: int, ma
     best_match = None
     
     for row in range(start_row, end_row + 1):
-        for col in range(1, min(worksheet.max_column + 1, 20)):
+        for col in range(1, min(worksheet.max_column + 1, BlueprintRules.MAX_SCAN_COLUMN)):
+            tick("content_extractor.find_total_label_cell", sub="cells_scanned")
             cell = worksheet.cell(row=row, column=col)
             val = _get_cell_value_safe(worksheet, cell)
             if not val:
@@ -162,11 +222,13 @@ def find_total_label_cell(worksheet: Worksheet, start_row: int, end_row: int, ma
     
     return best_match if best_match else None
 
+@loop_profiler.watch("content_extractor.find_pallet_count_column")
 def find_pallet_count_column(worksheet: Worksheet, footer_row: int, columns: List['ColumnInfo'], find_col_id_func, logger_instance: logging.Logger, sheet_name: str = "Unknown") -> Optional[str]:
     """
     Scan the footer row for a pallet count pattern.
     """
-    for col in range(1, min(worksheet.max_column + 1, 20)):
+    for col in range(1, min(worksheet.max_column + 1, BlueprintRules.MAX_SCAN_COLUMN)):
+        tick("content_extractor.find_pallet_count_column", sub="cols_scanned")
         cell = worksheet.cell(row=footer_row, column=col)
         val = _get_cell_value_safe(worksheet, cell)
         
