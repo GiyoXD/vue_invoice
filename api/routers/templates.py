@@ -98,24 +98,17 @@ def update_mapping_config(new_mappings: dict):
         return False
 
 def read_table_info_from_config(template_dir: Path) -> dict:
-    result = {}
+    """Read table_info summary index from _config.json top-level key."""
     config_files = list(template_dir.glob("*_config.json"))
-    if not config_files: return result
+    if not config_files:
+        return {}
     try:
         with open(config_files[0], 'r', encoding='utf-8') as f:
             cfg = json.load(f)
-        layout = cfg.get("layout_bundle", {})
-        fallback = layout.get("defaults", {}).get("data_flow", {}).get("mappings", {}).get("col_desc", {}).get("fallback", {})
-        if fallback: result["fallback_description"] = fallback
-        for _, sheet_data in layout.items():
-            if not isinstance(sheet_data, dict): continue
-            bf = sheet_data.get("footer", {}).get("add_ons", {}).get("before_footer", {})
-            if bf.get("enabled") and bf.get("text"):
-                result["hs_code"] = bf["text"]
-                break
+        return cfg.get("table_info", {})
     except Exception:
         logger.exception("Failed to read table info from config in %s", template_dir)
-    return result
+        return {}
 
 # --- Routes ---
 
@@ -249,20 +242,20 @@ async def update_template_cell(req: CellOverrideRequest):
                 _, _, _, mr = range_boundaries(m); max_r = max(max_r, mr)
             return max_r
 
-        h_content = sheet.get("header_content", {})
-        h_max = get_max_row(h_content, sheet.get("header_merges", []))
+        h_content = sheet.get("template_header_content") or sheet.get("header_content", {})
+        h_max = get_max_row(h_content, sheet.get("template_header_merges") or sheet.get("header_merges", []))
         col_letter, row_val = coordinate_from_string(req.cell_address)
         col_idx = column_index_from_string(col_letter)
         is_f = row_val > h_max
 
         if is_f:
             rel = row_val - h_max - 1
-            f_rows = sheet.get("footer_rows", [])
+            f_rows = sheet.get("template_footer_rows") or sheet.get("footer_rows", [])
             row = next((r for r in f_rows if r.get('relative_index') == rel), None)
             if not row:
                 row = {"relative_index": rel, "cells": [], "merges": []}
                 f_rows.append(row)
-                sheet["footer_rows"] = sorted(f_rows, key=lambda x: x.get('relative_index', 0))
+                sheet["template_footer_rows"] = sorted(f_rows, key=lambda x: x.get('relative_index', 0))
             cells = row.get("cells", [])
             cell = next((c for c in cells if c.get('col_index') == col_idx), None)
             if not cell:
