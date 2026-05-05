@@ -233,6 +233,19 @@ input[type="file"]:focus,
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
 }
 
+/* ── Date Picker Icon (Dark Mode Visibility) ── */
+input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
+    cursor: pointer;
+    opacity: 0.8;
+    transition: var(--hover-effect);
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
 input[type="file"] {
     margin-bottom: 0.75rem;
     padding: 0.75rem;
