@@ -13,22 +13,22 @@ export default {
                     
                     <div style="margin-bottom: 1rem;">
                         <input type="text" v-model="searchQuery" placeholder="Search templates..." class="input-field" style="width: 100%;" />
+                        <button class="btn-small" @click="fetchTemplates" style="width: 100%; margin-top: 1rem;">Refresh List</button>
                     </div>
 
-                    <div v-if="filteredTemplates.length === 0" style="color: #94a3b8; font-size: 0.875rem;">No templates found.</div>
+                    <div v-if="filteredTemplates.length === 0" style="color: #94a3b8; font-size: 1.0rem;">No templates found.</div>
                     <div class="history-list">
                         <div v-for="t in filteredTemplates" :key="t.name + (t.bundle_name || '') + (t.source_file || '')" 
                              class="history-item" :class="{ active: selectedTemplateName === t.name }"
                              @click="loadTemplate(t)">
                             <div class="h-date">
                                 {{ t.name }}
-                                <span v-if="t.bundle_name && t.name !== t.bundle_name" style="font-size: 0.8em; color: #64748b; font-weight: normal;">({{ t.bundle_name }})</span>
+                                <span v-if="t.bundle_name && t.name !== t.bundle_name" style="font-size: 1.1em; color: #ef4444; font-weight: bold;">({{ t.bundle_name }})</span>
                             </div>
                             <div class="h-file" style="font-size: 0.75rem; color: #64748b;">Source: {{ t.source_file }}</div>
                             <div class="h-stats">Updated: {{ formatTime(t.modified) }}</div>
                         </div>
                     </div>
-                     <button class="btn-small" @click="fetchTemplates" style="width: 100%; margin-top: 1rem;">Refresh List</button>
                 </div>
 
                 <!-- Main: Details -->
@@ -196,7 +196,7 @@ export default {
         const saveNotes = async () => {
             if (!selectedTemplateName.value) return;
             isSavingNotes.value = true;
-            
+
             const t = templates.value.find(tmpl => tmpl.name === selectedTemplateName.value);
             try {
                 const res = await fetch('/api/template/notes', {
@@ -208,7 +208,7 @@ export default {
                         notes: editingNotesText.value
                     })
                 });
-                
+
                 if (res.ok) {
                     if (currentTemplate.value) {
                         currentTemplate.value.notes = editingNotesText.value;
@@ -274,15 +274,15 @@ export default {
                 currentTemplate.value = null; // Clear immediately to prevent showing old data while loading
             }
             try {
-                const url = t.bundle_name 
+                const url = t.bundle_name
                     ? `/api/template/view?name=${encodeURIComponent(t.name)}&bundle=${encodeURIComponent(t.bundle_name)}&_t=${Date.now()}`
                     : `/api/template/view?name=${encodeURIComponent(t.name)}&_t=${Date.now()}`;
-                    
+
                 const res = await fetch(url);
                 if (res.ok) {
                     currentTemplate.value = await res.json();
                     const sheets = Object.keys(currentTemplate.value?.template_layout || {});
-                    
+
                     // Default to first sheet, unless preserving state and current sheet is still valid
                     if (!preserveState || !currentSheetName.value || !sheets.includes(currentSheetName.value)) {
                         if (sheets.length > 0) currentSheetName.value = sheets[0];
@@ -296,11 +296,11 @@ export default {
 
         const deleteTemplate = async () => {
             if (!selectedTemplateName.value) return;
-            
+
             // Find the full template object to get the bundle_name
             const t = templates.value.find(tmpl => tmpl.name === selectedTemplateName.value);
             const bundleName = t?.bundle_name || selectedTemplateName.value;
-            
+
             if (!confirm(`WARNING: Are you sure you want to permanently delete the ENTIRE template bundle for '${bundleName}'?\n\nThis will delete all variants (Base, KH, VN, etc) and configuration files within the bundle folder.`)) {
                 return;
             }
@@ -308,7 +308,7 @@ export default {
                 const url = t?.bundle_name
                     ? `/api/template/${encodeURIComponent(selectedTemplateName.value)}?bundle=${encodeURIComponent(t.bundle_name)}`
                     : `/api/template/${encodeURIComponent(selectedTemplateName.value)}`;
-                    
+
                 const res = await fetch(url, {
                     method: 'DELETE'
                 });
@@ -335,7 +335,7 @@ export default {
         const filteredTemplates = computed(() => {
             const q = (searchQuery.value || "").trim().toLowerCase();
             if (!q) return templates.value;
-            
+
             console.log(`Filtering for: "${q}"`);
             const filtered = templates.value.filter(t => {
                 const nameMatch = (t.name || "").toLowerCase().includes(q);
@@ -650,8 +650,8 @@ export default {
                     cells.push({
                         id: address,
                         address: address,
-                        content: typeof cellContent === 'object' && cellContent !== null 
-                            ? (cellContent.default !== undefined && cellContent.default !== null ? cellContent.default : (Object.keys(cellContent).length > 0 ? JSON.stringify(cellContent) : "")) 
+                        content: typeof cellContent === 'object' && cellContent !== null
+                            ? (cellContent.default !== undefined && cellContent.default !== null ? cellContent.default : (Object.keys(cellContent).length > 0 ? JSON.stringify(cellContent) : ""))
                             : (cellContent || ""),
                         rawContent: cellContent,
                         hasOverride: typeof cellContent === 'object' && cellContent !== null,
@@ -714,7 +714,7 @@ export default {
             if (!ts) return '';
             const d = new Date(ts);
             const pad = (n) => String(n).padStart(2, '0');
-            return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+            return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
         };
 
         /**
