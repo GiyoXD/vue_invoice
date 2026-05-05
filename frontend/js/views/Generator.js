@@ -90,15 +90,15 @@ export default {
                 <div class="grid-form">
                     <div class="form-group">
                         <label>Invoice Number</label>
-                        <input type="text" v-model="invoiceNo" class="input-field" />
+                        <input style="color: red;" type="text" v-model="invoiceNo" class="input-field" />
                     </div>
                     <div class="form-group">
                         <label>Invoice Date</label>
-                        <input type="date" v-model="invoiceDate" class="input-field" />
+                        <input style="color: red;" type="date" v-model="invoiceDate" class="input-field" />
                     </div>
                     <div class="form-group">
                         <label>Invoice Ref (Optional)</label>
-                        <input type="text" v-model="invoiceRef" class="input-field" />
+                        <input style="color: red;" type="text" v-model="invoiceRef" class="input-field" />
                     </div>
                 </div>
 
@@ -401,9 +401,9 @@ export default {
             for (const adj of priceAdjustments.value) {
                 const desc = (adj.description || '').trim();
                 const valRaw = String(adj.value || '').trim();
-                
+
                 if (desc === '' && valRaw === '') continue; // Skip empty rows
-                
+
                 if (valRaw === '') {
                     adjustmentError.value = 'Please enter a value for all adjustments.';
                     return { isValid: false, list: [] };
@@ -483,7 +483,7 @@ export default {
                     if (data.files && data.files.length > 0) {
                         data.files.forEach(f => {
                             const mimeType = f.mime_type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-                            
+
                             // Convert Base64 to Blob for robust downloading of large files
                             const binaryString = window.atob(f.content);
                             const bytes = new Uint8Array(binaryString.length);
