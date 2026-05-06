@@ -3,9 +3,24 @@
 # Usage: .\start_dev.ps1
 
 param(
-    [int]$Port = 8000,
+    [int]$Port = 0,
     [switch]$NoBrowser
 )
+
+# Load .env manually to get API_PORT if not provided via param
+if ($Port -eq 0) {
+    if (Test-Path ".env") {
+        $envFile = Get-Content ".env"
+        foreach ($line in $envFile) {
+            if ($line -match "^API_PORT=(.*)") {
+                $Port = [int]$matches[1]
+                break
+            }
+        }
+    }
+    # Fallback to 8080 if still not set
+    if ($Port -eq 0) { $Port = 8080 }
+}
 
 $Host.UI.RawUI.WindowTitle = "Invoice Generator - Dev Server"
 

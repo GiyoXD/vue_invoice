@@ -114,6 +114,13 @@ class SystemConfig:
         return self._resolve_path("template_image_dir", "database/template_images", env_key="TEMPLATE_IMAGE_DIR")
 
     @property
+    def api_port(self) -> int:
+        env_val = os.getenv("API_PORT")
+        if env_val and env_val.isdigit():
+            return int(env_val)
+        return 8080
+
+    @property
     def default_template_name(self) -> str:
         env_val = os.getenv("FALLBACK_TEMPLATE")
         if env_val:

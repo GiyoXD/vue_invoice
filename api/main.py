@@ -23,7 +23,7 @@ app.mount("/frontend", StaticFiles(directory=str(sys_config.frontend_dir), html=
 app.mount("/static", StaticFiles(directory=str(sys_config.frontend_dir), html=True), name="static")
 
 # 4. Include Modular Routers
-from api.routers import blueprint, upload, generate, history, templates, logs
+from api.routers import blueprint, upload, generate, history, templates, logs, google_sheets
 
 app.include_router(blueprint.router)
 app.include_router(upload.router)
@@ -31,6 +31,7 @@ app.include_router(generate.router)
 app.include_router(history.router)
 app.include_router(templates.router)
 app.include_router(logs.router)
+app.include_router(google_sheets.router)
 
 # 5. Base Routes
 @app.get("/")
@@ -46,4 +47,4 @@ sys_config.temp_uploads_dir.mkdir(parents=True, exist_ok=True)
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=sys_config.api_port)
