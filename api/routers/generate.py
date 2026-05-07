@@ -272,13 +272,29 @@ def generate_invoice(request: GenerateRequest):
                 "mime_type": "application/zip",
                 "content": zip_b64
             })
+            
+        # Read the final saved JSON back to send as metadata to the frontend
+        serialized_metadata = {}
+        metadata_error = None
+        if json_path_obj.exists():
+            try:
+                with open(json_path_obj, 'r', encoding='utf-8') as f:
+                    serialized_metadata = json.load(f)
+            except Exception as e:
+                metadata_error = f"Metadata read failed: {str(e)}"
+                logger.error(f"Failed to read back metadata from {json_path_obj}: {e}")
+        else:
+            metadata_error = f"Metadata file missing after generation: {json_path_obj.name}"
+            logger.warning(metadata_error)
 
         return {
             "status": "completed",
             "output_paths": results,
             "message": f"Generated {len(results)} invoices.",
             "files": final_payload_files,
-            "errors": errors if errors else None
+            "errors": errors if errors else None,
+            "metadata": serialized_metadata,
+            "metadata_error": metadata_error  # None on success; non-null means footer_data will be missing
         }
     except Exception as e:
         import traceback

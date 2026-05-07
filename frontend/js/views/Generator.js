@@ -88,17 +88,27 @@ export default {
                 </div>
                 
                 <div class="grid-form">
-                    <div class="form-group">
+                    <div class="form-group" style="position: relative;">
                         <label>Invoice Number</label>
-                        <input style="color: red;" type="text" v-model="invoiceNo" class="input-field" />
+                        <div style="display: flex; gap: 0.5rem;">
+                            <input style="color: red; flex: 1;" type="text" v-model="invoiceNo" class="input-field" />
+                            <button class="btn-small" @click="lookupRefFromSheets" :disabled="isLookingUp || !invoiceNo" style="margin: 0; padding: 0 0.75rem;" title="Lookup Ref No in Google Sheets">
+                                {{ isLookingUp ? '...' : '🔍' }}
+                            </button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>Invoice Date</label>
                         <input style="color: red;" type="date" v-model="invoiceDate" class="input-field" />
                     </div>
                     <div class="form-group">
-                        <label>Invoice Ref (Optional)</label>
-                        <input style="color: red;" type="text" v-model="invoiceRef" class="input-field" />
+                        <label style="display: flex; align-items: center; justify-content: space-between;">
+                            <span>Invoice Ref (Optional)</span>
+                            <span v-if="refSourceStatus" :style="{ fontSize: '0.75rem', fontWeight: 'bold', padding: '0.1rem 0.4rem', borderRadius: '4px', background: refSourceStatus.type === 'found' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)', color: refSourceStatus.type === 'found' ? '#10b981' : '#f59e0b' }">
+                                {{ refSourceStatus.message }}
+                            </span>
+                        </label>
+                        <input style="color: red;" type="text" v-model="invoiceRef" @input="refSourceStatus = null" class="input-field" />
                     </div>
                 </div>
 
@@ -177,6 +187,27 @@ export default {
                         These will be evenly distributed across aggregation rows (col_amount).
                     </p>
                 </div>
+                <!-- GOOGLE SHEETS SETTINGS (ONLINE MODE) -->
+                <div class="form-group" style="margin-top: 1.5rem; margin-bottom: 1.5rem;">
+                    <div @click="showGoogleSheetsSettings = !showGoogleSheetsSettings" style="cursor: pointer; display: flex; align-items: center; gap: 0.5rem; color: #64748b; font-size: 0.9rem; font-weight: bold; user-select: none;">
+                        <span style="transition: transform 0.2s; display: inline-block;" :style="{ transform: showGoogleSheetsSettings ? 'rotate(90deg)' : 'rotate(0deg)' }">▶</span>
+                        <span>🌐 Google Sheets Sync Settings <span :style="{ color: isOnlineMode ? '#10b981' : '#94a3b8' }">{{ isOnlineMode ? '(Enabled)' : '(Disabled)' }}</span></span>
+                    </div>
+                    
+                    <div v-if="showGoogleSheetsSettings" style="margin-top: 0.75rem; padding: 1rem; background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px;">
+                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                            <input type="checkbox" v-model="isOnlineMode" accent-color="#10b981" /> 
+                            <span style="font-weight: bold; color: #e2e8f0; text-transform: uppercase; font-size: 0.85rem; letter-spacing: 0.05em;">Enable Online Sync</span>
+                        </label>
+                        <div v-if="isOnlineMode" style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
+                            <input type="text" v-model="googleSheetId" placeholder="Spreadsheet ID (Optional if set in backend)" class="input-field" style="flex: 1; min-width: 250px;" />
+                            <input type="text" v-model="googleSheetName" placeholder="Sheet Name (e.g. 2026)" class="input-field" style="width: 150px;" />
+                        </div>
+                        <p style="color: #94a3b8; font-size: 0.75rem; margin-top: 0.5rem;">
+                            If checked, Ref No will be auto-fetched/incremented, and new invoices will be saved to the sheet.
+                        </p>
+                    </div>
+                </div>
                 
                 <button class="btn" @click="generateInvoice" :disabled="isGenerating || !assetStatus?.ready">
                     {{ isGenerating ? 'Generating...' : (assetStatus?.ready ? 'Generate Invoice' : 'Blueprint Required') }}
@@ -184,6 +215,34 @@ export default {
 
                 <div v-if="generationStatus && !generationError" :class="['status-box', generationStatus.type]">
                     {{ generationStatus.message }}
+                </div>
+
+                <!-- Google Sheets Sync Button (Visible after successful generation) -->
+                <div v-if="isOnlineMode && generationStatus && generationStatus.type === 'success' && !isGenerating" style="margin-top: 1rem; padding: 1rem; border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; background: rgba(30, 41, 59, 0.5);">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <h4 style="margin: 0; color: #e2e8f0;">Google Sheets Sync</h4>
+                            <p style="margin: 0.25rem 0 0 0; font-size: 0.8rem; color: #94a3b8;">Push invoice data to Google Sheets.</p>
+                        </div>
+                        <button class="btn" @click="() => exportToSheets(false)" :disabled="isSyncing || showConflictConfirm" style="margin: 0; width: auto; padding: 0.5rem 1rem; background: #10b981;">
+                            {{ isSyncing ? 'Syncing...' : 'Push to Sheets' }}
+                        </button>
+                    </div>
+                    <!-- Conflict Confirmation Panel (replaces window.confirm) -->
+                    <div v-if="showConflictConfirm" style="margin-top: 0.75rem; padding: 0.75rem; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px;">
+                        <p style="margin: 0 0 0.5rem 0; color: #fbbf24; font-size: 0.9rem; font-weight: bold;">⚠️ {{ conflictMessage }}</p>
+                        <div style="display: flex; gap: 0.5rem;">
+                            <button class="btn" @click="confirmOverride" :disabled="isSyncing" style="margin: 0; width: auto; padding: 0.4rem 1rem; background: #ef4444; font-size: 0.85rem;">
+                                {{ isSyncing ? 'Overriding...' : 'Override' }}
+                            </button>
+                            <button class="btn" @click="cancelOverride" :disabled="isSyncing" style="margin: 0; width: auto; padding: 0.4rem 1rem; background: #475569; font-size: 0.85rem;">
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                    <div v-if="syncStatus" :class="['status-box', syncStatus.type]" style="margin-top: 0.75rem; margin-bottom: 0; padding: 0.5rem; font-size: 0.85rem;">
+                        {{ syncStatus.message }}
+                    </div>
                 </div>
 
                 <!-- ERROR PANEL FOR GENERATION -->
@@ -259,8 +318,6 @@ export default {
                         <span class="stat-value">{{ weightStats.cbm?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 3}) }} m³</span>
                     </div>
                 </div>
-
-
             </div>
         </div>
     `,
@@ -279,6 +336,7 @@ export default {
         const invoiceNo = ref('');
         const invoiceDate = ref(new Date().toISOString().split('T')[0]);
         const invoiceRef = ref('');
+        const refSourceStatus = ref(null); // { type: 'found'|'new', message: '' }
 
         // Options
         const includeStandard = ref(true);
@@ -302,6 +360,12 @@ export default {
         const validationWarnings = ref([]); // Validation warnings from extraction step
         const assetStatus = ref(null); // Asset availability status from upload
 
+        // Google Sheets Export
+        const isOnlineMode = ref(true);
+        const showGoogleSheetsSettings = ref(false);
+        const googleSheetId = ref(''); // Leave empty to use backend default (DEFAULT_SPREADSHEET_ID)
+        const googleSheetName = ref('2026');
+
         // --- Generator Actions ---
         const handleFileUpload = (event) => {
             selectedFile.value = event.target.files[0];
@@ -313,6 +377,7 @@ export default {
             assetStatus.value = null;
             selectedVariants.value = [];
             priceAdjustments.value = [];
+            refSourceStatus.value = null;
         };
 
         const addAdjustment = () => {
@@ -444,6 +509,12 @@ export default {
             validationData.value = null;
 
             try {
+                // Online Mode: Auto-resolve Ref No before generation if empty
+                if (isOnlineMode.value && !invoiceRef.value) {
+                    generationStatus.value = { type: 'info', message: 'Resolving Ref No from Google Sheets...' };
+                    await lookupRefFromSheets(true); // silent lookup
+                }
+
                 const basePayload = {
                     identifier: identifier.value,
                     json_path: jsonPath.value,
@@ -480,6 +551,11 @@ export default {
                     if (data.metadata) {
                         validationData.value = data.metadata;
                     }
+                    // Warn if metadata read failed on the backend (Sheets sync will have wrong values)
+                    if (data.metadata_error) {
+                        console.error('[Generate] metadata_error:', data.metadata_error);
+                        generationStatus.value = { type: 'warning', message: `Invoice generated, but metadata could not be loaded: ${data.metadata_error}. Google Sheets sync may push incorrect values.` };
+                    }
                     if (data.files && data.files.length > 0) {
                         data.files.forEach(f => {
                             const mimeType = f.mime_type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
@@ -502,6 +578,10 @@ export default {
                             URL.revokeObjectURL(url);
                         });
                     }
+                    
+                    // Reset sync status when a new invoice is generated
+                    syncStatus.value = null;
+                    
                 } else {
                     // Capture structured error from API
                     generationError.value = {
@@ -582,12 +662,146 @@ export default {
             return path.split(/[\\/]/).pop() || 'Unknown';
         });
 
+        const isSyncing = ref(false);
+        const syncStatus = ref(null);
+
+        const showConflictConfirm = ref(false);
+        const conflictMessage = ref('');
+
+        /**
+         * Export generated data to Google Sheets
+         */
+        const exportToSheets = async (forceOverride = false) => {
+            isSyncing.value = true;
+            syncStatus.value = { type: 'info', message: 'Syncing to Google Sheets...' };
+            try {
+                // Fetch directly from the grand_total footer data
+                const grandTotal = validationData.value?.footer_data?.grand_total || {};
+
+                // --- DEBUG: Log what we found in validationData ---
+                console.log('[Sheets Export] validationData keys:', validationData.value ? Object.keys(validationData.value) : 'NULL');
+                console.log('[Sheets Export] grand_total:', grandTotal);
+
+                const pallets = grandTotal.col_pallet_count ?? (summaryStats.value?.total_pallets || 0);
+                let gross = grandTotal.col_gross ?? (weightStats.value?.gross || 0);
+                
+                // Format gross to drop trailing zeroes if it's a string (e.g. "8290.5000" -> "8290.5")
+                if (typeof gross === 'string' && !isNaN(parseFloat(gross))) {
+                    gross = parseFloat(gross).toString();
+                }
+
+                console.log('[Sheets Export] pallets:', pallets, '| gross:', gross);
+
+                // Guard: warn user if values look empty/zero
+                if (!pallets && !gross) {
+                    syncStatus.value = { type: 'error', message: 'Cannot sync: pallet and gross weight data is missing. Please regenerate the invoice first.' };
+                    isSyncing.value = false;
+                    return;
+                }
+
+                const palletStr = `${pallets} PALLETS: ${gross}`;
+                console.log('[Sheets Export] palletStr:', palletStr);
+
+                const payload = {
+                    invoice_no: invoiceNo.value || identifier.value,
+                    ref_no: invoiceRef.value || '',
+                    invoice_date: invoiceDate.value,
+                    pallet_str: palletStr,
+                    force_override: forceOverride === true,
+                    worksheet_name: googleSheetName.value || '2026'
+                };
+
+                if (googleSheetId.value && googleSheetId.value.trim() !== '') {
+                    payload.spreadsheet_id = googleSheetId.value.trim();
+                }
+
+                console.log('[Sheets Export] payload:', payload);
+
+                const response = await fetch('/api/sheets/export', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                console.log('[Sheets Export] response:', data);
+                
+                if (!response.ok) {
+                    console.error("Sheets sync failed:", data);
+                    syncStatus.value = { type: 'error', message: data.error || 'Failed to sync to Google Sheets.' };
+                } else if (data.action === 'conflict') {
+                    // Show inline confirmation instead of blocking window.confirm()
+                    syncStatus.value = null;
+                    conflictMessage.value = data.message;
+                    showConflictConfirm.value = true;
+                } else {
+                    syncStatus.value = { type: 'success', message: data.message || 'Successfully synced to Google Sheets!' };
+                }
+            } catch (error) {
+                console.error("Sheets network error:", error);
+                syncStatus.value = { type: 'error', message: 'Network error while syncing.' };
+            } finally {
+                isSyncing.value = false;
+            }
+        };
+
         /**
          * Computed: Whether KH/VN variants are available.
          */
         const hasVariants = computed(() => {
             return (assetStatus.value?.variants?.length || 0) > 0;
         });
+
+        const confirmOverride = async () => {
+            showConflictConfirm.value = false;
+            await exportToSheets(true);
+        };
+
+        const cancelOverride = () => {
+            showConflictConfirm.value = false;
+            syncStatus.value = { type: 'info', message: 'Sync cancelled.' };
+        };
+
+        const isLookingUp = ref(false);
+
+        /**
+         * Look up Ref No from Google Sheets
+         */
+        const lookupRefFromSheets = async (silent = false) => {
+            if (!invoiceNo.value) return;
+            isLookingUp.value = true;
+            try {
+                const payload = {
+                    invoice_no: invoiceNo.value,
+                    worksheet_name: googleSheetName.value || '2026'
+                };
+                if (googleSheetId.value && googleSheetId.value.trim() !== '') {
+                    payload.spreadsheet_id = googleSheetId.value.trim();
+                }
+
+                const response = await fetch('/api/sheets/resolve_ref', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    invoiceRef.value = data.ref_no;
+                    refSourceStatus.value = {
+                        type: data.found ? 'found' : 'new',
+                        message: data.found ? '✓ Pulled from Sheets' : '✨ Auto-generated'
+                    };
+                } else {
+                    const err = await response.json();
+                    if (!silent) alert(`Lookup Failed: ${err.error || 'Check console'}`);
+                }
+            } catch (error) {
+                if (!silent) alert(`Network Error: ${error.message}`);
+            } finally {
+                isLookingUp.value = false;
+            }
+        };
 
         return {
             selectedFile,
@@ -627,7 +841,21 @@ export default {
             addAdjustment,
             removeAdjustment,
             globalUnitPrice,
-            isNetMode
+            isNetMode,
+            googleSheetId,
+            googleSheetName,
+            isOnlineMode,
+            showGoogleSheetsSettings,
+            isLookingUp,
+            lookupRefFromSheets,
+            isSyncing,
+            syncStatus,
+            exportToSheets,
+            refSourceStatus,
+            showConflictConfirm,
+            conflictMessage,
+            confirmOverride,
+            cancelOverride
         };
     }
 };

@@ -1,4 +1,4 @@
-
+secret.json
 # Ignore Database Files (Large)
 database/*.db
 database/*.sqlite

@@ -6,3 +6,5 @@ pydantic==2.11.7
 pillow==12.2.0
 python-multipart==0.0.26
 numpy==2.3.1
+gspread==6.1.0
+google-auth==2.29.0

@@ -18,6 +18,11 @@ db_manager.init_db()
 # 3. Create FastAPI App
 app = FastAPI(title="Giyo Invoice API")
 
+# Fix Windows MIME type registry issues for Javascript modules
+import mimetypes
+mimetypes.add_type("application/javascript", ".js")
+mimetypes.add_type("text/css", ".css")
+
 # Mount frontend
 app.mount("/frontend", StaticFiles(directory=str(sys_config.frontend_dir), html=True), name="frontend")
 app.mount("/static", StaticFiles(directory=str(sys_config.frontend_dir), html=True), name="static")

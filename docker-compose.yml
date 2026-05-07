@@ -19,8 +19,9 @@ services:
       # Hidden internal volume to keep temp files forever without cluttering Windows
       - temp_data:/app/temp_inside_docker
       - temp_data:/app/output_inside_docker
-      # Inject environment config from host
+      # Inject environment config and secrets from host
       - ./.env:/app/.env:ro
+      - ./secret.json:/app/secret.json:ro
     environment:
       - PYTHONPATH=.
       # Force messy temporary files to stay strictly inside the container
