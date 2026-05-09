@@ -233,17 +233,34 @@ async def update_template_cell(req: CellOverrideRequest):
         sheet = data.get("template_layout", {}).get(req.sheet_name)
         if not sheet: return JSONResponse(status_code=404, content={"error": "Sheet not found"})
         
-        def get_max_row(content, merges):
+        def get_max_row(content, merges, styles=None):
             max_r = 0
             for addr in content.keys():
                 _, r = coordinate_from_string(addr); max_r = max(max_r, r)
             m_list = merges if isinstance(merges, list) else merges.keys() if isinstance(merges, dict) else []
             for m in m_list:
                 _, _, _, mr = range_boundaries(m); max_r = max(max_r, mr)
+            # Also scan header styles — the frontend includes styled-but-empty
+            # cells when computing headerMaxRow, so we must match that logic
+            # to avoid off-by-one shifts in footer relative_index.
+            if styles:
+                style_palette = sheet.get("style_palette", {})
+                for key, value in styles.items():
+                    if isinstance(value, list):
+                        # Grouped format: key = style_id, value = [coords]
+                        for coord in value:
+                            _, r = coordinate_from_string(coord); max_r = max(max_r, r)
+                    elif isinstance(value, (dict, str)):
+                        # Legacy per-cell format: key = coord
+                        try:
+                            _, r = coordinate_from_string(key); max_r = max(max_r, r)
+                        except Exception:
+                            pass
             return max_r
 
         h_content = sheet.get("template_header_content") or sheet.get("header_content", {})
-        h_max = get_max_row(h_content, sheet.get("template_header_merges") or sheet.get("header_merges", []))
+        h_styles = sheet.get("template_header_styles") or sheet.get("header_styles", {})
+        h_max = get_max_row(h_content, sheet.get("template_header_merges") or sheet.get("header_merges", []), styles=h_styles)
         col_letter, row_val = coordinate_from_string(req.cell_address)
         col_idx = column_index_from_string(col_letter)
         is_f = row_val > h_max
