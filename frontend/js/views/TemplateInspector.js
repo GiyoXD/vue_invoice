@@ -170,6 +170,9 @@ export default {
                                 <div v-if="editorMessage" :style="{marginTop: '0.5rem', fontSize: '0.85rem', color: editorMessageType === 'error' ? '#ef4444' : '#22c55e'}">
                                     {{ editorMessage }}
                                 </div>
+                                <div style="margin-top: 0.75rem; padding: 0.4rem 0.6rem; background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2); border-radius: 4px; font-size: 0.7rem; color: #d97706; line-height: 1.4;">
+                                    ⚠ If footer overrides appear shifted after re-generating, the Excel template structure likely changed (rows added/removed). Re-apply overrides after verifying cell positions or delete the template to create a new one.
+                                </div>
                             </div>
                         </div>
                     </div>
