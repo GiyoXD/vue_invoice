@@ -534,10 +534,6 @@ def run_invoice_automation(
             # Freeze a deep copy BEFORE any processing loop mutates the row dicts in-place.
             # This is what gets written to "raw_data" in the JSON — CBM is never distributed here.
             raw_tables_snapshot = copy.deepcopy(all_tables_data)
-
-
-
-
             # --- 5. Process Each Table (Instrumented) ---
             logging.info(f"--- Starting Data Processing Loop for {len(all_tables_data)} Extracted Table(s) ---")
             
@@ -554,10 +550,6 @@ def run_invoice_automation(
                 validate_data(current_table_data, table_id_str, column_mapping, monitor=monitor, phase='presence')
                 
                 try:
-                    # 5a.0 Normalize pallet count format
-                    # Converts 'x-y' format (e.g. '1-39', '2-39') to simple 1/0 integers
-                    data_processor.normalize_pallet_count(current_table_data)
-                    
                     # 5a. CBM
                     data_after_cbm = data_processor.process_cbm_column(current_table_data)
                     

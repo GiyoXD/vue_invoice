@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Tuple, Any, Union
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.utils import get_column_letter
 from decimal import Decimal, InvalidOperation
+from . import data_processor
 
 # --- Loop Profiler (non-invasive measurement) ---
 from core.utils.loop_profiler import loop_profiler, tick
@@ -339,6 +340,10 @@ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[
             # Additional logic to skip completely empty rows (optional but good practice)
             if any(v is not None and (not isinstance(v, str) or v.strip() != "") for v in row_dict.values()):
                 current_table_data.append(row_dict)
+
+        # Normalize pallet count format IMMEDIATELY upon extraction so all downstream JSON output has 1/0 boundaries
+        if current_table_data:
+            data_processor.normalize_pallet_count(current_table_data)
 
         all_tables_data.append(current_table_data)
         logging.info(f"{prefix} Successfully stored {len(current_table_data)} rows for Table Index {table_index}.")
