@@ -3,62 +3,62 @@ import { ref, computed, onMounted, watch } from 'vue';
 
 export default {
     template: `
-        <div class="inspector-view fade-in">
-            <h1>Template Inspector</h1>
+        <div class="max-w-[1600px] mx-auto py-8 fade-in h-screen flex flex-col">
+            <h1 class="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 drop-shadow-md flex-shrink-0">Template Inspector</h1>
             
-            <div class="inspector-layout">
+            <div class="flex gap-6 mt-8 flex-grow min-h-0">
                 <!-- Sidebar: Template List -->
-                <div class="history-sidebar card">
-                    <h3>Available Templates</h3>
+                <div class="w-[300px] bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl p-6 flex flex-col flex-shrink-0">
+                    <h3 class="text-xl font-bold text-slate-100 mb-4 mt-0">Available Templates</h3>
                     
                     <div class="mb-4">
-                        <input type="text" v-model="searchQuery" placeholder="Search templates..." class="input-field w-full" />
-                        <button class="btn-small w-full mt-4" @click="fetchTemplates">Refresh List</button>
+                        <input type="text" v-model="searchQuery" placeholder="Search templates..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" />
+                        <button class="w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg shadow-sm transition-colors mt-4 flex-shrink-0" @click="fetchTemplates">Refresh List</button>
                     </div>
 
-                    <div v-if="filteredTemplates.length === 0" class="text-secondary text-base">No templates found.</div>
-                    <div class="history-list">
+                    <div v-if="filteredTemplates.length === 0" class="text-slate-400 text-base">No templates found.</div>
+                    <div class="flex-1 overflow-y-auto flex flex-col gap-2 pr-2">
                         <div v-for="t in filteredTemplates" :key="t.name + (t.bundle_name || '') + (t.source_file || '')" 
-                             class="history-item" :class="{ active: selectedTemplateName === t.name }"
+                             class="p-3 bg-slate-900/50 border border-slate-700 rounded-lg cursor-pointer transition-all hover:border-blue-500 hover:bg-slate-800" :class="{ 'border-blue-500 bg-slate-800': selectedTemplateName === t.name }"
                              @click="loadTemplate(t)">
-                            <div class="h-date">
+                            <div class="text-emerald-400 font-bold text-sm mb-1 truncate drop-shadow-sm">
                                 {{ t.name }}
-                                <span v-if="t.bundle_name && t.name !== t.bundle_name" class="text-lg text-danger font-bold">({{ t.bundle_name }})</span>
+                                <span v-if="t.bundle_name && t.name !== t.bundle_name" class="text-lg text-red-500 font-bold ml-1">({{ t.bundle_name }})</span>
                             </div>
-                            <div class="h-file text-xs text-muted">Source: {{ t.source_file }}</div>
-                            <div class="h-stats">Updated: {{ formatTime(t.modified) }}</div>
+                            <div class="text-slate-400 text-xs mb-2 truncate">Source: {{ t.source_file }}</div>
+                            <div class="text-slate-500 text-xs">Updated: {{ formatTime(t.modified) }}</div>
                         </div>
                     </div>
                 </div>
 
                 <!-- Main: Details -->
-                <div class="inspector-main card">
+                <div class="flex-1 bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl p-6 flex flex-col min-w-0">
                     <div v-if="!currentTemplate" class="text-center p-8 text-muted">
                         <p>Select a template from the list to inspect.</p>
                     </div>
 
                     <div v-if="currentTemplate" class="template-viewer">
-                        <div class="status-box info mb-4 flex justify-between items-start">
+                        <div class="flex items-center justify-between p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl mb-4 flex-shrink-0">
                             <div>
-                                <strong>Viewing:</strong> {{ currentTemplateName }} <br>
-                                <span class="text-sm opacity-80">Source: {{ currentTemplateFingerprint?.source_file }}</span>
+                                <strong class="text-blue-400">Viewing:</strong> <span class="text-slate-200">{{ currentTemplateName }}</span> <br>
+                                <span class="text-sm text-slate-400 opacity-80">Source: {{ currentTemplateFingerprint?.source_file }}</span>
                             </div>
-                            <button class="btn-danger px-2 py-1 text-sm" @click="deleteTemplate" title="Delete Template">
+                            <button class="px-4 py-2 bg-red-500 hover:bg-red-400 text-white font-medium rounded-lg shadow-sm transition-colors text-sm" @click="deleteTemplate" title="Delete Template">
                                 Delete Template
                             </button>
                         </div>
 
                         <!-- Client Notes Section -->
-                        <div class="card mb-4 bg-darker border-dark">
+                        <div class="mb-4 bg-slate-900/50 border border-slate-700 rounded-xl p-4">
                             <div class="flex justify-between items-center mb-2">
-                                <h4 class="m-0 text-sm text-secondary flex items-center gap-2">
+                                <h4 class="m-0 text-sm text-slate-400 flex items-center gap-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-notebook-pen"><path d="M11 2H9a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/><path d="m16 2 4 4-8 8H8v-4l8-8Z"/><path d="M15 5 19 9"/></svg>
                                     Client Notes / Remarks
                                 </h4>
-                                <button v-if="!isEditingNotes" class="btn-micro" @click="isEditingNotes = true">Edit</button>
+                                <button v-if="!isEditingNotes" class="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded text-xs transition-colors" @click="isEditingNotes = true">Edit</button>
                                 <div v-else class="flex gap-1">
-                                    <button class="btn-micro badge-gray" @click="cancelEditNotes">Cancel</button>
-                                    <button class="btn-micro badge-blue" @click="saveNotes" :disabled="isSavingNotes">
+                                    <button class="px-3 py-1 bg-slate-600 hover:bg-slate-500 text-white rounded text-xs transition-colors" @click="cancelEditNotes">Cancel</button>
+                                    <button class="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs transition-colors" @click="saveNotes" :disabled="isSavingNotes">
                                         {{ isSavingNotes ? 'Saving...' : 'Save' }}
                                     </button>
                                 </div>
@@ -68,13 +68,13 @@ export default {
                                 <div v-else class="text-sm text-muted italic">No notes for this client yet. Click Edit to add.</div>
                             </div>
                             <div v-else>
-                                <textarea v-model="editingNotesText" class="input-field w-full text-sm bg-dark min-h-24" placeholder="Enter things to remember for this client..."></textarea>
+                                <textarea v-model="editingNotesText" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm min-h-[100px]" placeholder="Enter things to remember for this client..."></textarea>
                             </div>
                         </div>
 
                         <!-- Client Profile Section -->
-                        <div v-if="clientProfile" class="card mb-4 bg-dark border-dark">
-                            <h4 class="mb-3 text-sm text-secondary flex items-center gap-2">
+                        <div v-if="clientProfile" class="mb-4 bg-slate-900/50 border border-slate-700 rounded-xl p-4">
+                            <h4 class="mb-3 text-sm text-slate-400 flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
                                 Client Profile
                             </h4>
@@ -94,8 +94,8 @@ export default {
                         </div>
 
                         <!-- Table Information Section -->
-                        <div v-if="currentTemplate && currentTemplate.table_info" class="card mb-4 bg-dark border-dark">
-                            <h4 class="mb-2 text-sm text-secondary flex items-center gap-2">
+                        <div v-if="currentTemplate && currentTemplate.table_info" class="mb-4 bg-slate-900/50 border border-slate-700 rounded-xl p-4">
+                            <h4 class="mb-2 text-sm text-slate-400 flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-table-properties"><path d="M15 2H9a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z"/><path d="M9 10h12"/><path d="M9 14h12"/><path d="M9 18h12"/><path d="M9 6h12"/><path d="M11 2v20"/></svg>
                                 Table Information
                             </h4>
@@ -114,19 +114,19 @@ export default {
                         <!-- Sheet Selector -->
                         <div class="sheet-tabs mb-4 flex gap-2">
                             <button v-for="(sheetData, sheetName) in templateLayout" :key="sheetName"
-                                    class="btn-small" 
-                                    :class="{ 'btn-primary': currentSheetName === sheetName }"
+                                    class="px-4 py-2 rounded-lg text-sm font-medium transition-colors border border-transparent" 
+                                    :class="currentSheetName === sheetName ? 'bg-blue-600 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'"
                                     @click="currentSheetName = sheetName">
                                 {{ sheetName }}
                             </button>
                         </div>
                         
                         <!-- Zoom & View Controls -->
-                        <div class="zoom-controls mb-2 flex gap-2 items-center">
-                            <button class="btn-small" @click="zoomOut" title="Zoom Out">-</button>
-                            <span class="text-sm text-center min-w-12">{{ zoomPercentage }}%</span>
-                            <button class="btn-small" @click="zoomIn" title="Zoom In">+</button>
-                            <button class="btn-small" @click="resetZoom" title="Reset Zoom">Reset</button>
+                        <div class="mb-2 flex gap-2 items-center">
+                            <button class="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded transition-colors" @click="zoomOut" title="Zoom Out">-</button>
+                            <span class="text-sm text-center min-w-12 text-slate-300">{{ zoomPercentage }}%</span>
+                            <button class="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded transition-colors" @click="zoomIn" title="Zoom In">+</button>
+                            <button class="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded transition-colors" @click="resetZoom" title="Reset Zoom">Reset</button>
 
                             <div class="w-px h-6 bg-slate-300 mx-2"></div>
 
@@ -152,11 +152,11 @@ export default {
                         </div>
 
                         <!-- Cell Override Editor Popup -->
-                        <div v-if="editingCell" class="fixed inset-0 bg-black-50 z-100 flex items-center justify-center" @click.self="closeEditor">
-                            <div class="bg-darker border border-dark rounded-lg p-5 shadow-2xl min-w-[320px]">
+                        <div v-if="editingCell" class="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center backdrop-blur-sm" @click.self="closeEditor">
+                            <div class="bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-2xl min-w-[400px]">
                                 <h3 class="m-0 mb-3 text-base text-primary">Cell {{ editingCell.address }}</h3>
 
-                                <div class="mb-3 px-3 py-2 bg-white-5 rounded text-sm">
+                                <div class="mb-4 p-4 bg-slate-800 rounded-lg text-sm border border-slate-700/50">
                                     <span class="text-secondary">Current (default):</span>
                                     <span class="text-primary ml-2">
                                         {{ (typeof editingCell.rawContent === 'object' && editingCell.rawContent !== null) ? (editingCell.rawContent.default ?? "") : (editingCell.rawContent || '(empty)') }}
@@ -165,13 +165,13 @@ export default {
 
                                 <div class="mb-3">
                                     <label class="block text-secondary text-sm mb-1">Base Value <span class="text-blue-400 text-xs">(applies to ALL modes)</span></label>
-                                    <input type="text" v-model="editStandardValue" class="input-field w-full" placeholder="Enter value for standard, custom, DAF..." @keyup.enter="saveCellOverrides" />
+                                    <input type="text" v-model="editStandardValue" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="Enter value for standard, custom, DAF..." @keyup.enter="saveCellOverrides" />
                                     <p class="text-muted text-xs mt-1 mb-0">This value will be used in Standard, Custom, DAF, and any other mode.</p>
                                 </div>
 
                                 <div class="mb-3">
                                     <label class="block text-secondary text-sm mb-1">DAF Override <span class="text-amber-400 text-xs">(takes priority in DAF mode)</span></label>
-                                    <input type="text" v-model="editDafValue" class="input-field w-full" placeholder="Leave empty to use base value" @keyup.enter="saveCellOverrides" />
+                                    <input type="text" v-model="editDafValue" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="Leave empty to use base value" @keyup.enter="saveCellOverrides" />
                                     <p class="text-muted text-xs mt-1 mb-0">Only used when generating in DAF mode. If empty, the base value is used.</p>
                                 </div>
 
@@ -182,16 +182,16 @@ export default {
                                     </div>
                                 </div>
 
-                                <div class="flex gap-2 justify-end">
-                                    <button class="btn-small badge-gray" @click="closeEditor">Cancel</button>
-                                    <button class="btn-small badge-blue text-white" @click="saveCellOverrides" :disabled="isSavingCell">
+                                <div class="flex gap-3 justify-end mt-6">
+                                    <button class="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors" @click="closeEditor">Cancel</button>
+                                    <button class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors shadow-lg shadow-blue-500/20" @click="saveCellOverrides" :disabled="isSavingCell">
                                         {{ isSavingCell ? 'Saving...' : 'Save Overrides' }}
                                     </button>
                                 </div>
                                 <div v-if="editorMessage" class="mt-2 text-sm" :class="editorMessageType === 'error' ? 'text-red-500' : 'text-emerald-500'">
                                     {{ editorMessage }}
                                 </div>
-                                <div class="mt-3 py-2 px-2 bg-amber-100 border border-amber-200 rounded text-xxs text-amber-600 leading-snug">
+                                <div class="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-400 leading-snug">
                                     ⚠ If footer overrides appear shifted after re-generating, the Excel template structure likely changed (rows added/removed). Re-apply overrides after verifying cell positions or delete the template to create a new one.
                                 </div>
                             </div>
