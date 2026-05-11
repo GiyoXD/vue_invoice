@@ -3,20 +3,25 @@ import { ref, computed } from 'vue';
 export default {
     emits: ['switch-view'], // Declare event to switch tabs
     template: `
-        <div class="generator-view fade-in">
-            <h1>Invoice Generator</h1>
+        <div class="generator-view fade-in max-w-5xl mx-auto py-8">
+            <h1 class="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 mb-8 drop-shadow-md">Invoice Generator</h1>
             
-            <div class="card">
-                <h2>1. Upload Source Data</h2>
-                <p class="text-secondary mb-4">Select your Excel file to begin processing.</p>
-                
-                <input type="file" @change="handleFileUpload" accept=".xlsx, .xls" />
-                
-                <button class="btn" @click="uploadFile" :disabled="!selectedFile || isUploading">
-                    {{ isUploading ? 'Processing...' : 'Upload & Process' }}
-                </button>
+            <div class="bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl p-8 mb-8 relative overflow-hidden group transition-all duration-300 hover:shadow-blue-500/10 hover:border-blue-500/30">
+                <div class="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+                <div class="relative z-10">
+                    <h2 class="text-2xl font-bold text-slate-100 mb-2">1. Upload Source Data</h2>
+                    <p class="text-slate-400 mb-6">Select your Excel file to begin processing.</p>
+                    
+                    <div class="flex items-center gap-4">
+                        <input type="file" @change="handleFileUpload" accept=".xlsx, .xls" class="block w-full text-sm text-slate-400 file:mr-4 file:py-2.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-500/10 file:text-blue-400 hover:file:bg-blue-500/20 transition-all cursor-pointer" />
+                        
+                        <button class="whitespace-nowrap px-6 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-medium rounded-full shadow-lg shadow-blue-500/30 transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none" @click="uploadFile" :disabled="!selectedFile || isUploading">
+                            {{ isUploading ? 'Processing...' : 'Upload & Process' }}
+                        </button>
+                    </div>
+                </div>
 
-                <div v-if="uploadStatus && !uploadError" :class="['status-box', uploadStatus.type]">
+                <div v-if="uploadStatus && !uploadError" :class="['status-box', uploadStatus.type, 'mt-6']">
                     {{ uploadStatus.message }}
                 </div>
 
@@ -60,8 +65,8 @@ export default {
                 </div>
             </div>
 
-            <div class="card delay-200" v-if="processingComplete">
-                <h2>2. Invoice Details</h2>
+            <div class="bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-xl rounded-2xl p-8 mb-8" v-if="processingComplete">
+                <h2 class="text-2xl font-bold text-slate-100 mb-6">2. Invoice Details</h2>
                 
                 <!-- ASSET WARNING PANEL -->
                 <div v-if="assetStatus && !assetStatus.ready" class="asset-warning">
@@ -81,41 +86,41 @@ export default {
                 </div>
                 
                 <!-- ASSET READY STATUS -->
-                <div v-if="assetStatus && assetStatus.ready" class="asset-ready">
-                    <span class="ready-icon">✅</span>
-                    <span class="ready-text">Blueprint found: using <strong>{{ assetConfigName }}</strong></span>
-                    <span v-if="hasVariants" class="ml-2 bg-yellow-15 text-yellow-400 rounded px-2 py-1 text-xs font-bold">KH/VN variants detected</span>
+                <div v-if="assetStatus && assetStatus.ready" class="flex items-center mb-6 text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 p-4 rounded-xl">
+                    <span class="mr-2">✅</span>
+                    <span class="text-slate-200">Blueprint found: using <strong class="text-emerald-400">{{ assetConfigName }}</strong></span>
+                    <span v-if="hasVariants" class="ml-2 bg-yellow-500/10 text-yellow-400 rounded px-2 py-1 text-xs font-bold border border-yellow-500/20">KH/VN variants detected</span>
                 </div>
                 
-                <div class="grid-form">
-                    <div class="form-group relative">
-                        <label>Invoice Number</label>
+                <div class="flex flex-col gap-6">
+                    <div class="relative">
+                        <label class="block text-slate-400 font-medium mb-2">Invoice Number</label>
                         <div class="flex gap-2">
-                            <input class="text-red-500 flex-1 input-field" type="text" v-model="invoiceNo" />
-                            <button class="btn-small m-0 px-3" @click="lookupRefFromSheets" :disabled="isLookingUp || !invoiceNo" title="Lookup Ref No in Google Sheets">
+                            <input class="flex-1 w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" type="text" v-model="invoiceNo" />
+                            <button class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed" @click="lookupRefFromSheets" :disabled="isLookingUp || !invoiceNo" title="Lookup Ref No in Google Sheets">
                                 {{ isLookingUp ? '...' : '🔍' }}
                             </button>
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label>Invoice Date</label>
-                        <input class="text-red-500 input-field" type="date" v-model="invoiceDate" />
+                    <div>
+                        <label class="block text-slate-400 font-medium mb-2">Invoice Date</label>
+                        <input class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" type="date" v-model="invoiceDate" />
                     </div>
-                    <div class="form-group">
-                        <label class="flex items-center justify-between">
+                    <div>
+                        <label class="flex items-center justify-between text-slate-400 font-medium mb-2">
                             <span>Invoice Ref (Optional)</span>
                             <span v-if="refSourceStatus" 
-                                  class="text-xs font-bold px-2 py-0-5 rounded-md" 
-                                  :class="refSourceStatus.type === 'found' ? 'bg-emerald-500-15 text-emerald-500' : 'bg-amber-500-15 text-amber-500'">
+                                  class="text-xs font-bold px-2 py-0.5 rounded-md" 
+                                  :class="refSourceStatus.type === 'found' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'">
                                 {{ refSourceStatus.message }}
                             </span>
                         </label>
-                        <input class="text-red-500 input-field" type="text" v-model="invoiceRef" @input="refSourceStatus = null" />
+                        <input class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" type="text" v-model="invoiceRef" @input="refSourceStatus = null" />
                     </div>
                 </div>
 
-                <div class="form-group mt-4">
-                    <label>Generation Options</label>
+                <div class="mt-8">
+                    <label class="block text-slate-400 font-medium mb-3">Generation Options</label>
                     <div class="flex gap-6 mt-2 flex-wrap">
                         <label class="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox" v-model="includeStandard" accent-color="#2563eb" /> 
@@ -154,7 +159,7 @@ export default {
                         This template uses Net Weight as the pricing basis. Enter the unit price to calculate amounts.
                     </p>
                     <label>Unit Price (USD/kg)</label>
-                    <input type="number" v-model="globalUnitPrice" step="0.01" min="0" placeholder="e.g. 1.25" class="input-field max-w-xs" />
+                    <input type="number" v-model="globalUnitPrice" step="0.01" min="0" placeholder="e.g. 1.25" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all max-w-xs" />
                     <p class="text-gray-500 text-xs mt-1">
                         Amount = Net Weight × Unit Price
                     </p>
@@ -166,17 +171,17 @@ export default {
                         <input
                             type="text"
                             v-model="adj.description"
-                            class="input-field flex-2"
+                            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all flex-2"
                         />
                         <input
                             type="number"
                             v-model="adj.value"
                             step="any"
-                            class="input-field flex-1"
+                            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all flex-1"
                         />
-                        <button class="btn-small w-auto m-0 px-3" @click="removeAdjustment(index)">✕</button>
+                        <button class="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg shadow-sm transition-colors w-auto" @click="removeAdjustment(index)">✕</button>
                     </div>
-                    <button class="btn-small w-full mt-1" @click="addAdjustment">+ Add Adjustment</button>
+                    <button class="w-full px-4 py-2 mt-1 border border-slate-600 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors" @click="addAdjustment">+ Add Adjustment</button>
                     <p v-if="adjustmentError" class="text-red-400 text-sm mt-2">
                         {{ adjustmentError }}
                     </p>
@@ -197,8 +202,8 @@ export default {
                             <span class="font-bold text-primary uppercase text-sm tracking-wider">Enable Online Sync</span>
                         </label>
                         <div v-if="isOnlineMode" class="mt-3 flex gap-2 flex-wrap">
-                            <input type="text" v-model="googleSheetId" placeholder="Spreadsheet ID (Optional if set in backend)" class="input-field flex-1 min-w-64" />
-                            <input type="text" v-model="googleSheetName" placeholder="Sheet Name (e.g. 2026)" class="input-field w-40" />
+                            <input type="text" v-model="googleSheetId" placeholder="Spreadsheet ID (Optional if set in backend)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all flex-1 min-w-[250px]" />
+                            <input type="text" v-model="googleSheetName" placeholder="Sheet Name (e.g. 2026)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all w-40" />
                         </div>
                         <p class="text-secondary text-xs mt-2">
                             If checked, Ref No will be auto-fetched/incremented, and new invoices will be saved to the sheet.
@@ -206,7 +211,7 @@ export default {
                     </div>
                 </div>
                 
-                <button class="btn" @click="generateInvoice" :disabled="isGenerating || !assetStatus?.ready">
+                <button class="w-full px-6 py-3 mt-4 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/20 transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none" @click="generateInvoice" :disabled="isGenerating || !assetStatus?.ready">
                     {{ isGenerating ? 'Generating...' : (assetStatus?.ready ? 'Generate Invoice' : 'Blueprint Required') }}
                 </button>
 
@@ -221,7 +226,7 @@ export default {
                             <h4 class="m-0 text-primary">Google Sheets Sync</h4>
                             <p class="mt-1 mb-0 text-sm text-secondary">Push invoice data to Google Sheets.</p>
                         </div>
-                        <button class="btn m-0 w-auto px-4 py-2 bg-emerald-500" @click="() => exportToSheets(false)" :disabled="isSyncing || showConflictConfirm">
+                        <button class="px-6 py-2 bg-emerald-500 hover:bg-emerald-400 text-white font-medium rounded-lg shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed" @click="() => exportToSheets(false)" :disabled="isSyncing || showConflictConfirm">
                             {{ isSyncing ? 'Syncing...' : 'Push to Sheets' }}
                         </button>
                     </div>
@@ -229,10 +234,10 @@ export default {
                     <div v-if="showConflictConfirm" class="mt-3 p-3 bg-amber-10 border border-amber-30 rounded-md">
                         <p class="m-0 mb-2 text-yellow-400 text-sm font-bold">⚠️ {{ conflictMessage }}</p>
                         <div class="flex gap-2">
-                            <button class="btn m-0 w-auto py-1 px-4 bg-red-500 text-sm" @click="confirmOverride" :disabled="isSyncing">
+                            <button class="px-4 py-2 bg-red-500 hover:bg-red-400 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50" @click="confirmOverride" :disabled="isSyncing">
                                 {{ isSyncing ? 'Overriding...' : 'Override' }}
                             </button>
-                            <button class="btn m-0 w-auto py-1 px-4 bg-slate-600 text-sm" @click="cancelOverride" :disabled="isSyncing">
+                            <button class="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50" @click="cancelOverride" :disabled="isSyncing">
                                 Cancel
                             </button>
                         </div>
@@ -280,39 +285,39 @@ export default {
             </div>
 
             <!-- VALIDATION CARD -->
-            <div class="card validation-card delay-100" v-if="validationData && !isGenerating && !generationError">
-                <div class="validation-header">
-                    <h3>✅ Invoice Generated Successfully</h3>
-                    <span class="text-sm opacity-70">{{ validationData.timestamp }}</span>
+            <div class="bg-emerald-500/10 border border-emerald-500/30 shadow-2xl rounded-2xl p-8 mb-8 delay-100 fade-in" v-if="validationData && !isGenerating && !generationError">
+                <div class="flex justify-between items-end mb-6 border-b border-emerald-500/20 pb-4">
+                    <h3 class="text-emerald-400 m-0 text-xl font-bold">✅ Invoice Generated Successfully</h3>
+                    <span class="text-sm text-emerald-400/70">{{ validationData.timestamp }}</span>
                 </div>
 
-                <div v-if="summaryStats" class="stat-grid">
-                    <div class="stat-item">
-                        <span class="stat-label">Total Items</span>
-                        <span class="stat-value">{{ summaryStats.total_pcs?.toLocaleString() || 0 }}</span>
+                <div v-if="summaryStats" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div class="flex flex-col gap-1 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
+                        <span class="text-emerald-400/80 text-sm font-bold uppercase tracking-wider">Total Items</span>
+                        <span class="text-emerald-300 text-2xl font-mono">{{ summaryStats.total_pcs?.toLocaleString() || 0 }}</span>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Total SQFT</span>
-                        <span class="stat-value">{{ summaryStats.total_sqft?.toLocaleString(undefined, {maximumFractionDigits: 2}) || 0 }}</span>
+                    <div class="flex flex-col gap-1 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
+                        <span class="text-emerald-400/80 text-sm font-bold uppercase tracking-wider">Total SQFT</span>
+                        <span class="text-emerald-300 text-2xl font-mono">{{ summaryStats.total_sqft?.toLocaleString(undefined, {maximumFractionDigits: 2}) || 0 }}</span>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Total Pallets</span>
-                        <span class="stat-value">{{ summaryStats.total_pallets || 0 }}</span>
+                    <div class="flex flex-col gap-1 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
+                        <span class="text-emerald-400/80 text-sm font-bold uppercase tracking-wider">Total Pallets</span>
+                        <span class="text-emerald-300 text-2xl font-mono">{{ summaryStats.total_pallets || 0 }}</span>
                     </div>
                 </div>
 
-                <div v-if="weightStats" class="stat-grid">
-                    <div class="stat-item">
-                        <span class="stat-label">Net Weight</span>
-                        <span class="stat-value">{{ weightStats.net?.toLocaleString() }} kg</span>
+                <div v-if="weightStats" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                    <div class="flex flex-col gap-1 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
+                        <span class="text-emerald-400/80 text-sm font-bold uppercase tracking-wider">Net Weight</span>
+                        <span class="text-emerald-300 text-2xl font-mono">{{ weightStats.net?.toLocaleString() }} kg</span>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Gross Weight</span>
-                        <span class="stat-value">{{ weightStats.gross?.toLocaleString() }} kg</span>
+                    <div class="flex flex-col gap-1 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
+                        <span class="text-emerald-400/80 text-sm font-bold uppercase tracking-wider">Gross Weight</span>
+                        <span class="text-emerald-300 text-2xl font-mono">{{ weightStats.gross?.toLocaleString() }} kg</span>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-label">Total CBM</span>
-                        <span class="stat-value">{{ weightStats.cbm?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 3}) }} m³</span>
+                    <div class="flex flex-col gap-1 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
+                        <span class="text-emerald-400/80 text-sm font-bold uppercase tracking-wider">Total CBM</span>
+                        <span class="text-emerald-300 text-2xl font-mono">{{ weightStats.cbm?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 3}) }} m³</span>
                     </div>
                 </div>
             </div>

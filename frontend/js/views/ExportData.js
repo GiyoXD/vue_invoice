@@ -3,26 +3,26 @@ import { ref } from 'vue';
 export default {
     name: 'ExportDataView',
     template: `
-        <div class="view-container">
-            <div class="header-section">
-                <h1>Data Export Registry</h1>
-                <p class="subtitle">Select a time interval to export stored invoice data to CSV.</p>
+        <div class="max-w-5xl mx-auto py-8 fade-in">
+            <div class="mb-8">
+                <h1 class="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 drop-shadow-md mb-2">Data Export Registry</h1>
+                <p class="text-slate-400">Select a time interval to export stored invoice data to CSV.</p>
             </div>
 
-            <div class="card export-card">
-                <div class="export-controls">
-                    <div class="control-group">
+            <div class="bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl p-8 mb-8">
+                <div class="flex flex-col md:flex-row gap-6 items-end">
+                    <div class="flex-1 w-full">
                         <label for="start-date">Start Date</label>
-                        <input type="date" id="start-date" v-model="startDate" class="date-input">
+                        <input type="date" id="start-date" v-model="startDate" class="w-full mt-2 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all">
                     </div>
                     
-                    <div class="control-group">
+                    <div class="flex-1 w-full">
                         <label for="end-date">End Date</label>
-                        <input type="date" id="end-date" v-model="endDate" class="date-input">
+                        <input type="date" id="end-date" v-model="endDate" class="w-full mt-2 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all">
                     </div>
 
-                    <div class="action-group">
-                        <button @click="exportData" :disabled="exporting" class="action-btn primary-btn">
+                    <div class="w-full md:w-auto">
+                        <button @click="exportData" :disabled="exporting" class="w-full px-8 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-medium rounded-lg shadow-lg shadow-blue-500/30 transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none">
                             <span v-if="!exporting">Export to CSV</span>
                             <span v-else>Exporting...</span>
                         </button>
@@ -39,23 +39,23 @@ export default {
             </div>
 
             <!-- Data Preview Section (Peek) -->
-            <div class="card preview-card mt-8 bg-slate-800-40 border border-white-5">
-                <h3>Recent Invoices (Peek)</h3>
+            <div class="bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl p-8 mb-8 mt-8">
+                <h3 class="text-2xl font-bold text-slate-100 mb-2">Recent Invoices (Peek)</h3>
                 <div class="table-container mt-4 overflow-x-auto">
-                    <table class="w-full border-collapse text-sm">
-                        <thead class="bg-white-5">
+                    <table class="w-full border-collapse text-sm text-slate-300">
+                        <thead class="bg-slate-900/50 border-b border-slate-700 text-slate-400">
                             <tr>
-                                <th class="p-3 text-left">Filename</th>
-                                <th class="p-3 text-left">Accepted At</th>
-                                <th class="p-3 text-center">Items</th>
-                                <th class="p-3 text-right">Total SQFT</th>
-                                <th class="p-3 text-right">Total Net</th>
-                                <th class="p-3 text-right">Total Pallets</th>
-                                <th class="p-3 text-right">Total Amount</th>
+                                <th class="p-3 text-left font-medium">Filename</th>
+                                <th class="p-3 text-left font-medium">Accepted At</th>
+                                <th class="p-3 text-center font-medium">Items</th>
+                                <th class="p-3 text-right font-medium">Total SQFT</th>
+                                <th class="p-3 text-right font-medium">Total Net</th>
+                                <th class="p-3 text-right font-medium">Total Pallets</th>
+                                <th class="p-3 text-right font-medium">Total Amount</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="item in recentInvoices" :key="item.id" class="border-b border-white-5">
+                            <tr v-for="item in recentInvoices" :key="item.id" class="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors">
                                 <td class="p-3">{{ item.filename }}</td>
                                 <td class="p-3">{{ formatDate(item.timestamp) }}</td>
                                 <td class="p-3 text-center">{{ item.item_count }}</td>
@@ -65,23 +65,23 @@ export default {
                                 <td class="p-3 text-right font-mono">$ {{ item.total_amount?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00' }}</td>
                             </tr>
                             <tr v-if="recentInvoices.length === 0">
-                                <td colspan="7" class="p-8 text-center text-white-40">No invoices found in registry.</td>
+                                <td colspan="7" class="p-8 text-center text-slate-500">No invoices found in registry.</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
                 <div class="mt-4 text-right">
-                    <button @click="fetchRecentInvoices" class="action-btn text-xs py-2 px-3 bg-blue-100 text-blue-300 border border-blue-200">
+                    <button @click="fetchRecentInvoices" class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg shadow-sm transition-colors text-sm">
                         Refresh List
                     </button>
                 </div>
             </div>
 
-            <div class="danger-zone mt-16 p-8 border border-red-500-20 rounded-xl bg-red-500-5">
-                <h3 class="text-red-400 mt-0">Danger Zone</h3>
-                <p class="text-red-400-80 text-sm">Resetting the database will permanently delete all stored invoice processing history and the master list table.</p>
+            <div class="mt-16 p-8 border border-red-500/30 rounded-2xl bg-red-500/10 backdrop-blur-sm">
+                <h3 class="text-red-400 mt-0 text-xl font-bold mb-2">Danger Zone</h3>
+                <p class="text-red-400/80 text-sm">Resetting the database will permanently delete all stored invoice processing history and the master list table.</p>
                 <div class="mt-6">
-                    <button @click="confirmReset" class="action-btn danger-btn bg-red-600 text-white">
+                    <button @click="confirmReset" class="px-6 py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-lg shadow-lg shadow-red-500/20 transition-all transform hover:-translate-y-0.5">
                         Reset Database Registry
                     </button>
                 </div>

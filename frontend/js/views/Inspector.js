@@ -2,60 +2,58 @@ import { ref, computed, onMounted } from 'vue';
 
 export default {
     template: `
-        <div class="inspector-view fade-in">
-            <h1>Data Inspector & Registry</h1>
+        <div class="max-w-[1600px] mx-auto py-8 fade-in h-screen flex flex-col">
+            <h1 class="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 drop-shadow-md flex-shrink-0">Data Inspector & Registry</h1>
             
-            <div class="inspector-layout">
+            <div class="flex gap-6 mt-8 flex-grow min-h-0">
                 <!-- Sidebar: History -->
-                <div class="history-sidebar card">
-                    <h3>Recent Runs</h3>
+                <div class="w-[300px] bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl p-6 flex flex-col flex-shrink-0">
+                    <h3 class="text-xl font-bold text-slate-100 mb-4 mt-0">Recent Runs</h3>
                      <div v-if="historyList.length === 0" class="text-secondary text-sm">No history found.</div>
-                    <div class="history-list">
+                    <div class="flex-1 overflow-y-auto flex flex-col gap-2 pr-2">
                         <div v-for="run in historyList" :key="run.filename" 
-                             class="history-item" :class="run.type" @click="loadHistoryItem(run)">
-                            <div class="h-date">{{ formatTime(run.timestamp) }}</div>
-                            <div class="h-file">{{ run.output_file }}</div>
-                            <div class="h-stats">
-                                <span class="badge">{{ run.type }}</span>
-                                {{ run.item_count }} items • {{ run.status }}
+                             class="p-3 bg-slate-900/50 border border-slate-700 rounded-lg cursor-pointer transition-all hover:border-blue-500 hover:bg-slate-800" :class="run.type" @click="loadHistoryItem(run)">
+                            <div class="text-emerald-400 font-bold text-sm mb-1 truncate drop-shadow-sm" :title="run.output_file">{{ run.output_file }}</div>
+                            <div class="text-slate-400 text-xs mb-2">{{ formatTime(run.timestamp) }}</div>
+                            <div class="text-slate-500 text-xs flex items-center">
+                                <span class="text-emerald-500 font-bold mr-1">{{ run.item_count }}</span> items • {{ run.status }}
                             </div>
                         </div>
                     </div>
-                    <button class="btn-small w-full mt-4" @click="fetchHistory">Refresh List</button>
+                    <button class="w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg shadow-sm transition-colors mt-4 flex-shrink-0" @click="fetchHistory">Refresh List</button>
                 </div>
 
                 <!-- Main: Details -->
-                <div class="inspector-main card">
-                     <div class="flex-row flex gap-4 items-end mb-4">
+                <div class="flex-1 bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl p-6 flex flex-col min-w-0">
+                     <div class="flex flex-row gap-4 items-end mb-4 flex-shrink-0">
                         <div class="flex-grow">
-                            <label class="block mb-2 text-secondary">Load Metadata File (Manual)</label>
-                            <input type="file" @change="loadMetadataFile" accept=".json" />
+                            <label class="block mb-2 text-slate-400 font-medium">Load Metadata File (Manual)</label>
+                            <input type="file" @change="loadMetadataFile" accept=".json" class="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-slate-700 file:text-slate-200 hover:file:bg-slate-600 transition-all cursor-pointer" />
                         </div>
-                         <button class="nav-btn" @click="clearInspector" v-if="inspectorData">Clear</button>
+                         <button class="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors" @click="clearInspector" v-if="inspectorData">Clear</button>
                      </div>
 
                     <div v-if="!inspectorData" class="text-center p-8 text-slate-500">
                         <p>Select a run from the left 👈 or upload a file.</p>
                     </div>
 
-                    <div v-if="inspectorData">
-                         <div class="status-box info inspector-status-bar mb-4">
-                            <div class="inspector-status-info">
-                                <strong>Viewing:</strong> {{ inspectorData.output_file || currentRun?.output_file || 'Uploaded File' }}
-                                <span class="opacity-70 ml-4">{{ inspectorData.timestamp || currentRun?.timestamp }}</span>
-                                <span v-if="currentRun?.type === 'accepted'" class="badge accepted ml-4">ACCEPTED</span>
+                    <div v-if="inspectorData" class="flex flex-col min-h-0 flex-1">
+                         <div class="flex items-center justify-between p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl mb-4 flex-shrink-0">
+                            <div class="text-sm">
+                                <strong class="text-blue-400">Viewing:</strong> <span class="text-slate-200">{{ inspectorData.output_file || currentRun?.output_file || 'Uploaded File' }}</span>
+                                <span class="opacity-50 ml-4 text-slate-400">{{ inspectorData.timestamp || currentRun?.timestamp }}</span>
+                                <span v-if="currentRun?.type === 'accepted'" class="ml-4 bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded text-xs font-bold border border-emerald-500/30">ACCEPTED</span>
                             </div>
-                            <div class="inspector-actions">
-                                <button v-if="currentRun?.type === 'processed'" class="btn-small btn-accept" 
+                            <div class="flex gap-2">
+                                <button v-if="currentRun?.type === 'processed'" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-white font-medium rounded-lg shadow-sm transition-colors text-sm" 
                                         @click="acceptCurrentRun">
                                     Accept & Save Check ✅
                                 </button>
-                                <button v-if="currentRun?.type === 'processed'" class="btn-small btn-reject" 
+                                <button v-if="currentRun?.type === 'processed'" class="px-4 py-2 bg-red-500 hover:bg-red-400 text-white font-medium rounded-lg shadow-sm transition-colors text-sm" 
                                         @click="rejectCurrentRun">
                                     Reject & Delete ❌
                                 </button>
-                                <button v-if="inspectorData.output_path_absolute" class="btn-small" 
-                                        class="btn-small bg-blue-600 text-white border-none"
+                                <button v-if="inspectorData.output_path_absolute" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-lg shadow-sm transition-colors text-sm" 
                                         @click="downloadExcel(inspectorData.output_path_absolute)">
                                     Download .xlsx 📥
                                 </button>
@@ -63,68 +61,68 @@ export default {
                          </div>
 
                          <!-- WARNING: Already in DB -->
-                         <div v-if="existingInDb && currentRun?.type === 'processed'" class="status-box mb-4 bg-red-50 border border-red-400 text-red-800 p-4 rounded-xl">
+                         <div v-if="existingInDb && currentRun?.type === 'processed'" class="mb-4 bg-red-500/10 border border-red-500/30 text-red-400 p-4 rounded-xl flex-shrink-0">
                              <strong class="text-lg">⚠️ WARNING: Database Collision</strong>
-                             <p class="mt-2 m-0">
-                                 Invoice <strong>{{ currentRun?.filename || inspectorData.output_file }}</strong> is ALREADY in the database.
-                                 Accepting it again will <strong>REPLACE</strong> all existing records for this invoice.
+                             <p class="mt-2 m-0 text-sm">
+                                 Invoice <strong class="text-white">{{ currentRun?.filename || inspectorData.output_file }}</strong> is ALREADY in the database.
+                                 Accepting it again will <strong class="text-white">REPLACE</strong> all existing records for this invoice.
                              </p>
                          </div>
                     
-                        <div class="table-container">
-                            <table class="data-table">
-                                <thead>
+                        <div class="flex-1 overflow-auto border border-slate-700 rounded-lg custom-scrollbar">
+                            <table class="w-full border-collapse text-sm text-slate-300 min-w-max">
+                                <thead class="bg-slate-900/80 sticky top-0 z-10 border-b border-slate-700">
                                     <tr>
-                                        <th>#</th>
-                                        <th>DC</th>
-                                        <th>PO</th>
-                                        <th>Prod Order</th>
-                                        <th>Prod Date</th>
-                                        <th>Line No</th>
-                                        <th>Direction</th>
-                                        <th>Item Code</th>
-                                        <th>Ref Code</th>
-                                        <th>Description</th>
-                                        <th>Level</th>
-                                        <th>PCS</th>
-                                        <th>SQFT</th>
-                                        <th>Pallets</th>
+                                        <th class="p-2 text-left font-medium border-r border-slate-700/50">#</th>
+                                        <th class="p-2 text-left font-medium border-r border-slate-700/50">DC</th>
+                                        <th class="p-2 text-left font-medium border-r border-slate-700/50">PO</th>
+                                        <th class="p-2 text-left font-medium border-r border-slate-700/50">Prod Order</th>
+                                        <th class="p-2 text-left font-medium border-r border-slate-700/50">Prod Date</th>
+                                        <th class="p-2 text-left font-medium border-r border-slate-700/50">Line No</th>
+                                        <th class="p-2 text-left font-medium border-r border-slate-700/50">Direction</th>
+                                        <th class="p-2 text-left font-medium border-r border-slate-700/50">Item Code</th>
+                                        <th class="p-2 text-left font-medium border-r border-slate-700/50">Ref Code</th>
+                                        <th class="p-2 text-left font-medium border-r border-slate-700/50 min-w-[200px]">Description</th>
+                                        <th class="p-2 text-left font-medium border-r border-slate-700/50">Level</th>
+                                        <th class="p-2 text-right font-medium border-r border-slate-700/50">PCS</th>
+                                        <th class="p-2 text-right font-medium border-r border-slate-700/50">SQFT</th>
+                                        <th class="p-2 text-right font-medium border-r border-slate-700/50">Pallets</th>
 
-                                        <th>Net</th>
-                                        <th>Gross</th>
-                                        <th>CBM</th>
-                                        <th>Unit Price</th>
-                                        <th>Amount</th>
+                                        <th class="p-2 text-right font-medium border-r border-slate-700/50">Net</th>
+                                        <th class="p-2 text-right font-medium border-r border-slate-700/50">Gross</th>
+                                        <th class="p-2 text-right font-medium border-r border-slate-700/50">CBM</th>
+                                        <th class="p-2 text-right font-medium border-r border-slate-700/50">Unit Price</th>
+                                        <th class="p-2 text-right font-medium">Amount</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="(row, index) in inspectorItems" :key="index" :class="row.is_adjustment ? 'bg-emerald-50 font-medium' : ''">
+                                    <tr v-for="(row, index) in inspectorItems" :key="index" :class="row.is_adjustment ? 'bg-emerald-900/30 font-medium' : 'hover:bg-slate-700/30 border-b border-slate-700/50'">
                                         <td>{{ index + 1 }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.col_dc || '' }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.col_po || row.po }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.col_production_order_no || row.production_order_no || '' }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.col_production_date || '' }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.col_line_no || '' }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.col_direction || '' }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.col_item || row.item }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.col_reference_code || '' }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.col_desc || row.description }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.col_level || '' }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.col_qty_pcs || row.pcs }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.col_qty_sf || row.sqft }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.col_pallet_count || row.pallet_count }}</td>
+                                        <td>{{ row.col_dc || '' }}</td>
+                                        <td>{{ row.col_po || row.po }}</td>
+                                        <td>{{ row.col_production_order_no || row.production_order_no || '' }}</td>
+                                        <td>{{ row.col_production_date || '' }}</td>
+                                        <td>{{ row.col_line_no || '' }}</td>
+                                        <td>{{ row.col_direction || '' }}</td>
+                                        <td>{{ row.col_item || row.item }}</td>
+                                        <td>{{ row.col_reference_code || '' }}</td>
+                                        <td>{{ row.col_desc || row.description }}</td>
+                                        <td>{{ row.col_level || '' }}</td>
+                                        <td>{{ formatNumber(row.col_qty_pcs || row.pcs) }}</td>
+                                        <td>{{ formatNumber(row.col_qty_sf || row.sqft) }}</td>
+                                        <td>{{ formatNumber(row.col_pallet_count || row.pallet_count) }}</td>
 
-                                        <td contenteditable="true" spellcheck="false">
-                                            <span v-if="!row.is_adjustment">{{ row.col_net || row.net }}</span>
+                                        <td>
+                                            <span v-if="!row.is_adjustment">{{ formatNumber(row.col_net || row.net) }}</span>
                                         </td>
-                                        <td contenteditable="true" spellcheck="false">
-                                            <span v-if="!row.is_adjustment">{{ row.col_gross || row.gross }}</span>
+                                        <td>
+                                            <span v-if="!row.is_adjustment">{{ formatNumber(row.col_gross || row.gross) }}</span>
                                         </td>
-                                        <td contenteditable="true" spellcheck="false">
-                                            <span v-if="!row.is_adjustment">{{ row.col_cbm_raw || row.col_cbm || row.cbm }}</span>
+                                        <td>
+                                            <span v-if="!row.is_adjustment">{{ formatNumber(row.col_cbm_raw || row.col_cbm || row.cbm) }}</span>
                                         </td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.col_unit_price || '' }}</td>
-                                        <td contenteditable="true" spellcheck="false">{{ row.col_amount || row.amount }}</td>
+                                        <td>{{ formatNumber(row.col_unit_price || '') }}</td>
+                                        <td>{{ formatNumber(row.col_amount || row.amount) }}</td>
                                     </tr>
                                 </tbody>
                             </table>
@@ -171,6 +169,14 @@ export default {
         });
 
         // Methods
+        const formatNumber = (val) => {
+            if (val === null || val === undefined || val === '') return '';
+            const num = Number(val);
+            if (isNaN(num)) return val;
+            if (Number.isInteger(num)) return num.toString();
+            return parseFloat(num.toFixed(4)).toString();
+        };
+
         const fetchHistory = async () => {
             try {
                 const res = await fetch('/api/history');
@@ -347,6 +353,7 @@ export default {
             clearInspector,
             downloadExcel,
             formatTime,
+            formatNumber,
             currentRun,
             existingInDb
         };

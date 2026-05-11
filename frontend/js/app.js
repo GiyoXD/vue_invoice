@@ -16,15 +16,15 @@ const App = {
         ExportDataView
     },
     template: `
-        <div class="container fade-in">
+        <div class="max-w-[1600px] mx-auto px-6 py-6 fade-in h-screen flex flex-col">
             <!-- Navigation -->
-            <div class="nav-bar">
-                <button class="nav-btn" :class="{ active: currentView === 'home' }" @click="currentView = 'home'">⚡ Generator</button>
-                <button class="nav-btn" :class="{ active: currentView === 'inspector' }" @click="currentView = 'inspector'">🔍 Inspector</button>
-                <button class="nav-btn" :class="{ active: currentView === 'export' }" @click="currentView = 'export'">📦 Export</button>
-                <button class="nav-btn" :class="{ active: currentView === 'template_inspector' }" @click="currentView = 'template_inspector'">📐 Templates</button>
-                <button class="nav-btn" :class="{ active: currentView === 'extractor' }" @click="currentView = 'extractor'">✨ New Template</button>
-                <button class="nav-btn" :class="{ active: currentView === 'logs' }" @click="currentView = 'logs'">📋 Logs</button>
+            <div class="flex gap-4 p-4 bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl mb-8 overflow-x-auto custom-scrollbar flex-shrink-0">
+                <button class="px-6 py-3 font-medium rounded-xl transition-all whitespace-nowrap" :class="currentView === 'home' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-700/50 hover:bg-slate-600/80 text-slate-300'" @click="currentView = 'home'">⚡ Generator</button>
+                <button class="px-6 py-3 font-medium rounded-xl transition-all whitespace-nowrap" :class="currentView === 'inspector' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-700/50 hover:bg-slate-600/80 text-slate-300'" @click="currentView = 'inspector'">🔍 Inspector</button>
+                <button class="px-6 py-3 font-medium rounded-xl transition-all whitespace-nowrap" :class="currentView === 'export' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-700/50 hover:bg-slate-600/80 text-slate-300'" @click="currentView = 'export'">📦 Export</button>
+                <button class="px-6 py-3 font-medium rounded-xl transition-all whitespace-nowrap" :class="currentView === 'template_inspector' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-700/50 hover:bg-slate-600/80 text-slate-300'" @click="currentView = 'template_inspector'">📐 Templates</button>
+                <button class="px-6 py-3 font-medium rounded-xl transition-all whitespace-nowrap" :class="currentView === 'extractor' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-700/50 hover:bg-slate-600/80 text-slate-300'" @click="currentView = 'extractor'">✨ New Template</button>
+                <button class="px-6 py-3 font-medium rounded-xl transition-all whitespace-nowrap" :class="currentView === 'logs' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-700/50 hover:bg-slate-600/80 text-slate-300'" @click="currentView = 'logs'">📋 Logs</button>
             </div>
 
             <!-- HOME VIEW: Generator -->

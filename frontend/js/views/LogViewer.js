@@ -12,46 +12,46 @@ import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
  */
 export default {
     template: `
-        <div class="log-viewer-view fade-in">
-            <h1>Session Log</h1>
+        <div class="max-w-5xl mx-auto py-8 fade-in flex flex-col h-[calc(100vh-80px)]">
+            <h1 class="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 drop-shadow-md flex-shrink-0 mb-6">Session Log</h1>
 
             <!-- Toolbar -->
-            <div class="log-toolbar card">
-                <div class="log-toolbar-left">
+            <div class="bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl p-6 mb-6 flex flex-col sm:flex-row justify-between items-center gap-4 flex-shrink-0">
+                <div class="flex items-center gap-4 w-full sm:w-auto">
                     <input
                         type="text"
                         v-model="searchQuery"
                         placeholder="Filter logs..."
-                        class="log-search-input"
+                        class="bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all flex-1 sm:w-64"
                     />
-                    <span class="log-line-count">{{ filteredLines.length }} / {{ allLines.length }} lines</span>
+                    <span class="text-slate-400 text-sm whitespace-nowrap">{{ filteredLines.length }} / {{ allLines.length }} lines</span>
                 </div>
-                <div class="log-toolbar-right">
-                    <label class="log-toggle">
-                        <input type="checkbox" v-model="autoRefresh" />
+                <div class="flex items-center gap-4 flex-wrap w-full sm:w-auto justify-end">
+                    <label class="flex items-center gap-2 text-slate-300 text-sm cursor-pointer">
+                        <input type="checkbox" v-model="autoRefresh" class="accent-blue-500" />
                         <span>Auto-refresh</span>
                     </label>
-                    <label class="log-toggle">
-                        <input type="checkbox" v-model="autoScroll" />
+                    <label class="flex items-center gap-2 text-slate-300 text-sm cursor-pointer">
+                        <input type="checkbox" v-model="autoScroll" class="accent-blue-500" />
                         <span>Auto-scroll</span>
                     </label>
-                    <button class="btn-small log-btn-refresh" @click="fetchLog" :disabled="loading">
+                    <button class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg shadow-sm transition-colors text-sm" @click="fetchLog" :disabled="loading">
                         {{ loading ? '...' : '↻ Refresh' }}
                     </button>
-                    <button class="btn-small log-btn-clear" @click="clearLog">🗑 Clear</button>
+                    <button class="px-4 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg shadow-sm transition-colors text-sm border border-red-500/30" @click="clearLog">🗑 Clear</button>
                 </div>
             </div>
 
             <!-- Log Container -->
-            <div class="log-container card" ref="logContainerRef">
-                <div v-if="allLines.length === 0 && !loading" class="log-empty">
+            <div class="flex-1 bg-slate-900/90 border border-slate-700/50 shadow-2xl rounded-2xl p-4 overflow-y-auto font-mono text-sm leading-relaxed min-h-0 custom-scrollbar" ref="logContainerRef">
+                <div v-if="allLines.length === 0 && !loading" class="text-slate-500 text-center py-8 italic">
                     No log data. Run an invoice generation to see output here.
                 </div>
                 <div
                     v-for="(line, index) in filteredLines"
                     :key="index"
-                    class="log-line"
-                    :class="getLogLevelClass(line)"
+                    class="py-0.5 break-words"
+                    :class="[getLogLevelClass(line), 'text-slate-300']"
                 >{{ line }}</div>
             </div>
         </div>
@@ -90,9 +90,9 @@ export default {
          * @returns {string} CSS class name.
          */
         const getLogLevelClass = (line) => {
-            if (line.includes('| ERROR') || line.includes('| CRITICAL')) return 'log-error';
-            if (line.includes('| WARNING')) return 'log-warning';
-            if (line.includes('| DEBUG')) return 'log-debug';
+            if (line.includes('| ERROR') || line.includes('| CRITICAL')) return '!text-red-400 font-bold';
+            if (line.includes('| WARNING')) return '!text-yellow-400';
+            if (line.includes('| DEBUG')) return '!text-slate-500';
             return '';
         };
 

@@ -31,3 +31,6 @@ database/generated_invoices/
 database/temp_uploads/
 run_log/
 database/blueprints/mapper/mapping_config.json
+
+# Node/NPM
+node_modules/

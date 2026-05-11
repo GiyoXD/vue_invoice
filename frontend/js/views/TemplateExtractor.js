@@ -6,7 +6,7 @@ export default {
             <h1>New Template Extractor</h1>
             
             <!-- STEP 1: UPLOAD -->
-            <div class="card" v-if="currentStep === 1">
+            <div class="bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl p-8 mb-8" v-if="currentStep === 1">
                 <h2>1. Analyze Invoice Source</h2>
                 <p class="text-secondary mb-4">
                     Upload a sample invoice file. Upload <strong>2 files</strong> to auto-create KH + VN versions.
@@ -29,7 +29,7 @@ export default {
                     <!-- Single-file suffix selector -->
                     <div v-if="selectedFiles.length === 1" class="mt-3 flex items-center gap-3">
                         <label class="text-secondary text-sm">Version suffix:</label>
-                        <select v-model="singleFileSuffix" class="input-field w-40">
+                        <select v-model="singleFileSuffix" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all w-40">
                             <option value="_KH">KH version</option>
                             <option value="_VN">VN version</option>
                         </select>
@@ -40,7 +40,7 @@ export default {
                     </div>
                 </div>
                 
-                <button class="btn mt-4" @click="analyzeFiles" :disabled="selectedFiles.length === 0 || isProcessing">
+                <button class="w-full px-6 py-3 mt-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-medium rounded-full shadow-lg shadow-blue-500/30 transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none" @click="analyzeFiles" :disabled="selectedFiles.length === 0 || isProcessing">
                     {{ isProcessing ? 'Analyzing...' : 'Analyze & Extract' }}
                 </button>
                 
@@ -50,7 +50,7 @@ export default {
             </div>
 
             <!-- STEP 2: MAP HEADERS -->
-            <div class="card delay-100" v-if="currentStep === 2">
+            <div class="bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl p-8 mb-8 delay-100 animate-in fade-in" v-if="currentStep === 2">
                 <h2>2. Map Unrecognized Headers</h2>
                 <p class="text-secondary mb-6">
                     We found some headers we don't recognize. Please map them to system fields.
@@ -58,7 +58,7 @@ export default {
 
                 <div class="form-group">
                     <label>Template Prefix (Unique ID)</label>
-                    <input type="text" v-model="filePrefix" class="input-field" placeholder="e.g. MOTO, JLFHM" />
+                    <input type="text" v-model="filePrefix" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="e.g. MOTO, JLFHM" />
                     
                     <!-- Show preview of what will be created -->
                     <div v-if="filePrefix && isDualMode" class="mt-2 py-2 px-3 bg-blue-100 border border-blue-200 rounded-md text-sm text-blue-300">
@@ -72,7 +72,7 @@ export default {
                 <!-- PRICING MODE SELECTOR -->
                 <div class="form-group mt-4">
                     <label>Pricing Mode</label>
-                    <select v-model="pricingMode" class="input-field w-72">
+                    <select v-model="pricingMode" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all w-72">
                         <option value="standard">Standard (SQFT × Unit Price)</option>
                         <option value="net">Net Weight (Global Price per kg)</option>
                     </select>
@@ -89,7 +89,7 @@ export default {
                     <div v-for="(headerText, index) in allMissingHeaders" :key="index" class="bg-white-3 p-4 rounded-md">
                         <div class="font-bold mb-2 text-yellow-400">"{{ headerText }}"</div>
                         <div class="flex items-center gap-2">
-                            <select v-model="userMappings[headerText]" class="input-field w-full" :disabled="confirmedHeaders.includes(headerText)">
+                            <select v-model="userMappings[headerText]" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all w-full" :disabled="confirmedHeaders.includes(headerText)">
                                 <option value="" disabled selected>Select a field...</option>
                                 <option v-for="opt in systemOptions" :value="opt.id">
                                     {{ opt.label }} ({{ opt.id }})
@@ -123,8 +123,8 @@ export default {
                 </div>
 
                 <div class="flex-row flex gap-4 mt-8">
-                    <button class="nav-btn" @click="currentStep = 1">Back</button>
-                    <button class="btn" @click="generateTemplate" :disabled="isProcessing || !filePrefix">
+                    <button class="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-full transition-colors" @click="currentStep = 1">Back</button>
+                    <button class="w-full px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-bold rounded-full shadow-lg shadow-emerald-500/20 transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none" @click="generateTemplate" :disabled="isProcessing || !filePrefix">
                         {{ isProcessing ? 'Generating...' : 'Create Template' }}
                     </button>
                 </div>
@@ -148,7 +148,7 @@ export default {
             </div>
 
             <!-- STEP 3: SUCCESS -->
-            <div class="card text-center delay-100" v-if="currentStep === 3">
+            <div class="bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl p-8 mb-8 text-center delay-100 animate-in zoom-in" v-if="currentStep === 3">
                 <div class="text-6xl mb-4">🎉</div>
                 <h2>Template Created!</h2>
                 <p class="text-secondary mb-4">
@@ -167,11 +167,11 @@ export default {
                 <p class="text-secondary mb-8">
                     You can now go to the Generator and process invoices for this company.
                 </p>
-                <button class="btn" @click="resetFlow">Process Another</button>
+                <button class="w-full px-6 py-3 mt-4 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-medium rounded-full shadow-lg shadow-blue-500/30 transition-all transform hover:-translate-y-0.5" @click="resetFlow">Process Another</button>
             </div>
 
             <!-- GLOBAL MAPPINGS -->
-            <div class="card mt-8">
+            <div class="bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl p-8 mb-8 mt-8">
                 <div class="flex justify-between items-center cursor-pointer" @click="showMappings = !showMappings">
                     <h2>Manage Global Mappings</h2>
                     <span>{{ showMappings ? '▲ Collapse' : '▼ Expand' }}</span>
@@ -183,26 +183,26 @@ export default {
                     </p>
                     
                     <div class="flex gap-2 mb-4">
-                        <select v-model="activeMappingType" @change="switchMappingType($event.target.value)" class="input-field w-72 font-bold">
+                        <select v-model="activeMappingType" @change="switchMappingType($event.target.value)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all w-72 font-bold">
                             <option value="header_text_mappings">Header Mappings</option>
                             <option value="sheet_name_mappings">Sheet Name Mappings</option>
                             <option value="shipping_header_map">Shipping Header Map</option>
                             <option value="footer_label_mappings">Footer Labels (Total)</option>
                         </select>
-                        <input type="text" v-model="mappingSearch" class="input-field flex-1" placeholder="Search..." />
+                        <input type="text" v-model="mappingSearch" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all flex-1" placeholder="Search..." />
                     </div>
 
                     <!-- Add New Mapping Row -->
-                    <div class="grid grid-cols-1fr-1fr-auto gap-2 mb-4 p-2 bg-emerald-5-dark border border-emerald-500-dashed rounded-md items-center">
-                        <input type="text" v-model="newMappingKey" class="input-field p-2" :placeholder="activeMappingType === 'shipping_header_map' ? 'Col ID (e.g. col_grade)' : (activeMappingType === 'footer_label_mappings' ? 'New Footer Label (e.g. GRAND TOTAL)' : 'New Input Text (e.g. Qty(SF))')" />
+                    <div class="grid grid-cols-1fr-1fr-auto gap-2 mb-4 p-2 bg-emerald-500/5 border border-emerald-500/30 border-dashed rounded-md items-center">
+                        <input type="text" v-model="newMappingKey" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" :placeholder="activeMappingType === 'shipping_header_map' ? 'Col ID (e.g. col_grade)' : (activeMappingType === 'footer_label_mappings' ? 'New Footer Label (e.g. GRAND TOTAL)' : 'New Input Text (e.g. Qty(SF))')" />
                         
-                        <input v-if="activeMappingType === 'sheet_name_mappings' || activeMappingType === 'shipping_header_map' || activeMappingType === 'footer_label_mappings'" type="text" v-model="newMappingVal" class="input-field p-2" :placeholder="activeMappingType === 'shipping_header_map' ? 'Keywords (comma-separated)' : (activeMappingType === 'footer_label_mappings' ? 'Auto-filled' : 'Target Name (e.g. Packing list)')" :disabled="activeMappingType === 'footer_label_mappings'" />
-                        <select v-else v-model="newMappingVal" class="input-field p-2">
+                        <input v-if="activeMappingType === 'sheet_name_mappings' || activeMappingType === 'shipping_header_map' || activeMappingType === 'footer_label_mappings'" type="text" v-model="newMappingVal" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" :placeholder="activeMappingType === 'shipping_header_map' ? 'Keywords (comma-separated)' : (activeMappingType === 'footer_label_mappings' ? 'Auto-filled' : 'Target Name (e.g. Packing list)')" :disabled="activeMappingType === 'footer_label_mappings'" />
+                        <select v-else v-model="newMappingVal" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all">
                             <option value="" disabled selected>Select system field...</option>
                             <option v-for="opt in systemOptions" :value="opt.id">{{ opt.label }} ({{ opt.id }})</option>
                         </select>
                         
-                        <button class="btn m-0 min-w-24" @click.prevent="addNewMapping" :disabled="!newMappingKey || !newMappingVal">Add</button>
+                        <button class="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px]" @click.prevent="addNewMapping" :disabled="!newMappingKey || !newMappingVal">Add</button>
                     </div>
 
                     <div class="max-h-100 overflow-y-auto border border-white-10 rounded-md p-2">
@@ -214,19 +214,19 @@ export default {
                                 <div class="w-20 text-center">Action</div>
                             </div>
                             
-                            <div v-for="(colId, headerText) in filteredMappings" :key="headerText" class="grid grid-cols-1fr-1fr-auto gap-2 items-center bg-white-3 p-2 rounded">
-                                <input type="text" :value="headerText" @change="updateMappingHeader(headerText, $event.target.value)" class="input-field p-1" />
+                            <div v-for="(colId, headerText) in filteredMappings" :key="headerText" class="grid grid-cols-1fr-1fr-auto gap-2 items-center bg-white/5 p-2 rounded">
+                                <input type="text" :value="headerText" @change="updateMappingHeader(headerText, $event.target.value)" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" />
                                 
-                                <input v-if="activeMappingType === 'sheet_name_mappings' || activeMappingType === 'shipping_header_map' || activeMappingType === 'footer_label_mappings'" type="text" :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="input-field p-1" :disabled="activeMappingType === 'footer_label_mappings'" />
+                                <input v-if="activeMappingType === 'sheet_name_mappings' || activeMappingType === 'shipping_header_map' || activeMappingType === 'footer_label_mappings'" type="text" :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" :disabled="activeMappingType === 'footer_label_mappings'" />
                                 
-                                <select v-else :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="input-field p-1">
+                                <select v-else :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm">
                                     <option v-for="opt in systemOptions" :value="opt.id">
                                         {{ opt.label }} ({{ opt.id }})
                                     </option>
                                     <option v-if="!systemOptions.find(o => o.id === colId)" :value="colId">{{ colId }} (Unknown)</option>
                                 </select>
                                 
-                                <button class="btn-sm p-1 min-w-20 bg-red-500 text-white border-0 rounded cursor-pointer" @click="deleteMapping(headerText)">Delete</button>
+                                <button class="px-3 py-1 bg-red-500 hover:bg-red-400 text-white rounded cursor-pointer transition-colors w-full text-sm" @click="deleteMapping(headerText)">Delete</button>
                             </div>
                             <div v-if="Object.keys(filteredMappings).length === 0" class="p-4 text-center text-secondary">
                                 No mappings found matching your search.
@@ -235,7 +235,7 @@ export default {
                     </div>
                     
                     <div class="mt-4 flex justify-end">
-                        <button class="btn bg-emerald-500" @click="saveMappings" :disabled="isSavingMappings">
+                        <button class="px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-white font-bold rounded-full shadow-lg shadow-emerald-500/20 transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed" @click="saveMappings" :disabled="isSavingMappings">
                             {{ isSavingMappings ? 'Saving...' : 'Save Mappings' }}
                         </button>
                     </div>

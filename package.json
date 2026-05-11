@@ -1,0 +1,29 @@
+{
+  "name": "vue_invoice_project",
+  "version": "1.0.0",
+  "description": "\"# vue_invoice\"",
+  "main": "index.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "dev:css": "tailwindcss -i ./frontend/css/tailwind-input.css -o ./frontend/css/tailwind.css --watch",
+    "build:css": "tailwindcss -i ./frontend/css/tailwind-input.css -o ./frontend/css/tailwind.css --minify"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GiyoXD/vue_invoice.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/GiyoXD/vue_invoice/issues"
+  },
+  "homepage": "https://github.com/GiyoXD/vue_invoice#readme",
+  "devDependencies": {
+    "autoprefixer": "^10.5.0",
+    "postcss": "^8.5.14",
+    "tailwindcss": "^3.4.19"
+  }
+}
