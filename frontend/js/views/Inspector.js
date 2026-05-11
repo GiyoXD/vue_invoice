@@ -9,7 +9,7 @@ export default {
                 <!-- Sidebar: History -->
                 <div class="history-sidebar card">
                     <h3>Recent Runs</h3>
-                     <div v-if="historyList.length === 0" style="color: #94a3b8; font-size: 0.875rem;">No history found.</div>
+                     <div v-if="historyList.length === 0" class="text-secondary text-sm">No history found.</div>
                     <div class="history-list">
                         <div v-for="run in historyList" :key="run.filename" 
                              class="history-item" :class="run.type" @click="loadHistoryItem(run)">
@@ -21,29 +21,29 @@ export default {
                             </div>
                         </div>
                     </div>
-                    <button class="btn-small" @click="fetchHistory" style="width: 100%; margin-top: 1rem;">Refresh List</button>
+                    <button class="btn-small w-full mt-4" @click="fetchHistory">Refresh List</button>
                 </div>
 
                 <!-- Main: Details -->
                 <div class="inspector-main card">
-                     <div class="flex-row" style="display: flex; gap: 1rem; align-items: flex-end; margin-bottom: 1rem;">
-                        <div style="flex-grow: 1;">
-                            <label style="display: block; margin-bottom: 0.5rem; color: #94a3b8;">Load Metadata File (Manual)</label>
+                     <div class="flex-row flex gap-4 items-end mb-4">
+                        <div class="flex-grow">
+                            <label class="block mb-2 text-secondary">Load Metadata File (Manual)</label>
                             <input type="file" @change="loadMetadataFile" accept=".json" />
                         </div>
                          <button class="nav-btn" @click="clearInspector" v-if="inspectorData">Clear</button>
                      </div>
 
-                    <div v-if="!inspectorData" style="text-align: center; padding: 2rem; color: #64748b;">
+                    <div v-if="!inspectorData" class="text-center p-8 text-slate-500">
                         <p>Select a run from the left 👈 or upload a file.</p>
                     </div>
 
                     <div v-if="inspectorData">
-                         <div class="status-box info inspector-status-bar" style="margin-bottom: 1rem;">
+                         <div class="status-box info inspector-status-bar mb-4">
                             <div class="inspector-status-info">
                                 <strong>Viewing:</strong> {{ inspectorData.output_file || currentRun?.output_file || 'Uploaded File' }}
-                                <span style="opacity: 0.7; margin-left: 1rem;">{{ inspectorData.timestamp || currentRun?.timestamp }}</span>
-                                <span v-if="currentRun?.type === 'accepted'" class="badge accepted" style="margin-left:1rem;">ACCEPTED</span>
+                                <span class="opacity-70 ml-4">{{ inspectorData.timestamp || currentRun?.timestamp }}</span>
+                                <span v-if="currentRun?.type === 'accepted'" class="badge accepted ml-4">ACCEPTED</span>
                             </div>
                             <div class="inspector-actions">
                                 <button v-if="currentRun?.type === 'processed'" class="btn-small btn-accept" 
@@ -55,7 +55,7 @@ export default {
                                     Reject & Delete ❌
                                 </button>
                                 <button v-if="inspectorData.output_path_absolute" class="btn-small" 
-                                        style="background: #2563eb; color: white; border: none;"
+                                        class="btn-small bg-blue-600 text-white border-none"
                                         @click="downloadExcel(inspectorData.output_path_absolute)">
                                     Download .xlsx 📥
                                 </button>
@@ -63,9 +63,9 @@ export default {
                          </div>
 
                          <!-- WARNING: Already in DB -->
-                         <div v-if="existingInDb && currentRun?.type === 'processed'" class="status-box" style="margin-bottom: 1rem; background-color: #fef2f2; border: 1px solid #f87171; color: #991b1b; padding: 1rem; border-radius: 8px;">
-                             <strong style="font-size: 1.1em;">⚠️ WARNING: Database Collision</strong>
-                             <p style="margin-top: 0.5rem; margin-bottom: 0;">
+                         <div v-if="existingInDb && currentRun?.type === 'processed'" class="status-box mb-4 bg-red-50 border border-red-400 text-red-800 p-4 rounded-xl">
+                             <strong class="text-lg">⚠️ WARNING: Database Collision</strong>
+                             <p class="mt-2 m-0">
                                  Invoice <strong>{{ currentRun?.filename || inspectorData.output_file }}</strong> is ALREADY in the database.
                                  Accepting it again will <strong>REPLACE</strong> all existing records for this invoice.
                              </p>
@@ -98,7 +98,7 @@ export default {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <tr v-for="(row, index) in inspectorItems" :key="index" :style="row.is_adjustment ? 'background: #f0fdf4; font-weight: 500;' : ''">
+                                    <tr v-for="(row, index) in inspectorItems" :key="index" :class="row.is_adjustment ? 'bg-emerald-50 font-medium' : ''">
                                         <td>{{ index + 1 }}</td>
                                         <td contenteditable="true" spellcheck="false">{{ row.col_dc || '' }}</td>
                                         <td contenteditable="true" spellcheck="false">{{ row.col_po || row.po }}</td>

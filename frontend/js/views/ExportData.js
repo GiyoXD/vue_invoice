@@ -29,7 +29,7 @@ export default {
                     </div>
                 </div>
 
-                <div v-if="error" class="error-message" style="color: #ef4444; margin-top: 1rem; text-align: center;">
+                <div v-if="error" class="error-message text-red-500 mt-4 text-center">
                     {{ error }}
                 </div>
                 
@@ -39,49 +39,49 @@ export default {
             </div>
 
             <!-- Data Preview Section (Peek) -->
-            <div class="card preview-card" style="margin-top: 2rem; background: rgba(30, 41, 59, 0.4); border: 1px solid rgba(255, 255, 255, 0.05);">
+            <div class="card preview-card mt-8 bg-slate-800-40 border border-white-5">
                 <h3>Recent Invoices (Peek)</h3>
-                <div class="table-container" style="margin-top: 1rem; overflow-x: auto;">
-                    <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
-                        <thead style="background: rgba(255, 255, 255, 0.05);">
+                <div class="table-container mt-4 overflow-x-auto">
+                    <table class="w-full border-collapse text-sm">
+                        <thead class="bg-white-5">
                             <tr>
-                                <th style="padding: 0.75rem; text-align: left;">Filename</th>
-                                <th style="padding: 0.75rem; text-align: left;">Accepted At</th>
-                                <th style="padding: 0.75rem; text-align: center;">Items</th>
-                                <th style="padding: 0.75rem; text-align: right;">Total SQFT</th>
-                                <th style="padding: 0.75rem; text-align: right;">Total Net</th>
-                                <th style="padding: 0.75rem; text-align: right;">Total Pallets</th>
-                                <th style="padding: 0.75rem; text-align: right;">Total Amount</th>
+                                <th class="p-3 text-left">Filename</th>
+                                <th class="p-3 text-left">Accepted At</th>
+                                <th class="p-3 text-center">Items</th>
+                                <th class="p-3 text-right">Total SQFT</th>
+                                <th class="p-3 text-right">Total Net</th>
+                                <th class="p-3 text-right">Total Pallets</th>
+                                <th class="p-3 text-right">Total Amount</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr v-for="item in recentInvoices" :key="item.id" style="border-bottom: 1px solid rgba(255, 255, 255, 0.05);">
-                                <td style="padding: 0.75rem;">{{ item.filename }}</td>
-                                <td style="padding: 0.75rem;">{{ formatDate(item.timestamp) }}</td>
-                                <td style="padding: 0.75rem; text-align: center;">{{ item.item_count }}</td>
-                                <td style="padding: 0.75rem; text-align: right; font-family: monospace;">{{ item.total_sqft?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00' }}</td>
-                                <td style="padding: 0.75rem; text-align: right; font-family: monospace;">{{ item.total_net?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00' }} kg</td>
-                                <td style="padding: 0.75rem; text-align: right; font-family: monospace;">{{ item.total_pallets?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00' }}</td>
-                                <td style="padding: 0.75rem; text-align: right; font-family: monospace;">$ {{ item.total_amount?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00' }}</td>
+                            <tr v-for="item in recentInvoices" :key="item.id" class="border-b border-white-5">
+                                <td class="p-3">{{ item.filename }}</td>
+                                <td class="p-3">{{ formatDate(item.timestamp) }}</td>
+                                <td class="p-3 text-center">{{ item.item_count }}</td>
+                                <td class="p-3 text-right font-mono">{{ item.total_sqft?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00' }}</td>
+                                <td class="p-3 text-right font-mono">{{ item.total_net?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00' }} kg</td>
+                                <td class="p-3 text-right font-mono">{{ item.total_pallets?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00' }}</td>
+                                <td class="p-3 text-right font-mono">$ {{ item.total_amount?.toLocaleString(undefined, {minimumFractionDigits: 2}) || '0.00' }}</td>
                             </tr>
                             <tr v-if="recentInvoices.length === 0">
-                                <td colspan="7" style="padding: 2rem; text-align: center; color: rgba(255, 255, 255, 0.4);">No invoices found in registry.</td>
+                                <td colspan="7" class="p-8 text-center text-white-40">No invoices found in registry.</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
-                <div style="margin-top: 1rem; text-align: right;">
-                    <button @click="fetchRecentInvoices" class="action-btn" style="padding: 0.4rem 0.8rem; font-size: 0.8rem; background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.3);">
+                <div class="mt-4 text-right">
+                    <button @click="fetchRecentInvoices" class="action-btn text-xs py-2 px-3 bg-blue-100 text-blue-300 border border-blue-200">
                         Refresh List
                     </button>
                 </div>
             </div>
 
-            <div class="danger-zone" style="margin-top: 4rem; padding: 2rem; border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 12px; background: rgba(239, 68, 68, 0.05);">
-                <h3 style="color: #f87171; margin-top: 0;">Danger Zone</h3>
-                <p style="color: rgba(248, 113, 113, 0.8); font-size: 0.9rem;">Resetting the database will permanently delete all stored invoice processing history and the master list table.</p>
-                <div style="margin-top: 1.5rem;">
-                    <button @click="confirmReset" class="action-btn danger-btn" style="background: #dc2626; color: white;">
+            <div class="danger-zone mt-16 p-8 border border-red-500-20 rounded-xl bg-red-500-5">
+                <h3 class="text-red-400 mt-0">Danger Zone</h3>
+                <p class="text-red-400-80 text-sm">Resetting the database will permanently delete all stored invoice processing history and the master list table.</p>
+                <div class="mt-6">
+                    <button @click="confirmReset" class="action-btn danger-btn bg-red-600 text-white">
                         Reset Database Registry
                     </button>
                 </div>

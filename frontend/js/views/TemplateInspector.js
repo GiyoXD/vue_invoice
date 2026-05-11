@@ -11,21 +11,21 @@ export default {
                 <div class="history-sidebar card">
                     <h3>Available Templates</h3>
                     
-                    <div style="margin-bottom: 1rem;">
-                        <input type="text" v-model="searchQuery" placeholder="Search templates..." class="input-field" style="width: 100%;" />
-                        <button class="btn-small" @click="fetchTemplates" style="width: 100%; margin-top: 1rem;">Refresh List</button>
+                    <div class="mb-4">
+                        <input type="text" v-model="searchQuery" placeholder="Search templates..." class="input-field w-full" />
+                        <button class="btn-small w-full mt-4" @click="fetchTemplates">Refresh List</button>
                     </div>
 
-                    <div v-if="filteredTemplates.length === 0" style="color: #94a3b8; font-size: 1.0rem;">No templates found.</div>
+                    <div v-if="filteredTemplates.length === 0" class="text-secondary text-base">No templates found.</div>
                     <div class="history-list">
                         <div v-for="t in filteredTemplates" :key="t.name + (t.bundle_name || '') + (t.source_file || '')" 
                              class="history-item" :class="{ active: selectedTemplateName === t.name }"
                              @click="loadTemplate(t)">
                             <div class="h-date">
                                 {{ t.name }}
-                                <span v-if="t.bundle_name && t.name !== t.bundle_name" style="font-size: 1.1em; color: #ef4444; font-weight: bold;">({{ t.bundle_name }})</span>
+                                <span v-if="t.bundle_name && t.name !== t.bundle_name" class="text-lg text-danger font-bold">({{ t.bundle_name }})</span>
                             </div>
-                            <div class="h-file" style="font-size: 0.75rem; color: #64748b;">Source: {{ t.source_file }}</div>
+                            <div class="h-file text-xs text-muted">Source: {{ t.source_file }}</div>
                             <div class="h-stats">Updated: {{ formatTime(t.modified) }}</div>
                         </div>
                     </div>
@@ -33,65 +33,86 @@ export default {
 
                 <!-- Main: Details -->
                 <div class="inspector-main card">
-                    <div v-if="!currentTemplate" style="text-align: center; padding: 2rem; color: #64748b;">
+                    <div v-if="!currentTemplate" class="text-center p-8 text-muted">
                         <p>Select a template from the list to inspect.</p>
                     </div>
 
                     <div v-if="currentTemplate" class="template-viewer">
-                        <div class="status-box info" style="margin-bottom: 1rem; display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div class="status-box info mb-4 flex justify-between items-start">
                             <div>
                                 <strong>Viewing:</strong> {{ currentTemplateName }} <br>
-                                <span style="font-size: 0.85em; opacity: 0.8;">Source: {{ currentTemplateFingerprint?.source_file }}</span>
+                                <span class="text-sm opacity-80">Source: {{ currentTemplateFingerprint?.source_file }}</span>
                             </div>
-                            <button class="btn-danger" @click="deleteTemplate" title="Delete Template" style="padding: 0.25rem 0.5rem; font-size: 0.875rem;">
+                            <button class="btn-danger px-2 py-1 text-sm" @click="deleteTemplate" title="Delete Template">
                                 Delete Template
                             </button>
                         </div>
 
                         <!-- Client Notes Section -->
-                        <div class="card" style="margin-bottom: 1rem; background: #1e293b; border-color: #334155;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                                <h4 style="margin: 0; font-size: 0.9rem; color: #94a3b8; display: flex; align-items: center; gap: 0.5rem;">
+                        <div class="card mb-4 bg-darker border-dark">
+                            <div class="flex justify-between items-center mb-2">
+                                <h4 class="m-0 text-sm text-secondary flex items-center gap-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-notebook-pen"><path d="M11 2H9a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/><path d="m16 2 4 4-8 8H8v-4l8-8Z"/><path d="M15 5 19 9"/></svg>
                                     Client Notes / Remarks
                                 </h4>
-                                <button v-if="!isEditingNotes" class="btn-small" @click="isEditingNotes = true" style="padding: 2px 8px; font-size: 0.75rem;">Edit</button>
-                                <div v-else style="display: flex; gap: 0.25rem;">
-                                    <button class="btn-small" @click="cancelEditNotes" style="padding: 2px 8px; font-size: 0.75rem; background: #475569;">Cancel</button>
-                                    <button class="btn-small" @click="saveNotes" :disabled="isSavingNotes" style="padding: 2px 8px; font-size: 0.75rem; background: #3b82f6;">
+                                <button v-if="!isEditingNotes" class="btn-micro" @click="isEditingNotes = true">Edit</button>
+                                <div v-else class="flex gap-1">
+                                    <button class="btn-micro badge-gray" @click="cancelEditNotes">Cancel</button>
+                                    <button class="btn-micro badge-blue" @click="saveNotes" :disabled="isSavingNotes">
                                         {{ isSavingNotes ? 'Saving...' : 'Save' }}
                                     </button>
                                 </div>
                             </div>
                             <div v-if="!isEditingNotes">
-                                <div v-if="templateNotes" style="font-size: 0.875rem; color: #e2e8f0; white-space: pre-wrap; line-height: 1.5;">{{ templateNotes }}</div>
-                                <div v-else style="font-size: 0.875rem; color: #64748b; font-style: italic;">No notes for this client yet. Click Edit to add.</div>
+                                <div v-if="templateNotes" class="text-sm text-primary whitespace-pre-wrap leading-relaxed">{{ templateNotes }}</div>
+                                <div v-else class="text-sm text-muted italic">No notes for this client yet. Click Edit to add.</div>
                             </div>
                             <div v-else>
-                                <textarea v-model="editingNotesText" class="input-field" style="width: 100%; min-height: 100px; font-size: 0.875rem; background: #0f172a;" placeholder="Enter things to remember for this client..."></textarea>
+                                <textarea v-model="editingNotesText" class="input-field w-full text-sm bg-dark min-h-24" placeholder="Enter things to remember for this client..."></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Client Profile Section -->
+                        <div v-if="clientProfile" class="card mb-4 bg-dark border-dark">
+                            <h4 class="mb-3 text-sm text-secondary flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                Client Profile
+                            </h4>
+                            <div class="text-sm grid grid-cols-120-1fr gap-x-4 gap-y-2">
+                                <div class="text-muted font-medium">Company:</div>
+                                <div class="text-primary">{{ clientProfile.fullname || '—' }}</div>
+
+                                <div class="text-muted font-medium">Address:</div>
+                                <div class="text-primary whitespace-pre-line">{{ clientProfile.address || '—' }}</div>
+
+                                <div class="text-muted font-medium">Contact:</div>
+                                <div class="text-primary whitespace-pre-line">{{ clientProfile.contact || '—' }}</div>
+
+                                <div class="text-muted font-medium">Shipping:</div>
+                                <div class="text-primary">{{ clientProfile.shipping || '—' }}</div>
                             </div>
                         </div>
 
                         <!-- Table Information Section -->
-                        <div v-if="currentTemplate && currentTemplate.table_info" class="card" style="margin-bottom: 1rem; background: #0f172a; border-color: #334155;">
-                            <h4 style="margin: 0 0 0.5rem 0; font-size: 0.9rem; color: #94a3b8; display: flex; align-items: center; gap: 0.5rem;">
+                        <div v-if="currentTemplate && currentTemplate.table_info" class="card mb-4 bg-dark border-dark">
+                            <h4 class="mb-2 text-sm text-secondary flex items-center gap-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-table-properties"><path d="M15 2H9a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2Z"/><path d="M9 10h12"/><path d="M9 14h12"/><path d="M9 18h12"/><path d="M9 6h12"/><path d="M11 2v20"/></svg>
                                 Table Information
                             </h4>
-                            <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem; font-size: 0.875rem;">
-                                <div style="color: #64748b; font-weight: 500;">Fallback Desc (Standard):</div>
-                                <div style="color: #e2e8f0;">{{ currentTemplate.table_info.fallback_description?.standard || 'None' }}</div>
+                            <div class="text-sm grid grid-cols-auto-1fr gap-x-4 gap-y-2">
+                                <div class="text-muted font-medium">Fallback Desc (Standard):</div>
+                                <div class="text-primary">{{ currentTemplate.table_info.fallback_description?.standard || 'None' }}</div>
 
-                                <div style="color: #64748b; font-weight: 500;">Fallback Desc (DAF):</div>
-                                <div style="color: #e2e8f0;">{{ currentTemplate.table_info.fallback_description?.daf || 'None' }}</div>
+                                <div class="text-muted font-medium">Fallback Desc (DAF):</div>
+                                <div class="text-primary">{{ currentTemplate.table_info.fallback_description?.daf || 'None' }}</div>
 
-                                <div style="color: #64748b; font-weight: 500;">HS Code:</div>
-                                <div style="color: #e2e8f0;">{{ currentTemplate.table_info.hs_code || 'None' }}</div>
+                                <div class="text-muted font-medium">HS Code:</div>
+                                <div class="text-primary">{{ currentTemplate.table_info.hs_code || 'None' }}</div>
                             </div>
                         </div>
 
                         <!-- Sheet Selector -->
-                        <div class="sheet-tabs" style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
+                        <div class="sheet-tabs mb-4 flex gap-2">
                             <button v-for="(sheetData, sheetName) in templateLayout" :key="sheetName"
                                     class="btn-small" 
                                     :class="{ 'btn-primary': currentSheetName === sheetName }"
@@ -101,21 +122,21 @@ export default {
                         </div>
                         
                         <!-- Zoom & View Controls -->
-                        <div class="zoom-controls" style="margin-bottom: 0.5rem; display: flex; gap: 0.5rem; align-items: center;">
+                        <div class="zoom-controls mb-2 flex gap-2 items-center">
                             <button class="btn-small" @click="zoomOut" title="Zoom Out">-</button>
-                            <span style="font-size: 0.875rem; min-width: 3rem; text-align: center;">{{ zoomPercentage }}%</span>
+                            <span class="text-sm text-center min-w-12">{{ zoomPercentage }}%</span>
                             <button class="btn-small" @click="zoomIn" title="Zoom In">+</button>
                             <button class="btn-small" @click="resetZoom" title="Reset Zoom">Reset</button>
 
-                            <div style="width: 1px; height: 1.5rem; background: #cbd5e1; margin: 0 0.5rem;"></div>
+                            <div class="w-px h-6 bg-slate-300 mx-2"></div>
 
-                            <label style="display: flex; align-items: center; gap: 0.25rem; font-size: 0.875rem; cursor: pointer; user-select: none;">
+                            <label class="flex items-center gap-1 text-sm select-none cursor-pointer">
                                 <input type="checkbox" v-model="showFullText"> Wrap Text
                             </label>
                         </div>
                         
                         <!-- Excel Grid -->
-                        <div class="excel-grid-container" style="overflow: auto; max-height: 75vh; position: relative;">
+                        <div class="excel-grid-container overflow-auto max-h-75vh relative">
                             <div class="excel-grid" :style="gridStyle">
                                 <!-- Render Cells -->
                                 <div v-for="cell in gridCells" :key="cell.id"
@@ -123,54 +144,54 @@ export default {
                                      :style="cell.style"
                                      :title="'[' + cell.address + '] ' + cell.content"
                                      @click="openCellEditor(cell)">
-                                     <span v-if="cell.hasOverride" style="position: absolute; top: 2px; right: 2px; width: 6px; height: 6px; border-radius: 50%; background: #3b82f6;" title="Has mode override"></span>
-                                     <span v-if="cell.isFormula" style="color: blue; font-style: italic;">{{ cell.content }}</span>
+                                     <span v-if="cell.hasOverride" class="absolute bg-blue-500 rounded-full w-1-5 h-1-5 top-0-5 right-0-5" title="Has mode override"></span>
+                                     <span v-if="cell.isFormula" class="text-blue-600 italic">{{ cell.content }}</span>
                                      <span v-else>{{ cell.content }}</span>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Cell Override Editor Popup -->
-                        <div v-if="editingCell" style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.3); z-index: 100; display: flex; align-items: center; justify-content: center;" @click.self="closeEditor">
-                            <div style="background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 1.25rem; min-width: 320px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
-                                <h3 style="margin: 0 0 0.75rem 0; font-size: 1rem; color: #f1f5f9;">Cell {{ editingCell.address }}</h3>
+                        <div v-if="editingCell" class="fixed inset-0 bg-black-50 z-100 flex items-center justify-center" @click.self="closeEditor">
+                            <div class="bg-darker border border-dark rounded-lg p-5 shadow-2xl min-w-[320px]">
+                                <h3 class="m-0 mb-3 text-base text-primary">Cell {{ editingCell.address }}</h3>
 
-                                <div style="margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(255,255,255,0.05); border-radius: 4px; font-size: 0.85rem;">
-                                    <span style="color: #94a3b8;">Current (default):</span>
-                                    <span style="color: #e2e8f0; margin-left: 0.5rem;">
+                                <div class="mb-3 px-3 py-2 bg-white-5 rounded text-sm">
+                                    <span class="text-secondary">Current (default):</span>
+                                    <span class="text-primary ml-2">
                                         {{ (typeof editingCell.rawContent === 'object' && editingCell.rawContent !== null) ? (editingCell.rawContent.default ?? "") : (editingCell.rawContent || '(empty)') }}
                                     </span>
                                 </div>
 
-                                <div style="margin-bottom: 0.75rem;">
-                                    <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.25rem;">Base Value <span style="color: #60a5fa; font-size: 0.75rem;">(applies to ALL modes)</span></label>
-                                    <input type="text" v-model="editStandardValue" class="input-field" placeholder="Enter value for standard, custom, DAF..." style="width: 100%;" @keyup.enter="saveCellOverrides" />
-                                    <p style="color: #64748b; font-size: 0.7rem; margin: 0.25rem 0 0 0;">This value will be used in Standard, Custom, DAF, and any other mode.</p>
+                                <div class="mb-3">
+                                    <label class="block text-secondary text-sm mb-1">Base Value <span class="text-blue-400 text-xs">(applies to ALL modes)</span></label>
+                                    <input type="text" v-model="editStandardValue" class="input-field w-full" placeholder="Enter value for standard, custom, DAF..." @keyup.enter="saveCellOverrides" />
+                                    <p class="text-muted text-xs mt-1 mb-0">This value will be used in Standard, Custom, DAF, and any other mode.</p>
                                 </div>
 
-                                <div style="margin-bottom: 0.75rem;">
-                                    <label style="display: block; color: #94a3b8; font-size: 0.85rem; margin-bottom: 0.25rem;">DAF Override <span style="color: #fbbf24; font-size: 0.75rem;">(takes priority in DAF mode)</span></label>
-                                    <input type="text" v-model="editDafValue" class="input-field" placeholder="Leave empty to use base value" style="width: 100%;" @keyup.enter="saveCellOverrides" />
-                                    <p style="color: #64748b; font-size: 0.7rem; margin: 0.25rem 0 0 0;">Only used when generating in DAF mode. If empty, the base value is used.</p>
+                                <div class="mb-3">
+                                    <label class="block text-secondary text-sm mb-1">DAF Override <span class="text-amber-400 text-xs">(takes priority in DAF mode)</span></label>
+                                    <input type="text" v-model="editDafValue" class="input-field w-full" placeholder="Leave empty to use base value" @keyup.enter="saveCellOverrides" />
+                                    <p class="text-muted text-xs mt-1 mb-0">Only used when generating in DAF mode. If empty, the base value is used.</p>
                                 </div>
 
-                                <div v-if="editingCell.currentOverrides" style="margin-bottom: 0.75rem; padding: 0.5rem 0.75rem; background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.2); border-radius: 4px; font-size: 0.8rem;">
-                                    <div style="color: #60a5fa; margin-bottom: 0.25rem;">Existing overrides:</div>
-                                    <div v-for="(v, k) in editingCell.currentOverrides" :key="k" style="color: #93c5fd;">
+                                <div v-if="editingCell.currentOverrides" class="mb-3 px-3 py-2 bg-blue-100 border border-blue-200 rounded text-sm">
+                                    <div class="text-blue-400 mb-1">Existing overrides:</div>
+                                    <div v-for="(v, k) in editingCell.currentOverrides" :key="k" class="text-blue-300">
                                         <strong>{{ k }}:</strong> {{ v }}
                                     </div>
                                 </div>
 
-                                <div style="display: flex; gap: 0.5rem; justify-content: flex-end;">
-                                    <button class="btn-small" @click="closeEditor" style="background: #475569;">Cancel</button>
-                                    <button class="btn-small" @click="saveCellOverrides" :disabled="isSavingCell" style="background: #3b82f6; color: white;">
+                                <div class="flex gap-2 justify-end">
+                                    <button class="btn-small badge-gray" @click="closeEditor">Cancel</button>
+                                    <button class="btn-small badge-blue text-white" @click="saveCellOverrides" :disabled="isSavingCell">
                                         {{ isSavingCell ? 'Saving...' : 'Save Overrides' }}
                                     </button>
                                 </div>
-                                <div v-if="editorMessage" :style="{marginTop: '0.5rem', fontSize: '0.85rem', color: editorMessageType === 'error' ? '#ef4444' : '#22c55e'}">
+                                <div v-if="editorMessage" class="mt-2 text-sm" :class="editorMessageType === 'error' ? 'text-red-500' : 'text-emerald-500'">
                                     {{ editorMessage }}
                                 </div>
-                                <div style="margin-top: 0.75rem; padding: 0.4rem 0.6rem; background: rgba(251,191,36,0.08); border: 1px solid rgba(251,191,36,0.2); border-radius: 4px; font-size: 0.7rem; color: #d97706; line-height: 1.4;">
+                                <div class="mt-3 py-2 px-2 bg-amber-100 border border-amber-200 rounded text-xxs text-amber-600 leading-snug">
                                     ⚠ If footer overrides appear shifted after re-generating, the Excel template structure likely changed (rows added/removed). Re-apply overrides after verifying cell positions or delete the template to create a new one.
                                 </div>
                             </div>
@@ -195,6 +216,7 @@ export default {
         const editingNotesText = ref("");
 
         const templateNotes = computed(() => currentTemplate.value?.notes || "");
+        const clientProfile = computed(() => currentTemplate.value?.client_profile || null);
 
         const saveNotes = async () => {
             if (!selectedTemplateName.value) return;
@@ -797,6 +819,8 @@ export default {
             currentTemplateFingerprint,
             templateLayout,
             currentSheetName,
+            templateNotes,
+            clientProfile,
             zoomLevel,
             zoomPercentage,
             showFullText,

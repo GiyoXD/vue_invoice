@@ -8,7 +8,7 @@ export default {
             
             <div class="card">
                 <h2>1. Upload Source Data</h2>
-                <p style="color: #94a3b8; margin-bottom: 1rem;">Select your Excel file to begin processing.</p>
+                <p class="text-secondary mb-4">Select your Excel file to begin processing.</p>
                 
                 <input type="file" @change="handleFileUpload" accept=".xlsx, .xls" />
                 
@@ -22,12 +22,12 @@ export default {
 
                 <!-- NORMALIZATION WARNINGS PANEL -->
                 <div v-if="validationWarnings && validationWarnings.length > 0" class="warning-panel">
-                    <div class="warning-header" style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem;">
-                        <span class="warning-icon" style="font-size: 1.25rem;">⚠️</span>
-                        <h3 style="margin: 0; color: #b45309; font-size: 1rem;">Data Auto-Correction Notices</h3>
+                    <div class="warning-header flex items-center gap-2 mb-3">
+                        <span class="warning-icon text-xl">⚠️</span>
+                        <h3 class="m-0 text-amber-700 text-base">Data Auto-Correction Notices</h3>
                     </div>
-                    <ul style="margin: 0; padding-left: 1.5rem; color: #92400e; font-size: 0.9rem;">
-                        <li v-for="(msg, idx) in validationWarnings" :key="idx" style="margin-bottom: 0.25rem;">
+                    <ul class="m-0 pl-6 text-amber-800 text-sm">
+                        <li v-for="(msg, idx) in validationWarnings" :key="idx" class="mb-1">
                             {{ msg }}
                         </li>
                     </ul>
@@ -60,7 +60,7 @@ export default {
                 </div>
             </div>
 
-            <div class="card" v-if="processingComplete" style="animation-delay: 0.2s">
+            <div class="card delay-200" v-if="processingComplete">
                 <h2>2. Invoice Details</h2>
                 
                 <!-- ASSET WARNING PANEL -->
@@ -84,59 +84,61 @@ export default {
                 <div v-if="assetStatus && assetStatus.ready" class="asset-ready">
                     <span class="ready-icon">✅</span>
                     <span class="ready-text">Blueprint found: using <strong>{{ assetConfigName }}</strong></span>
-                    <span v-if="hasVariants" style="margin-left: 0.5rem; padding: 0.15rem 0.5rem; background: rgba(234, 179, 8, 0.15); color: #facc15; border-radius: 4px; font-size: 0.75rem; font-weight: bold;">KH/VN variants detected</span>
+                    <span v-if="hasVariants" class="ml-2 bg-yellow-15 text-yellow-400 rounded px-2 py-1 text-xs font-bold">KH/VN variants detected</span>
                 </div>
                 
                 <div class="grid-form">
-                    <div class="form-group" style="position: relative;">
+                    <div class="form-group relative">
                         <label>Invoice Number</label>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <input style="color: red; flex: 1;" type="text" v-model="invoiceNo" class="input-field" />
-                            <button class="btn-small" @click="lookupRefFromSheets" :disabled="isLookingUp || !invoiceNo" style="margin: 0; padding: 0 0.75rem;" title="Lookup Ref No in Google Sheets">
+                        <div class="flex gap-2">
+                            <input class="text-red-500 flex-1 input-field" type="text" v-model="invoiceNo" />
+                            <button class="btn-small m-0 px-3" @click="lookupRefFromSheets" :disabled="isLookingUp || !invoiceNo" title="Lookup Ref No in Google Sheets">
                                 {{ isLookingUp ? '...' : '🔍' }}
                             </button>
                         </div>
                     </div>
                     <div class="form-group">
                         <label>Invoice Date</label>
-                        <input style="color: red;" type="date" v-model="invoiceDate" class="input-field" />
+                        <input class="text-red-500 input-field" type="date" v-model="invoiceDate" />
                     </div>
                     <div class="form-group">
-                        <label style="display: flex; align-items: center; justify-content: space-between;">
+                        <label class="flex items-center justify-between">
                             <span>Invoice Ref (Optional)</span>
-                            <span v-if="refSourceStatus" :style="{ fontSize: '0.75rem', fontWeight: 'bold', padding: '0.1rem 0.4rem', borderRadius: '4px', background: refSourceStatus.type === 'found' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)', color: refSourceStatus.type === 'found' ? '#10b981' : '#f59e0b' }">
+                            <span v-if="refSourceStatus" 
+                                  class="text-xs font-bold px-2 py-0-5 rounded-md" 
+                                  :class="refSourceStatus.type === 'found' ? 'bg-emerald-500-15 text-emerald-500' : 'bg-amber-500-15 text-amber-500'">
                                 {{ refSourceStatus.message }}
                             </span>
                         </label>
-                        <input style="color: red;" type="text" v-model="invoiceRef" @input="refSourceStatus = null" class="input-field" />
+                        <input class="text-red-500 input-field" type="text" v-model="invoiceRef" @input="refSourceStatus = null" />
                     </div>
                 </div>
 
-                <div class="form-group" style="margin-top: 1rem;">
+                <div class="form-group mt-4">
                     <label>Generation Options</label>
-                    <div style="display: flex; gap: 1.5rem; margin-top: 0.5rem; flex-wrap: wrap;">
-                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <div class="flex gap-6 mt-2 flex-wrap">
+                        <label class="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox" v-model="includeStandard" accent-color="#2563eb" /> 
                             <span>Standard Invoice</span>
                         </label>
-                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <label class="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox" v-model="includeCustom" accent-color="#2563eb" /> 
                             <span>Custom Mode</span>
                         </label>
-                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <label class="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox" v-model="includeDAF" accent-color="#2563eb" /> 
                             <span>DAF Mode</span>
                         </label>
-                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; border-left: 1px solid #e2e8f0; padding-left: 1.5rem; margin-left: 0.5rem;">
+                        <label class="flex items-center gap-2 cursor-pointer border-l border-gray-200 pl-6 ml-2">
                             <input type="checkbox" v-model="enableAutoFit" accent-color="#2563eb" /> 
                             <span>Auto-Fit Dimensions</span>
                         </label>
                     </div>
                     
                     <!-- KH/VN Variant Options -->
-                    <div v-if="hasVariants" style="display: flex; gap: 1.5rem; margin-top: 0.75rem; padding: 0.75rem; background: rgba(234, 179, 8, 0.05); border: 1px solid rgba(234, 179, 8, 0.15); border-radius: 6px; flex-wrap: wrap;">
-                        <span style="color: #facc15; font-weight: bold; font-size: 0.85rem; align-self: center;">Variants:</span>
-                        <label v-for="v in assetStatus.variants" :key="v.suffix" style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <div v-if="hasVariants" class="flex gap-6 mt-3 p-3 bg-yellow-5 border border-yellow-15 rounded-md flex-wrap">
+                        <span class="text-yellow-400 font-bold text-sm self-center">Variants:</span>
+                        <label v-for="v in assetStatus.variants" :key="v.suffix" class="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox" v-model="selectedVariants" :value="v.suffix" accent-color="#eab308" />
                             <span>{{ v.suffix.replace('_', '') }} version</span>
                         </label>
@@ -144,66 +146,61 @@ export default {
                 </div>
 
                 <!-- NET WEIGHT PRICING MODE -->
-                <div v-if="isNetMode" class="form-group" style="margin-top: 1rem; padding: 1rem; background: rgba(16, 185, 129, 0.05); border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 8px;">
-                    <label style="display: flex; align-items: center; gap: 0.5rem;">
-                        <span style="color: #10b981; font-weight: bold;">⚖️ Net Weight Mode</span>
+                <div v-if="isNetMode" class="form-group mt-4 p-4 bg-emerald-5 border border-emerald-20 rounded-xl">
+                    <label class="flex items-center gap-2">
+                        <span class="text-emerald-500 font-bold">⚖️ Net Weight Mode</span>
                     </label>
-                    <p style="color: #94a3b8; font-size: 0.8rem; margin: 0.25rem 0 0.75rem 0;">
+                    <p class="text-secondary text-sm my-1 mb-3">
                         This template uses Net Weight as the pricing basis. Enter the unit price to calculate amounts.
                     </p>
                     <label>Unit Price (USD/kg)</label>
-                    <input type="number" v-model="globalUnitPrice" step="0.01" min="0" class="input-field"
-                           placeholder="e.g. 1.25" style="max-width: 200px;" />
-                    <p style="color: #6b7280; font-size: 0.75rem; margin-top: 0.25rem;">
+                    <input type="number" v-model="globalUnitPrice" step="0.01" min="0" placeholder="e.g. 1.25" class="input-field max-w-xs" />
+                    <p class="text-gray-500 text-xs mt-1">
                         Amount = Net Weight × Unit Price
                     </p>
                 </div>
 
-                <div class="form-group" style="margin-top: 1rem;">
+                <div class="form-group mt-4">
                     <label>Aggregation Adjustments</label>
-                    <div v-for="(adj, index) in priceAdjustments" :key="index" style="display: flex; gap: 0.5rem; margin-bottom: 0.5rem;">
+                    <div v-for="(adj, index) in priceAdjustments" :key="index" class="flex gap-2 mb-2">
                         <input
                             type="text"
                             v-model="adj.description"
-                            class="input-field"
-                            placeholder="Reason (e.g. Shipping Discount)"
-                            style="flex: 2;"
+                            class="input-field flex-2"
                         />
                         <input
                             type="number"
                             v-model="adj.value"
                             step="any"
-                            class="input-field"
-                            placeholder="Value"
-                            style="flex: 1;"
+                            class="input-field flex-1"
                         />
-                        <button class="btn-small" @click="removeAdjustment(index)" style="width: auto; margin-top: 0; padding: 0 0.75rem;">✕</button>
+                        <button class="btn-small w-auto m-0 px-3" @click="removeAdjustment(index)">✕</button>
                     </div>
-                    <button class="btn-small" @click="addAdjustment" style="width: 100%; margin-top: 0.25rem;">+ Add Adjustment</button>
-                    <p v-if="adjustmentError" style="color: #f87171; font-size: 0.8rem; margin-top: 0.5rem;">
+                    <button class="btn-small w-full mt-1" @click="addAdjustment">+ Add Adjustment</button>
+                    <p v-if="adjustmentError" class="text-red-400 text-sm mt-2">
                         {{ adjustmentError }}
                     </p>
-                    <p style="color: #94a3b8; font-size: 0.8rem; margin-top: 0.5rem;">
+                    <p class="text-secondary text-sm mt-2">
                         These will be evenly distributed across aggregation rows (col_amount).
                     </p>
                 </div>
                 <!-- GOOGLE SHEETS SETTINGS (ONLINE MODE) -->
-                <div class="form-group" style="margin-top: 1.5rem; margin-bottom: 1.5rem;">
-                    <div @click="showGoogleSheetsSettings = !showGoogleSheetsSettings" style="cursor: pointer; display: flex; align-items: center; gap: 0.5rem; color: #64748b; font-size: 0.9rem; font-weight: bold; user-select: none;">
-                        <span style="transition: transform 0.2s; display: inline-block;" :style="{ transform: showGoogleSheetsSettings ? 'rotate(90deg)' : 'rotate(0deg)' }">▶</span>
-                        <span>🌐 Google Sheets Sync Settings <span :style="{ color: isOnlineMode ? '#10b981' : '#94a3b8' }">{{ isOnlineMode ? '(Enabled)' : '(Disabled)' }}</span></span>
+                <div class="form-group my-6">
+                    <div @click="showGoogleSheetsSettings = !showGoogleSheetsSettings" class="cursor-pointer flex items-center gap-2 text-muted text-sm font-bold select-none">
+                        <span class="transition-transform inline-block" :class="{ 'rotate-90': showGoogleSheetsSettings }">▶</span>
+                        <span>🌐 Google Sheets Sync Settings <span :class="isOnlineMode ? 'text-emerald-500' : 'text-secondary'">{{ isOnlineMode ? '(Enabled)' : '(Disabled)' }}</span></span>
                     </div>
                     
-                    <div v-if="showGoogleSheetsSettings" style="margin-top: 0.75rem; padding: 1rem; background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px;">
-                        <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <div v-if="showGoogleSheetsSettings" class="mt-3 p-4 bg-slate-500-50 border border-slate-400-20 rounded-xl">
+                        <label class="flex items-center gap-2 cursor-pointer">
                             <input type="checkbox" v-model="isOnlineMode" accent-color="#10b981" /> 
-                            <span style="font-weight: bold; color: #e2e8f0; text-transform: uppercase; font-size: 0.85rem; letter-spacing: 0.05em;">Enable Online Sync</span>
+                            <span class="font-bold text-primary uppercase text-sm tracking-wider">Enable Online Sync</span>
                         </label>
-                        <div v-if="isOnlineMode" style="margin-top: 0.75rem; display: flex; gap: 0.5rem; flex-wrap: wrap;">
-                            <input type="text" v-model="googleSheetId" placeholder="Spreadsheet ID (Optional if set in backend)" class="input-field" style="flex: 1; min-width: 250px;" />
-                            <input type="text" v-model="googleSheetName" placeholder="Sheet Name (e.g. 2026)" class="input-field" style="width: 150px;" />
+                        <div v-if="isOnlineMode" class="mt-3 flex gap-2 flex-wrap">
+                            <input type="text" v-model="googleSheetId" placeholder="Spreadsheet ID (Optional if set in backend)" class="input-field flex-1 min-w-64" />
+                            <input type="text" v-model="googleSheetName" placeholder="Sheet Name (e.g. 2026)" class="input-field w-40" />
                         </div>
-                        <p style="color: #94a3b8; font-size: 0.75rem; margin-top: 0.5rem;">
+                        <p class="text-secondary text-xs mt-2">
                             If checked, Ref No will be auto-fetched/incremented, and new invoices will be saved to the sheet.
                         </p>
                     </div>
@@ -218,29 +215,29 @@ export default {
                 </div>
 
                 <!-- Google Sheets Sync Button (Visible after successful generation) -->
-                <div v-if="isOnlineMode && generationStatus && generationStatus.type === 'success' && !isGenerating" style="margin-top: 1rem; padding: 1rem; border: 1px solid rgba(148, 163, 184, 0.2); border-radius: 8px; background: rgba(30, 41, 59, 0.5);">
-                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div v-if="isOnlineMode && generationStatus && generationStatus.type === 'success' && !isGenerating" class="mt-4 p-4 border border-slate-400-20 rounded-xl bg-slate-500-50">
+                    <div class="flex items-center justify-between">
                         <div>
-                            <h4 style="margin: 0; color: #e2e8f0;">Google Sheets Sync</h4>
-                            <p style="margin: 0.25rem 0 0 0; font-size: 0.8rem; color: #94a3b8;">Push invoice data to Google Sheets.</p>
+                            <h4 class="m-0 text-primary">Google Sheets Sync</h4>
+                            <p class="mt-1 mb-0 text-sm text-secondary">Push invoice data to Google Sheets.</p>
                         </div>
-                        <button class="btn" @click="() => exportToSheets(false)" :disabled="isSyncing || showConflictConfirm" style="margin: 0; width: auto; padding: 0.5rem 1rem; background: #10b981;">
+                        <button class="btn m-0 w-auto px-4 py-2 bg-emerald-500" @click="() => exportToSheets(false)" :disabled="isSyncing || showConflictConfirm">
                             {{ isSyncing ? 'Syncing...' : 'Push to Sheets' }}
                         </button>
                     </div>
                     <!-- Conflict Confirmation Panel (replaces window.confirm) -->
-                    <div v-if="showConflictConfirm" style="margin-top: 0.75rem; padding: 0.75rem; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 6px;">
-                        <p style="margin: 0 0 0.5rem 0; color: #fbbf24; font-size: 0.9rem; font-weight: bold;">⚠️ {{ conflictMessage }}</p>
-                        <div style="display: flex; gap: 0.5rem;">
-                            <button class="btn" @click="confirmOverride" :disabled="isSyncing" style="margin: 0; width: auto; padding: 0.4rem 1rem; background: #ef4444; font-size: 0.85rem;">
+                    <div v-if="showConflictConfirm" class="mt-3 p-3 bg-amber-10 border border-amber-30 rounded-md">
+                        <p class="m-0 mb-2 text-yellow-400 text-sm font-bold">⚠️ {{ conflictMessage }}</p>
+                        <div class="flex gap-2">
+                            <button class="btn m-0 w-auto py-1 px-4 bg-red-500 text-sm" @click="confirmOverride" :disabled="isSyncing">
                                 {{ isSyncing ? 'Overriding...' : 'Override' }}
                             </button>
-                            <button class="btn" @click="cancelOverride" :disabled="isSyncing" style="margin: 0; width: auto; padding: 0.4rem 1rem; background: #475569; font-size: 0.85rem;">
+                            <button class="btn m-0 w-auto py-1 px-4 bg-slate-600 text-sm" @click="cancelOverride" :disabled="isSyncing">
                                 Cancel
                             </button>
                         </div>
                     </div>
-                    <div v-if="syncStatus" :class="['status-box', syncStatus.type]" style="margin-top: 0.75rem; margin-bottom: 0; padding: 0.5rem; font-size: 0.85rem;">
+                    <div v-if="syncStatus" :class="['status-box', syncStatus.type]" class="mt-3 mb-0 p-2 text-sm">
                         {{ syncStatus.message }}
                     </div>
                 </div>
@@ -255,10 +252,10 @@ export default {
                     <div class="error-message">{{ generationError.message }}</div>
                     
                     <!-- DETAILED ERROR LIST -->
-                    <div v-if="generationError.details && generationError.details.length" class="error-details-list" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid rgba(248, 113, 113, 0.2);">
-                        <h4 style="font-size: 0.85rem; color: #f87171; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.025em;">Root Causes:</h4>
-                        <ul style="margin: 0; padding-left: 1.25rem; font-size: 0.85rem; color: #fca5a5;">
-                            <li v-for="(detail, idx) in generationError.details" :key="idx" style="margin-bottom: 0.25rem;">
+                    <div v-if="generationError.details && generationError.details.length" class="error-details-list mt-4 pt-4 border-t border-red-400-20">
+                        <h4 class="text-sm text-red-400 mb-2 uppercase tracking-wide">Root Causes:</h4>
+                        <ul class="m-0 pl-5 text-sm text-red-300">
+                            <li v-for="(detail, idx) in generationError.details" :key="idx" class="mb-1">
                                 {{ detail }}
                             </li>
                         </ul>
@@ -283,10 +280,10 @@ export default {
             </div>
 
             <!-- VALIDATION CARD -->
-            <div class="card validation-card" v-if="validationData && !isGenerating && !generationError" style="animation-delay: 0.1s">
+            <div class="card validation-card delay-100" v-if="validationData && !isGenerating && !generationError">
                 <div class="validation-header">
                     <h3>✅ Invoice Generated Successfully</h3>
-                    <span style="font-size: 0.875rem; opacity: 0.7">{{ validationData.timestamp }}</span>
+                    <span class="text-sm opacity-70">{{ validationData.timestamp }}</span>
                 </div>
 
                 <div v-if="summaryStats" class="stat-grid">

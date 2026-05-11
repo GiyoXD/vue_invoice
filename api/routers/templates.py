@@ -9,6 +9,7 @@ from typing import List, Optional, Dict
 from pathlib import Path
 from core.system_config import sys_config
 from core.orchestrator import Orchestrator
+from core.invoice_generator.extractors.template_client_profile_parser import TemplateClientProfileParser
 from openpyxl.utils.cell import coordinate_from_string, column_index_from_string, range_boundaries
 
 router = APIRouter(prefix="/api", tags=["templates"])
@@ -211,6 +212,19 @@ async def view_template(name: str, bundle: Optional[str] = None):
         if info:
             if "table_info" not in data: data["table_info"] = {}
             data["table_info"].update(info)
+
+        # Inject parsed client profile so the Template Inspector can display it
+        invoice_sheet = data.get("template_layout", {}).get("Invoice", {})
+        header_content = invoice_sheet.get("template_header_content") or invoice_sheet.get("header_content")
+        if header_content:
+            parser = TemplateClientProfileParser(header_content)
+            data["client_profile"] = {
+                "fullname": parser.get_client_fullname(),
+                "address":  parser.get_client_address(),
+                "contact":  parser.get_client_contact(),
+                "shipping": parser.get_shipping_method(),
+            }
+
         return data
     except Exception as e: return JSONResponse(status_code=500, content={"error": str(e)})
 
