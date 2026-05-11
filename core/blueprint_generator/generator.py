@@ -10,11 +10,10 @@ This is the main entry point that:
 
 import logging
 import json
-import sys
 import argparse
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
-from datetime import datetime
+from core.utils.clock import now as ict_now, timestamp as ict_timestamp
 import openpyxl
 
 
@@ -24,6 +23,7 @@ from .internal.validator import ConfigValidator
 from core.utils.pipeline_monitor import PipelineMonitor
 from core.utils.snitch import snitch
 from core.utils.loop_profiler import loop_profiler
+
 
 logger = logging.getLogger(__name__)
 
@@ -119,14 +119,13 @@ class BlueprintGenerator:
         if not template_path.exists():
             raise FileNotFoundError(f"Template not found: {template_path}")
         
-        self.logger.info(f"=" * 60)
-        self.logger.info(f"Auto Bundle Generator")
-        self.logger.info(f"=" * 60)
-        self.logger.info(f"Template: {template_path}")
+        self.logger.info("=" * 60)
+        self.logger.info("Auto Bundle Generator")
+        self.logger.info("=" * 60)
+        self.logger.info("Template: {template_path}")
         
         
         # Step 0: Load Workbook ONCE (Optimization)
-        import openpyxl
         self.logger.info("\n[Step 0] Loading workbook...")
         try:
             wb = openpyxl.load_workbook(template_path, data_only=False)
@@ -136,7 +135,11 @@ class BlueprintGenerator:
         
         # Step 1: Analyze template
         self.logger.info("\n[Step 1] Scanning template structure...")
-        mapping_config = self._load_mapping_config()
+        try:
+            mapping_config = self._load_mapping_config()
+        except Exception as e:
+            self.logger.error(f"Failed to load mapping config: {e}")
+            raise e
         
         # Inject Runtime Mappings (from API/User)
         if runtime_mappings:
@@ -275,43 +278,12 @@ class BlueprintGenerator:
             template_config_file = config_dir / f"{file_prefix}_template.json"
             
             # [Preserve User Overrides]
-            # If an old template JSON exists, carry over any mode-dependent
-            # overrides (dict values in header_content, e.g. {"default":"X","daf":"Y"}).
-            # These are user-entered via Template Inspector and would be lost on regeneration.
-            # ALSO PRESERVE 'notes' FIELD.
-            preserved_notes = None
-            if template_config_file.exists():
-                try:
-                    with open(template_config_file, 'r', encoding='utf-8') as f:
-                        old_data = json.load(f)
-                    
-                    preserved_notes = old_data.get("notes")
-                    old_layout = old_data.get("template_layout", {})
-                    
-                    for sheet_name, old_sheet in old_layout.items():
-                        if sheet_name not in layout_metadata:
-                            continue
-                        old_hc = old_sheet.get("header_content", {})
-                        new_hc = layout_metadata[sheet_name].get("header_content", {})
-                        
-                        for cell_addr, old_val in old_hc.items():
-                            if isinstance(old_val, dict):
-                                # This is a mode override — preserve it
-                                # Update the 'default' key with the new value if available
-                                new_plain = new_hc.get(cell_addr)
-                                if new_plain is not None and not isinstance(new_plain, dict):
-                                    old_val["default"] = new_plain
-                                new_hc[cell_addr] = old_val
-                                
-                        layout_metadata[sheet_name]["header_content"] = new_hc
-                    self.logger.info(f"   [Override Preservation] Merged user overrides from existing template.")
-                except Exception as e:
-                    self.logger.warning(f"   [Override Preservation] Could not merge old overrides: {e}")
+            preserved_notes = self._preserve_user_overrides(template_config_file, layout_metadata)
             
             # [Fingerprint]
             fingerprint = {
                 "source_file": template_path.name,
-                "created_at": datetime.now().isoformat()
+                "created_at": ict_timestamp()
             }
             
 
@@ -413,6 +385,109 @@ class BlueprintGenerator:
             self.logger.info(f"   Fallback: Copied original template")
             
         return template_file, layout_metadata
+    
+    def _preserve_user_overrides(self, template_config_file: Path, layout_metadata: Dict[str, Any]) -> Optional[Any]:
+        """
+        Preserve user overrides from an existing template config.
+        
+        If an old template JSON exists, carry over any mode-dependent
+        overrides (dict values in template_header_content / template_footer_rows,
+        e.g. {"default":"X","standard":"Y","daf":"Z"}).
+        These are user-entered via Template Inspector and would be lost on regeneration.
+        Also preserves the 'notes' field.
+        
+        Args:
+            template_config_file: Path to the existing template JSON file
+            layout_metadata: The newly generated layout metadata (mutated in place)
+            
+        Returns:
+            Preserved notes value, or None if no old config exists
+        """
+        if not template_config_file.exists():
+            return None
+        
+        try:
+            with open(template_config_file, 'r', encoding='utf-8') as f:
+                old_data = json.load(f)
+            
+            preserved_notes = old_data.get("notes")
+            old_layout = old_data.get("template_layout", {})
+            
+            override_count = 0
+            for sheet_name, old_sheet in old_layout.items():
+                if sheet_name not in layout_metadata:
+                    continue
+                
+                # --- HEADER CONTENT OVERRIDES ---
+                # Support both old key ("header_content") and new key ("template_header_content")
+                old_hc = old_sheet.get("template_header_content") or old_sheet.get("header_content", {})
+                new_hc = layout_metadata[sheet_name].get("template_header_content") or layout_metadata[sheet_name].get("header_content", {})
+                
+                for cell_addr, old_val in old_hc.items():
+                    if isinstance(old_val, dict):
+                        # Build fresh override: default from NEW scan, only standard/daf from OLD
+                        new_plain = new_hc.get(cell_addr)
+                        preserved_override = {
+                            "default": new_plain if (new_plain is not None and not isinstance(new_plain, dict)) else ""
+                        }
+                        if "standard" in old_val:
+                            preserved_override["standard"] = old_val["standard"]
+                        if "daf" in old_val:
+                            preserved_override["daf"] = old_val["daf"]
+                        new_hc[cell_addr] = preserved_override
+                        override_count += 1
+                
+                # Write back to the correct key used by the sanitizer
+                if "template_header_content" in layout_metadata[sheet_name]:
+                    layout_metadata[sheet_name]["template_header_content"] = new_hc
+                else:
+                    layout_metadata[sheet_name]["header_content"] = new_hc
+                
+                # --- FOOTER ROW OVERRIDES ---
+                old_footer_rows = old_sheet.get("template_footer_rows") or old_sheet.get("footer_rows", [])
+                new_footer_rows = layout_metadata[sheet_name].get("template_footer_rows") or layout_metadata[sheet_name].get("footer_rows", [])
+                
+                # Build lookup: (relative_index, col_index) -> old cell value
+                old_footer_overrides = {}
+                for old_row in old_footer_rows:
+                    rel_idx = old_row.get("relative_index")
+                    for old_cell in old_row.get("cells", []):
+                        old_cell_val = old_cell.get("value")
+                        if isinstance(old_cell_val, dict):
+                            # This cell has mode overrides
+                            col_idx = old_cell.get("col_index")
+                            old_footer_overrides[(rel_idx, col_idx)] = old_cell_val
+                
+                # Merge old overrides into the new footer rows
+                if old_footer_overrides:
+                    for new_row in new_footer_rows:
+                        rel_idx = new_row.get("relative_index")
+                        for new_cell in new_row.get("cells", []):
+                            col_idx = new_cell.get("col_index")
+                            key = (rel_idx, col_idx)
+                            if key in old_footer_overrides:
+                                old_override = old_footer_overrides[key]
+                                # Build fresh override: default from NEW scan, only standard/daf from OLD
+                                new_plain = new_cell.get("value")
+                                preserved_override = {
+                                    "default": new_plain if (new_plain is not None and not isinstance(new_plain, dict)) else ""
+                                }
+                                if "standard" in old_override:
+                                    preserved_override["standard"] = old_override["standard"]
+                                if "daf" in old_override:
+                                    preserved_override["daf"] = old_override["daf"]
+                                new_cell["value"] = preserved_override
+                                override_count += 1
+            
+            if override_count > 0:
+                self.logger.info(f"   [Override Preservation] Merged {override_count} user overrides from existing template.")
+            else:
+                self.logger.info("   [Override Preservation] No user overrides found to preserve.")
+            
+            return preserved_notes
+        except Exception as e:
+            self.logger.warning(f"   [Override Preservation] Could not merge old overrides: {e}")
+            return None
     
     def _build_table_info(self, analysis: TemplateAnalysisResult) -> Dict[str, Any]:
         """
