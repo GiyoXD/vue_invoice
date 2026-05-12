@@ -519,7 +519,7 @@ export default {
                 borderRight,
                 borderBottom,
                 borderLeft,
-                padding: '3px 4px',
+                padding: '1px 2px',
                 fontSize: (cellStyle.font?.size || 11) + 'pt',
                 fontWeight: cellStyle.font?.bold ? 'bold' : 'normal',
                 fontStyle: cellStyle.font?.italic ? 'italic' : 'normal',

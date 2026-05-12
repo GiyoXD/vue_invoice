@@ -1,8 +1,8 @@
 import { createApp, ref } from 'vue';
-import GeneratorView from './views/Generator.js?v=6';
+import GeneratorView from './views/Generator.js?v=7';
 import InspectorView from './views/Inspector.js?v=6';
 import TemplateExtractorView from './views/TemplateExtractor.js?v=6';
-import TemplateInspectorView from './views/TemplateInspector.js?v=8';
+import TemplateInspectorView from './views/TemplateInspector.js?v=9';
 import LogViewerView from './views/LogViewer.js?v=6';
 import ExportDataView from './views/ExportData.js?v=6';
 

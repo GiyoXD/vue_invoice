@@ -134,10 +134,6 @@ export default {
                             <input type="checkbox" v-model="includeDAF" accent-color="#2563eb" /> 
                             <span>DAF Mode</span>
                         </label>
-                        <label class="flex items-center gap-2 cursor-pointer border-l border-gray-200 pl-6 ml-2">
-                            <input type="checkbox" v-model="enableAutoFit" accent-color="#2563eb" /> 
-                            <span>Auto-Fit Dimensions</span>
-                        </label>
                     </div>
                     
                     <!-- KH/VN Variant Options -->
@@ -345,7 +341,7 @@ export default {
         const includeCustom = ref(false);
         const includeDAF = ref(false);
         const selectedVariants = ref([]);
-        const enableAutoFit = ref(true);
+
 
         const priceAdjustments = ref([]); // List of { description: '', value: '' }
         const adjustmentError = ref('');
@@ -527,8 +523,7 @@ export default {
                     generate_custom: includeCustom.value,
                     generate_daf: includeDAF.value,
                     generate_kh: true,  // KH is the default variant
-                    generate_vn: selectedVariants.value.includes('_VN'),
-                    auto_fit: enableAutoFit.value
+                    generate_vn: selectedVariants.value.includes('_VN')
                 };
 
                 // Net weight pricing mode: include global unit price
@@ -819,7 +814,7 @@ export default {
             includeStandard,
             includeCustom,
             includeDAF,
-            enableAutoFit,
+
             handleFileUpload,
             uploadFile,
             isGenerating,

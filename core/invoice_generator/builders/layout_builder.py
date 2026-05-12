@@ -597,65 +597,34 @@ class LayoutBuilder:
             # No footer, so next row is right after data (or header if no data)
             self.next_row_after_footer = footer_row_position
         
-        # 6b. Auto-fit column widths and row heights based on actual cell content
-        if getattr(self.args, 'enable_auto_fit', True):
-            from ..utils.layout import auto_fit_dimensions
-            _af_header_start = self.header_info.get('second_row_index', 1) + 1
-            _af_data_end = self.next_row_after_footer - 1
-            _af_num_cols = self.header_info.get('num_columns', 0)
-            _af_header_row_start = self.header_info.get('first_row_index', None)
-            _af_header_row_end = self.header_info.get('second_row_index', None)
+        # 6b. Apply static column widths (auto_fit completely removed)
+        logger.info("Applying static config widths (auto-fit disabled)")
+        try:
+            from ..utils.layout import apply_column_widths
+            # Map column IDs to their physical column indices
+            col_id_to_idx = self.header_info.get('column_id_map', {})
+            # Create a map of column letter to column ID for apply_column_widths
+            from openpyxl.utils import get_column_letter
+            header_map = {}
+            for col_id, col_idx in col_id_to_idx.items():
+                # The function expects { header_text: width }, but we can just pass a dummy map 
+                # Actually, wait, let's check what apply_column_widths expects.
+                # It expects a styling config.
+                pass
             
-            # Calculate template boundaries for last-column scanning
-            _af_template_top_end = _af_header_row_start - 1 if _af_header_row_start else None
-            _af_template_bottom_start = self.next_row_after_footer
-            _af_max_row = self.worksheet.max_row
-            
-            logger.info(f"auto_fit_dimensions CALL: header_start={_af_header_start}, data_end={_af_data_end}, num_columns={_af_num_cols}, header_rows={_af_header_row_start}-{_af_header_row_end}, template_top_end={_af_template_top_end}, template_bottom_start={_af_template_bottom_start}, max_row={_af_max_row}")
-            try:
-                auto_fit_dimensions(
-                    worksheet=self.worksheet,
-                    header_start_row=_af_header_start,
-                    data_end_row=_af_data_end,
-                    num_columns=_af_num_cols,
-                    padding=7,
-                    line_height=20.0,
-                    header_row_start=_af_header_row_start,
-                    header_row_end=_af_header_row_end,
-                    template_top_end_row=_af_template_top_end,
-                    template_bottom_start_row=_af_template_bottom_start,
-                    max_row=_af_max_row
-                )
-            except Exception as e:
-                logger.error(f"auto_fit_dimensions FAILED: {e}", exc_info=True)
-        else:
-            logger.info("Skipping auto_fit_dimensions (enable_auto_fit=False) - Applying static config widths instead")
-            try:
-                from ..utils.layout import apply_column_widths
-                # Map column IDs to their physical column indices
-                col_id_to_idx = self.header_info.get('column_id_map', {})
-                # Create a map of column letter to column ID for apply_column_widths
-                from openpyxl.utils import get_column_letter
-                header_map = {}
+            # Apply static widths from the styling registry
+            if hasattr(self, 'styling_config') and self.styling_config:
+                # New style registry format stores widths in the columns dict
+                columns_config = self.styling_config.get('columns', {}) if isinstance(self.styling_config, dict) else {}
                 for col_id, col_idx in col_id_to_idx.items():
-                    # The function expects { header_text: width }, but we can just pass a dummy map 
-                    # Actually, wait, let's check what apply_column_widths expects.
-                    # It expects a styling config.
-                    pass
-                
-                # Apply static widths from the styling registry
-                if hasattr(self, 'styling_config') and self.styling_config:
-                    # New style registry format stores widths in the columns dict
-                    columns_config = self.styling_config.get('columns', {}) if isinstance(self.styling_config, dict) else {}
-                    for col_id, col_idx in col_id_to_idx.items():
-                        col_cfg = columns_config.get(col_id, {})
-                        width = col_cfg.get('width')
-                        if width:
-                            col_letter = get_column_letter(col_idx)
-                            self.worksheet.column_dimensions[col_letter].width = float(width)
-                            logger.debug(f"Applied static width {width} to {col_id} ({col_letter})")
-            except Exception as e:
-                logger.error(f"Failed to apply static column widths: {e}", exc_info=True)
+                    col_cfg = columns_config.get(col_id, {})
+                    width = col_cfg.get('width')
+                    if width:
+                        col_letter = get_column_letter(col_idx)
+                        self.worksheet.column_dimensions[col_letter].width = float(width)
+                        logger.debug(f"Applied static width {width} to {col_id} ({col_letter})")
+        except Exception as e:
+            logger.error(f"Failed to apply static column widths: {e}", exc_info=True)
 
         # 7. Template Footer Restoration
         # This restores the static content (signatures, etc.) from the JSON template
