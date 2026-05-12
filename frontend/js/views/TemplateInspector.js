@@ -144,7 +144,7 @@ export default {
                                      :style="cell.style"
                                      :title="'[' + cell.address + '] ' + cell.content"
                                      @click="openCellEditor(cell)">
-                                     <span v-if="cell.hasOverride" class="absolute bg-blue-500 rounded-full w-1-5 h-1-5 top-0-5 right-0-5" title="Has mode override"></span>
+                                     <span v-if="cell.hasOverride" class="absolute bg-blue-500 rounded-full" style="width: 6px; height: 6px; top: 2px; right: 2px;" title="Has mode override"></span>
                                      <span v-if="cell.isFormula" class="text-blue-600 italic">{{ cell.content }}</span>
                                      <span v-else>{{ cell.content }}</span>
                                 </div>
