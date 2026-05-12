@@ -152,50 +152,52 @@ export default {
                         </div>
 
                         <!-- Cell Override Editor Popup -->
-                        <div v-if="editingCell" class="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center backdrop-blur-sm" @click.self="closeEditor">
-                            <div class="bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-2xl min-w-[400px]">
-                                <h3 class="m-0 mb-3 text-base text-primary">Cell {{ editingCell.address }}</h3>
+                        <teleport to="body">
+                            <div v-if="editingCell" class="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center backdrop-blur-sm" @click.self="closeEditor">
+                                <div class="bg-slate-900 border border-slate-700 rounded-2xl p-6 shadow-2xl min-w-[400px]">
+                                    <h3 class="m-0 mb-3 text-base text-primary">Cell {{ editingCell.address }}</h3>
 
-                                <div class="mb-4 p-4 bg-slate-800 rounded-lg text-sm border border-slate-700/50">
-                                    <span class="text-secondary">Current (default):</span>
-                                    <span class="text-primary ml-2">
-                                        {{ (typeof editingCell.rawContent === 'object' && editingCell.rawContent !== null) ? (editingCell.rawContent.default ?? "") : (editingCell.rawContent || '(empty)') }}
-                                    </span>
-                                </div>
+                                    <div class="mb-4 p-4 bg-slate-800 rounded-lg text-sm border border-slate-700/50">
+                                        <span class="text-secondary">Current (default):</span>
+                                        <span class="text-primary ml-2">
+                                            {{ (typeof editingCell.rawContent === 'object' && editingCell.rawContent !== null) ? (editingCell.rawContent.default ?? "") : (editingCell.rawContent || '(empty)') }}
+                                        </span>
+                                    </div>
 
-                                <div class="mb-3">
-                                    <label class="block text-secondary text-sm mb-1">Base Value <span class="text-blue-400 text-xs">(applies to ALL modes)</span></label>
-                                    <input type="text" v-model="editStandardValue" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="Enter value for standard, custom, DAF..." @keyup.enter="saveCellOverrides" />
-                                    <p class="text-muted text-xs mt-1 mb-0">This value will be used in Standard, Custom, DAF, and any other mode.</p>
-                                </div>
+                                    <div class="mb-3">
+                                        <label class="block text-secondary text-sm mb-1">Base Value <span class="text-blue-400 text-xs">(applies to ALL modes)</span></label>
+                                        <input type="text" v-model="editStandardValue" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="Enter value for standard, custom, DAF..." @keyup.enter="saveCellOverrides" />
+                                        <p class="text-muted text-xs mt-1 mb-0">This value will be used in Standard, Custom, DAF, and any other mode.</p>
+                                    </div>
 
-                                <div class="mb-3">
-                                    <label class="block text-secondary text-sm mb-1">DAF Override <span class="text-amber-400 text-xs">(takes priority in DAF mode)</span></label>
-                                    <input type="text" v-model="editDafValue" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="Leave empty to use base value" @keyup.enter="saveCellOverrides" />
-                                    <p class="text-muted text-xs mt-1 mb-0">Only used when generating in DAF mode. If empty, the base value is used.</p>
-                                </div>
+                                    <div class="mb-3">
+                                        <label class="block text-secondary text-sm mb-1">DAF Override <span class="text-amber-400 text-xs">(takes priority in DAF mode)</span></label>
+                                        <input type="text" v-model="editDafValue" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="Leave empty to use base value" @keyup.enter="saveCellOverrides" />
+                                        <p class="text-muted text-xs mt-1 mb-0">Only used when generating in DAF mode. If empty, the base value is used.</p>
+                                    </div>
 
-                                <div v-if="editingCell.currentOverrides" class="mb-3 px-3 py-2 bg-blue-100 border border-blue-200 rounded text-sm">
-                                    <div class="text-blue-400 mb-1">Existing overrides:</div>
-                                    <div v-for="(v, k) in editingCell.currentOverrides" :key="k" class="text-blue-300">
-                                        <strong>{{ k }}:</strong> {{ v }}
+                                    <div v-if="editingCell.currentOverrides" class="mb-3 px-3 py-2 bg-blue-100 border border-blue-200 rounded text-sm">
+                                        <div class="text-blue-400 mb-1">Existing overrides:</div>
+                                        <div v-for="(v, k) in editingCell.currentOverrides" :key="k" class="text-blue-300">
+                                            <strong>{{ k }}:</strong> {{ v }}
+                                        </div>
+                                    </div>
+
+                                    <div class="flex gap-3 justify-end mt-6">
+                                        <button class="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors" @click="closeEditor">Cancel</button>
+                                        <button class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors shadow-lg shadow-blue-500/20" @click="saveCellOverrides" :disabled="isSavingCell">
+                                            {{ isSavingCell ? 'Saving...' : 'Save Overrides' }}
+                                        </button>
+                                    </div>
+                                    <div v-if="editorMessage" class="mt-2 text-sm" :class="editorMessageType === 'error' ? 'text-red-500' : 'text-emerald-500'">
+                                        {{ editorMessage }}
+                                    </div>
+                                    <div class="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-400 leading-snug">
+                                        ⚠ If footer overrides appear shifted after re-generating, the Excel template structure likely changed (rows added/removed). Re-apply overrides after verifying cell positions or delete the template to create a new one.
                                     </div>
                                 </div>
-
-                                <div class="flex gap-3 justify-end mt-6">
-                                    <button class="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded-lg transition-colors" @click="closeEditor">Cancel</button>
-                                    <button class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors shadow-lg shadow-blue-500/20" @click="saveCellOverrides" :disabled="isSavingCell">
-                                        {{ isSavingCell ? 'Saving...' : 'Save Overrides' }}
-                                    </button>
-                                </div>
-                                <div v-if="editorMessage" class="mt-2 text-sm" :class="editorMessageType === 'error' ? 'text-red-500' : 'text-emerald-500'">
-                                    {{ editorMessage }}
-                                </div>
-                                <div class="mt-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-400 leading-snug">
-                                    ⚠ If footer overrides appear shifted after re-generating, the Excel template structure likely changed (rows added/removed). Re-apply overrides after verifying cell positions or delete the template to create a new one.
-                                </div>
                             </div>
-                        </div>
+                        </teleport>
                     </div>
                 </div>
             </div>

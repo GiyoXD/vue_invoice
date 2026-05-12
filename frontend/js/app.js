@@ -1,10 +1,10 @@
 import { createApp, ref } from 'vue';
-import GeneratorView from './views/Generator.js?v=5';
-import InspectorView from './views/Inspector.js?v=5';
-import TemplateExtractorView from './views/TemplateExtractor.js?v=5';
-import TemplateInspectorView from './views/TemplateInspector.js?v=5';
-import LogViewerView from './views/LogViewer.js?v=5';
-import ExportDataView from './views/ExportData.js?v=5';
+import GeneratorView from './views/Generator.js?v=6';
+import InspectorView from './views/Inspector.js?v=6';
+import TemplateExtractorView from './views/TemplateExtractor.js?v=6';
+import TemplateInspectorView from './views/TemplateInspector.js?v=6';
+import LogViewerView from './views/LogViewer.js?v=6';
+import ExportDataView from './views/ExportData.js?v=6';
 
 const App = {
     components: {
