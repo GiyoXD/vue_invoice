@@ -32,8 +32,8 @@ RUN chmod +x /app/docker_entrypoint.sh
 ENV PYTHONPATH=.
 
 # Expose the FastAPI port
-EXPOSE 8080
+EXPOSE 8081
 
 # Start the application via entrypoint
 ENTRYPOINT ["/app/docker_entrypoint.sh"]
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8081"]
