@@ -19,6 +19,7 @@ from openpyxl.utils import get_column_letter
 
 from .scanner import TemplateAnalysisResult, SheetAnalysis
 from core.utils.loop_profiler import tick
+from ..utils.openpyxl_utils import get_actual_column_width
 
 logger = logging.getLogger(__name__)
 
@@ -91,10 +92,11 @@ class ExcelTemplateSanitizer:
     def _capture_global_layout(self, ws, safe_max_column: int, preserved_layout: dict, analysis, table_footer_row: Optional[int]):
         for c in range(1, safe_max_column + 1):
             letter = get_column_letter(c)
-            if letter in ws.column_dimensions:
-                w = ws.column_dimensions[letter].width
-                if w is not None:
-                     preserved_layout["col_widths"][letter] = w
+            width = get_actual_column_width(ws, c, 1)
+            # The get_actual_column_width function falls back to defaultColWidth or 15.0
+            # We want to record whatever the actual width is
+            if width is not None:
+                preserved_layout["col_widths"][letter] = width
 
     def _capture_template_header_layout(self, ws, analysis, safe_max_column: int, preserved_layout: dict, process_and_store_style):
         for merged_range in ws.merged_cells:

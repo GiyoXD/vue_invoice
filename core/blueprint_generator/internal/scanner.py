@@ -23,6 +23,7 @@ from core.utils.snitch import snitch
 from core.utils.loop_profiler import loop_profiler, tick
 from ..utils.footer_scanner import FooterInfo, scan_footer
 from ..utils.content_extractor import detect_static_description_label, extract_table_fallback_description
+from ..utils.openpyxl_utils import get_actual_column_width
 
 logger = logging.getLogger(__name__)
 
@@ -115,9 +116,6 @@ class ExcelLayoutScanner:
         if cell.value is None:
             return ""
         return str(cell.value).strip()
-
-
-
 
     def _is_potential_header_row(self, cells) -> bool:
         """
@@ -583,23 +581,7 @@ class ExcelLayoutScanner:
                 self.logger.info(f"    [Leak Filter] Ignored long unmapped text as column header: '{value[:30]}...'")
                 continue
                 
-            # Get column width (3-Step Strategy)
-            col_letter = get_column_letter(col)
-            width = 10.0 # Ultimate fallback
-            
-            # 1. Explicit
-            dim = worksheet.column_dimensions.get(col_letter)
-            if dim and dim.width is not None:
-                width = dim.width
-            # 2. Sheet Default
-            elif worksheet.sheet_format and worksheet.sheet_format.defaultColWidth is not None:
-                width = worksheet.sheet_format.defaultColWidth
-            # 3. Failure
-            else:
-                 self.logger.warning(f"Could not detect width for column {col_letter} ({value}). Defaulting to 15.0")
-                 width = 15.0
-            
-            # Check for merged cells (colspan/rowspan)
+            # Check for merged cells (colspan/rowspan) BEFORE calculating width
             colspan = 1
             rowspan = 1
             for merged in merged_ranges:
@@ -610,6 +592,9 @@ class ExcelLayoutScanner:
                     for c in range(merged.min_col, merged.max_col + 1):
                         processed_cols.add(c)
                     break
+                    
+            # Get total column width spanning all merged cells
+            width = get_actual_column_width(worksheet, col, colspan)
             
             # [Smart Feature] Determine format: Check data first, then Rules
             # We use the calculated data_start_row which accounts for multi-row headers.
@@ -764,9 +749,16 @@ class ExcelLayoutScanner:
                 # FORCE text format for identifiers to prevent scientific notation or leading zero loss
                 if col_id in ["col_po", "col_item", "col_no", "col_container_no", "col_hs_code", "col_pallet_count", "col_dc"]:
                     format_str = "@"
-                col_letter = get_column_letter(col)
-                dim = worksheet.column_dimensions.get(col_letter)
-                width = dim.width if dim and dim.width is not None else 10.0
+                    
+                # Child columns might also be merged (though rare), but usually colspan=1
+                # We calculate standard width to be consistent
+                child_colspan = 1
+                for merged in worksheet.merged_cells.ranges:
+                    if merged.min_col == col and merged.min_row == row:
+                        child_colspan = merged.max_col - merged.min_col + 1
+                        break
+                        
+                width = get_actual_column_width(worksheet, col, child_colspan)
                 
                 children.append(ColumnInfo(
                     id=col_id,
