@@ -499,15 +499,16 @@ class ExcelTemplateSanitizer:
                 has_significant_style = True
             
         # 3. Fill (Background)
-        if cell.fill and hasattr(cell.fill, "start_color"):
-             color_val = self._serialize_color(cell.fill.start_color)
-             # Skip default "none" or white fills
-             if color_val and color_val not in ["00000000", "FFFFFFFF"]:
-                 style["fill"] = {
-                     "type": cell.fill.fill_type,
-                     "color": color_val
-                 }
-                 has_significant_style = True
+        if cell.fill and cell.fill.fill_type and cell.fill.fill_type != "none":
+            if hasattr(cell.fill, "start_color"):
+                 color_val = self._serialize_color(cell.fill.start_color)
+                 # Skip default "none" or white fills
+                 if color_val and color_val not in ["00000000", "FFFFFFFF"]:
+                     style["fill"] = {
+                         "type": cell.fill.fill_type,
+                         "color": color_val
+                     }
+                     has_significant_style = True
              
         # 4. Border
         if cell.border:

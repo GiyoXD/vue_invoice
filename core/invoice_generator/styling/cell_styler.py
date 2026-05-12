@@ -137,6 +137,9 @@ class CellStyler:
             if fill_color.startswith('#'):
                 fill_color = fill_color[1:]
             
+            if len(fill_color) == 6:
+                fill_color = 'FF' + fill_color
+                
             cell.fill = PatternFill(
                 start_color=fill_color,
                 end_color=fill_color,

@@ -401,9 +401,10 @@ class JsonTemplateStateBuilder:
         
     def _create_fill(self, d: Dict) -> Optional[PatternFill]:
         if not d: return None
-        if not d.get('type'): return None
+        if not d.get('type') or d.get('type') == 'none': return None
         
         fgColor = self._parse_color(d.get('color'))
+        if not fgColor: return None
         
         return PatternFill(
             fill_type=d.get('type'),
