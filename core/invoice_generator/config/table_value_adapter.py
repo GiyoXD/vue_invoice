@@ -248,6 +248,9 @@ class TableDataAdapter:
             if pallet_summary_total is not None:
                 logger.warning(f"Using legacy pallet_summary_total from data_source: {pallet_summary_total}")
 
+        # Format pallet counts into "x-y" display values for merging
+        self._format_pallet_counts(data_rows, num_data_rows)
+
         return {
             'data_rows': data_rows,
             'pallet_counts': pallet_counts,
@@ -328,6 +331,40 @@ class TableDataAdapter:
                 break
         
         return self.column_id_map.get(desc_col_id, -1) if desc_col_id else -1
+        
+    def _format_pallet_counts(self, data_rows: List[Dict[int, Any]], num_data_rows: int) -> None:
+        """
+        Formats raw binary pallet counts (1/0) into display values (e.g., '1-5', '2-5')
+        and carries values forward for proper vertical cell merging.
+        Modifies data_rows in-place.
+        """
+        if num_data_rows <= 0:
+            return
+            
+        pallet_col_idx = self.column_id_map.get('col_pallet_count')
+        if not pallet_col_idx:
+            return
+
+        # 1. First pass: Count total pallets in this table block
+        total_pallets = sum(
+            1 for row in data_rows[:num_data_rows] 
+            if _to_numeric(row.get(pallet_col_idx, 0)) == 1
+        )
+
+        # 2. Second pass: Assign 'x-y' order and carry-forward for merging
+        pallet_order = 0
+        carry_value = 0
+        
+        for row in data_rows[:num_data_rows]:
+            val = _to_numeric(row.get(pallet_col_idx, 0))
+            
+            if val == 1:
+                pallet_order += 1
+                formatted_val = f"{pallet_order}-{total_pallets}"
+                row[pallet_col_idx] = formatted_val
+                carry_value = formatted_val
+            else:
+                row[pallet_col_idx] = carry_value if carry_value != 0 else 0
     
     @staticmethod
     def create_from_bundles(

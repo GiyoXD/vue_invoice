@@ -18,6 +18,8 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional, List
 import logging
+import re
+
 logger = logging.getLogger(__name__)
 
 
@@ -299,6 +301,43 @@ class BundledConfigLoader:
         """Check if this is a bundled config (v2.1+)."""
         return self.version.startswith('2.1')
     
+    def get_max_columns(self, sheet_name: str) -> Optional[int]:
+        """
+        Count the actual number of Excel columns from the template header or layout config.
+        Accounts for parent columns with children if falling back to layout config.
+        """
+        template_config = self.get_template_json_config()
+        if template_config and sheet_name in template_config:
+            header_content = template_config[sheet_name].get('template_header_content', {})
+            if isinstance(header_content, dict) and header_content:
+                max_col = 0
+                for cell_ref in header_content.keys():
+                    match = re.match(r"([A-Z]+)(\d+)", cell_ref)
+                    if match:
+                        col_letter = match.group(1)
+                        col_idx = column_index_from_string(col_letter)
+                        if col_idx > max_col:
+                            max_col = col_idx
+                if max_col > 0:
+                    logger.debug(f"[PrintArea] Max column {max_col} from template header for '{sheet_name}'")
+                    return max_col
+
+        layout = self.get_layout_config(sheet_name)
+        columns = layout.get('structure', {}).get('columns', [])
+        if not columns:
+            return None
+
+        count = 0
+        for col in columns:
+            children = col.get('children', [])
+            if children:
+                count += len(children)
+            else:
+                count += 1
+
+        logger.debug(f"[PrintArea] Layout column count for '{sheet_name}': {count}")
+        return count
+
     # --- Raw Access (for advanced use cases) ---
     
     def get_raw_config(self) -> Dict[str, Any]:
