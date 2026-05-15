@@ -79,7 +79,7 @@ def validate_table_data_presence(
             monitor.log_process_item(f"{table_id_str} First-Row Validation", status="error", error=err_msg)
         raise DataValidationError(err_msg)
 
-def validate_weight_integrity(data_rows: List[Dict[str, Any]], monitor: Optional[Any] = None):
+def validate_weight_integrity(data_rows: List[Dict[str, Any]], monitor: Optional[Any] = None, ignore_tare_warning: bool = False):
     """
     Strict validation to ensure Gross Weight is always strictly bigger than Net Weight.
     Also verifies that the Tare weight (Gross - Net) is consistent across rows.
@@ -177,8 +177,12 @@ def validate_weight_integrity(data_rows: List[Dict[str, Any]], monitor: Optional
                         f"but found **{gross_val}**. "
                         "Please ensure all pallets in your table have identical tare weights."
                     )
-                    logging.error(f"{prefix} {error_msg}")
-                    raise DataValidationError(error_msg)
+                    if not ignore_tare_warning:
+                        raise DataValidationError(error_msg)
+                    else:
+                        logging.warning(f"{prefix} Ignored: {error_msg}")
+                        if monitor:
+                            monitor.log_warning(f"Ignored: {error_msg}")
 
         except (decimal.InvalidOperation, ValueError, TypeError):
             continue
@@ -188,7 +192,8 @@ def validate_data(
     table_id_str: str, 
     column_mapping: Dict[str, str], 
     monitor: Optional[Any] = None,
-    phase: str = 'presence'
+    phase: str = 'presence',
+    ignore_tare_warning: bool = False
 ):
     """
     Unified entry point for all table-level data validation.
@@ -206,7 +211,7 @@ def validate_data(
     elif phase == 'integrity':
         # Weight integrity is a data-level check, it doesn't need column mapping
         # but we use table_id_str in logs via monitor if provided (future enhancement)
-        validate_weight_integrity(data_rows, monitor=monitor)
+        validate_weight_integrity(data_rows, monitor=monitor, ignore_tare_warning=ignore_tare_warning)
     else:
         raise ValueError(f"Unknown validation phase requested: {phase}. Supported: 'presence', 'integrity'.")
 

@@ -1,6 +1,6 @@
 import logging
 import io
-from fastapi import APIRouter, UploadFile, File
+from fastapi import APIRouter, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from pathlib import Path
 from core.system_config import sys_config
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 orchestrator = Orchestrator()
 
 @router.post("/upload")
-def upload_excel(file: UploadFile = File(...)):
+def upload_excel(file: UploadFile = File(...), ignore_tare: bool = Form(False)):
     """
     Uploads an Excel file and processes it to JSON.
     Returns the identifier, json path, and asset availability status.
@@ -33,7 +33,8 @@ def upload_excel(file: UploadFile = File(...)):
         json_path, identifier = orchestrator.process_excel_to_json(
             buffer, 
             json_output_dir,
-            input_filename_override=file.filename
+            input_filename_override=file.filename,
+            ignore_tare_warning=ignore_tare
         )
         
         # Default Invoice No to filename stem

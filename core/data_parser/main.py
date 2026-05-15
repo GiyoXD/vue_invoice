@@ -395,7 +395,8 @@ def run_invoice_automation(
     input_excel_override: Union[str, Any] = None,
     input_filename_override: str = None,
     output_dir_override: str = None,
-    monitor_override: PipelineMonitor = None
+    monitor_override: PipelineMonitor = None,
+    ignore_tare_warning: bool = False
 ) -> Tuple[Path, str]:
     """
     Main entry point for the invoice automation process.
@@ -564,7 +565,7 @@ def run_invoice_automation(
                     try:
                         # 5b.1 Strict Validation: Gross Weight MUST NOT be smaller than Net Weight (Before Distribution)
                         # This throws a DataValidationError if any single cell is inconsistent in the source data.
-                        validate_data(data_normalized, table_id_str, column_mapping, monitor=monitor, phase='integrity')
+                        validate_data(data_normalized, table_id_str, column_mapping, monitor=monitor, phase='integrity', ignore_tare_warning=ignore_tare_warning)
 
                         data_after_distribution = data_processor.distribute_values(data_normalized, cfg.COLUMNS_TO_DISTRIBUTE, cfg.DISTRIBUTION_BASIS_COLUMN)
                         

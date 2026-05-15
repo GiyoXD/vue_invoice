@@ -20,7 +20,7 @@ class Orchestrator:
         self.project_root = Path(__file__).parent.parent
         
     @snitch
-    def process_excel_to_json(self, excel_path, output_dir: Path, input_filename_override: str = None) -> Tuple[Path, str]:
+    def process_excel_to_json(self, excel_path, output_dir: Path, input_filename_override: str = None, ignore_tare_warning: bool = False) -> Tuple[Path, str]:
         """
         Directly calls the Data Parser library function.
         No more subprocess overhead.
@@ -31,7 +31,8 @@ class Orchestrator:
             json_path, identifier = run_invoice_automation(
                 input_excel_override=excel_path if hasattr(excel_path, 'read') else str(excel_path),
                 input_filename_override=input_filename_override,
-                output_dir_override=str(output_dir)
+                output_dir_override=str(output_dir),
+                ignore_tare_warning=ignore_tare_warning
             )
             return json_path, identifier
 

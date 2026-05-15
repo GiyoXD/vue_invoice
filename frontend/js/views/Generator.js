@@ -60,6 +60,7 @@ export default {
                     
                     <div class="error-actions">
                         <button class="btn-retry" @click="retryUpload">🔄 Try Again</button>
+                        <button v-if="uploadError.message && uploadError.message.includes('Weight Integrity Error')" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg shadow transition-colors ml-2" @click="ignoreTareAndRetry">⚠️ Bypass Weight Check</button>
                         <button class="btn-copy-error" @click="copyError(uploadError)">📋 Copy Error</button>
                     </div>
                 </div>
@@ -167,13 +168,15 @@ export default {
                         <input
                             type="text"
                             v-model="adj.description"
-                            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all flex-2"
+                            placeholder="Description"
+                            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all flex-[2] min-w-[150px]"
                         />
                         <input
                             type="number"
                             v-model="adj.value"
                             step="any"
-                            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all flex-1"
+                            placeholder="Amount"
+                            class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all flex-[1] min-w-[120px]"
                         />
                         <button class="px-3 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg shadow-sm transition-colors w-auto" @click="removeAdjustment(index)">✕</button>
                     </div>
@@ -326,6 +329,7 @@ export default {
         const uploadStatus = ref(null);
         const uploadError = ref(null);
         const showUploadTraceback = ref(false);
+        const ignoreTareError = ref(false);
 
         const processingComplete = ref(false);
         const identifier = ref('');
@@ -370,6 +374,7 @@ export default {
             uploadStatus.value = null;
             uploadError.value = null;
             showUploadTraceback.value = false;
+            ignoreTareError.value = false;
             processingComplete.value = false;
             validationData.value = null;
             assetStatus.value = null;
@@ -402,6 +407,7 @@ export default {
 
             const formData = new FormData();
             formData.append('file', selectedFile.value);
+            formData.append('ignore_tare', ignoreTareError.value);
 
             try {
                 const response = await fetch('/api/upload', {
@@ -611,6 +617,11 @@ export default {
             uploadFile();
         };
 
+        const ignoreTareAndRetry = () => {
+            ignoreTareError.value = true;
+            uploadFile();
+        };
+
         /**
          * Retries the invoice generation after an error.
          */
@@ -806,6 +817,7 @@ export default {
             uploadStatus,
             uploadError,
             showUploadTraceback,
+            ignoreTareAndRetry,
             processingComplete,
             identifier,
             invoiceNo,
