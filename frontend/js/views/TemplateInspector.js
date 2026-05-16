@@ -3,7 +3,7 @@ import { ref, computed, onMounted, watch } from 'vue';
 
 export default {
     template: `
-        <div class="max-w-[1600px] mx-auto py-8 fade-in h-screen flex flex-col">
+        <div class="h-full flex flex-col fade-in">
             <h1 class="text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400 drop-shadow-md flex-shrink-0">Template Inspector</h1>
             
             <div class="flex gap-6 mt-8 flex-grow min-h-0">
@@ -23,7 +23,7 @@ export default {
                              @click="loadTemplate(t)">
                             <div class="text-emerald-400 font-bold text-sm mb-1 truncate drop-shadow-sm">
                                 {{ t.name }}
-                                <span v-if="t.bundle_name && t.name !== t.bundle_name" class="text-lg text-red-500 font-bold ml-1">({{ t.bundle_name }})</span>
+                                <span v-if="t.bundle_name && t.name !== t.bundle_name" class="text-xs text-red-500 font-bold ml-1">({{ t.bundle_name }})</span>
                             </div>
                             <div class="text-slate-400 text-xs mb-2 truncate">Source: {{ t.source_file }}</div>
                             <div class="text-slate-500 text-xs">Updated: {{ formatTime(t.modified) }}</div>

@@ -116,6 +116,72 @@
     @apply bg-amber-500/10 border-amber-500/30 text-amber-400;
   }
 
+  /* Error Panels */
+  .error-panel {
+    @apply mt-6 bg-red-500/10 border border-red-500/30 rounded-xl p-6;
+  }
+  .error-header {
+    @apply flex items-center gap-3 mb-4;
+  }
+  .error-header h3 {
+    @apply m-0 text-red-400 text-xl font-bold;
+  }
+  .error-icon {
+    @apply text-2xl;
+  }
+  .error-step {
+    @apply block text-red-300/90 text-xs font-bold uppercase tracking-wider mb-2 bg-red-500/20 px-2 py-1 rounded w-fit;
+  }
+  .error-message {
+    @apply text-red-200/90 text-sm mb-4 leading-relaxed;
+  }
+  .error-details-list {
+    @apply mt-4 pt-4 border-t border-red-500/20;
+  }
+  .error-actions {
+    @apply flex items-center gap-3 mt-5 pt-4 border-t border-red-500/20 flex-wrap;
+  }
+
+  /* Traceback Toggle */
+  .traceback-toggle {
+    @apply mt-2 flex items-center gap-2 cursor-pointer text-sm text-red-400 hover:text-red-300 font-bold select-none transition-colors w-fit p-2 -ml-2 rounded hover:bg-red-500/10;
+  }
+  .traceback-toggle .chevron {
+    @apply transition-transform duration-200 text-xs;
+  }
+  .traceback-toggle.open .chevron {
+    @apply rotate-180;
+  }
+  .traceback-content {
+    @apply hidden mt-3 p-4 bg-slate-900 shadow-inner border border-red-500/20 rounded-lg overflow-x-auto text-xs font-mono text-red-300;
+  }
+  .traceback-content.open {
+    @apply block;
+  }
+
+  /* Warning Panels */
+  .warning-panel, .asset-warning {
+    @apply mt-6 bg-amber-500/10 border border-amber-500/30 rounded-xl p-6;
+  }
+  .warning-header {
+    @apply flex items-center gap-3 mb-4;
+  }
+  .warning-header h3 {
+    @apply m-0 text-amber-500 text-xl font-bold;
+  }
+  .warning-icon {
+    @apply text-2xl;
+  }
+  .warning-message {
+    @apply text-amber-200/90 text-sm mb-4 leading-relaxed;
+  }
+  .warning-details {
+    @apply mt-4 p-4 bg-slate-900 border border-amber-500/20 rounded-lg text-sm text-amber-300/80;
+  }
+  .warning-actions {
+    @apply flex items-center gap-3 mt-5 pt-4 border-t border-amber-500/20;
+  }
+
   /* Misc */
   .fade-in {
     animation: fadeIn 0.3s ease-in-out forwards;

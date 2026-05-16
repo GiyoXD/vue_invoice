@@ -1,8 +1,8 @@
 import { createApp, ref } from 'vue';
 import GeneratorView from './views/Generator.js?v=7';
 import InspectorView from './views/Inspector.js?v=6';
-import TemplateExtractorView from './views/TemplateExtractor.js?v=6';
-import TemplateInspectorView from './views/TemplateInspector.js?v=9';
+import TemplateExtractorView from './views/TemplateExtractor.js?v=9';
+import TemplateInspectorView from './views/TemplateInspector.js?v=10';
 import LogViewerView from './views/LogViewer.js?v=6';
 import ExportDataView from './views/ExportData.js?v=6';
 
@@ -18,7 +18,7 @@ const App = {
     template: `
         <div class="max-w-[1600px] mx-auto px-6 py-6 fade-in h-screen flex flex-col">
             <!-- Navigation -->
-            <div class="flex gap-4 p-4 bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl mb-8 overflow-x-auto custom-scrollbar flex-shrink-0">
+            <div class="flex gap-4 p-4 bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl mb-8 overflow-x-auto custom-scrollbar flex-shrink-0 justify-center">
                 <button class="px-6 py-3 font-medium rounded-xl transition-all whitespace-nowrap" :class="currentView === 'home' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-700/50 hover:bg-slate-600/80 text-slate-300'" @click="currentView = 'home'">⚡ Generator</button>
                 <button class="px-6 py-3 font-medium rounded-xl transition-all whitespace-nowrap" :class="currentView === 'inspector' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-700/50 hover:bg-slate-600/80 text-slate-300'" @click="currentView = 'inspector'">🔍 Inspector</button>
                 <button class="px-6 py-3 font-medium rounded-xl transition-all whitespace-nowrap" :class="currentView === 'export' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-700/50 hover:bg-slate-600/80 text-slate-300'" @click="currentView = 'export'">📦 Export</button>

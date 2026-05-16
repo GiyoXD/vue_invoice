@@ -12,15 +12,15 @@ export default {
                     Upload a sample invoice file. Upload <strong>2 files</strong> to auto-create KH + VN versions.
                 </p>
                 
-                <input type="file" @change="handleFileUpload" accept=".xlsx, .xls" multiple />
+                <input type="file" @change="handleFileUpload" accept=".xlsx, .xls" multiple class="block w-full text-sm text-slate-400 file:mr-4 file:py-2.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-500/10 file:text-blue-400 hover:file:bg-blue-500/20 transition-all cursor-pointer" />
                 
                 <!-- Show selected files with KH/VN labels -->
                 <div v-if="selectedFiles.length > 0" class="mt-4">
                     <div v-for="(file, idx) in selectedFiles" :key="idx" 
-                         class="flex items-center gap-3 py-2 px-3 mb-2 bg-white-3 rounded-md border border-white-8">
+                         class="flex items-center gap-3 py-2 px-3 mb-2 bg-white/5 rounded-md border border-white/10">
                         <span v-if="selectedFiles.length === 2" 
                               class="px-2 py-1 rounded text-xs font-bold border"
-                              :class="idx === 0 ? 'bg-blue-400-20 text-blue-400 border-blue-400-30' : 'bg-yellow-400-20 text-yellow-400 border-yellow-400-30'">
+                              :class="idx === 0 ? 'bg-blue-400/20 text-blue-400 border-blue-400/30' : 'bg-yellow-400/20 text-yellow-400 border-yellow-400/30'">
                             {{ idx === 0 ? 'KH' : 'VN' }}
                         </span>
                         <span class="text-primary">📄 {{ file.name }}</span>
@@ -85,23 +85,20 @@ export default {
                     ✅ All headers recognized automatically!
                 </div>
 
-                <div v-else class="mapping-grid grid gap-4 mt-4">
-                    <div v-for="(headerText, index) in allMissingHeaders" :key="index" class="bg-white-3 p-4 rounded-md">
-                        <div class="font-bold mb-2 text-yellow-400">"{{ headerText }}"</div>
-                        <div class="flex items-center gap-2">
-                            <select v-model="userMappings[headerText]" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all w-full" :disabled="confirmedHeaders.includes(headerText)">
-                                <option value="" disabled selected>Select a field...</option>
-                                <option v-for="opt in systemOptions" :value="opt.id">
-                                    {{ opt.label }} ({{ opt.id }})
-                                </option>
-                            </select>
-                            <button 
-                                class="btn-sm" 
-                                :class="confirmedHeaders.includes(headerText) ? 'btn-danger' : 'btn-success'"
-                                class="text-xs py-1 px-2 min-w-16">
-                                {{ confirmedHeaders.includes(headerText) ? 'Remove' : 'Add' }}
-                            </button>
-                        </div>
+                <div v-else class="flex flex-col gap-2 mt-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+                    <div v-for="(headerText, index) in allMissingHeaders" :key="index" class="grid grid-cols-[1fr_2fr_auto] gap-4 items-center bg-white/5 p-3 rounded-md">
+                        <div class="font-bold text-yellow-400 truncate" :title="headerText">"{{ headerText }}"</div>
+                        <select v-model="userMappings[headerText]" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" :disabled="confirmedHeaders.includes(headerText)">
+                            <option value="" disabled selected>Select a field...</option>
+                            <option v-for="opt in systemOptions" :value="opt.id">
+                                {{ opt.label }} ({{ opt.id }})
+                            </option>
+                        </select>
+                        <button 
+                            @click="toggleMapping(headerText)"
+                            :class="[confirmedHeaders.includes(headerText) ? 'btn-danger' : 'btn-success', 'btn-sm text-sm py-2 px-4 min-w-[90px] h-full whitespace-nowrap']">
+                            {{ confirmedHeaders.includes(headerText) ? 'Remove' : 'Add' }}
+                        </button>
                     </div>
                 </div>
                 
@@ -114,7 +111,7 @@ export default {
                     <p class="text-secondary mb-4 text-sm">
                         We detected a potential footer label via partial match. If you confirm it, it will be mapped permanently so future templates are scanned exactly.
                     </p>
-                    <div v-for="(footerText, idx) in allMissingFooters" :key="'f'+idx" class="bg-emerald-5-dark border border-emerald-20 p-4 rounded-md mb-2 flex justify-between items-center">
+                    <div v-for="(footerText, idx) in allMissingFooters" :key="'f'+idx" class="bg-emerald-900/30 border border-emerald-500/20 p-4 rounded-md mb-2 flex justify-between items-center">
                         <div class="font-bold text-emerald-400">"{{ footerText }}"</div>
                         <button class="btn-sm min-w-24" :class="confirmedFooters.includes(footerText) ? 'btn-secondary' : 'btn-success'" @click="toggleFooter(footerText)">
                             {{ confirmedFooters.includes(footerText) ? 'Confirmed ✓' : 'Confirm It' }}
@@ -154,10 +151,10 @@ export default {
                 <p class="text-secondary mb-4">
                     The template <strong>{{ filePrefix }}</strong> has been configured successfully.
                 </p>
-                <div v-if="bundlePath" class="bg-emerald-10 p-4 rounded-xl mb-6 text-left">
+                <div v-if="bundlePath" class="bg-emerald-500/10 p-4 rounded-xl mb-6 text-left">
                     <p class="text-emerald-300 m-0 mb-2 text-sm">📁 Bundle created at:</p>
                     <code class="text-emerald-500 text-xs break-all">{{ bundlePath }}</code>
-                    <div v-if="generatedPrefixes.length > 1" class="mt-2 pt-2 border-t border-emerald-500-20">
+                    <div v-if="generatedPrefixes.length > 1" class="mt-2 pt-2 border-t border-emerald-500/20">
                         <p class="text-emerald-300 m-0 mb-1 text-xs">Contains:</p>
                         <div v-for="p in generatedPrefixes" :key="p" class="text-emerald-400 text-xs">
                             ✅ {{ p }}
@@ -182,18 +179,20 @@ export default {
                         View and edit the globally recognized mappings. These are used to automatically match headers and sheets in templates.
                     </p>
                     
-                    <div class="flex gap-2 mb-4">
-                        <select v-model="activeMappingType" @change="switchMappingType($event.target.value)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all w-72 font-bold">
+                    <div class="flex gap-4 mb-4">
+                        <select v-model="activeMappingType" @change="switchMappingType($event.target.value)" class="flex-none bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all w-72 font-bold">
                             <option value="header_text_mappings">Header Mappings</option>
                             <option value="sheet_name_mappings">Sheet Name Mappings</option>
                             <option value="shipping_header_map">Shipping Header Map</option>
                             <option value="footer_label_mappings">Footer Labels (Total)</option>
                         </select>
-                        <input type="text" v-model="mappingSearch" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all flex-1" placeholder="Search..." />
+                        <div class="flex-1 relative">
+                            <input type="text" v-model="mappingSearch" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="Search..." />
+                        </div>
                     </div>
 
                     <!-- Add New Mapping Row -->
-                    <div class="grid grid-cols-1fr-1fr-auto gap-2 mb-4 p-2 bg-emerald-500/5 border border-emerald-500/30 border-dashed rounded-md items-center">
+                    <div class="grid grid-cols-[1fr_1fr_auto] gap-2 mb-4 p-2 bg-emerald-500/5 border border-emerald-500/30 border-dashed rounded-md items-center">
                         <input type="text" v-model="newMappingKey" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" :placeholder="activeMappingType === 'shipping_header_map' ? 'Col ID (e.g. col_grade)' : (activeMappingType === 'footer_label_mappings' ? 'New Footer Label (e.g. GRAND TOTAL)' : 'New Input Text (e.g. Qty(SF))')" />
                         
                         <input v-if="activeMappingType === 'sheet_name_mappings' || activeMappingType === 'shipping_header_map' || activeMappingType === 'footer_label_mappings'" type="text" v-model="newMappingVal" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" :placeholder="activeMappingType === 'shipping_header_map' ? 'Keywords (comma-separated)' : (activeMappingType === 'footer_label_mappings' ? 'Auto-filled' : 'Target Name (e.g. Packing list)')" :disabled="activeMappingType === 'footer_label_mappings'" />
@@ -205,28 +204,28 @@ export default {
                         <button class="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px]" @click.prevent="addNewMapping" :disabled="!newMappingKey || !newMappingVal">Add</button>
                     </div>
 
-                    <div class="max-h-100 overflow-y-auto border border-white-10 rounded-md p-2">
+                    <div class="max-h-[400px] overflow-y-auto border border-white/10 rounded-md p-2">
                         <div class="mapping-grid grid gap-2">
                             <!-- Header Row -->
-                            <div class="grid grid-cols-1fr-1fr-auto gap-2 font-bold p-2 border-b border-white-10">
+                            <div class="grid grid-cols-[1fr_1fr_auto] gap-2 font-bold p-2 border-b border-white/10">
                                 <div>{{ activeMappingType === 'shipping_header_map' ? 'Column ID' : (activeMappingType === 'footer_label_mappings' ? 'Footer Target Text' : 'Original Text (Excel)') }}</div>
                                 <div>{{ activeMappingType === 'shipping_header_map' ? 'Keywords (comma-separated)' : (activeMappingType === 'footer_label_mappings' ? 'Type' : 'Mapped Target (System)') }}</div>
                                 <div class="w-20 text-center">Action</div>
                             </div>
                             
-                            <div v-for="(colId, headerText) in filteredMappings" :key="headerText" class="grid grid-cols-1fr-1fr-auto gap-2 items-center bg-white/5 p-2 rounded">
-                                <input type="text" :value="headerText" @change="updateMappingHeader(headerText, $event.target.value)" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" />
+                            <div v-for="(colId, headerText) in filteredMappings" :key="headerText" class="grid grid-cols-[1fr_1fr_auto] gap-2 items-center bg-white/5 p-2 rounded">
+                                <input type="text" :value="headerText" @change="updateMappingHeader(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" />
                                 
-                                <input v-if="activeMappingType === 'sheet_name_mappings' || activeMappingType === 'shipping_header_map' || activeMappingType === 'footer_label_mappings'" type="text" :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" :disabled="activeMappingType === 'footer_label_mappings'" />
+                                <input v-if="activeMappingType === 'sheet_name_mappings' || activeMappingType === 'shipping_header_map' || activeMappingType === 'footer_label_mappings'" type="text" :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" :disabled="activeMappingType === 'footer_label_mappings'" />
                                 
-                                <select v-else :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm">
+                                <select v-else :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm">
                                     <option v-for="opt in systemOptions" :value="opt.id">
                                         {{ opt.label }} ({{ opt.id }})
                                     </option>
                                     <option v-if="!systemOptions.find(o => o.id === colId)" :value="colId">{{ colId }} (Unknown)</option>
                                 </select>
                                 
-                                <button class="px-3 py-1 bg-red-500 hover:bg-red-400 text-white rounded cursor-pointer transition-colors w-full text-sm" @click="deleteMapping(headerText)">Delete</button>
+                                <button class="h-9 px-4 bg-red-500/80 hover:bg-red-500 text-white rounded cursor-pointer transition-colors w-full text-sm font-medium" @click="deleteMapping(headerText)">Delete</button>
                             </div>
                             <div v-if="Object.keys(filteredMappings).length === 0" class="p-4 text-center text-secondary">
                                 No mappings found matching your search.
