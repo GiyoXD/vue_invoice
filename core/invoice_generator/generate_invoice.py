@@ -4,6 +4,7 @@ import argparse
 import sys
 import io
 import logging
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 import openpyxl
@@ -19,6 +20,7 @@ from core.invoice_generator.utils.workbook_utils import (
     apply_print_settings,
     build_output_filename,
     finalize,
+    split_workbook_to_buffers,
 )
 from core.invoice_generator.resolvers import InvoiceAssetResolver
 from core.system_config import sys_config
@@ -30,23 +32,32 @@ DEFAULT_TEMPLATE_DIR = sys_config.templates_dir
 DEFAULT_CONFIG_DIR = sys_config.registry_dir
 
 
+@dataclass
+class GenerationOptions:
+    """Encapsulates all generation mode flags and output options."""
+    daf_mode: bool = False
+    custom_mode: bool = False
+    enable_auto_fit: bool = True
+    split_sheets: bool = False
+    return_bytes: bool = False
+
+
 def run_invoice_generation(
     input_data_path: Path,
     output_path: Path,
     template_dir: Optional[Path] = None,
     config_dir: Optional[Path] = None,
-    daf_mode: bool = False,
-    custom_mode: bool = False,
     explicit_config_path: Optional[Path] = None,
     explicit_template_path: Optional[Path] = None,
     input_data_dict: Optional[Dict[str, Any]] = None,
-    return_bytes: bool = False,
-    enable_auto_fit: bool = True
+    options: Optional[GenerationOptions] = None
 ):
     """
     Library entry point for invoice generation. 
     Uses GenerationSession context manager to ensure robust error handling.
     """
+    opts = options or GenerationOptions()
+
     # 0. FORCE CLEAR SESSION LOG (Per User Request)
     try:
         from core.logger_config import clear_session_log
@@ -62,14 +73,14 @@ def run_invoice_generation(
     # 2. Initialize Context
     ctx = _initialize_context(
         input_data_path, output_path, template_dir, config_dir,
-        daf_mode, custom_mode, enable_auto_fit, explicit_config_path, explicit_template_path, input_data_dict
+        explicit_config_path, explicit_template_path, input_data_dict, opts
     )
 
     # === CORE GENERATION LOGIC WITH MONITOR ===
     # Using 'meta_args' compatible dict for monitor (removing argparse dep)
     monitor_args = {
-        "DAF": daf_mode,
-        "custom": custom_mode,
+        "DAF": opts.daf_mode,
+        "custom": opts.custom_mode,
         "input_data_file": str(input_data_path),
         "configdir": str(config_dir)
     }
@@ -98,19 +109,21 @@ def run_invoice_generation(
     # 4. Build dynamic output filename based on sheets & invoice_id
         build_output_filename(ctx)
         
-        if return_bytes:
+        if opts.return_bytes:
             apply_print_settings(ctx)
-                    
-            logger.info("Saving workbook to in-memory buffer")
-            buffer = io.BytesIO()
-            ctx.output_workbook.save(buffer)
-            buffer.seek(0)
             
-            # Cleanup
-            if ctx.template_workbook: ctx.template_workbook.close()
-            if ctx.output_workbook: ctx.output_workbook.close()
-            
-            return ctx.output_path.name, buffer.getvalue()
+            if opts.split_sheets:
+                output_files = split_workbook_to_buffers(ctx.output_workbook, ctx.output_path)
+                if ctx.template_workbook: ctx.template_workbook.close()
+                if ctx.output_workbook: ctx.output_workbook.close()
+                return output_files
+            else:
+                logger.info("Saving workbook to in-memory buffer")
+                buffer = io.BytesIO()
+                ctx.output_workbook.save(buffer)
+                if ctx.template_workbook: ctx.template_workbook.close()
+                if ctx.output_workbook: ctx.output_workbook.close()
+                return ctx.output_path.name, buffer.getvalue()
         else:
             finalize(ctx)
 
@@ -121,10 +134,12 @@ def run_invoice_generation(
 
 class GeneratorContext:
     """Holds state for the invoice generation pipeline."""
-    def __init__(self, input_path: Path, output_path: Path, invoice_data: Dict):
+    def __init__(self, input_path: Path, output_path: Path, invoice_data: Dict,
+                 options: Optional[GenerationOptions] = None):
         self.input_path = input_path
         self.output_path = output_path
         self.invoice_data = invoice_data
+        self.options = options or GenerationOptions()
         
         # Paths
         self.template_dir: Optional[Path] = None
@@ -136,32 +151,33 @@ class GeneratorContext:
         self.template_workbook: Optional[openpyxl.Workbook] = None
         self.output_workbook: Optional[openpyxl.Workbook] = None
         
-        # Flags
-        self.daf_mode = False
-        self.custom_mode = False
-        self.enable_auto_fit = True
-        
         # Derived
         self.final_grand_total_pallets = 0
+
+    # --- Convenience accessors for backward compatibility ---
+    @property
+    def daf_mode(self): return self.options.daf_mode
+    @property
+    def custom_mode(self): return self.options.custom_mode
+    @property
+    def enable_auto_fit(self): return self.options.enable_auto_fit
+    @property
+    def split_sheets(self): return self.options.split_sheets
 
 
 def _initialize_context(
     input_path: Path, output_path: Path, 
     template_dir: Path, config_dir: Path,
-    daf_mode: bool, custom_mode: bool, enable_auto_fit: bool,
     manual_config: Optional[Path], manual_template: Optional[Path],
-    data_dict: Optional[Dict]
+    data_dict: Optional[Dict], options: Optional[GenerationOptions] = None
 ) -> GeneratorContext:
     invoice_data = data_dict or {}
     if not invoice_data:
         logger.warning("No input data dictionary provided.")
 
-    ctx = GeneratorContext(input_path, output_path, invoice_data)
+    ctx = GeneratorContext(input_path, output_path, invoice_data, options)
     ctx.template_dir = template_dir
     ctx.config_dir = config_dir
-    ctx.daf_mode = daf_mode
-    ctx.custom_mode = custom_mode
-    ctx.enable_auto_fit = enable_auto_fit
     
     # Pre-resolve known manual paths
     if manual_config: ctx.paths['config'] = manual_config.resolve()
@@ -360,6 +376,7 @@ def main():
     parser.add_argument("--DAF", action="store_true", help="DAF mode")
     parser.add_argument("--custom", action="store_true", help="Custom mode")
     parser.add_argument("--no-auto-fit", action="store_true", help="Disable auto-fit column dimensions")
+    parser.add_argument("--split-sheets", action="store_true", help="Split output workbook into individual files per sheet")
     parser.add_argument("--debug", action="store_true", help="Debug logging")
     
     args = parser.parse_args()
@@ -390,17 +407,22 @@ def main():
             print(f"Failed to load input data file: {e}")
             sys.exit(1)
 
+        cli_options = GenerationOptions(
+            daf_mode=args.DAF,
+            custom_mode=args.custom,
+            enable_auto_fit=not args.no_auto_fit,
+            split_sheets=args.split_sheets
+        )
+
         run_invoice_generation(
             input_data_path=Path(args.input_data_file),
             output_path=output_path,
             template_dir=Path(args.templatedir) if args.templatedir else None,
             config_dir=Path(args.configdir) if args.configdir else None,
-            daf_mode=args.DAF,
-            custom_mode=args.custom,
-            enable_auto_fit=not args.no_auto_fit,
             explicit_config_path=Path(args.config) if args.config else None,
             explicit_template_path=Path(args.template) if args.template else None,
-            input_data_dict=cli_data
+            input_data_dict=cli_data,
+            options=cli_options
         )
         print(f"Successfully generated: {args.output}")
     except Exception as e:

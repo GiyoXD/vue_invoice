@@ -37,6 +37,7 @@ class GenerateRequest(BaseModel):
     global_unit_price: Optional[float] = None  # For 'net' pricing mode (shipping lists)
     pricing_net_weight: bool = False
     auto_fit: bool = True
+    split_sheets: bool = False
 
 @router.post("/generate")
 def generate_invoice(request: GenerateRequest):
@@ -217,25 +218,36 @@ def generate_invoice(request: GenerateRequest):
                     try:
                         filename = f"{request.identifier}_Invoice{variant_suffix}{task['suffix']}.xlsx"
                         output_path = base_output_dir / filename
+
+                        from core.invoice_generator.generate_invoice import GenerationOptions
+                        gen_options = GenerationOptions(
+                            daf_mode=task["daf_mode"],
+                            custom_mode=task["custom_mode"],
+                            enable_auto_fit=request.auto_fit,
+                            split_sheets=request.split_sheets,
+                            return_bytes=True
+                        )
     
                         result = orchestrator.generate_invoice(
                             json_path=json_path_obj,
                             output_path=output_path,
                             template_dir=template_dir,
                             config_dir=config_dir,
-                            daf_mode=task["daf_mode"],
-                            custom_mode=task["custom_mode"],
-                            enable_auto_fit=request.auto_fit,
                             explicit_config_path=Path(variant["config_path"]) if variant.get("config_path") else None,
                             explicit_template_path=Path(variant["template_path"]) if variant.get("template_path") else None,
                             input_data_dict=full_data,
-                            return_bytes=True
+                            options=gen_options
                         )
                         
                         if result:
-                            fname, fbytes = result
-                            results.append(fname)
-                            generated_files.append((fname, fbytes))
+                            if isinstance(result, list):
+                                for fname, fbytes in result:
+                                    results.append(fname)
+                                    generated_files.append((fname, fbytes))
+                            else:
+                                fname, fbytes = result
+                                results.append(fname)
+                                generated_files.append((fname, fbytes))
                             processed_any = True
                     except Exception as e:
                         task_name = f"{variant_suffix.lstrip('_')} {task['name']}" if variant_suffix else task['name']

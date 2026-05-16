@@ -51,13 +51,10 @@ class Orchestrator:
                         output_path: Path, 
                         template_dir: Path, 
                         config_dir: Path, 
-                        daf_mode: bool = False,
-                        custom_mode: bool = False,
-                        enable_auto_fit: bool = True,
                         explicit_config_path: Path = None,
                         explicit_template_path: Path = None,
                         input_data_dict: Dict = None,
-                        return_bytes: bool = False):
+                        options = None):
         """
         Directly calls the Invoice Generator library function.
         No more subprocess overhead or serialization issues.
@@ -69,13 +66,10 @@ class Orchestrator:
                 output_path=output_path,
                 template_dir=template_dir,
                 config_dir=config_dir,
-                daf_mode=daf_mode,
-                custom_mode=custom_mode,
-                enable_auto_fit=enable_auto_fit,
                 explicit_config_path=explicit_config_path,
                 explicit_template_path=explicit_template_path,
                 input_data_dict=input_data_dict,
-                return_bytes=return_bytes
+                options=options
             )
             return result
 
