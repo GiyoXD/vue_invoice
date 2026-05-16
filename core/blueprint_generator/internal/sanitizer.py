@@ -19,7 +19,6 @@ from openpyxl.utils import get_column_letter
 
 from .scanner import TemplateAnalysisResult, SheetAnalysis
 from core.utils.loop_profiler import tick
-from ..utils.openpyxl_utils import get_actual_column_width
 
 logger = logging.getLogger(__name__)
 
@@ -90,13 +89,26 @@ class ExcelTemplateSanitizer:
 
 
     def _capture_global_layout(self, ws, safe_max_column: int, preserved_layout: dict, analysis, table_footer_row: Optional[int]):
+        # Cache grouped dimension ranges (openpyxl stores <col min="1" max="5" width="20"/>
+        # under a single dict key). We must iterate them to find the matching range for each column.
+        dim_ranges = list(ws.column_dimensions.values())
+
         for c in range(1, safe_max_column + 1):
             letter = get_column_letter(c)
-            width = get_actual_column_width(ws, c, 1)
-            # The get_actual_column_width function falls back to defaultColWidth or 15.0
-            # We want to record whatever the actual width is
-            if width is not None:
-                preserved_layout["col_widths"][letter] = width
+
+            # Find the dimension object whose range covers this column index
+            matching_dim = None
+            for dim in dim_ranges:
+                if dim.min <= c <= dim.max:
+                    matching_dim = dim
+                    break
+
+            # Only record widths that are EXPLICITLY set in the worksheet.
+            # Do NOT fall back to defaultColWidth or a hardcoded value here —
+            # that would inject phantom widths for columns the template left at
+            # Excel's default, corrupting the generated output.
+            if matching_dim and matching_dim.width is not None:
+                preserved_layout["col_widths"][letter] = matching_dim.width
 
     def _capture_template_header_layout(self, ws, analysis, safe_max_column: int, preserved_layout: dict, process_and_store_style):
         for merged_range in ws.merged_cells:

@@ -39,36 +39,29 @@ class PrintAreaConfig:
             worksheet: The openpyxl worksheet to configure
             max_col_override: Optional column count from layout config to cap print area width
         """
-        try:
-            # Guard against None worksheet
-            if worksheet is None:
-                logger.warning("configure_print_settings called with None worksheet - skipping")
-                return
-            
-            # Skip hidden sheets
-            if worksheet.sheet_state != 'visible':
-                return
+        # Guard against None worksheet
+        if worksheet is None:
+            logger.warning("configure_print_settings called with None worksheet - skipping")
+            return
 
+        # Skip hidden sheets
+        if worksheet.sheet_state != 'visible':
+            return
 
-            # Set paper size to A4
-            self._set_paper_size(worksheet)
+        # Set paper size to A4
+        self._set_paper_size(worksheet)
 
-            # Set margins
-            self._set_margins(worksheet)
+        # Set margins
+        self._set_margins(worksheet)
 
-            # Set centering options
-            self._set_centering(worksheet)
+        # Set centering options
+        self._set_centering(worksheet)
 
-            # Set worksheet view options (including page breaks)
-            self._set_worksheet_view(worksheet)
+        # Set worksheet view options (including page breaks)
+        self._set_worksheet_view(worksheet)
 
-            # Set dynamic print area
-            self._set_dynamic_print_area(worksheet, max_col_override)
-
-        except Exception as e:
-            logger.error(f"Error configuring print settings for sheet {worksheet.title}: {e}")
-            # Continue without raising to avoid breaking the process
-            pass
+        # Set dynamic print area
+        self._set_dynamic_print_area(worksheet, max_col_override)
 
     def _set_paper_size(self, worksheet: Worksheet) -> None:
         """Set paper size to A4 and enable scaling to fit width."""
@@ -94,22 +87,17 @@ class PrintAreaConfig:
 
     def _set_worksheet_view(self, worksheet: Worksheet) -> None:
         """Set worksheet view options including page breaks display."""
-        try:
-            # Set view to show page breaks
-            if self.show_page_breaks:
-                worksheet.sheet_view.view = 'pageBreakPreview'
-            else:
-                worksheet.sheet_view.view = 'normal'
+        # Set view to show page breaks
+        if self.show_page_breaks:
+            worksheet.sheet_view.view = 'pageBreakPreview'
+        else:
+            worksheet.sheet_view.view = 'normal'
 
-            # Set grid lines visibility
-            worksheet.sheet_view.showGridLines = self.show_grid_lines
+        # Set grid lines visibility
+        worksheet.sheet_view.showGridLines = self.show_grid_lines
 
-            # Set row/column headers visibility
-            worksheet.sheet_view.showRowColHeaders = self.show_row_col_headers
-
-        except Exception as e:
-            # Continue without failing - view settings are not critical
-            pass
+        # Set row/column headers visibility
+        worksheet.sheet_view.showRowColHeaders = self.show_row_col_headers
 
     def _set_dynamic_print_area(self, worksheet: Worksheet, max_col_override: int = None) -> None:
         """
@@ -124,36 +112,36 @@ class PrintAreaConfig:
             worksheet: The worksheet to set print area for
             max_col_override: Optional column count from layout config to cap max_col
         """
-        try:
-            # Find the boundaries of non-empty data
-            min_row, max_row, min_col, max_col = self._find_data_boundaries(worksheet)
+        # Find the boundaries of non-empty data
+        min_row, max_row, min_col, max_col = self._find_data_boundaries(worksheet)
 
-            if max_row is None or max_col is None:
-                return
+        if max_row is None or max_col is None:
+            return
 
-            # Use config-derived column count if provided
-            if max_col_override and max_col_override > 0:
-                max_col = max_col_override
-                logger.debug(f"Using config-derived max_col={max_col} for '{worksheet.title}'")
+        # Use config-derived column count if provided
+        if max_col_override and max_col_override > 0:
+            max_col = max_col_override
+            logger.debug(f"Using config-derived max_col={max_col} for '{worksheet.title}'")
 
-            # Convert column numbers to letters
-            start_col_letter = get_column_letter(min_col)  # Already 1-based from _find_data_boundaries
-            end_col_letter = get_column_letter(max_col)
+        # Convert column numbers to letters
+        # If min_col is somehow greater than max_col (e.g. override is very small), 
+        # clamp min_col to 1 or max_col
+        if min_col > max_col:
+            min_col = 1
 
-            # Create print area range (rows are 1-based, columns are 1-based)
-            print_area = f"{start_col_letter}{min_row}:{end_col_letter}{max_row}"
+        start_col_letter = get_column_letter(min_col)  # Already 1-based from _find_data_boundaries
+        end_col_letter = get_column_letter(max_col)
 
-            # Clear any existing print area first
-            if hasattr(worksheet, 'print_area') and worksheet.print_area:
-                worksheet.print_area = None
+        # Create print area range (rows are 1-based, columns are 1-based)
+        print_area = f"{start_col_letter}1:{end_col_letter}{max_row}"
 
-            # Set the print area
-            worksheet.print_area = print_area
-            logger.info(f"Set print area for '{worksheet.title}': {print_area}")
+        # Clear any existing print area first
+        if hasattr(worksheet, 'print_area') and worksheet.print_area:
+            worksheet.print_area = None
 
-        except Exception as e:
-            logger.error(f"Error setting dynamic print area: {e}")
-            raise
+        # Set the print area
+        worksheet.print_area = print_area
+        logger.info(f"Set print area for '{worksheet.title}': {print_area}")
 
     def _find_data_boundaries(self, worksheet: Worksheet) -> Tuple[int, int, int, int]:
         """
@@ -171,7 +159,7 @@ class PrintAreaConfig:
         # 1. Iterate through all cells to find data boundaries based on values
         for row in worksheet.iter_rows():
             for cell in row:
-                if cell.value is not None and str(cell.value).strip():
+                if self._is_significant_cell(cell):
                     row_idx = cell.row
                     col_idx = cell.column
                     
@@ -201,9 +189,9 @@ class PrintAreaConfig:
                 # Optimization: if the merge starts outside our current known data area, 
                 # does it matter? Maybe. But usually data drives the report.
                 
-                # Let's check the value of the top-left cell
+                # Let's check if the top-left cell has content or significant formatting
                 tl_cell = worksheet.cell(rng.min_row, rng.min_col)
-                if tl_cell.value is not None and str(tl_cell.value).strip():
+                if self._is_significant_cell(tl_cell):
                     # This merged cell has data, so it MUST be fully included
                     if rng.min_row < min_row: min_row = rng.min_row
                     if rng.max_row > max_row: max_row = rng.max_row
@@ -211,6 +199,25 @@ class PrintAreaConfig:
                     if rng.max_col > max_col: max_col = rng.max_col
 
         return min_row, max_row, min_col, max_col
+
+    def _is_significant_cell(self, cell) -> bool:
+        """Check if a cell has text or significant formatting that should be printed."""
+        # Check for value
+        if cell.value is not None and str(cell.value).strip():
+            return True
+            
+        # Check for significant formatting
+        if cell.border:
+            if (cell.border.left and cell.border.left.style) or \
+               (cell.border.right and cell.border.right.style) or \
+               (cell.border.top and cell.border.top.style) or \
+               (cell.border.bottom and cell.border.bottom.style):
+                return True
+                
+        if cell.fill and getattr(cell.fill, 'fill_type', None) and cell.fill.fill_type != 'none':
+            return True
+            
+        return False
 
 # Convenience function for quick configuration
 def configure_print_area(worksheet: Worksheet, max_col_override: int = None) -> None:
