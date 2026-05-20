@@ -157,7 +157,9 @@ class PrintAreaConfig:
         max_col = None
 
         # 1. Iterate through all cells to find data boundaries based on values
-        for row in worksheet.iter_rows():
+        # Cap row scan to prevent hanging on corrupted sheets (e.g., max_row=1048576)
+        max_scan_row = min(worksheet.max_row, 2000)
+        for row in worksheet.iter_rows(max_row=max_scan_row):
             for cell in row:
                 if self._is_significant_cell(cell):
                     row_idx = cell.row
@@ -213,9 +215,14 @@ class PrintAreaConfig:
                (cell.border.top and cell.border.top.style) or \
                (cell.border.bottom and cell.border.bottom.style):
                 return True
-                
+
         if cell.fill and getattr(cell.fill, 'fill_type', None) and cell.fill.fill_type != 'none':
-            return True
+            # Ignore plain white fills which are often used as "erase gridlines"
+            fill_color = getattr(cell.fill, 'start_color', None)
+            if fill_color:
+                rgb = getattr(fill_color, 'rgb', None)
+                if rgb not in ['00000000', 'FFFFFFFF']:
+                    return True
             
         return False
 
