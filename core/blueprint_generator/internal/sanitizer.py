@@ -59,10 +59,20 @@ class ExcelTemplateSanitizer:
         # By deleting the mapped sheets, we guarantee no customer data is leaked, 
         # and we avoid all openpyxl row-shifting overhead.
         analyzed_sheet_names = {sheet.name for sheet in analysis.sheets}
+        remaining_sheets = list(workbook.sheetnames)
         for sheet_name in list(workbook.sheetnames):
             if sheet_name in analyzed_sheet_names:
-                self.logger.info(f"Removing mapped sheet '{sheet_name}' from bundled XLSX (JSON-only mode)")
-                del workbook[sheet_name]
+                if len(remaining_sheets) > 1:
+                    self.logger.info(f"Removing mapped sheet '{sheet_name}' from bundled XLSX (JSON-only mode)")
+                    del workbook[sheet_name]
+                    remaining_sheets.remove(sheet_name)
+                else:
+                    self.logger.info(f"Keeping last sheet '{sheet_name}' in bundled XLSX but clearing cell values to prevent data leak")
+                    ws = workbook[sheet_name]
+                    for row in ws.iter_rows():
+                        for cell in row:
+                            if not isinstance(cell, MergedCell):
+                                cell.value = None
                 
         return workbook, layout_metadata
 

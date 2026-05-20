@@ -23,6 +23,7 @@ class TemplateConfig(BaseModel):
     bundle_dir_name: str = ""
     confirmed_footers: List[str] = []
     pricing_mode: str = "standard"  # 'standard' or 'net'
+    ignore_missing_description: bool = False
 
 class CellOverrideRequest(BaseModel):
     template_name: str
@@ -98,29 +99,30 @@ def update_mapping_config(new_mappings: dict):
         logger.exception("Failed to update mapping config")
         return False
 
-def read_table_info_from_config(template_dir: Path) -> dict:
-    """Read table_info summary index from _config.json top-level key."""
-    config_files = list(template_dir.glob("*_config.json"))
-    if not config_files:
+def read_table_info_from_config(template_dir: Path, prefix: str) -> dict:
+    """Read table_info summary index from the matching variant config file."""
+    config_file = template_dir / f"{prefix}_config.json"
+    if not config_file.exists():
+        logger.warning("Config file %s does not exist for template view", config_file)
         return {}
     try:
-        with open(config_files[0], 'r', encoding='utf-8') as f:
+        with open(config_file, 'r', encoding='utf-8') as f:
             cfg = json.load(f)
         return cfg.get("table_info", {})
     except Exception:
-        logger.exception("Failed to read table info from config in %s", template_dir)
+        logger.exception("Failed to read table info from config %s", config_file)
         return {}
 
 # --- Routes ---
 
 @router.post("/template/analyze")
-def analyze_template(file: UploadFile = File(...)):
+def analyze_template(file: UploadFile = File(...), ignore_missing_description: bool = False):
     temp_dir = sys_config.temp_uploads_dir
     temp_path = temp_dir / file.filename
     try:
         with open(temp_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-        json_output = orchestrator.analyze_template(temp_path, legacy_format=True)
+        json_output = orchestrator.analyze_template(temp_path, legacy_format=True, ignore_missing_description=ignore_missing_description)
         analysis_path = temp_dir / f"{file.filename}_analysis.json"
         with open(analysis_path, 'w', encoding='utf-8') as f: f.write(json_output)
         res = {
@@ -159,7 +161,8 @@ def generate_template(config: TemplateConfig):
             custom_prefix=config.file_prefix,
             runtime_mappings=config.user_mappings,
             bundle_dir_name=config.bundle_dir_name or None,
-            pricing_mode=config.pricing_mode
+            pricing_mode=config.pricing_mode,
+            ignore_missing_description=config.ignore_missing_description
         )
         
         try:
@@ -208,7 +211,7 @@ async def view_template(name: str, bundle: Optional[str] = None):
     if not t_path.exists(): return JSONResponse(status_code=404, content={"error": "Not found"})
     try:
         with open(t_path, 'r', encoding='utf-8') as f: data = json.load(f)
-        info = read_table_info_from_config(template_dir)
+        info = read_table_info_from_config(template_dir, safe_name)
         if info:
             if "table_info" not in data: data["table_info"] = {}
             data["table_info"].update(info)

@@ -339,22 +339,10 @@ class ConfigBuilder:
         """Build content section for a sheet."""
         content = {"static": {}}
         
-        # [Smart Feature] Predefined Standard col_static Content
-        # Format: VENDOR -> Des (if found) -> CASE QTY -> MADE IN CAMBODIA
         if "col_static" in [c.id for c in sheet.columns]:
-            static_lines = ["VENDOR#:"]
-            
-            # Check for detected description fallback
+            static_lines = []
             if sheet.static_content_hints:
-                desc = sheet.static_content_hints.get("description_fallback")
-                if desc:
-                    static_lines.append(f"Des: {desc}")
-            
-            static_lines.extend([
-                "CASE QTY:",
-                "MADE IN CAMBODIA"
-            ])
-            
+                static_lines = sheet.static_content_hints.get("static_lines", [])
             content["static"]["col_static"] = static_lines
         
         return content

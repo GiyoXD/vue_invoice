@@ -137,7 +137,8 @@
         "case_insensitive_matching": true,
         "partial_matching_threshold": 0.7,
         "log_unrecognized_items": true,
-        "create_suggestions": true
+        "create_suggestions": true,
+        "ignore_missing_description": false
     },
     "shipping_header_map": {
         "comment": "Single source of truth for column metadata. rules.py loads from here so any column defined here is recognized by the blueprint scanner and won't show as (Unknown) in the UI.",

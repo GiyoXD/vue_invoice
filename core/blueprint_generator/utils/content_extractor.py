@@ -5,7 +5,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.cell.cell import MergedCell
 
 if TYPE_CHECKING:
-    from core.blueprint_generator.excel_scanner import ColumnInfo
+    from core.blueprint_generator.internal.scanner import ColumnInfo
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +86,15 @@ def detect_static_description_label(worksheet: Worksheet, header_row: int, colum
     for col in columns:
         tick("content_extractor.detect_static_description_label", sub="columns_checked")
         if col.id == "col_static":
-            for row in range(header_row + 1, min(header_row + max_sample_rows + 1, worksheet.max_row + 1)):
+            # Skip vertically merged header cells by finding their max row
+            start_scan_row = header_row
+            for merged in worksheet.merged_cells.ranges:
+                if merged.min_row <= header_row <= merged.max_row:
+                    if merged.min_col <= col.col_index <= merged.max_col:
+                        start_scan_row = merged.max_row
+                        break
+                        
+            for row in range(start_scan_row + 1, min(start_scan_row + max_sample_rows + 1, worksheet.max_row + 1)):
                 tick("content_extractor.detect_static_description_label", sub="rows_sampled")
                 cell = worksheet.cell(row=row, column=col.col_index)
                 value = _get_cell_value_safe(worksheet, cell)
@@ -103,55 +111,47 @@ def detect_static_description_label(worksheet: Worksheet, header_row: int, colum
     return None
 
 
-# --- 2. TABLE DESCRIPTION FALLBACK (secondary path) ---
-
-def extract_table_fallback_description(worksheet: Worksheet, data_start: int, data_end: int, col_desc_index: int) -> Optional[str]:
+@loop_profiler.watch("content_extractor.extract_static_column_values")
+def extract_static_column_values(worksheet: Worksheet, header_row: int, columns: List['ColumnInfo'], footer_row: Optional[int] = None) -> List[str]:
     """
-    Secondary fallback: finds description category labels from col_desc.
-
-    Strategy: look for vertically-merged cells in col_desc — these are category
-    labels (e.g. "Leather", "COW LEATHER") that span multiple data rows.
-    Single-row values are specific product names and are ignored.
-
-    Scans a bounded window (data_start → min(data_end, data_start+100)) and stops
-    at the first TOTAL/SUB-TOTAL-like row to avoid picking up footer content.
+    Extracts the actual cell values from the static column ('col_static') starting below the header row.
+    Returns the raw string values as-is.
     """
-    TOTAL_KEYWORDS = {"TOTAL", "SUBTOTAL", "SUB TOTAL", "GRAND TOTAL", "AMOUNT"}
-    MAX_SCAN = 100  # Cap to avoid reading bank info / legal text deep in the sheet
-
-    # Build a lookup of merged ranges in col_desc column
-    merged_spans: list[tuple[int, int, str]] = []  # (min_row, max_row, value)
+    col_static = next((col for col in columns if col.id == "col_static"), None)
+    if not col_static:
+        return []
+        
+    static_lines = []
+    consecutive_empty = 0
+    
+    # Skip vertically merged header cells by finding their max row
+    start_scan_row = header_row
     for merged in worksheet.merged_cells.ranges:
-        if merged.min_col <= col_desc_index <= merged.max_col and merged.max_row > merged.min_row:
-            if merged.min_row >= data_start:
-                val = _get_cell_value_safe(worksheet, worksheet.cell(row=merged.min_row, column=col_desc_index))
-                if val:
-                    merged_spans.append((merged.min_row, merged.max_row, str(val).strip()))
+        if merged.min_row <= header_row <= merged.max_row:
+            if merged.min_col <= col_static.col_index <= merged.max_col:
+                start_scan_row = merged.max_row
+                break
+                
+    # We scan down the static column starting below the header bounds, stopping strictly before the footer/total row
+    limit_row = footer_row if footer_row is not None else (worksheet.max_row + 1)
+    for row in range(start_scan_row + 1, min(start_scan_row + 16, limit_row)):
+        cell = worksheet.cell(row=row, column=col_static.col_index)
+        val = _get_cell_value_safe(worksheet, cell)
+        
+        if val is not None and str(val).strip():
+            static_lines.append(str(val).strip())
+            consecutive_empty = 0
+        else:
+            consecutive_empty += 1
+            
+        # Stop scanning if we hit 3 consecutive empty rows
+        if consecutive_empty >= 3:
+            break
+            
+    return static_lines
 
-    # Sort by span length descending (longest = most prominent category)
-    merged_spans.sort(key=lambda x: x[1] - x[0], reverse=True)
 
-    # Filter: stop at footer boundary, skip very long text (bank info / legal notes)
-    scan_end = min(data_end, data_start + MAX_SCAN)
-    categories = []
-    seen = set()
-    for min_row, max_row, val in merged_spans:
-        if min_row > scan_end:
-            continue
-        upper = val.upper()
-        if any(kw in upper for kw in TOTAL_KEYWORDS):
-            continue
-        if len(val) > 80:  # skip long legal/bank text
-            continue
-        if val not in seen:
-            categories.append(val)
-            seen.add(val)
-
-    if categories:
-        result = " / ".join(categories)
-        logger.info(f"    [Extracted] Fallback description from merged col_desc cells: '{result}'")
-        return result
-    return None
+# --- 2. TABLE DESCRIPTION FALLBACK (secondary path removed) ---
 
 
 

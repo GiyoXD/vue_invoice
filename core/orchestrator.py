@@ -81,7 +81,7 @@ class Orchestrator:
 
     # --- Blueprint / Template Management ---
 
-    def analyze_template(self, template_path: Path, legacy_format: bool = True) -> str:
+    def analyze_template(self, template_path: Path, legacy_format: bool = True, ignore_missing_description: bool = False) -> str:
         """
         Wraps BlueprintGenerator.analyze.
         Returns the analysis result as a JSON string.
@@ -92,7 +92,7 @@ class Orchestrator:
             # Re-initialize generator to ensure fresh state
             generator = BlueprintGenerator(self.project_root)
             
-            return generator.analyze(str(template_path), legacy_format=legacy_format)
+            return generator.analyze(str(template_path), legacy_format=legacy_format, ignore_missing_description=ignore_missing_description)
             
         except Exception as e:
             import traceback
@@ -105,7 +105,8 @@ class Orchestrator:
                                 custom_prefix: str = None,
                                 runtime_mappings: Dict[str, str] = None,
                                 bundle_dir_name: str = None,
-                                pricing_mode: str = "standard") -> Path:
+                                pricing_mode: str = "standard",
+                                ignore_missing_description: bool = False) -> Path:
         """
         Wraps BlueprintGenerator.generate.
         Generates the config and clean template bundle.
@@ -122,7 +123,8 @@ class Orchestrator:
                 custom_prefix=custom_prefix,
                 runtime_mappings=runtime_mappings,
                 bundle_dir_name=bundle_dir_name,
-                pricing_mode=pricing_mode
+                pricing_mode=pricing_mode,
+                ignore_missing_description=ignore_missing_description
             )
             
             return result_path

@@ -36,6 +36,7 @@ from core.blueprint_generator.utils.content_extractor import (
     get_cell_merge_colspan,
     find_pallet_count_column,
     find_footer_hs_code,
+    extract_static_column_values,
 )
 
 
@@ -481,6 +482,208 @@ class TestExcelLayoutScannerHsCode(unittest.TestCase):
         self.assertIsNotNone(sheet2_analysis.footer_info)
         self.assertEqual(sheet2_analysis.footer_info.hs_code_text, "HS CODE: 4114.10.00")
         self.assertEqual(sheet2_analysis.footer_info.hs_code_colspan, 3)
+
+    def test_missing_description_raises_error(self):
+        from core.blueprint_generator.internal.scanner import ExcelLayoutScanner
+        wb = MagicMock()
+        wb.sheetnames = ["Invoice"]
+        
+        # Missing DES: in col_static
+        sheet1_values = {
+            (3, 1): "Mark & No",
+            (3, 2): "P.O.",
+            (3, 3): "Item No.",
+            (3, 4): "Description",
+            (3, 5): "Unit Price",
+            (3, 6): "Amount",
+            (4, 1): "VENDOR#: ABC",
+            (4, 4): "Product A",
+            (8, 5): "HS CODE: 4107.12.00",
+            (10, 2): "TOTAL:"
+        }
+        ws1 = self._make_mock_sheet("Invoice", 3, sheet1_values)
+        wb.__getitem__.return_value = ws1
+
+        scanner = ExcelLayoutScanner()
+        # Should raise ValueError because missing description fallback is not bypassed
+        with self.assertRaises(ValueError) as ctx:
+            scanner.scan_template("tests/experiment_sample/shipping_list/JF25057.xlsx", self.mapping_config, workbook=wb)
+        self.assertIn("Missing Description Fallback", str(ctx.exception))
+
+    def test_missing_description_ignored_by_config(self):
+        from core.blueprint_generator.internal.scanner import ExcelLayoutScanner
+        wb = MagicMock()
+        wb.sheetnames = ["Invoice"]
+        
+        # Missing DES: in col_static
+        sheet1_values = {
+            (3, 1): "Mark & No",
+            (3, 2): "P.O.",
+            (3, 3): "Item No.",
+            (3, 4): "Description",
+            (3, 5): "Unit Price",
+            (3, 6): "Amount",
+            (4, 1): "VENDOR#: ABC",
+            (4, 4): "Product A",
+            (8, 5): "HS CODE: 4107.12.00",
+            (10, 2): "TOTAL:"
+        }
+        ws1 = self._make_mock_sheet("Invoice", 3, sheet1_values)
+        wb.__getitem__.return_value = ws1
+
+        scanner = ExcelLayoutScanner()
+        # Set ignore_missing_description to True in config mapping
+        custom_mapping = self.mapping_config.copy()
+        custom_mapping["ignore_missing_description"] = True
+        
+        # Should not raise ValueError
+        result = scanner.scan_template("tests/experiment_sample/shipping_list/JF25057.xlsx", custom_mapping, workbook=wb)
+        self.assertEqual(len(result.sheets), 1)
+        self.assertTrue(any("Missing Description Fallback" in w for w in result.warnings))
+
+
+class TestExtractStaticColumnValues(unittest.TestCase):
+    """Tests for extract_static_column_values()."""
+
+    def setUp(self):
+        self.columns = [
+            MockColumnInfo(id="col_static", col_index=1),
+            MockColumnInfo(id="col_po", col_index=2),
+        ]
+
+    def _make_worksheet(self, cell_values: dict, max_row: int = 20, max_column: int = 5):
+        ws = MagicMock()
+        ws.max_row = max_row
+        ws.max_column = max_column
+
+        def mock_cell(row, column):
+            cell = MagicMock()
+            cell.value = cell_values.get((row, column))
+            cell.row = row
+            cell.column = column
+            return cell
+
+        ws.cell = mock_cell
+        return ws
+
+    def test_extract_simple_static_values(self):
+        """Extracts normal non-empty static cells and ignores empty ones."""
+        cell_values = {
+            (4, 1): "VENDOR#: CLW",
+            (5, 1): "CASE QTY: 123",
+            (6, 1): "MADE IN CAMBODIA",
+        }
+        ws = self._make_worksheet(cell_values)
+        lines = extract_static_column_values(ws, header_row=3, columns=self.columns)
+        self.assertEqual(lines, ["VENDOR#: CLW", "CASE QTY: 123", "MADE IN CAMBODIA"])
+
+    def test_preserves_description_cells_as_is(self):
+        """Preserves description cells exactly as they are without converting to placeholders."""
+        cell_values = {
+            (4, 1): "VENDOR#: ABC",
+            (5, 1): "DES: COW LEATHER",
+            (6, 1): "DES. : {{placeholder}}",
+            (7, 1): "MADE IN CAMBODIA",
+        }
+        ws = self._make_worksheet(cell_values)
+        lines = extract_static_column_values(ws, header_row=3, columns=self.columns)
+        self.assertEqual(lines, [
+            "VENDOR#: ABC",
+            "DES: COW LEATHER",
+            "DES. : {{placeholder}}",
+            "MADE IN CAMBODIA"
+        ])
+
+    def test_stops_at_consecutive_empty_rows(self):
+        """Scanning stops if 3 consecutive cells are empty."""
+        cell_values = {
+            (4, 1): "Line 1",
+            (5, 1): "Line 2",
+            (9, 1): "Line 3",  # 3 empty rows (6, 7, 8) in between
+        }
+        ws = self._make_worksheet(cell_values)
+        lines = extract_static_column_values(ws, header_row=3, columns=self.columns)
+        self.assertEqual(lines, ["Line 1", "Line 2"])
+
+    def test_skips_vertically_merged_header_cells(self):
+        """If the header row is vertically merged (e.g. spanning rows 3-4), scanning starts at row 5."""
+        cell_values = {
+            (3, 1): "STATIC HEADER", # merged header top cell
+            (4, 1): "STATIC HEADER", # merged header cell value safe
+            (5, 1): "Line 1",        # actual static content starts here
+            (6, 1): "Line 2",
+        }
+        ws = self._make_worksheet(cell_values)
+        
+        # Mock vertically merged header spanning row 3 to 4, column 1 to 1
+        mock_range = MagicMock()
+        mock_range.min_row = 3
+        mock_range.max_row = 4
+        mock_range.min_col = 1
+        mock_range.max_col = 1
+        ws.merged_cells.ranges = [mock_range]
+        
+        lines = extract_static_column_values(ws, header_row=3, columns=self.columns)
+        self.assertEqual(lines, ["Line 1", "Line 2"])
+
+    def test_stops_strictly_before_footer_row(self):
+        """Scanning stops strictly before the specified footer/total row."""
+        cell_values = {
+            (4, 1): "Line 1",
+            (5, 1): "Line 2",
+            (6, 1): "TOTAL:",  # This is the footer row
+            (7, 1): "Junk Line 3",  # This is beyond the footer row
+        }
+        ws = self._make_worksheet(cell_values)
+        lines = extract_static_column_values(ws, header_row=3, columns=self.columns, footer_row=6)
+        self.assertEqual(lines, ["Line 1", "Line 2"])
+
+
+class TestExcelTemplateSanitizer(unittest.TestCase):
+    """Tests for ExcelTemplateSanitizer sheet deletion and leak prevention."""
+
+    def test_sanitize_keeps_at_least_one_sheet_and_clears_it(self):
+        from core.blueprint_generator.internal.sanitizer import ExcelTemplateSanitizer
+        from core.blueprint_generator.internal.scanner import TemplateAnalysisResult, SheetAnalysis
+        import openpyxl
+
+        # Create a real workbook with 2 sheets
+        wb = openpyxl.Workbook()
+        ws1 = wb.active
+        ws1.title = "Sheet1"
+        ws1["A1"] = "Secret Customer Data 1"
+        
+        ws2 = wb.create_sheet("Sheet2")
+        ws2["A1"] = "Secret Customer Data 2"
+        ws2.merge_cells("B1:C2")
+        ws2["B1"] = "Merged Secret Data"
+
+        # Mock the analysis so both sheets are analyzed (mapped)
+        sheet_analysis1 = MagicMock(spec=SheetAnalysis)
+        sheet_analysis1.name = "Sheet1"
+        
+        sheet_analysis2 = MagicMock(spec=SheetAnalysis)
+        sheet_analysis2.name = "Sheet2"
+
+        analysis = MagicMock(spec=TemplateAnalysisResult)
+        analysis.customer_code = "TEST"
+        analysis.sheets = [sheet_analysis1, sheet_analysis2]
+
+        sanitizer = ExcelTemplateSanitizer()
+        
+        # Mock _clean_sheet to return dummy empty dict for each sheet
+        sanitizer._clean_sheet = MagicMock(return_value={})
+
+        # Sanitize the workbook
+        cleaned_wb, layout = sanitizer.sanitize_template(wb, analysis)
+
+        # It must only have 1 sheet remaining because both were mapped, but we cannot delete the last sheet
+        self.assertEqual(len(cleaned_wb.sheetnames), 1)
+        remaining_sheet_name = cleaned_wb.sheetnames[0]
+        # The remaining sheet must have its secret data cleared!
+        remaining_ws = cleaned_wb[remaining_sheet_name]
+        self.assertIsNone(remaining_ws["A1"].value)
+        self.assertIsNone(remaining_ws["B1"].value)
 
 
 if __name__ == '__main__':

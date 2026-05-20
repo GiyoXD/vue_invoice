@@ -71,7 +71,7 @@ class BlueprintGenerator:
                 self.logger.warning(f"Failed to load mapping config: {e}")
         return {}
 
-    def analyze(self, template_path: str, legacy_format: bool = True) -> str:
+    def analyze(self, template_path: str, legacy_format: bool = True, ignore_missing_description: bool = False) -> str:
         """
         Analyze template and return JSON string (for frontend integration).
         """
@@ -80,6 +80,8 @@ class BlueprintGenerator:
              raise FileNotFoundError(f"Template not found: {template_path}")
              
         mapping_config = self._load_mapping_config()
+        if ignore_missing_description:
+            mapping_config["ignore_missing_description"] = True
         analysis = self.scanner.scan_template(str(template_path), mapping_config=mapping_config)
         
         # Currently, legacy_format is always assumed or the output format is identical
@@ -96,7 +98,8 @@ class BlueprintGenerator:
                  custom_prefix: Optional[str] = None,
                  runtime_mappings: Optional[Dict[str, str]] = None,
                  bundle_dir_name: Optional[str] = None,
-                 pricing_mode: str = "standard") -> Optional[Path]:
+                 pricing_mode: str = "standard",
+                 ignore_missing_description: bool = False) -> Optional[Path]:
         """
         Generate bundle config from template.
         
@@ -140,6 +143,9 @@ class BlueprintGenerator:
         except Exception as e:
             self.logger.error(f"Failed to load mapping config: {e}")
             raise e
+            
+        if ignore_missing_description:
+            mapping_config["ignore_missing_description"] = True
         
         # Inject Runtime Mappings (from API/User)
         if runtime_mappings:

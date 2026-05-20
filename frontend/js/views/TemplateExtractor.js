@@ -35,6 +35,14 @@ export default {
                         </select>
                     </div>
 
+                    <!-- Ignore missing description check -->
+                    <div class="mt-4 flex items-center gap-2">
+                        <input type="checkbox" id="ignore-missing-desc" v-model="ignoreMissingDescription" class="rounded bg-slate-950 border-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-offset-slate-900 w-4 h-4 cursor-pointer" />
+                        <label for="ignore-missing-desc" class="text-sm text-slate-300 select-none cursor-pointer flex items-center gap-1.5">
+                            ⚠️ Ignore missing description error (Bypass DES column checks)
+                        </label>
+                    </div>
+
                     <div v-if="selectedFiles.length > 2" class="status-box error mt-2">
                         ⚠️ Maximum 2 files allowed. Only the first 2 will be used.
                     </div>
@@ -45,7 +53,14 @@ export default {
                 </button>
                 
                  <div v-if="statusMessage" :class="['status-box', statusType]">
-                    {{ statusMessage }}
+                    <div class="flex flex-col gap-2">
+                        <span class="break-words text-xs whitespace-pre-wrap leading-relaxed">{{ statusMessage }}</span>
+                        <button v-if="statusType === 'error' && (statusMessage.includes('Missing Description') || statusMessage.includes('description') || statusMessage.includes('ValueError'))" 
+                                @click="forceAnalyze" 
+                                class="mt-2 px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold rounded-lg transition-all self-start flex items-center gap-1.5 shadow-md transform hover:-translate-y-0.5 cursor-pointer">
+                            ⚠️ Force Analyze & Bypass This Error
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -253,6 +268,7 @@ export default {
         const isProcessing = ref(false);
         const statusMessage = ref("");
         const statusType = ref("info");
+        const ignoreMissingDescription = ref(false);
 
         const showMappings = ref(false);
         const globalMappings = ref({});
@@ -468,7 +484,7 @@ export default {
                     const formData = new FormData();
                     formData.append('file', file);
 
-                    const res = await fetch('/api/template/analyze', { method: 'POST', body: formData });
+                    const res = await fetch(`/api/template/analyze?ignore_missing_description=${ignoreMissingDescription.value}`, { method: 'POST', body: formData });
                     const data = await res.json();
 
                     if (!res.ok) {
@@ -570,7 +586,8 @@ export default {
                                 temp_filename: fileTokens.value[i].filename,
                                 bundle_dir_name: baseName,
                                 confirmed_footers: confirmedFooters.value,
-                                pricing_mode: pricingMode.value
+                                pricing_mode: pricingMode.value,
+                                ignore_missing_description: ignoreMissingDescription.value
                             })
                         });
                         const data = await res.json();
@@ -599,7 +616,8 @@ export default {
                             temp_filename: fileTokens.value[0].filename,
                             bundle_dir_name: useBundleDir,
                             confirmed_footers: confirmedFooters.value,
-                            pricing_mode: pricingMode.value
+                            pricing_mode: pricingMode.value,
+                            ignore_missing_description: ignoreMissingDescription.value
                         })
                     });
                     const data = await res.json();
@@ -638,6 +656,14 @@ export default {
             confirmedFooters.value = [];
             allMissingFooters.value = [];
             proactiveWarnings.value = [];
+            ignoreMissingDescription.value = false;
+        };
+
+        const forceAnalyze = async () => {
+            ignoreMissingDescription.value = true;
+            statusMessage.value = "";
+            statusType.value = "info";
+            await analyzeFiles();
         };
 
         return {
@@ -648,6 +674,8 @@ export default {
             isProcessing,
             statusMessage,
             statusType,
+            ignoreMissingDescription,
+            forceAnalyze,
             handleFileUpload,
             analyzeFiles,
             generateTemplate,

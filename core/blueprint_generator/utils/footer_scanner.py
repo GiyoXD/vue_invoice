@@ -11,7 +11,7 @@ from .content_extractor import find_total_label_cell, find_pallet_count_column, 
 from core.utils.loop_profiler import loop_profiler, tick
 
 if TYPE_CHECKING:
-    from core.blueprint_generator.excel_scanner import ColumnInfo
+    from core.blueprint_generator.internal.scanner import ColumnInfo
 
 logger = logging.getLogger(__name__)
 

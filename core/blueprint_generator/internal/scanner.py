@@ -22,7 +22,10 @@ from ..rules import BlueprintRules
 from core.utils.snitch import snitch
 from core.utils.loop_profiler import loop_profiler, tick
 from ..utils.footer_scanner import FooterInfo, scan_footer
-from ..utils.content_extractor import detect_static_description_label, extract_table_fallback_description
+from ..utils.content_extractor import (
+    detect_static_description_label,
+    extract_static_column_values
+)
 from ..utils.openpyxl_utils import get_actual_column_width
 
 logger = logging.getLogger(__name__)
@@ -363,14 +366,28 @@ class ExcelLayoutScanner:
                         global_hs_colspan = analysis.footer_info.hs_code_colspan
                         global_hs_col_id = analysis.footer_info.hs_code_col_id
 
+        # Check mapping config options to ignore missing description fallback
+        ignore_missing_desc = False
+        if mapping_config:
+            ignore_missing_desc = (
+                mapping_config.get("ignore_missing_description", False) or
+                mapping_config.get("fallback_strategies", {}).get("ignore_missing_description", False)
+            )
+
         # Strict Validation: Both values are required for the blueprint to be complete.
         # fallback_description → written into col_desc.fallback in the config (used by invoice renderer)
         # hs_code → written into before_footer.text in the config (used by footer builder)
         if not global_desc:
-            raise ValueError(
-                f"Missing Description Fallback! No 'DES: ...' label in col_static AND no descriptions "
-                f"found in col_desc data rows. Ensure the template has product descriptions: {path.name}"
-            )
+            if ignore_missing_desc:
+                warnings.append(
+                    f"Missing Description Fallback! No 'DES: ...' label found in col_static. "
+                    f"Bypassed because 'ignore_missing_description' is enabled."
+                )
+            else:
+                raise ValueError(
+                    f"Missing Description Fallback! No 'DES: ...' label found in col_static. "
+                    f"Ensure the template has product descriptions in the static column: {path.name}"
+                )
 
         if not global_hs_code:
             raise ValueError(
@@ -483,18 +500,19 @@ class ExcelLayoutScanner:
             # Extract row heights
             row_heights = self._extract_row_heights(worksheet, header_row, data_source, data_start_row)
             
-            # Detect static content hints (like "Mark & Nº" column content)
-            static_hints = self._detect_static_content(worksheet, header_row, columns, skip_desc_scan)
-            
-            # Note: _extract_description_fallback was removed. 
-            # Description is now only detected via label in _detect_static_content.
-
-
             # [Smart Feature] Dynamic Footer Analysis (Delegated to Utility)
             footer_info = scan_footer(worksheet, header_row, columns, self.logger, sheet_name=sheet_name, mapping_config=mapping_config, skip_hs_scan=skip_hs_scan)
             if footer_info:
                 self.logger.info(f"    Footer detected at row {footer_info.row_num}: '{footer_info.total_text}' (colspan={footer_info.merge_curr_colspan})")
             
+            # Detect static content hints (like "Mark & Nº" column content) strictly bounded by the total row anchor
+            footer_row = footer_info.row_num if footer_info else None
+            static_hints = self._detect_static_content(worksheet, header_row, columns, skip_desc_scan, footer_row=footer_row)
+            
+            # Note: _extract_description_fallback and secondary col_desc scan have been completely removed.
+            # Description is strictly detected via label in the static column (_detect_static_content).
+
+
             sheet_analysis = SheetAnalysis(
                 name=sheet_name,
                 header_row=header_row,
@@ -921,7 +939,8 @@ class ExcelLayoutScanner:
     
     @loop_profiler.watch("scanner._detect_static_content")
     def _detect_static_content(self, worksheet: Worksheet, header_row: int, 
-                               columns: List[ColumnInfo], skip_desc_scan: bool = False) -> Dict[str, List[str]]:
+                               columns: List[ColumnInfo], skip_desc_scan: bool = False,
+                               footer_row: Optional[int] = None) -> Dict[str, List[str]]:
         """Detect static content patterns in the data area."""
         hints = {}
         
@@ -929,20 +948,13 @@ class ExcelLayoutScanner:
             # Primary: look for 'DES: COW LEATHER' style label in col_static
             desc_fallback = detect_static_description_label(worksheet, header_row, columns)
             
-            if not desc_fallback:
-                # Secondary: scan col_desc data rows for unique description values
-                col_desc_index = next((col.col_index for col in columns if col.id == "col_desc"), None)
-                if col_desc_index is not None:
-                    logger.info("    [Fallback] No static DES label found. Scanning col_desc data rows for description.")
-                    desc_fallback = extract_table_fallback_description(
-                        worksheet,
-                        data_start=header_row + 1,
-                        data_end=worksheet.max_row,
-                        col_desc_index=col_desc_index
-                    )
-            
             if desc_fallback:
                 hints["description_fallback"] = desc_fallback
+        
+        # Extract actual static column values from the template, strictly stopping before footer row
+        static_lines = extract_static_column_values(worksheet, header_row, columns, footer_row=footer_row)
+        if static_lines:
+            hints["static_lines"] = static_lines
         
         return hints
 
