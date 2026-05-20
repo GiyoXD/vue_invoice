@@ -344,7 +344,7 @@ class ExcelLayoutScanner:
                 sheet_name, 
                 mapping_config,
                 skip_desc_scan=bool(global_desc),
-                skip_hs_scan=bool(global_hs_code)
+                skip_hs_scan=False
             )
             if analysis:
                 sheets.append(analysis)
@@ -358,9 +358,10 @@ class ExcelLayoutScanner:
                     global_desc = analysis.static_content_hints.get("description_fallback")
                 
                 if analysis.footer_info and analysis.footer_info.has_hs_code:
-                    global_hs_code = analysis.footer_info.hs_code_text
-                    global_hs_colspan = analysis.footer_info.hs_code_colspan
-                    global_hs_col_id = analysis.footer_info.hs_code_col_id
+                    if not global_hs_code:
+                        global_hs_code = analysis.footer_info.hs_code_text
+                        global_hs_colspan = analysis.footer_info.hs_code_colspan
+                        global_hs_col_id = analysis.footer_info.hs_code_col_id
 
         # Strict Validation: Both values are required for the blueprint to be complete.
         # fallback_description → written into col_desc.fallback in the config (used by invoice renderer)

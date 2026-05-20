@@ -329,7 +329,7 @@ class ExcelTemplateSanitizer:
             tick("sanitizer._find_table_footer_row", sub="rows_scanned")
             formula_cols = []  # Column indices with =SUM or =SUBTOTAL in this row
 
-            for col in range(1, max_col):
+            for col in range(1, max_col + 1):
                 tick("sanitizer._find_table_footer_row", sub="cells_checked")
                 cell = ws.cell(row=row, column=col)
                 value = self._get_cell_value(cell, merge_map)
@@ -362,7 +362,7 @@ class ExcelTemplateSanitizer:
         scan_limit_bottom_up = max(search_start_row, ws.max_row - 500)
         for row in range(ws.max_row, scan_limit_bottom_up - 1, -1):
             tick("sanitizer._find_table_footer_row", sub="fallback_rows_scanned")
-            for col in range(1, max_col):
+            for col in range(1, max_col + 1):
                 tick("sanitizer._find_table_footer_row", sub="fallback_cells_checked")
                 cell = ws.cell(row=row, column=col)
                 value = self._get_cell_value(cell, merge_map)
@@ -444,11 +444,11 @@ class ExcelTemplateSanitizer:
                 return True
         
         # Check column width
-        col_letter = get_column_letter(col)
-        if col_letter in ws.column_dimensions:
-            width = ws.column_dimensions[col_letter].width
-            if width is not None and width != self.DEFAULT_COL_WIDTH:
-                return True
+        for dim in ws.column_dimensions.values():
+            if dim.min <= col <= dim.max:
+                if dim.width is not None and dim.width != self.DEFAULT_COL_WIDTH:
+                    return True
+                break
         
         return False
 

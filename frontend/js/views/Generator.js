@@ -135,6 +135,10 @@ export default {
                             <input type="checkbox" v-model="includeDAF" accent-color="#2563eb" /> 
                             <span>DAF Mode</span>
                         </label>
+                        <label class="flex items-center gap-2 cursor-pointer border-l border-slate-700 pl-4">
+                            <input type="checkbox" v-model="splitSheets" accent-color="#10b981" /> 
+                            <span class="text-emerald-400 font-medium">Split Sheets into Separate Files</span>
+                        </label>
                     </div>
                     
                     <!-- KH/VN Variant Options -->
@@ -345,6 +349,7 @@ export default {
         const includeCustom = ref(false);
         const includeDAF = ref(false);
         const selectedVariants = ref([]);
+        const splitSheets = ref(false);
 
 
         const priceAdjustments = ref([]); // List of { description: '', value: '' }
@@ -529,7 +534,8 @@ export default {
                     generate_custom: includeCustom.value,
                     generate_daf: includeDAF.value,
                     generate_kh: true,  // KH is the default variant
-                    generate_vn: selectedVariants.value.includes('_VN')
+                    generate_vn: selectedVariants.value.includes('_VN'),
+                    split_sheets: splitSheets.value
                 };
 
                 // Net weight pricing mode: include global unit price
@@ -826,6 +832,7 @@ export default {
             includeStandard,
             includeCustom,
             includeDAF,
+            splitSheets,
 
             handleFileUpload,
             uploadFile,

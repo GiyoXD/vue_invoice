@@ -345,14 +345,32 @@ class TableDataAdapter:
         if not pallet_col_idx:
             return
 
-        # 1. First pass: Count total pallets in this table block
-        total_pallets = sum(
-            1 for row in data_rows[:num_data_rows] 
-            if _to_numeric(row.get(pallet_col_idx, 0)) == 1
-        )
+        # 1. Determine global grand total and starting index across all tables
+        global_total_pallets = 0
+        starting_pallet_order = 0
+        
+        if self.footer_data:
+            # Get grand total for the 'y' value (e.g. the '5' in '1-5')
+            if 'grand_total' in self.footer_data and 'col_pallet_count' in self.footer_data['grand_total']:
+                global_total_pallets = int(self.footer_data['grand_total']['col_pallet_count'])
+                
+            # Calculate the 'x' start offset by summing pallets from previous tables
+            if 'table_totals' in self.footer_data and self.table_key is not None:
+                table_totals = self.footer_data['table_totals']
+                if isinstance(table_totals, list):
+                    tbl_idx = 0
+                    if str(self.table_key).isdigit():
+                        tbl_idx = int(self.table_key)
+                    
+                    for i in range(min(tbl_idx, len(table_totals))):
+                        tbl_footer = table_totals[i]
+                        if 'col_pallet_count' in tbl_footer:
+                            starting_pallet_order += int(tbl_footer['col_pallet_count'])
+
+        total_pallets_to_display = global_total_pallets
 
         # 2. Second pass: Assign 'x-y' order and carry-forward for merging
-        pallet_order = 0
+        pallet_order = starting_pallet_order
         carry_value = 0
         
         for row in data_rows[:num_data_rows]:
@@ -360,7 +378,7 @@ class TableDataAdapter:
             
             if val == 1:
                 pallet_order += 1
-                formatted_val = f"{pallet_order}-{total_pallets}"
+                formatted_val = f"{pallet_order}-{total_pallets_to_display}"
                 row[pallet_col_idx] = formatted_val
                 carry_value = formatted_val
             else:

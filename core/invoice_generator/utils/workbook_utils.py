@@ -289,12 +289,95 @@ def build_output_filename(ctx):
 
 
 # ---------------------------------------------------------------------------
+# Sheet Splitting
+# ---------------------------------------------------------------------------
+
+def _build_split_filename(base_stem: str, sheet_name: str, suffix: str) -> str:
+    """
+    Build a filename for a split sheet.
+    Replaces 'Invoice' in the stem with the sheet name to stay tied
+    to the original input file identity.
+
+    Examples:
+        ("TH26001_Invoice_KH", "Packing list", ".xlsx") -> "TH26001_Packing list_KH.xlsx"
+        ("TH26001_Invoice",    "Contract",     ".xlsx") -> "TH26001_Contract.xlsx"
+        ("SomeFile",           "Invoice",      ".xlsx") -> "SomeFile_Invoice.xlsx"
+    """
+    if "Invoice" in base_stem:
+        new_base = base_stem.replace("Invoice", sheet_name)
+    else:
+        new_base = f"{base_stem}_{sheet_name}"
+    return f"{new_base}{suffix}"
+
+
+def split_workbook_to_buffers(workbook, output_path) -> list:
+    """
+    Split a workbook into per-sheet in-memory byte buffers.
+
+    Skips hidden sheets (openpyxl cannot save a workbook where the only
+    sheet is hidden). Preserves all print areas, dimensions, and styles.
+
+    Args:
+        workbook:    The openpyxl Workbook to split.
+        output_path: A Path used to derive filenames for each split file.
+
+    Returns:
+        List of (filename: str, file_bytes: bytes) tuples.
+    """
+    import io
+
+    logger.info("Splitting workbook into individual sheet buffers...")
+
+    # Snapshot the full workbook once
+    master_buffer = io.BytesIO()
+    workbook.save(master_buffer)
+
+    results = []
+    for sheet_name in workbook.sheetnames:
+        if workbook[sheet_name].sheet_state != 'visible':
+            logger.info(f"Skipping hidden sheet '{sheet_name}' during split.")
+            continue
+
+        master_buffer.seek(0)
+        wb = openpyxl.load_workbook(master_buffer)
+
+        # Remove every sheet except the target
+        for sn in wb.sheetnames:
+            if sn != sheet_name:
+                wb.remove(wb[sn])
+
+        sheet_buffer = io.BytesIO()
+        wb.save(sheet_buffer)
+        wb.close()
+
+        filename = _build_split_filename(
+            output_path.stem, sheet_name, output_path.suffix
+        )
+        results.append((filename, sheet_buffer.getvalue()))
+        logger.info(f"  ✅ Split sheet '{sheet_name}' -> {filename}")
+
+    return results
+
+
+# ---------------------------------------------------------------------------
 # Finalization
 # ---------------------------------------------------------------------------
 
 def finalize(ctx):
-    """Apply print settings and save the workbook to disk."""
+    """Apply print settings, optionally split sheets, and save the workbook to disk."""
     apply_print_settings(ctx)
+
+    # Split sheets to individual files if requested
+    if getattr(ctx, 'split_sheets', False):
+        for filename, fbytes in split_workbook_to_buffers(ctx.output_workbook, ctx.output_path):
+            split_path = ctx.output_path.parent / filename
+            try:
+                ensure_file_unlocked(split_path)
+            except Exception as e:
+                logger.error(f"File Lock Error on split file {split_path}: {e}")
+                continue
+            split_path.write_bytes(fbytes)
+            logger.info(f"Saved split file: {split_path}")
 
     logger.info(f"Saving workbook to {ctx.output_path}")
 
