@@ -391,7 +391,7 @@ class ConfigBuilder:
             # Add pallet count cell only if detected in this sheet's template
             if sheet.footer_info.pallet_count_col_id:
                 footer_cells.append([
-                    "{pallet_count} PALLETS",
+                    "{pallet_count} PALLET{multiple}",
                     sheet.footer_info.pallet_count_col_id
                 ])
                 self.logger.info(f"    [Smart] footer_cells: pallet count -> {sheet.footer_info.pallet_count_col_id}")
