@@ -380,7 +380,7 @@
             "col_po"
           ],
           [
-            "{pallet_count} PALLETS",
+            "{pallet_count} PALLET{multiple}",
             "col_item"
           ]
         ]
@@ -585,7 +585,7 @@
             "col_po"
           ],
           [
-            "{pallet_count} PALLETS",
+            "{pallet_count} PALLET{multiple}",
             "col_desc"
           ]
         ]

@@ -6,8 +6,13 @@ set -e
 # if they don't already exist in the mounted volume.
 
 if [ -d "/app/default_database" ]; then
-    echo "Seeding default database configurations into volume..."
-    # Copy recursively, without overwriting existing files (-n)
+    echo "Updating system mapper configurations in volume..."
+    # Always update system mapping configurations (master_config.json) to the latest version
+    mkdir -p /app/database/blueprints/mapper
+    cp -r /app/default_database/blueprints/mapper/* /app/database/blueprints/mapper/
+
+    # Seed all other database folders and files (like bundled blueprints or registry.db) only if they do not exist
+    echo "Seeding other database files if missing..."
     cp -r -n /app/default_database/* /app/database/
 fi
 
