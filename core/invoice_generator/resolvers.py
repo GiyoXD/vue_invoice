@@ -96,8 +96,8 @@ class InvoiceAssetResolver:
         prefix = match.group(1) if match else None
         
         if prefix:
-            # Strip trailing hyphen or underscore just in case (e.g. JF-25001 -> JF)
-            prefix = prefix.rstrip('-_')
+            # Strip trailing underscore just in case (e.g. JF_25001 -> JF)
+            prefix = prefix.rstrip('_')
 
         if not prefix:
             logger.warning(f"Could not extract prefix from '{file_stem}'")
@@ -214,7 +214,7 @@ class InvoiceAssetResolver:
         match = re.match(r'^([a-zA-Z\-_]+)', stem)
         prefix = match.group(1) if match else None
         if prefix:
-            prefix = prefix.rstrip('-_')
+            prefix = prefix.rstrip('_')
             
         if not prefix:
             return []
@@ -235,7 +235,7 @@ class InvoiceAssetResolver:
         match = re.match(r'^([a-zA-Z\-_]+)', file_stem)
         prefix = match.group(1) if match else None
         if prefix:
-            prefix = prefix.rstrip('-_')
+            prefix = prefix.rstrip('_')
             
         if not prefix:
             return None

@@ -57,3 +57,41 @@ def test_validate_similar_client_prefix_not_overlapse(tmp_path: Path):
     jlftlt_assets = resolver.resolve_assets_for_input_file("JLFTLT25001.json")
     assert jlftlt_assets is not None
     assert "JLFTLT_config.json" in str(jlftlt_assets.config_path)
+
+
+def test_differentiate_trailing_hyphen(tmp_path: Path):
+    """
+    Test that the sourcing algorithm correctly differentiates between
+    prefixes with trailing hyphens (like KB-) and those without (like KB).
+    They must not overlap.
+    """
+    config_dir = tmp_path / "config"
+    template_dir = tmp_path / "templates"
+    
+    config_dir.mkdir()
+    template_dir.mkdir()
+    
+    # Create KB- folder and assets
+    kb_dash_folder = config_dir / "KB-"
+    kb_dash_folder.mkdir()
+    (kb_dash_folder / "KB-_config.json").touch()
+    (kb_dash_folder / "KB-.xlsx").touch()
+    
+    # Create KB folder and assets
+    kb_folder = config_dir / "KB"
+    kb_folder.mkdir()
+    (kb_folder / "KB_config.json").touch()
+    (kb_folder / "KB.xlsx").touch()
+    
+    resolver = InvoiceAssetResolver(config_dir, template_dir)
+    
+    # KB-25001.json has prefix "KB-", so it should resolve to the KB- folder and assets
+    dash_assets = resolver.resolve_assets_for_input_file("KB-25001.json")
+    assert dash_assets is not None
+    assert "KB-_config.json" in str(dash_assets.config_path)
+    
+    # KB25001.json has prefix "KB", so it should resolve to the KB folder and assets
+    kb_assets = resolver.resolve_assets_for_input_file("KB25001.json")
+    assert kb_assets is not None
+    assert "KB_config.json" in str(kb_assets.config_path)
+
