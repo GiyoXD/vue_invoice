@@ -396,7 +396,8 @@ def run_invoice_automation(
     input_filename_override: str = None,
     output_dir_override: str = None,
     monitor_override: PipelineMonitor = None,
-    ignore_tare_warning: bool = False
+    ignore_tare_warning: bool = False,
+    ignore_cbm_warning: bool = False
 ) -> Tuple[Path, str]:
     """
     Main entry point for the invoice automation process.
@@ -568,6 +569,16 @@ def run_invoice_automation(
                         validate_data(data_normalized, table_id_str, column_mapping, monitor=monitor, phase='integrity', ignore_tare_warning=ignore_tare_warning)
 
                         data_after_distribution = data_processor.distribute_values(data_normalized, cfg.COLUMNS_TO_DISTRIBUTE, cfg.DISTRIBUTION_BASIS_COLUMN)
+                        
+                        # Validate distributed CBM and PCS proportions
+                        validate_data(
+                            data_after_distribution,
+                            table_id_str,
+                            column_mapping,
+                            monitor=monitor,
+                            phase='cbm_proportion',
+                            ignore_cbm_warning=ignore_cbm_warning
+                        )
                         
                         processed_tables.append(data_after_distribution)
                         data_for_aggregation = data_after_distribution

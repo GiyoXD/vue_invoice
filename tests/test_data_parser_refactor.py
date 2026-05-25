@@ -2,6 +2,7 @@ import unittest
 from decimal import Decimal
 from core.data_parser import data_processor
 from core.data_parser import sheet_parser
+from core.data_parser.validation import validate_data, DataValidationError
 
 class TestDataParserRefactor(unittest.TestCase):
 
@@ -114,6 +115,101 @@ class TestDataParserRefactor(unittest.TestCase):
              self.fail(f"New schema failed: {err}. Function Needs Refactoring!")
         except Exception as err:
              self.fail(f"New schema logic failed: {err}")
+
+    def test_cbm_pcs_proportion_orphaned_row(self):
+        # Row 1 has pieces (col_qty_pcs=100) but col_cbm=0 (orphaned)
+        # Row 2 has col_qty_pcs=0 but col_cbm=1.5
+        data = [
+            {"col_po": "PO1", "col_item": "ITEM1", "col_qty_pcs": Decimal('100'), "col_cbm": Decimal('0'), "_row_num": 12},
+            {"col_po": "PO1", "col_item": "ITEM2", "col_qty_pcs": Decimal('0'), "col_cbm": Decimal('1.5'), "_row_num": 13}
+        ]
+        column_mapping = {"col_po": "A", "col_item": "B", "col_qty_pcs": "C", "col_cbm": "D"}
+        
+        # Should raise DataValidationError
+        with self.assertRaises(DataValidationError) as context:
+            validate_data(data, "Table 1", column_mapping, phase='cbm_proportion')
+        self.assertIn("Data Validation Error (Row 12)", str(context.exception))
+        self.assertIn("has pieces (100) but received 0 CBM", str(context.exception))
+
+        # With ignore_cbm_warning=True, it should pass
+        try:
+            validate_data(data, "Table 1", column_mapping, phase='cbm_proportion', ignore_cbm_warning=True)
+        except DataValidationError:
+            self.fail("validate_data raised DataValidationError when ignore_cbm_warning was True")
+
+    def test_cbm_pcs_proportion_monotonicity_violation(self):
+        # ITEM1 has col_qty_pcs=100 and col_cbm=1.0
+        # ITEM2 has col_qty_pcs=50 and col_cbm=2.0
+        # Monotonicity violation
+        data = [
+            {"col_po": "PO1", "col_item": "ITEM1", "col_qty_pcs": Decimal('100'), "col_cbm": Decimal('1.0'), "_row_num": 14},
+            {"col_po": "PO1", "col_item": "ITEM2", "col_qty_pcs": Decimal('50'), "col_cbm": Decimal('2.0'), "_row_num": 15}
+        ]
+        column_mapping = {"col_po": "A", "col_item": "B", "col_qty_pcs": "C", "col_cbm": "D"}
+
+        with self.assertRaises(DataValidationError) as context:
+            validate_data(data, "Table 1", column_mapping, phase='cbm_proportion')
+        self.assertIn("Data Validation Error (Rows 14 and 15)", str(context.exception))
+        self.assertIn("more pieces (100) but a lower CBM (1.0)", str(context.exception))
+
+        # With ignore_cbm_warning=True, it should pass
+        try:
+            validate_data(data, "Table 1", column_mapping, phase='cbm_proportion', ignore_cbm_warning=True)
+        except DataValidationError:
+            self.fail("validate_data raised DataValidationError when ignore_cbm_warning was True")
+
+    def test_cbm_pcs_proportion_abnormally_high_ratio(self):
+        # ITEM1 has col_qty_pcs=2 and col_cbm=1.5 -> ratio = 0.75 > 0.5
+        data = [
+            {"col_po": "PO1", "col_item": "ITEM1", "col_qty_pcs": Decimal('2'), "col_cbm": Decimal('1.5'), "_row_num": 16}
+        ]
+        column_mapping = {"col_po": "A", "col_item": "B", "col_qty_pcs": "C", "col_cbm": "D"}
+
+        with self.assertRaises(DataValidationError) as context:
+            validate_data(data, "Table 1", column_mapping, phase='cbm_proportion')
+        self.assertIn("Data Validation Error (Row 16)", str(context.exception))
+        self.assertIn("abnormally high CBM-to-basis ratio", str(context.exception))
+
+        # With ignore_cbm_warning=True, it should pass
+        try:
+            validate_data(data, "Table 1", column_mapping, phase='cbm_proportion', ignore_cbm_warning=True)
+        except DataValidationError:
+            self.fail("validate_data raised DataValidationError when ignore_cbm_warning was True")
+
+    def test_cbm_pcs_proportion_ratio_outliers(self):
+        # Row 5 ratio (0.005) is outlier compared to median of 0.1
+        data = [
+            {"col_po": "PO1", "col_item": "ITEM1", "col_qty_pcs": Decimal('100'), "col_cbm": Decimal('10.0'), "_row_num": 17},
+            {"col_po": "PO1", "col_item": "ITEM2", "col_qty_pcs": Decimal('100'), "col_cbm": Decimal('10.0'), "_row_num": 18},
+            {"col_po": "PO1", "col_item": "ITEM3", "col_qty_pcs": Decimal('100'), "col_cbm": Decimal('10.0'), "_row_num": 19},
+            {"col_po": "PO1", "col_item": "ITEM4", "col_qty_pcs": Decimal('10'), "col_cbm": Decimal('2.0'), "_row_num": 20},
+            {"col_po": "PO1", "col_item": "ITEM5", "col_qty_pcs": Decimal('10'), "col_cbm": Decimal('0.05'), "_row_num": 21}
+        ]
+        column_mapping = {"col_po": "A", "col_item": "B", "col_qty_pcs": "C", "col_cbm": "D"}
+
+        with self.assertRaises(DataValidationError) as context:
+            validate_data(data, "Table 1", column_mapping, phase='cbm_proportion')
+        self.assertIn("Data Validation Error (Row 21)", str(context.exception))
+        self.assertIn("outlier (< 0.1x median ratio", str(context.exception))
+
+        # With ignore_cbm_warning=True, it should pass
+        try:
+            validate_data(data, "Table 1", column_mapping, phase='cbm_proportion', ignore_cbm_warning=True)
+        except DataValidationError:
+            self.fail("validate_data raised DataValidationError when ignore_cbm_warning was True")
+
+    def test_cbm_pcs_proportion_valid_table(self):
+        data = [
+            {"col_po": "PO1", "col_item": "ITEM1", "col_qty_pcs": Decimal('10'), "col_cbm": Decimal('1.0')},
+            {"col_po": "PO1", "col_item": "ITEM2", "col_qty_pcs": Decimal('20'), "col_cbm": Decimal('2.0')},
+            {"col_po": "PO1", "col_item": "ITEM3", "col_qty_pcs": Decimal('30'), "col_cbm": Decimal('3.0')}
+        ]
+        column_mapping = {"col_po": "A", "col_item": "B", "col_qty_pcs": "C", "col_cbm": "D"}
+
+        try:
+            validate_data(data, "Table 1", column_mapping, phase='cbm_proportion')
+        except DataValidationError as ve:
+            self.fail(f"Valid table failed validation: {ve}")
 
 if __name__ == '__main__':
     unittest.main()

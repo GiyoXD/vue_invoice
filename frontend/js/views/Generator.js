@@ -61,6 +61,7 @@ export default {
                     <div class="error-actions">
                         <button class="btn-retry" @click="retryUpload">🔄 Try Again</button>
                         <button v-if="uploadError.message && uploadError.message.includes('Weight Integrity Error')" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg shadow transition-colors ml-2" @click="ignoreTareAndRetry">⚠️ Bypass Weight Check</button>
+                        <button v-if="uploadError.message && uploadError.message.includes('CBM')" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg shadow transition-colors ml-2" @click="ignoreCbmAndRetry">⚠️ Bypass CBM Check</button>
                         <button class="btn-copy-error" @click="copyError(uploadError)">📋 Copy Error</button>
                     </div>
                 </div>
@@ -334,6 +335,7 @@ export default {
         const uploadError = ref(null);
         const showUploadTraceback = ref(false);
         const ignoreTareError = ref(false);
+        const ignoreCbmError = ref(false);
 
         const processingComplete = ref(false);
         const identifier = ref('');
@@ -380,6 +382,7 @@ export default {
             uploadError.value = null;
             showUploadTraceback.value = false;
             ignoreTareError.value = false;
+            ignoreCbmError.value = false;
             processingComplete.value = false;
             validationData.value = null;
             assetStatus.value = null;
@@ -413,6 +416,7 @@ export default {
             const formData = new FormData();
             formData.append('file', selectedFile.value);
             formData.append('ignore_tare', ignoreTareError.value);
+            formData.append('ignore_cbm', ignoreCbmError.value);
 
             try {
                 const response = await fetch('/api/upload', {
@@ -628,6 +632,11 @@ export default {
             uploadFile();
         };
 
+        const ignoreCbmAndRetry = () => {
+            ignoreCbmError.value = true;
+            uploadFile();
+        };
+
         /**
          * Retries the invoice generation after an error.
          */
@@ -824,6 +833,7 @@ export default {
             uploadError,
             showUploadTraceback,
             ignoreTareAndRetry,
+            ignoreCbmAndRetry,
             processingComplete,
             identifier,
             invoiceNo,

@@ -385,8 +385,21 @@ def normalize_by_pallet_anchor(
         elif current_group is not None:
             current_group['member_indices'].append(i)
         else:
-            # Rows before the first pallet anchor — no group to attach to, leave as-is
-            pass
+            # Rows before the first pallet anchor — no group to attach to.
+            # If they have distributable values (like net, gross, cbm), it's a critical error!
+            if _has_distributable_value(row):
+                row_num = row.get('_row_num')
+                row_num_str = f" (Row {row_num})" if row_num else ""
+                po_val = row.get('col_po', 'Unknown PO')
+                item_val = row.get('col_item', 'Unknown Item')
+                error_msg = (
+                    f"Data Validation Error{row_num_str}: Orphaned data found at PO [{po_val}] / Item [{item_val}]. "
+                    f"Net Weight, Gross Weight, or CBM values exist before the first pallet anchor. "
+                    f"Please ensure every pallet group starts with a valid Pallet Count."
+                )
+                if monitor:
+                    monitor.log_process_item("Pallet Normalization", status="error", error=error_msg)
+                raise DataValidationError(error_msg)
 
     if not groups:
         logging.info(f"{prefix} No pallet anchor rows found. Skipping normalization.")

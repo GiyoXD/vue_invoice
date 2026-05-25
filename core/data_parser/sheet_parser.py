@@ -339,6 +339,7 @@ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[
             
             # Additional logic to skip completely empty rows (optional but good practice)
             if any(v is not None and (not isinstance(v, str) or v.strip() != "") for v in row_dict.values()):
+                row_dict['_row_num'] = current_row
                 current_table_data.append(row_dict)
 
         # Normalize pallet count format IMMEDIATELY upon extraction so all downstream JSON output has 1/0 boundaries

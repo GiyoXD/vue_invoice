@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 orchestrator = Orchestrator()
 
 @router.post("/upload")
-def upload_excel(file: UploadFile = File(...), ignore_tare: bool = Form(False)):
+def upload_excel(file: UploadFile = File(...), ignore_tare: bool = Form(False), ignore_cbm: bool = Form(False)):
     """
     Uploads an Excel file and processes it to JSON.
     Returns the identifier, json path, and asset availability status.
@@ -34,7 +34,8 @@ def upload_excel(file: UploadFile = File(...), ignore_tare: bool = Form(False)):
             buffer, 
             json_output_dir,
             input_filename_override=file.filename,
-            ignore_tare_warning=ignore_tare
+            ignore_tare_warning=ignore_tare,
+            ignore_cbm_warning=ignore_cbm
         )
         
         # Default Invoice No to filename stem
