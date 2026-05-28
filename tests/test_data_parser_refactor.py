@@ -128,7 +128,7 @@ class TestDataParserRefactor(unittest.TestCase):
         # Should raise DataValidationError
         with self.assertRaises(DataValidationError) as context:
             validate_data(data, "Table 1", column_mapping, phase='cbm_proportion')
-        self.assertIn("Data Validation Error (Row 12)", str(context.exception))
+        self.assertIn("[Zero CBM] (Row 12)", str(context.exception))
         self.assertIn("has pieces (100) but received 0 CBM", str(context.exception))
 
         # With ignore_cbm_warning=True, it should pass
@@ -149,8 +149,8 @@ class TestDataParserRefactor(unittest.TestCase):
 
         with self.assertRaises(DataValidationError) as context:
             validate_data(data, "Table 1", column_mapping, phase='cbm_proportion')
-        self.assertIn("Data Validation Error (Rows 14 and 15)", str(context.exception))
-        self.assertIn("more pieces (100) but a lower CBM (1.0)", str(context.exception))
+        self.assertIn("[Monotonicity] (Rows 14 and 15)", str(context.exception))
+        self.assertIn("more pieces (100) but lower CBM (1.0)", str(context.exception))
 
         # With ignore_cbm_warning=True, it should pass
         try:
@@ -167,8 +167,8 @@ class TestDataParserRefactor(unittest.TestCase):
 
         with self.assertRaises(DataValidationError) as context:
             validate_data(data, "Table 1", column_mapping, phase='cbm_proportion')
-        self.assertIn("Data Validation Error (Row 16)", str(context.exception))
-        self.assertIn("abnormally high CBM-to-basis ratio", str(context.exception))
+        self.assertIn("[High Ratio] (Row 16)", str(context.exception))
+        self.assertIn("Exceeds 0.5 CBM/unit threshold", str(context.exception))
 
         # With ignore_cbm_warning=True, it should pass
         try:
@@ -189,8 +189,8 @@ class TestDataParserRefactor(unittest.TestCase):
 
         with self.assertRaises(DataValidationError) as context:
             validate_data(data, "Table 1", column_mapping, phase='cbm_proportion')
-        self.assertIn("Data Validation Error (Row 21)", str(context.exception))
-        self.assertIn("outlier (< 0.1x median ratio", str(context.exception))
+        self.assertIn("[Ratio Outlier] (Row 21)", str(context.exception))
+        self.assertIn("Verify CBM (0.05) or quantity (10)", str(context.exception))
 
         # With ignore_cbm_warning=True, it should pass
         try:
@@ -210,6 +210,36 @@ class TestDataParserRefactor(unittest.TestCase):
             validate_data(data, "Table 1", column_mapping, phase='cbm_proportion')
         except DataValidationError as ve:
             self.fail(f"Valid table failed validation: {ve}")
+
+    def test_weight_integrity_unpaired_empty_string(self):
+        data = [
+            {"col_po": "PO1", "col_item": "ITEM1", "col_net": Decimal('10.0'), "col_gross": "", "_row_num": 5}
+        ]
+        column_mapping = {"col_po": "A", "col_item": "B", "col_net": "C", "col_gross": "D"}
+        with self.assertRaises(DataValidationError) as context:
+            validate_data(data, "Table 1", column_mapping, phase='integrity')
+        self.assertIn("Weight Integrity Error (Row 5)", str(context.exception))
+        self.assertIn("Partial weight found", str(context.exception))
+
+    def test_weight_integrity_both_empty(self):
+        data = [
+            {"col_po": "PO1", "col_item": "ITEM1", "col_net": "", "col_gross": None, "_row_num": 5}
+        ]
+        column_mapping = {"col_po": "A", "col_item": "B", "col_net": "C", "col_gross": "D"}
+        try:
+            validate_data(data, "Table 1", column_mapping, phase='integrity')
+        except DataValidationError as ve:
+            self.fail(f"Empty weights failed validation: {ve}")
+
+    def test_weight_integrity_invalid_positivity(self):
+        data = [
+            {"col_po": "PO1", "col_item": "ITEM1", "col_net": Decimal('10.0'), "col_gross": Decimal('9.0'), "_row_num": 6}
+        ]
+        column_mapping = {"col_po": "A", "col_item": "B", "col_net": "C", "col_gross": "D"}
+        with self.assertRaises(DataValidationError) as context:
+            validate_data(data, "Table 1", column_mapping, phase='integrity')
+        self.assertIn("Weight Validation Error (Row 6)", str(context.exception))
+        self.assertIn("Gross Weight (9.0) is not strictly greater than Net Weight (10.0)", str(context.exception))
 
 if __name__ == '__main__':
     unittest.main()

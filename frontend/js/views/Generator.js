@@ -1,4 +1,5 @@
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
+import { recommendTruck } from '../utils/truck.js';
 
 export default {
     emits: ['switch-view'], // Declare event to switch tabs
@@ -322,6 +323,29 @@ export default {
                     <div class="flex flex-col gap-1 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
                         <span class="text-emerald-400/80 text-sm font-bold uppercase tracking-wider">Total CBM</span>
                         <span class="text-emerald-300 text-2xl font-mono">{{ weightStats.cbm?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 3}) }} m³</span>
+                    </div>
+                </div>
+
+                <!-- Recommended Shipping Vehicle Card -->
+                <div v-if="recommendedTruckInfo" class="mt-6 p-4 rounded-xl border flex items-center justify-between transition-all" :class="recommendedTruckInfo.color">
+                    <div class="flex items-center gap-3">
+                        <span class="text-2xl">🚛</span>
+                        <div class="text-left flex flex-col gap-1">
+                            <div class="flex items-center gap-2">
+                                <h4 class="m-0 text-sm font-bold uppercase tracking-wider text-slate-400">Recommended Shipping Vehicle</h4>
+                                <label class="flex items-center gap-1 cursor-pointer text-[10px] font-bold text-slate-400 uppercase tracking-wider select-none bg-slate-900 border border-slate-700/50 rounded-lg px-2 py-0.5 hover:border-slate-500 transition-colors">
+                                    <input type="checkbox" v-model="isWideCargo" accent-color="#10b981" class="rounded bg-slate-950 border-slate-800 w-3 h-3 cursor-pointer" />
+                                    <span>Wide Pallets</span>
+                                </label>
+                            </div>
+                            <p class="m-0 text-lg font-extrabold text-slate-100 mt-0.5">{{ recommendedTruckInfo.displayName }}</p>
+                        </div>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">Tonnage Limit</span>
+                        <span class="text-sm font-semibold text-slate-300 mt-0.5">
+                            Max {{ recommendedTruckInfo.maxWeight === Infinity ? 'Limit Exceeded' : recommendedTruckInfo.maxWeight.toLocaleString() + ' kg' }}
+                        </span>
                     </div>
                 </div>
             </div>
@@ -661,10 +685,26 @@ export default {
         };
 
         const summaryStats = computed(() => {
+            const gt = validationData.value?.footer_data?.grand_total;
+            if (gt) {
+                return {
+                    total_pcs: Number(gt.col_qty_pcs) || 0,
+                    total_sqft: Number(gt.col_qty_sf) || 0,
+                    total_pallets: Number(gt.col_pallet_count) || 0
+                };
+            }
             return validationData.value?.database_export?.summary || null;
         });
 
         const weightStats = computed(() => {
+            const gt = validationData.value?.footer_data?.grand_total;
+            if (gt) {
+                return {
+                    net: Number(gt.col_net) || 0,
+                    gross: Number(gt.col_gross) || 0,
+                    cbm: Number(gt.col_cbm) || 0
+                };
+            }
             if (!validationData.value?.database_export?.packing_list_items) return null;
             const items = validationData.value.database_export.packing_list_items;
             let net = 0; let gross = 0; let cbm = 0;
@@ -674,6 +714,27 @@ export default {
                 try { cbm += parseFloat(item.cbm) || 0; } catch { }
             });
             return { net, gross, cbm };
+        });
+
+        const isWideCargo = ref(false);
+
+        const recommendedTruckInfo = computed(() => {
+            const gross = weightStats.value?.gross || 0;
+            const cbm = weightStats.value?.cbm || 0;
+            const pallets = summaryStats.value?.total_pallets || 0;
+            return recommendTruck(gross, cbm, pallets, isWideCargo.value);
+        });
+
+        watch(validationData, (newData) => {
+            if (newData) {
+                const desc = String(newData.footer_data?.grand_total?.col_desc || '').toUpperCase();
+                const file = String(identifier.value || '').toUpperCase();
+                if (desc.includes('LEATHER') || file.includes('JF') || file.includes('JLFTLT')) {
+                    isWideCargo.value = true;
+                } else {
+                    isWideCargo.value = false;
+                }
+            }
         });
 
         /**
@@ -854,6 +915,7 @@ export default {
             validationData,
             summaryStats,
             weightStats,
+            recommendedTruckInfo,
             retryUpload,
             retryGeneration,
             copyError,
@@ -881,7 +943,8 @@ export default {
             showConflictConfirm,
             conflictMessage,
             confirmOverride,
-            cancelOverride
+            cancelOverride,
+            isWideCargo
         };
     }
 };

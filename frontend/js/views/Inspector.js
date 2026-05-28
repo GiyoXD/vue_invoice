@@ -1,4 +1,5 @@
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
+import { recommendTruck } from '../utils/truck.js';
 
 export default {
     template: `
@@ -24,18 +25,64 @@ export default {
                 </div>
 
                 <!-- Main: Details -->
-                <div class="flex-1 bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl p-6 flex flex-col min-w-0">
-                     <div class="flex flex-row gap-4 items-end mb-4 flex-shrink-0">
-                        <div class="flex-grow">
-                            <label class="block mb-2 text-slate-400 font-medium">Load Metadata File (Manual)</label>
-                            <input type="file" @change="loadMetadataFile" accept=".json" class="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-slate-700 file:text-slate-200 hover:file:bg-slate-600 transition-all cursor-pointer" />
-                        </div>
-                         <button class="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors" @click="clearInspector" v-if="inspectorData">Clear</button>
-                     </div>
+                <div class="flex-1 bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl p-6 flex flex-col min-w-0">                     <!-- Quick Check Totals Summary Panel -->
+                     <div v-if="inspectorData" class="flex flex-wrap gap-4 items-center justify-between p-4 bg-slate-900/60 border border-slate-700 rounded-xl mb-4 flex-shrink-0">
+                         <div class="flex flex-wrap gap-6 items-center">
+                             <div class="flex flex-col">
+                                 <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total PCS</span>
+                                 <span class="text-lg font-bold text-blue-400 mt-0.5">{{ formatNumber(inspectorTotals.pcs) }}</span>
+                             </div>
+                             <div class="h-8 w-px bg-slate-700/50"></div>
+                             <div class="flex flex-col">
+                                 <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total SQFT</span>
+                                 <span class="text-lg font-bold text-emerald-400 mt-0.5">{{ formatNumber(inspectorTotals.sqft) }}</span>
+                             </div>
+                             <div class="h-8 w-px bg-slate-700/50"></div>
+                             <div class="flex flex-col">
+                                 <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Pallets</span>
+                                 <span class="text-lg font-bold text-yellow-400 mt-0.5">{{ formatNumber(inspectorTotals.pallets) }}</span>
+                             </div>
+                             <div class="h-8 w-px bg-slate-700/50"></div>
+                             <div class="flex flex-col">
+                                 <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Net (KGS)</span>
+                                 <span class="text-lg font-bold text-cyan-400 mt-0.5">{{ formatNumber(inspectorTotals.net) }}</span>
+                             </div>
+                             <div class="h-8 w-px bg-slate-700/50"></div>
+                              <div class="flex flex-col">
+                                  <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Gross (KGS)</span>
+                                  <span class="text-lg font-bold text-orange-400 mt-0.5">{{ formatNumber(inspectorTotals.gross) }}</span>
+                              </div>
+                              <div class="h-8 w-px bg-slate-700/50"></div>
+                              <div class="flex flex-col">
+                                  <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total CBM</span>
+                                  <span class="text-lg font-bold text-teal-400 mt-0.5">{{ formatNumber(inspectorTotals.cbm) }} m³</span>
+                              </div>
+                              <div class="h-8 w-px bg-slate-700/50"></div>
+                              <div class="flex flex-col">
+                                  <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider font-semibold">Recommended Truck</span>
+                                  <div class="flex items-center gap-2 mt-0.5">
+                                      <span v-if="recommendedTruckInfo" class="text-xs font-bold px-2.5 py-1 rounded-full border transition-all" :class="recommendedTruckInfo.color" :title="recommendedTruckInfo.description">
+                                          {{ recommendedTruckInfo.displayName }}
+                                      </span>
+                                      <span v-else class="text-sm font-bold text-slate-500">—</span>
+                                      <label class="flex items-center gap-1 cursor-pointer text-[10px] font-bold text-slate-400 uppercase tracking-wider select-none bg-slate-900 border border-slate-700/50 rounded-lg px-2 py-1 hover:border-slate-500 transition-colors">
+                                          <input type="checkbox" v-model="isWideCargo" accent-color="#10b981" class="rounded bg-slate-950 border-slate-800 w-3 h-3 cursor-pointer" />
+                                          <span>Wide Pallets</span>
+                                      </label>
+                                  </div>
+                              </div>
+                              <div class="h-8 w-px bg-slate-700/50"></div>
+                              <div class="flex flex-col">
+                                  <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Amount</span>
+                                  <span class="text-lg font-bold text-purple-400 mt-0.5">$ {{ formatNumber(inspectorTotals.amount) }}</span>
+                              </div>
+                          </div>
+                          <button class="px-5 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors font-medium text-sm flex-shrink-0" @click="clearInspector">Clear View</button>
+                      </div>
 
-                    <div v-if="!inspectorData" class="text-center p-8 text-slate-500">
-                        <p>Select a run from the left 👈 or upload a file.</p>
-                    </div>
+                     <div v-if="!inspectorData" class="text-center p-8 text-slate-500">
+                         <p>Select a run from the left 👈 to inspect invoice data.</p>
+                     </div>     
 
                     <div v-if="inspectorData" class="flex flex-col min-h-0 flex-1">
                          <div class="flex items-center justify-between p-4 bg-blue-500/10 border border-blue-500/20 rounded-xl mb-4 flex-shrink-0">
@@ -143,6 +190,54 @@ export default {
             return uploadedMetadata.value;
         });
 
+        const inspectorTotals = computed(() => {
+            const data = inspectorData.value;
+            const gt = data?.footer_data?.grand_total || {};
+            
+            // Add any extra price adjustments to the backend amount total
+            let adjustmentSum = 0;
+            if (data?.price_adjustment && Array.isArray(data.price_adjustment)) {
+                data.price_adjustment.forEach(adj => {
+                    const val = Number(adj[1]);
+                    if (isNaN(val)) {
+                        throw new Error(`Invalid price_adjustment value: "${adj[1]}" is not a number`);
+                    }
+                    adjustmentSum += val;
+                });
+            }
+
+            return {
+                pcs: gt.col_qty_pcs || 0,
+                sqft: gt.col_qty_sf || 0,
+                pallets: gt.col_pallet_count || 0,
+                net: gt.col_net || 0,
+                gross: gt.col_gross || 0,
+                cbm: gt.col_cbm || 0,
+                amount: Number(gt.col_amount || 0) + adjustmentSum
+            };
+        });
+
+        const isWideCargo = ref(false);
+
+        const recommendedTruckInfo = computed(() => {
+            const gross = inspectorTotals.value?.gross || 0;
+            const cbm = inspectorTotals.value?.cbm || 0;
+            const pallets = inspectorTotals.value?.pallets || 0;
+            return recommendTruck(gross, cbm, pallets, isWideCargo.value);
+        });
+
+        watch(uploadedMetadata, (newData) => {
+            if (newData) {
+                const desc = String(newData.footer_data?.grand_total?.col_desc || '').toUpperCase();
+                const file = String(newData.output_file || '').toUpperCase();
+                if (desc.includes('LEATHER') || file.includes('JF') || file.includes('JLFTLT')) {
+                    isWideCargo.value = true;
+                } else {
+                    isWideCargo.value = false;
+                }
+            }
+        });
+
         const inspectorItems = computed(() => {
             const data = inspectorData.value;
             if (!data) return [];
@@ -177,11 +272,14 @@ export default {
             return parseFloat(num.toFixed(4)).toString();
         };
 
-        const fetchHistory = async () => {
+        const fetchHistory = async (autoLoadLatest = false) => {
             try {
                 const res = await fetch('/api/history');
                 if (res.ok) {
                     historyList.value = await res.json();
+                    if (autoLoadLatest && historyList.value.length > 0) {
+                        loadHistoryItem(historyList.value[0]);
+                    }
                 }
             } catch (e) {
                 console.error("Failed to fetch history", e);
@@ -306,18 +404,6 @@ export default {
             }
         };
 
-        const loadMetadataFile = (event) => {
-            const file = event.target.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                try {
-                    uploadedMetadata.value = JSON.parse(e.target.result);
-                } catch (err) { alert("Invalid JSON file"); }
-            };
-            reader.readAsText(file);
-        };
-
         const clearInspector = () => {
             uploadedMetadata.value = null;
         };
@@ -334,7 +420,7 @@ export default {
 
         // Initialize
         onMounted(() => {
-            fetchHistory();
+            fetchHistory(true);
         });
 
         // API to expose to parent if needed, or just keep internal
@@ -345,17 +431,19 @@ export default {
             historyList,
             inspectorData,
             inspectorItems,
+            inspectorTotals,
             fetchHistory,
             loadHistoryItem,
             acceptCurrentRun,
             rejectCurrentRun,
-            loadMetadataFile,
             clearInspector,
             downloadExcel,
             formatTime,
             formatNumber,
             currentRun,
-            existingInDb
+            existingInDb,
+            recommendedTruckInfo,
+            isWideCargo
         };
     }
 };
