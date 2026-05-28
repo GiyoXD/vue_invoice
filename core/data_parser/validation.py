@@ -59,11 +59,14 @@ def validate_table_data_presence(
         val = first_row.get(col_name)
         has_val = False
         if val is not None:
-             if isinstance(val, (int, float, decimal.Decimal)):
-                 if val != 0:
-                     has_val = True
-             elif str(val).strip():
-                 has_val = True
+            val_str = str(val).strip()
+            if val_str:
+                try:
+                    num_val = decimal.Decimal(val_str.replace(',', ''))
+                    if num_val != 0:
+                        has_val = True
+                except (decimal.InvalidOperation, ValueError, TypeError):
+                    has_val = True
         
         if not has_val:
             missing_data_cols.append(col_name)
@@ -80,12 +83,18 @@ def validate_table_data_presence(
             monitor.log_process_item(f"{table_id_str} First-Row Validation", status="error", error=err_msg)
         raise DataValidationError(err_msg)
 
-def validate_weight_integrity(data_rows: List[Dict[str, Any]], monitor: Optional[Any] = None, ignore_tare_warning: bool = False):
+def validate_weight_integrity(
+    data_rows: List[Dict[str, Any]], 
+    table_id_str: Optional[str] = None, 
+    monitor: Optional[Any] = None, 
+    ignore_tare_warning: bool = False
+):
     """
     Strict validation to ensure Gross Weight is always strictly bigger than Net Weight.
     Also verifies that the Tare weight (Gross - Net) is consistent across rows.
     """
     prefix = "[validate_weight_integrity]"
+    table_context = f" in {table_id_str}" if table_id_str else ""
     
     # Column keys
     net_key = 'col_net'
@@ -107,38 +116,33 @@ def validate_weight_integrity(data_rows: List[Dict[str, Any]], monitor: Optional
         # Get raw values
         net_raw = row.get(net_key)
         gross_raw = row.get(gross_key)
-        
-        # --- NEW STRICT VALIDATION: Unpaired weights are forbidden ---
-        # If one exists but the other doesn't, it's a data entry error
-        if (net_raw is not None and gross_raw is None) or (net_raw is None and gross_raw is not None):
-            po_val = row.get(po_key, "Unknown PO")
-            item_val = row.get(item_key, "Unknown Item")
-            missing_col = "Gross Weight" if gross_raw is None else "Net Weight"
-            present_col = "Net Weight" if net_raw is not None else "Gross Weight"
-            
-            row_num = row.get('_row_num')
-            row_num_str = f" (Row {row_num})" if row_num else ""
-            error_msg = (
-                f"Weight Integrity Error{row_num_str}: Partial weight found at row for PO [{po_val}] / Item [{item_val}]. "
-                f"{present_col} has a value, but {missing_col} is missing. "
-                "Weights must always be provided as a Net/Gross pair."
-            )
-            logging.error(f"{prefix} {error_msg}")
-            raise DataValidationError(error_msg)
 
-        # Skip if both are missing (legitimate filler or spacer row)
-        if net_raw is None and gross_raw is None:
-            continue
-            
         try:
             # Handle Decimals, floats, or strings
             net_val = net_raw if isinstance(net_raw, decimal.Decimal) else DataConverter.convert_to_decimal(net_raw)
             gross_val = gross_raw if isinstance(gross_raw, decimal.Decimal) else DataConverter.convert_to_decimal(gross_raw)
             
-            if net_val is None or gross_val is None:
-                # This handles cases where values might be empty strings after stripping (if convert_to_decimal returns None)
-                # We treat this as missing/filler unless it's an unpaired entry
+            # Skip if both are missing (legitimate filler or spacer row)
+            if net_val is None and gross_val is None:
                 continue
+
+            # --- NEW STRICT VALIDATION: Unpaired weights are forbidden ---
+            # If one exists but the other doesn't, it's a data entry error
+            if net_val is None or gross_val is None:
+                po_val = row.get(po_key, "Unknown PO")
+                item_val = row.get(item_key, "Unknown Item")
+                missing_col = "Gross Weight" if gross_val is None else "Net Weight"
+                present_col = "Net Weight" if net_val is not None else "Gross Weight"
+                
+                row_num = row.get('_row_num')
+                row_num_str = f" (Row {row_num})" if row_num else ""
+                error_msg = (
+                    f"Weight Integrity Error{row_num_str}{table_context}: Partial weight found at row for PO [{po_val}] / Item [{item_val}]. "
+                    f"{present_col} has a value, but {missing_col} is missing. "
+                    "Weights must always be provided as a Net/Gross pair."
+                )
+                logging.error(f"{prefix} {error_msg}")
+                raise DataValidationError(error_msg)
 
             # Skip header/footer rows where BOTH are 0
             if net_val == 0 and gross_val == 0:
@@ -152,7 +156,7 @@ def validate_weight_integrity(data_rows: List[Dict[str, Any]], monitor: Optional
                 row_num_str = f" (Row {row_num})" if row_num else ""
                 
                 error_msg = (
-                    f"Weight Validation Error{row_num_str}: At row for PO [{po_val}] / Item [{item_val}], "
+                    f"Weight Validation Error{row_num_str}{table_context}: At row for PO [{po_val}] / Item [{item_val}], "
                     f"Gross Weight ({gross_val}) is not strictly greater than Net Weight ({net_val}). "
                     "In shipping, Gross Weight MUST always be bigger than Net Weight. "
                     "Please fix your source Excel and try again."
@@ -178,7 +182,7 @@ def validate_weight_integrity(data_rows: List[Dict[str, Any]], monitor: Optional
                     row_num = row.get('_row_num')
                     row_num_str = f" (Row {row_num})" if row_num else ""
                     error_msg = (
-                        f"Weight Integrity Error{row_num_str}: `Net + Pallet Weight` does not equal `Gross Weight` at {row_id_str}. "
+                        f"Weight Integrity Error{row_num_str}{table_context}: `Net + Pallet Weight` does not equal `Gross Weight` at {row_id_str}. "
                         f"Based on the first row ({ref_row_info}), the Pallet Weight (Tare) is **{reference_tare}**. "
                         f"Expected Gross Weight for this row is {net_val} + {reference_tare} = **{expected_gross}**, "
                         f"but found **{gross_val}**. "
@@ -216,9 +220,7 @@ def validate_cbm_pcs_proportion(
     
     # Determine the basis column (prefer col_qty_pcs if mapped, then col_qty_sf)
     basis_col = 'col_qty_pcs'
-    if 'col_qty_pcs' in column_mapping:
-        basis_col = 'col_qty_pcs'
-    elif 'col_qty_sf' in column_mapping:
+    if basis_col not in column_mapping and 'col_qty_sf' in column_mapping:
         basis_col = 'col_qty_sf'
 
     # Skip if CBM or the basis column are not mapped
@@ -245,161 +247,170 @@ def validate_cbm_pcs_proportion(
         logging.debug(f"{prefix} Table has no positive CBM values, skipping proportion validation.")
         return
 
-    try:
-        # 2. Check each row for Zero CBM and Abnormally High Ratio
-        for row in data_rows:
-            basis_raw = row.get(basis_col)
-            cbm_raw = row.get(col_cbm)
-            po_val = row.get(col_po, "Unknown PO")
-            item_val = row.get('col_item', "Unknown Item")
-            
-            basis_dec = None
-            if basis_raw is not None:
-                try:
-                    basis_dec = basis_raw if isinstance(basis_raw, decimal.Decimal) else DataConverter.convert_to_decimal(basis_raw)
-                except (decimal.InvalidOperation, ValueError, TypeError):
-                    pass
-            
-            if basis_dec is None or basis_dec <= 0:
-                continue
+    # Collect ALL violations instead of failing on the first one
+    violations = []
 
-            cbm_dec = None
-            if cbm_raw is not None:
-                try:
-                    cbm_dec = cbm_raw if isinstance(cbm_raw, decimal.Decimal) else DataConverter.convert_to_decimal(cbm_raw)
-                except (decimal.InvalidOperation, ValueError, TypeError):
-                    pass
-
-            # Check for Zero CBM
-            if cbm_dec is None or cbm_dec == 0:
-                row_num = row.get('_row_num')
-                row_num_str = f" (Row {row_num})" if row_num else ""
-                raise DataValidationError(
-                    f"Data Validation Error{row_num_str}: Row for PO [{po_val}] / Item [{item_val}] has pieces ({basis_dec}) but received 0 CBM. "
-                    "This indicates a missing CBM or incorrect distribution anchor."
-                )
-
-            # Check for Abnormally High Ratio (> 0.5 CBM/unit)
-            ratio = cbm_dec / basis_dec
-            if ratio > decimal.Decimal('0.5'):
-                row_num = row.get('_row_num')
-                row_num_str = f" (Row {row_num})" if row_num else ""
-                raise DataValidationError(
-                    f"Data Validation Error{row_num_str}: Row for PO [{po_val}] / Item [{item_val}] has an abnormally high CBM-to-basis ratio of {ratio:.4f} CBM/unit "
-                    f"({cbm_dec} CBM for {basis_dec} units). This exceeds the maximum threshold of 0.5 CBM/unit."
-                )
-
-        # 3. Monotonicity Check within PO Group
-        po_groups = {}
-        for row in data_rows:
-            po_val = row.get(col_po)
-            if not po_val:
-                continue
-            po_str = str(po_val).strip()
-            if not po_str:
-                continue
-            basis_raw = row.get(basis_col)
-            cbm_raw = row.get(col_cbm)
-            try:
-                basis_dec = basis_raw if isinstance(basis_raw, decimal.Decimal) else DataConverter.convert_to_decimal(basis_raw)
-                cbm_dec = cbm_raw if isinstance(cbm_raw, decimal.Decimal) else DataConverter.convert_to_decimal(cbm_raw)
-                if basis_dec is not None and basis_dec > 0:
-                    if cbm_dec is None:
-                        cbm_dec = decimal.Decimal(0)
-                    if po_str not in po_groups:
-                        po_groups[po_str] = []
-                    po_groups[po_str].append({
-                        'row': row,
-                        'basis': basis_dec,
-                        'cbm': cbm_dec,
-                        'item': row.get('col_item', 'Unknown Item')
-                    })
-            except (decimal.InvalidOperation, ValueError, TypeError):
-                continue
-
-        for po, group_rows in po_groups.items():
-            n = len(group_rows)
-            for i in range(n):
-                for j in range(i + 1, n):
-                    row_A = group_rows[i]
-                    row_B = group_rows[j]
-                    
-                    tolerance = decimal.Decimal('0.0001')
-                    if row_A['basis'] > row_B['basis']:
-                        if row_A['cbm'] < row_B['cbm'] - tolerance:
-                            row_A_num = row_A['row'].get('_row_num')
-                            row_B_num = row_B['row'].get('_row_num')
-                            rows_str = f" (Rows {row_A_num} and {row_B_num})" if (row_A_num and row_B_num) else f" (Row {row_A_num})" if row_A_num else f" (Row {row_B_num})" if row_B_num else ""
-                            raise DataValidationError(
-                                f"Data Validation Error{rows_str}: In PO [{po}], row for Item [{row_A['item']}] has more pieces ({row_A['basis']}) but a lower CBM ({row_A['cbm']}) than Item [{row_B['item']}] which has fewer pieces ({row_B['basis']}) but a higher CBM ({row_B['cbm']}). Please verify if the pallet count or CBM is misplaced."
-                            )
-                    elif row_B['basis'] > row_A['basis']:
-                        if row_B['cbm'] < row_A['cbm'] - tolerance:
-                            row_A_num = row_A['row'].get('_row_num')
-                            row_B_num = row_B['row'].get('_row_num')
-                            rows_str = f" (Rows {row_A_num} and {row_B_num})" if (row_A_num and row_B_num) else f" (Row {row_A_num})" if row_A_num else f" (Row {row_B_num})" if row_B_num else ""
-                            raise DataValidationError(
-                                f"Data Validation Error{rows_str}: In PO [{po}], row for Item [{row_B['item']}] has more pieces ({row_B['basis']}) but a lower CBM ({row_B['cbm']}) than Item [{row_A['item']}] which has fewer pieces ({row_A['basis']}) but a higher CBM ({row_A['cbm']}). Please verify if the pallet count or CBM is misplaced."
-                            )
-
-        # 4. Check for Ratio Outliers
-        ratios = []
-        ratio_details = []
-        for row in data_rows:
-            basis_raw = row.get(basis_col)
-            cbm_raw = row.get(col_cbm)
-            try:
-                basis_dec = basis_raw if isinstance(basis_raw, decimal.Decimal) else DataConverter.convert_to_decimal(basis_raw)
-                cbm_dec = cbm_raw if isinstance(cbm_raw, decimal.Decimal) else DataConverter.convert_to_decimal(cbm_raw)
-                if basis_dec is not None and basis_dec > 0 and cbm_dec is not None and cbm_dec > 0:
-                    ratio = cbm_dec / basis_dec
-                    ratios.append(ratio)
-                    ratio_details.append({
-                        'row': row,
-                        'ratio': ratio,
-                        'cbm': cbm_dec,
-                        'basis': basis_dec,
-                        'po': row.get(col_po, 'Unknown PO'),
-                        'item': row.get('col_item', 'Unknown Item')
-                    })
-            except (decimal.InvalidOperation, ValueError, TypeError):
-                continue
+    # 2. Check each row for Zero CBM and Abnormally High Ratio
+    for row in data_rows:
+        basis_raw = row.get(basis_col)
+        cbm_raw = row.get(col_cbm)
+        po_val = row.get(col_po, "Unknown PO")
+        item_val = row.get('col_item', "Unknown Item")
         
-        if len(ratios) >= 3:
-            sorted_ratios = sorted(ratios)
-            n = len(sorted_ratios)
-            if n % 2 == 1:
-                median_ratio = sorted_ratios[n // 2]
-            else:
-                median_ratio = (sorted_ratios[n // 2 - 1] + sorted_ratios[n // 2]) / decimal.Decimal(2)
-                
-            upper_limit = median_ratio * decimal.Decimal(10)
-            lower_limit = median_ratio * decimal.Decimal('0.1')
-            
-            for rd in ratio_details:
-                if rd['ratio'] > upper_limit:
-                    row_num = rd['row'].get('_row_num')
-                    row_num_str = f" (Row {row_num})" if row_num else ""
-                    raise DataValidationError(
-                        f"Data Validation Error{row_num_str}: Row for PO [{rd['po']}] / Item [{rd['item']}] has a CBM-to-basis ratio of {rd['ratio']:.6f} which is an outlier (> 10x median ratio of {median_ratio:.6f}). Please verify if the CBM ({rd['cbm']}) or quantity ({rd['basis']}) is correct."
-                    )
-                elif rd['ratio'] < lower_limit:
-                    row_num = rd['row'].get('_row_num')
-                    row_num_str = f" (Row {row_num})" if row_num else ""
-                    raise DataValidationError(
-                        f"Data Validation Error{row_num_str}: Row for PO [{rd['po']}] / Item [{rd['item']}] has a CBM-to-basis ratio of {rd['ratio']:.6f} which is an outlier (< 0.1x median ratio of {median_ratio:.6f}). Please verify if the CBM ({rd['cbm']}) or quantity ({rd['basis']}) is correct."
-                    )
+        basis_dec = None
+        if basis_raw is not None:
+            try:
+                basis_dec = basis_raw if isinstance(basis_raw, decimal.Decimal) else DataConverter.convert_to_decimal(basis_raw)
+            except (decimal.InvalidOperation, ValueError, TypeError):
+                pass
+        
+        if basis_dec is None or basis_dec <= 0:
+            continue
 
-    except DataValidationError as ve:
+        cbm_dec = None
+        if cbm_raw is not None:
+            try:
+                cbm_dec = cbm_raw if isinstance(cbm_raw, decimal.Decimal) else DataConverter.convert_to_decimal(cbm_raw)
+            except (decimal.InvalidOperation, ValueError, TypeError):
+                pass
+
+        # Check for Zero CBM
+        if cbm_dec is None or cbm_dec == 0:
+            row_num = row.get('_row_num')
+            row_num_str = f" (Row {row_num})" if row_num else ""
+            violations.append(
+                f"[Zero CBM]{row_num_str}: PO [{po_val}] / Item [{item_val}] has pieces ({basis_dec}) but received 0 CBM. "
+                "Missing CBM or incorrect distribution anchor."
+            )
+            continue  # Skip ratio check if CBM is zero
+
+        # Check for Abnormally High Ratio (> 0.5 CBM/unit)
+        ratio = cbm_dec / basis_dec
+        if ratio > decimal.Decimal('0.5'):
+            row_num = row.get('_row_num')
+            row_num_str = f" (Row {row_num})" if row_num else ""
+            violations.append(
+                f"[High Ratio]{row_num_str}: PO [{po_val}] / Item [{item_val}] has {ratio:.4f} CBM/unit "
+                f"({cbm_dec} CBM for {basis_dec} units). Exceeds 0.5 CBM/unit threshold."
+            )
+
+    # 3. Monotonicity Check within PO Group
+    po_groups = {}
+    for row in data_rows:
+        po_val = row.get(col_po)
+        if not po_val:
+            continue
+        po_str = str(po_val).strip()
+        if not po_str:
+            continue
+        basis_raw = row.get(basis_col)
+        cbm_raw = row.get(col_cbm)
+        try:
+            basis_dec = basis_raw if isinstance(basis_raw, decimal.Decimal) else DataConverter.convert_to_decimal(basis_raw)
+            cbm_dec = cbm_raw if isinstance(cbm_raw, decimal.Decimal) else DataConverter.convert_to_decimal(cbm_raw)
+            if basis_dec is not None and basis_dec > 0:
+                if cbm_dec is None:
+                    cbm_dec = decimal.Decimal(0)
+                if po_str not in po_groups:
+                    po_groups[po_str] = []
+                po_groups[po_str].append({
+                    'row': row,
+                    'basis': basis_dec,
+                    'cbm': cbm_dec,
+                    'item': row.get('col_item', 'Unknown Item')
+                })
+        except (decimal.InvalidOperation, ValueError, TypeError):
+            continue
+
+    tolerance = decimal.Decimal('0.0001')
+    for po, group_rows in po_groups.items():
+        n = len(group_rows)
+        for i in range(n):
+            for j in range(i + 1, n):
+                row_A = group_rows[i]
+                row_B = group_rows[j]
+                
+                if row_A['basis'] > row_B['basis']:
+                    if row_A['cbm'] < row_B['cbm'] - tolerance:
+                        row_A_num = row_A['row'].get('_row_num')
+                        row_B_num = row_B['row'].get('_row_num')
+                        rows_str = f" (Rows {row_A_num} and {row_B_num})" if (row_A_num and row_B_num) else f" (Row {row_A_num})" if row_A_num else f" (Row {row_B_num})" if row_B_num else ""
+                        violations.append(
+                            f"[Monotonicity]{rows_str}: In PO [{po}], Item [{row_A['item']}] has more pieces ({row_A['basis']}) but lower CBM ({row_A['cbm']}) "
+                            f"than Item [{row_B['item']}] ({row_B['basis']} pcs, {row_B['cbm']} CBM). Verify pallet count or CBM."
+                        )
+                elif row_B['basis'] > row_A['basis']:
+                    if row_B['cbm'] < row_A['cbm'] - tolerance:
+                        row_A_num = row_A['row'].get('_row_num')
+                        row_B_num = row_B['row'].get('_row_num')
+                        rows_str = f" (Rows {row_A_num} and {row_B_num})" if (row_A_num and row_B_num) else f" (Row {row_A_num})" if row_A_num else f" (Row {row_B_num})" if row_B_num else ""
+                        violations.append(
+                            f"[Monotonicity]{rows_str}: In PO [{po}], Item [{row_B['item']}] has more pieces ({row_B['basis']}) but lower CBM ({row_B['cbm']}) "
+                            f"than Item [{row_A['item']}] ({row_A['basis']} pcs, {row_A['cbm']} CBM). Verify pallet count or CBM."
+                        )
+
+    # 4. Check for Ratio Outliers
+    ratios = []
+    ratio_details = []
+    for row in data_rows:
+        basis_raw = row.get(basis_col)
+        cbm_raw = row.get(col_cbm)
+        try:
+            basis_dec = basis_raw if isinstance(basis_raw, decimal.Decimal) else DataConverter.convert_to_decimal(basis_raw)
+            cbm_dec = cbm_raw if isinstance(cbm_raw, decimal.Decimal) else DataConverter.convert_to_decimal(cbm_raw)
+            if basis_dec is not None and basis_dec > 0 and cbm_dec is not None and cbm_dec > 0:
+                ratio = cbm_dec / basis_dec
+                ratios.append(ratio)
+                ratio_details.append({
+                    'row': row,
+                    'ratio': ratio,
+                    'cbm': cbm_dec,
+                    'basis': basis_dec,
+                    'po': row.get(col_po, 'Unknown PO'),
+                    'item': row.get('col_item', 'Unknown Item')
+                })
+        except (decimal.InvalidOperation, ValueError, TypeError):
+            continue
+    
+    if len(ratios) >= 3:
+        sorted_ratios = sorted(ratios)
+        n = len(sorted_ratios)
+        if n % 2 == 1:
+            median_ratio = sorted_ratios[n // 2]
+        else:
+            median_ratio = (sorted_ratios[n // 2 - 1] + sorted_ratios[n // 2]) / decimal.Decimal(2)
+            
+        upper_limit = median_ratio * decimal.Decimal(10)
+        lower_limit = median_ratio * decimal.Decimal('0.1')
+        
+        for rd in ratio_details:
+            if rd['ratio'] > upper_limit:
+                row_num = rd['row'].get('_row_num')
+                row_num_str = f" (Row {row_num})" if row_num else ""
+                violations.append(
+                    f"[Ratio Outlier]{row_num_str}: PO [{rd['po']}] / Item [{rd['item']}] ratio {rd['ratio']:.6f} is > 10x median ({median_ratio:.6f}). "
+                    f"Verify CBM ({rd['cbm']}) or quantity ({rd['basis']})."
+                )
+            elif rd['ratio'] < lower_limit:
+                row_num = rd['row'].get('_row_num')
+                row_num_str = f" (Row {row_num})" if row_num else ""
+                violations.append(
+                    f"[Ratio Outlier]{row_num_str}: PO [{rd['po']}] / Item [{rd['item']}] ratio {rd['ratio']:.6f} is < 0.1x median ({median_ratio:.6f}). "
+                    f"Verify CBM ({rd['cbm']}) or quantity ({rd['basis']})."
+                )
+
+    # --- Report all violations at once ---
+    if violations:
+        summary = f"CBM Validation found {len(violations)} issue(s) in {table_id_str}:\n" + "\n".join(f"  {i+1}. {v}" for i, v in enumerate(violations))
+        
         if ignore_cbm_warning:
-            err_msg = str(ve)
-            logging.warning(f"[{table_id_str}] [CBM Validation Bypassed]: {err_msg}")
+            logging.warning(f"[{table_id_str}] [CBM Validation Bypassed]: {summary}")
             if monitor:
-                monitor.log_warning(f"Ignored CBM Warning: {err_msg}")
+                monitor.log_warning(f"Ignored CBM Warnings: {summary}")
         else:
             if monitor:
-                monitor.log_process_item(f"{table_id_str} CBM Validation", status="error", error=str(ve))
-            raise ve
+                monitor.log_process_item(f"{table_id_str} CBM Validation", status="error", error=summary)
+            raise DataValidationError(summary)
 
 def validate_data(
     data_rows: List[Dict[str, Any]], 
@@ -425,9 +436,12 @@ def validate_data(
     if phase == 'presence':
         validate_table_data_presence(data_rows, table_id_str, column_mapping, monitor=monitor)
     elif phase == 'integrity':
-        # Weight integrity is a data-level check, it doesn't need column mapping
-        # but we use table_id_str in logs via monitor if provided (future enhancement)
-        validate_weight_integrity(data_rows, monitor=monitor, ignore_tare_warning=ignore_tare_warning)
+        validate_weight_integrity(
+            data_rows, 
+            table_id_str=table_id_str, 
+            monitor=monitor, 
+            ignore_tare_warning=ignore_tare_warning
+        )
     elif phase == 'cbm_proportion':
         validate_cbm_pcs_proportion(
             data_rows, 
