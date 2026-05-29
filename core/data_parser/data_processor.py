@@ -250,6 +250,9 @@ def normalize_pallet_count(table_data: List[Dict[str, Any]]) -> List[Dict[str, A
     logging.info(f"{prefix} Normalized {len(table_data)} rows → {normalized_count} pallet boundaries detected.")
     return table_data
 
+
+from .validation import verify_pallet_integrity
+
 # process_cbm_column function remains unchanged...
 def process_cbm_column(raw_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """

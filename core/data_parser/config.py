@@ -40,6 +40,7 @@ EXPECTED_HEADER_DATA_TYPES = {
     'col_reference_code': ['string'],
     'col_level': ['string'],
     'col_pallet_count': ['numeric', 'string'],
+    'col_pallet_id': ['string', 'numeric'],
     'col_manual_no': ['string'],
     'col_remarks': ['string'],
     'col_inv_no': ['string'],
@@ -73,6 +74,10 @@ EXPECTED_HEADER_PATTERNS = {
     'col_pallet_count': [
         r'^1$'
     ],
+    # Pallet ID format: 2 digits + 1 letter + 8 digits (e.g. 01T26052605)
+    'col_pallet_id': [
+        r'^\d{2}[A-Z]\d{8}$'
+    ],
     'col_remarks': [r'^\D+$'],  # Non-numeric characters only
 }
 
@@ -93,10 +98,11 @@ HEADERLESS_COLUMN_PATTERNS = {
     'col_production_order_no': [
         r'^(25|26|27)\d{5}-\d{2}$',
     ],
-
-
-    # You can add other rules here in the future, for example:
-    # 'serial_no': [r'^[A-Z]{3}-\d{5}$']
+    # Pallet ID: auto-detect by data pattern (e.g. 01T26052605, 02T26052306)
+    # Works even without header text, just like CBM.
+    'col_pallet_id': [
+        r'^\d{2}[A-Z]\d{8}$',
+    ],
 }
 
 

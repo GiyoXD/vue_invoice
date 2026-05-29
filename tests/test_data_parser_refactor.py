@@ -158,6 +158,31 @@ class TestDataParserRefactor(unittest.TestCase):
         except DataValidationError:
             self.fail("validate_data raised DataValidationError when ignore_cbm_warning was True")
 
+    def test_cbm_pcs_proportion_monotonicity_tolerance(self):
+        # ITEM1 has 100 pcs and 1.95 CBM
+        # ITEM2 has 50 pcs and 2.0 CBM
+        # Difference is 2.5%, which is within the 3.2% tolerance -> should pass
+        data_valid = [
+            {"col_po": "PO1", "col_item": "ITEM1", "col_qty_pcs": Decimal('100'), "col_cbm": Decimal('1.95'), "_row_num": 14},
+            {"col_po": "PO1", "col_item": "ITEM2", "col_qty_pcs": Decimal('50'), "col_cbm": Decimal('2.0'), "_row_num": 15}
+        ]
+        column_mapping = {"col_po": "A", "col_item": "B", "col_qty_pcs": "C", "col_cbm": "D"}
+        try:
+            validate_data(data_valid, "Table 1", column_mapping, phase='cbm_proportion')
+        except DataValidationError as ve:
+            self.fail(f"Monotonicity with 2.5% difference failed validation: {ve}")
+
+        # ITEM1 has 100 pcs and 1.93 CBM
+        # ITEM2 has 50 pcs and 2.0 CBM
+        # Difference is 3.5%, which is outside the 3.2% tolerance -> should fail
+        data_invalid = [
+            {"col_po": "PO1", "col_item": "ITEM1", "col_qty_pcs": Decimal('100'), "col_cbm": Decimal('1.93'), "_row_num": 14},
+            {"col_po": "PO1", "col_item": "ITEM2", "col_qty_pcs": Decimal('50'), "col_cbm": Decimal('2.0'), "_row_num": 15}
+        ]
+        with self.assertRaises(DataValidationError) as context:
+            validate_data(data_invalid, "Table 1", column_mapping, phase='cbm_proportion')
+        self.assertIn("[Monotonicity]", str(context.exception))
+
     def test_cbm_pcs_proportion_abnormally_high_ratio(self):
         # ITEM1 has col_qty_pcs=2 and col_cbm=1.5 -> ratio = 0.75 > 0.5
         data = [
@@ -241,5 +266,88 @@ class TestDataParserRefactor(unittest.TestCase):
         self.assertIn("Weight Validation Error (Row 6)", str(context.exception))
         self.assertIn("Gross Weight (9.0) is not strictly greater than Net Weight (10.0)", str(context.exception))
 
+    def test_validate_data_runs_pallet_integrity(self):
+        # Weight valid, but pallet ID reappears after gap
+        data = [
+            {"col_po": "PO1", "col_item": "ITEM1", "col_net": Decimal('10.0'), "col_gross": Decimal('11.0'), "col_pallet_count": 1, "col_pallet_id": "01T26052605", "_row_num": 10},
+            {"col_po": "PO1", "col_item": "ITEM2", "col_net": Decimal('20.0'), "col_gross": Decimal('21.0'), "col_pallet_count": 1, "col_pallet_id": "01T26052608", "_row_num": 11},
+            {"col_po": "PO1", "col_item": "ITEM3", "col_net": Decimal('30.0'), "col_gross": Decimal('31.0'), "col_pallet_count": 1, "col_pallet_id": "01T26052605", "_row_num": 12},
+        ]
+        column_mapping = {"col_po": "A", "col_item": "B", "col_net": "C", "col_gross": "D", "col_pallet_count": "E", "col_pallet_id": "F"}
+        with self.assertRaises(DataValidationError) as context:
+            validate_data(data, "Table 1", column_mapping, phase='integrity')
+        self.assertIn("Pallet ID '01T26052605' reappeared after a gap", str(context.exception))
+
+    def test_verify_pallet_integrity_valid(self):
+        data = [
+            {"col_pallet_count": 1, "col_pallet_id": "01T26052605", "_row_num": 10},
+            {"col_pallet_count": 1, "col_pallet_id": "01T26052608", "_row_num": 11},
+            {"col_pallet_count": 1, "col_pallet_id": "01T26052609", "_row_num": 12},
+            {"col_pallet_count": 0, "col_pallet_id": "01T26052609", "_row_num": 13},
+            {"col_pallet_count": 1, "col_pallet_id": "02T26052306", "_row_num": 14},
+            {"col_pallet_count": 1, "col_pallet_id": "02T26052307", "_row_num": 15},
+            {"col_pallet_count": 0, "col_pallet_id": "02T26052307", "_row_num": 16},
+        ]
+        # Should not raise any error
+        try:
+            data_processor.verify_pallet_integrity(data)
+        except Exception as e:
+            self.fail(f"verify_pallet_integrity raised an error on valid data: {e}")
+
+    def test_verify_pallet_integrity_invalid_transition(self):
+        # Pallet ID changed from 01T26052605 to 01T26052608, but count is 0
+        data = [
+            {"col_pallet_count": 1, "col_pallet_id": "01T26052605", "_row_num": 10},
+            {"col_pallet_count": 0, "col_pallet_id": "01T26052608", "_row_num": 11},
+        ]
+        with self.assertRaises(DataValidationError) as context:
+            data_processor.verify_pallet_integrity(data)
+        self.assertIn("Pallet ID changed to '01T26052608'", str(context.exception))
+        self.assertIn("boundary marker count is 0", str(context.exception))
+
+    def test_verify_pallet_integrity_invalid_continuity(self):
+        # Pallet ID remains 01T26052609, but count is 1
+        data = [
+            {"col_pallet_count": 1, "col_pallet_id": "01T26052609", "_row_num": 12},
+            {"col_pallet_count": 1, "col_pallet_id": "01T26052609", "_row_num": 13},
+        ]
+        with self.assertRaises(DataValidationError) as context:
+            data_processor.verify_pallet_integrity(data)
+        self.assertIn("Pallet ID did not change (still '01T26052609')", str(context.exception))
+        self.assertIn("boundary marker count is 1", str(context.exception))
+
+    def test_verify_pallet_integrity_missing_id(self):
+        # Count is 1, but Pallet ID is missing
+        data = [
+            {"col_pallet_count": 1, "col_pallet_id": "", "_row_num": 10},
+        ]
+        with self.assertRaises(DataValidationError) as context:
+            data_processor.verify_pallet_integrity(data)
+        self.assertIn("Pallet boundary found (count=1), but Pallet ID is missing", str(context.exception))
+
+    def test_verify_pallet_integrity_recurrence(self):
+        # ID 01T26052605 reappears after 01T26052608
+        data = [
+            {"col_pallet_count": 1, "col_pallet_id": "01T26052605", "_row_num": 10},
+            {"col_pallet_count": 1, "col_pallet_id": "01T26052608", "_row_num": 11},
+            {"col_pallet_count": 1, "col_pallet_id": "01T26052605", "_row_num": 12},
+        ]
+        with self.assertRaises(DataValidationError) as context:
+            data_processor.verify_pallet_integrity(data)
+        self.assertIn("Pallet ID '01T26052605' reappeared after a gap", str(context.exception))
+
+    def test_verify_pallet_integrity_empty_rows(self):
+        # Empty rows should be ignored or reset the state, not crash
+        data = [
+            {"col_pallet_count": 1, "col_pallet_id": "01T26052605", "_row_num": 10},
+            {"col_pallet_count": 0, "col_pallet_id": "", "_row_num": 11}, # completely empty
+            {"col_pallet_count": 1, "col_pallet_id": "01T26052608", "_row_num": 12},
+        ]
+        try:
+            data_processor.verify_pallet_integrity(data)
+        except Exception as e:
+            self.fail(f"verify_pallet_integrity failed with empty rows: {e}")
+
 if __name__ == '__main__':
     unittest.main()
+

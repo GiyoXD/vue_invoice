@@ -151,15 +151,18 @@ def _score_cell(canonical_name: str, data_value: Any, row_num: int, col_num: int
 
 
 @loop_profiler.watch("_process_row")
-def _process_row(sheet: Worksheet, row_num: int) -> Tuple[Dict[str, str], int]:
+def _process_row(sheet: Worksheet, row_num: int) -> Tuple[Dict[str, str], int, int]:
     """
     Process a single row: scan all columns, score candidates, resolve ties.
     
     Returns:
-        Tuple of (column_mapping dict, total_row_score).
+        Tuple of (column_mapping dict, total_row_score, header_text_match_count).
         column_mapping: {canonical_name: column_letter, ...}
+        header_text_match_count: number of columns matched via actual header text (not data-pattern-only)
     """
     all_column_candidates: Dict[int, List[Dict]] = {}
+    # Track which columns had actual header text matches vs data-pattern-only
+    header_text_columns: set = set()
 
     # --- Phase 1: Score every column in this row ---
     for col_num in range(HEADER_SEARCH_COL_RANGE[0], HEADER_SEARCH_COL_RANGE[1] + 1):
@@ -177,6 +180,7 @@ def _process_row(sheet: Worksheet, row_num: int) -> Tuple[Dict[str, str], int]:
                 score = _score_cell(canonical_name, data_value, row_num, col_num)
                 if score is not None and score > 0:
                     col_scores.append({'score': score, 'name': canonical_name})
+                    header_text_columns.add(col_num)
 
         # ALWAYS check strong data patterns (formerly just headerless), even if there's a header.
         # This prevents generic headers (like "PO" -> col_po) from stealing TTX PO data (25xxxxxx).
@@ -212,6 +216,7 @@ def _process_row(sheet: Worksheet, row_num: int) -> Tuple[Dict[str, str], int]:
         del all_column_candidates[col1], all_column_candidates[col2]
 
     # Greedy selection for remaining columns
+    header_text_match_count = 0
     for col_num, candidates in sorted(all_column_candidates.items()):
         valid_candidates = [c for c in candidates if c['name'] not in processed_canonicals]
         if not valid_candidates:
@@ -221,8 +226,10 @@ def _process_row(sheet: Worksheet, row_num: int) -> Tuple[Dict[str, str], int]:
         potential_mapping[best_candidate['name']] = get_column_letter(col_num)
         processed_canonicals.add(best_candidate['name'])
         current_row_score += best_candidate['score']
+        if col_num in header_text_columns:
+            header_text_match_count += 1
 
-    return potential_mapping, current_row_score
+    return potential_mapping, current_row_score, header_text_match_count
 
 
 @loop_profiler.watch("find_and_map_smart_headers")
@@ -249,7 +256,7 @@ def find_and_map_smart_headers(sheet: Worksheet) -> Optional[Tuple[int, Dict[str
             continue
 
         tick("find_and_map_smart_headers", sub="rows_scanned")
-        potential_mapping, current_row_score = _process_row(sheet, row_num)
+        potential_mapping, current_row_score, _ = _process_row(sheet, row_num)
 
         logging.debug(f"{prefix} Row {row_num} | Score: {current_row_score} | Mapping: {potential_mapping}")
 
@@ -374,10 +381,15 @@ def find_all_header_rows(sheet, search_pattern, row_range, col_range, start_afte
         for r_idx in range(start_row, max_row_to_search + 1):
             tick("find_all_header_rows", sub="rows_scanned")
             # Reuse the smart logic that checks for multiple mapped columns
-            potential_mapping, score = _process_row(sheet, r_idx)
+            potential_mapping, score, header_text_matches = _process_row(sheet, r_idx)
             
-            # If a row has at least 3 recognizable headers and a decent score, it's a header row
-            if len(potential_mapping) >= 3 and score >= 15:
+            # A valid header row must have:
+            # - At least 3 recognizable column mappings
+            # - A decent total score
+            # - At least 2 columns matched via actual header TEXT (not just data-pattern-only)
+            #   This prevents data rows (with pallet IDs, CBM patterns, etc.) from being
+            #   falsely detected as header rows.
+            if len(potential_mapping) >= 3 and score >= 15 and header_text_matches >= 2:
                 found_rows.add(r_idx)
         
         if not found_rows:

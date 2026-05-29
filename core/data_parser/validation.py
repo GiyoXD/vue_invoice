@@ -323,6 +323,7 @@ def validate_cbm_pcs_proportion(
             continue
 
     tolerance = decimal.Decimal('0.0001')
+    cbm_tol_pct = decimal.Decimal('0.032') # 3.2% relative tolerance
     for po, group_rows in po_groups.items():
         n = len(group_rows)
         for i in range(n):
@@ -331,7 +332,10 @@ def validate_cbm_pcs_proportion(
                 row_B = group_rows[j]
                 
                 if row_A['basis'] > row_B['basis']:
-                    if row_A['cbm'] < row_B['cbm'] - tolerance:
+                    # Row A has more pieces, so it should have more CBM.
+                    # We allow a tolerance of up to 3.2% of B's CBM.
+                    allowed_cbm = row_B['cbm'] * (decimal.Decimal('1.0') - cbm_tol_pct)
+                    if row_A['cbm'] < allowed_cbm - tolerance:
                         row_A_num = row_A['row'].get('_row_num')
                         row_B_num = row_B['row'].get('_row_num')
                         rows_str = f" (Rows {row_A_num} and {row_B_num})" if (row_A_num and row_B_num) else f" (Row {row_A_num})" if row_A_num else f" (Row {row_B_num})" if row_B_num else ""
@@ -340,7 +344,10 @@ def validate_cbm_pcs_proportion(
                             f"than Item [{row_B['item']}] ({row_B['basis']} pcs, {row_B['cbm']} CBM). Verify pallet count or CBM."
                         )
                 elif row_B['basis'] > row_A['basis']:
-                    if row_B['cbm'] < row_A['cbm'] - tolerance:
+                    # Row B has more pieces, so it should have more CBM.
+                    # We allow a tolerance of up to 3.2% of A's CBM.
+                    allowed_cbm = row_A['cbm'] * (decimal.Decimal('1.0') - cbm_tol_pct)
+                    if row_B['cbm'] < allowed_cbm - tolerance:
                         row_A_num = row_A['row'].get('_row_num')
                         row_B_num = row_B['row'].get('_row_num')
                         rows_str = f" (Rows {row_A_num} and {row_B_num})" if (row_A_num and row_B_num) else f" (Row {row_A_num})" if row_A_num else f" (Row {row_B_num})" if row_B_num else ""
@@ -412,6 +419,131 @@ def validate_cbm_pcs_proportion(
                 monitor.log_process_item(f"{table_id_str} CBM Validation", status="error", error=summary)
             raise DataValidationError(summary)
 
+def verify_pallet_integrity(
+    table_data: List[Dict[str, Any]],
+    table_id_str: Optional[str] = None,
+    monitor: Optional[Any] = None
+) -> None:
+    """
+    Validates pallet data integrity in two phases:
+    
+    Phase 1 — Pairing check (col_pallet_id vs col_qty_sf):
+      If col_pallet_id column exists, every row with sqft data MUST have a pallet ID.
+      Missing pallet ID on a data row = WARNING (operator forgot to fill it).
+      If col_pallet_id column doesn't exist at all = warn and skip.
+    
+    Phase 2 — Correlation check (col_pallet_count vs col_pallet_id):
+      Only runs if BOTH columns exist.
+      - If col_pallet_id changed from last row, col_pallet_count MUST be 1.
+      - If col_pallet_id is same as last row, col_pallet_count MUST be 0.
+      - If col_pallet_count is 1, a valid non-empty col_pallet_id MUST be present.
+      - A col_pallet_id cannot reappear after a different one (no gaps).
+    """
+    import re
+    pallet_count_key = 'col_pallet_count'
+    pallet_id_key = 'col_pallet_id'
+    sqft_key = 'col_qty_sf'
+    
+    has_count = any(pallet_count_key in row for row in table_data)
+    has_id = any(pallet_id_key in row for row in table_data)
+    
+    # If col_pallet_id doesn't exist at all, warn and skip
+    if not has_id:
+        msg = f"[Pallet Pairing] col_pallet_id column not found in {table_id_str or 'data'}. Skipping pallet validation."
+        logging.warning(msg)
+        if monitor:
+            monitor.log_warning(msg)
+        return
+
+    # --- Phase 1: Pairing check (pallet_id must exist for every row with sqft) ---
+    missing_id_rows = []
+    for idx, row in enumerate(table_data):
+        row_num = row.get('_row_num', idx + 1)
+        sqft_val = row.get(sqft_key)
+        raw_id = row.get(pallet_id_key)
+        pallet_id = str(raw_id).strip() if raw_id is not None else ""
+        
+        # Row has sqft data but no pallet ID → operator forgot to fill
+        has_sqft = sqft_val is not None and str(sqft_val).strip() not in ('', '0', '0.0', '0.00')
+        if has_sqft and not pallet_id:
+            missing_id_rows.append(row_num)
+    
+    if missing_id_rows:
+        row_list = ', '.join(str(r) for r in missing_id_rows[:10])
+        suffix = f" (and {len(missing_id_rows) - 10} more)" if len(missing_id_rows) > 10 else ""
+        msg = (
+            f"[{table_id_str or 'Table'}] [Pallet Pairing] {len(missing_id_rows)} row(s) have sqft data but missing Pallet ID: "
+            f"rows {row_list}{suffix}. Operator may have forgotten to fill these."
+        )
+        logging.warning(msg)
+        if monitor:
+            monitor.log_warning(msg)
+
+    # --- Phase 2: Correlation check (count vs id) — only if both columns exist ---
+    if not has_count:
+        return
+
+    last_pallet_id = None
+    seen_pallet_ids = set()
+
+    for idx, row in enumerate(table_data):
+        row_num = row.get('_row_num', idx + 1)
+        raw_count = row.get(pallet_count_key, 0)
+        
+        # Determine 1/0 boundary marker count
+        try:
+            count = 1 if (raw_count is not None and int(float(str(raw_count).strip())) >= 1) else 0
+        except (ValueError, TypeError):
+            count = 0
+            
+        raw_id = row.get(pallet_id_key)
+        pallet_id = str(raw_id).strip() if raw_id is not None else ""
+        
+        # If both are empty, we might be on a non-pallet/footer/ignored row.
+        # We skip validation but reset last_pallet_id so that if a new pallet starts
+        # later, we treat it as a new block.
+        if not pallet_id and count == 0:
+            last_pallet_id = None
+            continue
+
+        # Rule C (Presence): If count is 1, pallet_id must be present
+        if count == 1 and not pallet_id:
+            raise DataValidationError(
+                f"Pallet Validation Error (Row {row_num}){f' in {table_id_str}' if table_id_str else ''}: "
+                f"Pallet boundary found (count=1), but Pallet ID is missing."
+            )
+
+        # Rules A & B: Transitions
+        if pallet_id != last_pallet_id:
+            # Count MUST be 1 (Rule A)
+            if count != 1:
+                raise DataValidationError(
+                    f"Pallet Validation Error (Row {row_num}){f' in {table_id_str}' if table_id_str else ''}: "
+                    f"Pallet ID changed to '{pallet_id}' (from '{last_pallet_id}') "
+                    f"but boundary marker count is {raw_count} (expected 1)."
+                )
+            
+            # Rule D: Contiguity (No recurrence after a gap)
+            if pallet_id in seen_pallet_ids:
+                raise DataValidationError(
+                    f"Pallet Validation Error (Row {row_num}){f' in {table_id_str}' if table_id_str else ''}: "
+                    f"Pallet ID '{pallet_id}' reappeared after a gap. "
+                    f"All rows for a pallet must be contiguous."
+                )
+            seen_pallet_ids.add(pallet_id)
+        else:
+            # Continuation of the same pallet ID
+            # Count MUST be 0 (Rule B)
+            if count != 0:
+                raise DataValidationError(
+                    f"Pallet Validation Error (Row {row_num}){f' in {table_id_str}' if table_id_str else ''}: "
+                    f"Pallet boundary marker count is 1 on row {row_num}, "
+                    f"but Pallet ID did not change (still '{pallet_id}')."
+                )
+
+        last_pallet_id = pallet_id
+
+
 def validate_data(
     data_rows: List[Dict[str, Any]], 
     table_id_str: str, 
@@ -441,6 +573,11 @@ def validate_data(
             table_id_str=table_id_str, 
             monitor=monitor, 
             ignore_tare_warning=ignore_tare_warning
+        )
+        verify_pallet_integrity(
+            data_rows,
+            table_id_str=table_id_str,
+            monitor=monitor
         )
     elif phase == 'cbm_proportion':
         validate_cbm_pcs_proportion(

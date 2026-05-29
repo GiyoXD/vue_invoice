@@ -733,6 +733,14 @@ def run_invoice_automation(
                 )
                 logging.info(f"Table {table_index + 1}: {pallet_sum} pallet boundaries (1/0 format)")
 
+        # Remove col_pallet_id from final output structures as it is strictly for validation
+        for table in processed_tables:
+            for row in table:
+                row.pop('col_pallet_id', None)
+        for table in raw_tables_snapshot:
+            for row in table:
+                row.pop('col_pallet_id', None)
+
         # --- 8. Generate JSON Output ---
         logging.info("--- Preparing Data for JSON Output ---")
         try:

@@ -138,7 +138,12 @@ class BlueprintRules:
         ),
         "col_pallet_count": ColumnDefinition(
             id="col_pallet_count", 
-            keywords=["pallet", "plt", "pallet no", "pallet no.", "plt no", "plt no.", "pallet #", "pallet number", "pallet no.#", "pallet no. #"], 
+            keywords=["pallet count", "pallet qty", "plt count", "托数", "件数"], 
+            excel_format="@"
+        ),
+        "col_pallet_id": ColumnDefinition(
+            id="col_pallet_id",
+            keywords=["pallet id", "pallet_id", "plt id", "pallet no", "pallet no.", "plt no", "plt no.", "pallet #", "pallet number", "pallet no.#", "pallet no. #", "托盘号", "箱号"],
             excel_format="@"
         ),
         "col_dc": ColumnDefinition(

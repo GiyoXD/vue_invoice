@@ -64,7 +64,13 @@
             "PCS": "col_qty_pcs",
             "SF": "col_qty_sf",
             "No.": "col_no",
-            "Pallet\nNO.": "col_pallet_count",
+            "Pallet\nNO.": "col_pallet_id",
+            "Pallet ID": "col_pallet_id",
+            "PALLET ID": "col_pallet_id",
+            "Pallet No": "col_pallet_id",
+            "PALLET NO": "col_pallet_id",
+            "Plt No.": "col_pallet_id",
+            "PLT NO.": "col_pallet_id",
             "REMARKS": "col_remarks",
             "HS CODE": "col_hs_code",
             "TOTAL PRICE": "col_amount",
@@ -72,7 +78,7 @@
             "Name of\\nCormodity": "col_item",
             "Unit Price\\n(USD)": "col_unit_price",
             "Total value\\n(USD)": "col_amount",
-            "PALLET\\nNO.": "col_pallet_count",
+            "PALLET\\nNO.": "col_pallet_id",
             "Name of\nCormodity": "col_item",
             "Unit Price\n(USD)": "col_unit_price",
             "NO": "col_no",
@@ -390,6 +396,24 @@
                 "PALLET",
                 "\u4ef6\u6570",
                 "\u6258\u6570"
+            ],
+            "format": "@"
+        },
+        "col_pallet_id": {
+            "keywords": [
+                "pallet id",
+                "pallet_id",
+                "plt id",
+                "pallet no",
+                "pallet no.",
+                "plt no",
+                "plt no.",
+                "pallet #",
+                "pallet number",
+                "pallet no.#",
+                "pallet no. #",
+                "\u6258\u76d2\u53f7",
+                "\u7bb1\u53f7"
             ],
             "format": "@"
         },
