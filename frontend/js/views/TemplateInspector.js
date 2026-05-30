@@ -225,13 +225,14 @@ export default {
             isSavingNotes.value = true;
 
             const t = templates.value.find(tmpl => tmpl.name === selectedTemplateName.value);
+            if (!t) return;
             try {
                 const res = await fetch('/api/template/notes', {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        template_name: selectedTemplateName.value,
-                        bundle_name: t?.bundle_name || "",
+                        customer_code: t.customer_code,
+                        locale: t.locale,
                         notes: editingNotesText.value
                     })
                 });
@@ -301,9 +302,7 @@ export default {
                 currentTemplate.value = null; // Clear immediately to prevent showing old data while loading
             }
             try {
-                const url = t.bundle_name
-                    ? `/api/template/view?name=${encodeURIComponent(t.name)}&bundle=${encodeURIComponent(t.bundle_name)}&_t=${Date.now()}`
-                    : `/api/template/view?name=${encodeURIComponent(t.name)}&_t=${Date.now()}`;
+                const url = `/api/template/view?customer_code=${encodeURIComponent(t.customer_code)}&locale=${encodeURIComponent(t.locale)}&_t=${Date.now()}`;
 
                 const res = await fetch(url);
                 if (res.ok) {
@@ -324,17 +323,15 @@ export default {
         const deleteTemplate = async () => {
             if (!selectedTemplateName.value) return;
 
-            // Find the full template object to get the bundle_name
+            // Find the full template object to get customer_code and locale
             const t = templates.value.find(tmpl => tmpl.name === selectedTemplateName.value);
-            const bundleName = t?.bundle_name || selectedTemplateName.value;
+            if (!t) return;
 
-            if (!confirm(`WARNING: Are you sure you want to permanently delete the ENTIRE template bundle for '${bundleName}'?\n\nThis will delete all variants (Base, KH, VN, etc) and configuration files within the bundle folder.`)) {
+            if (!confirm(`WARNING: Are you sure you want to permanently delete the template for '${t.customer_code}' (${t.locale})?`)) {
                 return;
             }
             try {
-                const url = t?.bundle_name
-                    ? `/api/template/${encodeURIComponent(selectedTemplateName.value)}?bundle=${encodeURIComponent(t.bundle_name)}`
-                    : `/api/template/${encodeURIComponent(selectedTemplateName.value)}`;
+                const url = `/api/template/${encodeURIComponent(t.customer_code)}?locale=${encodeURIComponent(t.locale)}`;
 
                 const res = await fetch(url, {
                     method: 'DELETE'
@@ -771,13 +768,14 @@ export default {
             editorMessage.value = "";
 
             const t = templates.value.find(tmpl => tmpl.name === selectedTemplateName.value);
+            if (!t) return;
             try {
                 const res = await fetch('/api/template/cell', {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        template_name: selectedTemplateName.value,
-                        bundle_name: t?.bundle_name || "",
+                        customer_code: t.customer_code,
+                        locale: t.locale,
                         sheet_name: currentSheetName.value,
                         cell_address: editingCell.value.address,
                         overrides: {

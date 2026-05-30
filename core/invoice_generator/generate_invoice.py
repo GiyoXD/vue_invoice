@@ -40,6 +40,9 @@ class GenerationOptions:
     enable_auto_fit: bool = True
     split_sheets: bool = False
     return_bytes: bool = False
+    explicit_config_data: Optional[Dict[str, Any]] = None
+    explicit_template_json_data: Optional[Dict[str, Any]] = None
+    explicit_template_xlsx_bytes: Optional[bytes] = None
 
 
 def run_invoice_generation(
@@ -153,6 +156,7 @@ class GeneratorContext:
         
         # Derived
         self.final_grand_total_pallets = 0
+        self.template_xlsx_bytes: Optional[bytes] = None
 
     # --- Convenience accessors for backward compatibility ---
     @property
@@ -188,6 +192,16 @@ def _initialize_context(
 
 def _load_resources(ctx: GeneratorContext):
     """Stage 1: Resolve assets and load configuration."""
+    # Check if direct data was provided via generation options
+    if ctx.options.explicit_config_data is not None:
+        ctx.config_loader = BundledConfigLoader.from_dict(
+            ctx.options.explicit_config_data,
+            ctx.options.explicit_template_json_data
+        )
+        if ctx.options.explicit_template_xlsx_bytes:
+            ctx.template_xlsx_bytes = ctx.options.explicit_template_xlsx_bytes
+        return
+
     # A. Resolve Paths
     resolver = InvoiceAssetResolver(base_config_dir=ctx.config_dir, base_template_dir=ctx.template_dir)
     assets = resolver.resolve_assets_for_input_file(str(ctx.input_path))
@@ -202,15 +216,23 @@ def _load_resources(ctx: GeneratorContext):
             
     ctx.paths['data'] = ctx.input_path
 
-    # Validation
-    if 'config' not in ctx.paths or 'template' not in ctx.paths:
+    # Validation: need either paths or direct data
+    has_direct_data = assets and assets.config_data is not None
+    if not has_direct_data and ('config' not in ctx.paths or 'template' not in ctx.paths):
          raise FileNotFoundError(f"Could not resolve config/template for '{ctx.input_path.name}'")
 
     # B. Load Config
     try:
-        ctx.config_loader = BundledConfigLoader(ctx.paths['config'])
+        if has_direct_data:
+            ctx.config_loader = BundledConfigLoader.from_dict(assets.config_data, assets.template_json_data)
+        else:
+            ctx.config_loader = BundledConfigLoader(ctx.paths['config'])
     except Exception as e:
         raise RuntimeError(f"Failed to load configuration: {e}") from e
+
+    # Store xlsx bytes for downstream use (unknown sheet injection)
+    if has_direct_data and assets.template_xlsx_bytes:
+        ctx.template_xlsx_bytes = assets.template_xlsx_bytes
 
     # C. Calculate Grand Total Pallets
     # Read the pre-calculated total from footer_data.grand_total (set by data_parser)

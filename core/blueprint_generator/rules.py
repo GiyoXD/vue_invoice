@@ -245,15 +245,8 @@ class BlueprintRules:
         Hardcoded COLUMNS always take priority over JSON definitions.
         """
         try:
-            from core.system_config import sys_config
-            json_path = sys_config.mapping_config_path
-
-            if not json_path.exists():
-                logger.warning(f"mapping_config.json not found at {json_path}. Skipping dynamic column load.")
-                return
-
-            with open(json_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+            from core.database.db_manager import get_global_mapping_config
+            data = get_global_mapping_config()
 
             col_defs = data.get("shipping_header_map", {})
             loaded = 0

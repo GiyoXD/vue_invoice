@@ -63,12 +63,17 @@ class BlueprintGenerator:
         
     def _load_mapping_config(self) -> Dict[str, Any]:
         """Load the user-defined mapping configuration."""
-        if self.mapping_config_path.exists():
-            try:
-                with open(self.mapping_config_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except Exception as e:
-                self.logger.warning(f"Failed to load mapping config: {e}")
+        try:
+            from core.database.db_manager import get_global_mapping_config
+            return get_global_mapping_config()
+        except Exception as e:
+            self.logger.warning(f"Failed to load mapping config from DB: {e}")
+            if self.mapping_config_path.exists():
+                try:
+                    with open(self.mapping_config_path, 'r', encoding='utf-8') as f:
+                        return json.load(f)
+                except Exception:
+                    pass
         return {}
 
     def analyze(self, template_path: str, legacy_format: bool = True, ignore_missing_description: bool = False) -> str:
@@ -99,7 +104,9 @@ class BlueprintGenerator:
                  runtime_mappings: Optional[Dict[str, str]] = None,
                  bundle_dir_name: Optional[str] = None,
                  pricing_mode: str = "standard",
-                 ignore_missing_description: bool = False) -> Optional[Path]:
+                 ignore_missing_description: bool = False,
+                 in_memory: bool = False,
+                 existing_template_json: Optional[Dict[str, Any]] = None) -> Optional[Any]:
         """
         Generate bundle config from template.
         
@@ -160,17 +167,16 @@ class BlueprintGenerator:
             
             # [Smart Feature] "One-Shot Learning": Save new mappings globally
             try:
-                from core.system_config import sys_config
-                config_path = sys_config.mapping_config_path
+                import copy
+                to_save = copy.deepcopy(mapping_config)
+                if "ignore_missing_description" in to_save:
+                    del to_save["ignore_missing_description"]
                 
-                # Ensure directory exists
-                config_path.parent.mkdir(parents=True, exist_ok=True)
-                
-                with open(config_path, 'w', encoding='utf-8') as f:
-                    json.dump(mapping_config, f, indent=4)
-                self.logger.info(f"   [Learning] Saved {len(runtime_mappings)} new mappings to global config at {config_path}.")
+                from core.database.db_manager import save_global_mapping_config
+                save_global_mapping_config(to_save)
+                self.logger.info(f"   [Learning] Saved {len(runtime_mappings)} new mappings to global mapping configuration database.")
             except Exception as e:
-                self.logger.warning(f"   [Learning Failed] Could not save mappings to disk: {e}")
+                self.logger.warning(f"   [Learning Failed] Could not save mappings: {e}")
 
         analysis = self.scanner.scan_template(str(template_path), mapping_config=mapping_config, workbook=wb)
         
@@ -251,7 +257,40 @@ class BlueprintGenerator:
              self.logger.info("✅ Config validation passed (Matches Ideal Structure).")
         
         
-        # Step 3: Save or print
+        # Step 3: Save, return in-memory, or print
+        if in_memory:
+            from .internal.sanitizer import ExcelTemplateSanitizer
+            sanitizer = ExcelTemplateSanitizer()
+            cleaned_wb, layout_metadata = sanitizer.sanitize_template(wb, analysis)
+            
+            preserved_notes = self._preserve_user_overrides(None, layout_metadata, old_data=existing_template_json)
+            
+            fingerprint = {
+                "source_file": template_path.name,
+                "created_at": ict_timestamp()
+            }
+            template_json_data = {
+                "fingerprint": fingerprint,
+                "template_layout": layout_metadata
+            }
+            if preserved_notes:
+                template_json_data["notes"] = preserved_notes
+                
+            from io import BytesIO
+            virtual_file = BytesIO()
+            try:
+                cleaned_wb.save(virtual_file)
+                template_xlsx_bytes = virtual_file.getvalue()
+            except Exception as e:
+                self.logger.error(f"Failed to save cleaned template to memory: {e}")
+                with open(template_path, "rb") as f:
+                    template_xlsx_bytes = f.read()
+                    
+            loop_profiler.report(title=f"Blueprint Generate Profiler (In-Memory) — {template_path.name}")
+            loop_profiler.reset()
+            
+            return bundle, template_json_data, template_xlsx_bytes
+
         if dry_run:
             self.logger.info("\n[Dry Run] Generated config:")
             print(json.dumps(bundle, indent=2, ensure_ascii=False))
@@ -392,7 +431,7 @@ class BlueprintGenerator:
             
         return template_file, layout_metadata
     
-    def _preserve_user_overrides(self, template_config_file: Path, layout_metadata: Dict[str, Any]) -> Optional[Any]:
+    def _preserve_user_overrides(self, template_config_file: Optional[Path], layout_metadata: Dict[str, Any], old_data: Optional[Dict[str, Any]] = None) -> Optional[Any]:
         """
         Preserve user overrides from an existing template config.
         
@@ -403,18 +442,24 @@ class BlueprintGenerator:
         Also preserves the 'notes' field.
         
         Args:
-            template_config_file: Path to the existing template JSON file
+            template_config_file: Optional Path to the existing template JSON file
             layout_metadata: The newly generated layout metadata (mutated in place)
+            old_data: Optional already loaded template JSON dict (bypasses file read)
             
         Returns:
             Preserved notes value, or None if no old config exists
         """
-        if not template_config_file.exists():
-            return None
+        if old_data is None:
+            if template_config_file is None or not template_config_file.exists():
+                return None
+            try:
+                with open(template_config_file, 'r', encoding='utf-8') as f:
+                    old_data = json.load(f)
+            except Exception as e:
+                self.logger.warning(f"   [Override Preservation] Could not read old config file: {e}")
+                return None
         
         try:
-            with open(template_config_file, 'r', encoding='utf-8') as f:
-                old_data = json.load(f)
             
             preserved_notes = old_data.get("notes")
             old_layout = old_data.get("template_layout", {})

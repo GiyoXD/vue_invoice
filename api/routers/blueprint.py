@@ -26,6 +26,7 @@ class ScanResult(BaseModel):
 class GenerateRequest(BaseModel):
     file_token: str
     customer_code: str # e.g. "CLW"
+    locale: str = "KH"
     mappings: Dict[str, str] = {} # {"Unknown Header": "col_remark"}
     footer_mappings: List[str] = []
     pricing_mode: str = "standard"  # 'standard' or 'net'
@@ -110,55 +111,76 @@ async def generate_config(request: GenerateRequest):
     try:
         # Save newly confirmed footer labels to global Config permanently
         if request.footer_mappings:
-            config_path = sys_config.mapping_config_path
-            if config_path.exists():
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                
-                if "footer_label_mappings" not in data:
-                    data["footer_label_mappings"] = {"keywords": []}
-                
-                existing_footers = data["footer_label_mappings"].get("keywords", [])
-                for fm in request.footer_mappings:
-                    if fm not in existing_footers:
-                        existing_footers.append(fm)
-                data["footer_label_mappings"]["keywords"] = existing_footers
-                
-                with open(config_path, 'w', encoding='utf-8') as f:
-                    json.dump(data, f, indent=4, ensure_ascii=False)
-                    
+            from core.database.db_manager import get_global_mapping_config, save_global_mapping_config
+            data = get_global_mapping_config()
+            
+            if "footer_label_mappings" not in data:
+                data["footer_label_mappings"] = {"keywords": []}
+            
+            existing_footers = data["footer_label_mappings"].get("keywords", [])
+            for fm in request.footer_mappings:
+                if fm not in existing_footers:
+                    existing_footers.append(fm)
+            data["footer_label_mappings"]["keywords"] = existing_footers
+            
+            save_global_mapping_config(data)
+                     
         # Run Generator
         orchestrator = Orchestrator()
         
-        # TODO: This requires updating Orchestrator.generate_blueprint_bundle signature
-        # to accept 'runtime_mappings' dict.
+        customer_code = request.customer_code
+        locale = request.locale
         
-        result_path = orchestrator.generate_blueprint_bundle(
+        from core.database.db_manager import SessionLocal, Blueprint
+        db = SessionLocal()
+        existing_template_json = None
+        try:
+            existing = db.query(Blueprint).filter(
+                Blueprint.customer_code == customer_code,
+                Blueprint.locale == locale
+            ).first()
+            if existing:
+                existing_template_json = json.loads(existing.template_json)
+        finally:
+            db.close()
+        
+        config_data, template_json_data, template_xlsx_bytes = orchestrator.generate_blueprint_bundle(
             template_path=file_path,
-            output_dir=sys_config.bundled_dir,
-            custom_prefix=request.customer_code,
-            # User mappings passed here!
+            custom_prefix=customer_code,
             runtime_mappings=request.mappings,
-            pricing_mode=request.pricing_mode
+            pricing_mode=request.pricing_mode,
+            in_memory=True,
+            existing_template_json=existing_template_json
         )
         
+        # Save to SQLite directly in-memory
+        from api.routers.templates import save_blueprint_to_db
+        save_blueprint_to_db(
+            customer_code=customer_code,
+            locale=locale,
+            config_data=config_data,
+            template_json_data=template_json_data,
+            xlsx_bytes=template_xlsx_bytes,
+            filename=f"{customer_code}_{locale}.xlsx"
+        )
+        
+        return GenerateResult(
+            status="success",
+            config_path=f"db://blueprints/{customer_code}",
+            template_path=f"db://templates/{customer_code}.xlsx",
+            message=f"Blueprint generated and saved to database for {customer_code}"
+        )
+
+    except Exception as e:
+        logger.error(f"Blueprint generation failed: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
         # Clean up the uploaded Excel file now that the blueprint is generated
         try:
             if file_path.exists():
                 file_path.unlink()
         except Exception as cleanup_err:
             logger.warning(f"Failed to delete temporary blueprint file {file_path}: {cleanup_err}")
-        
-        return GenerateResult(
-            status="success",
-            config_path=str(result_path),
-            template_path=str(result_path.with_name(f"{request.customer_code}.xlsx")),
-            message=f"Blueprint generated for {request.customer_code}"
-        )
-
-    except Exception as e:
-        logger.error(f"Generation failed: {e}")
-        return JSONResponse(status_code=500, content={"error": str(e)})
 
 class StringUtils:
     @staticmethod
@@ -201,9 +223,8 @@ async def get_mappings(mapping_type: str = "header_text_mappings"):
     so the frontend can use the same key-value editor UI.
     """
     try:
-        from core.system_config import sys_config
-        with open(sys_config.mapping_config_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        from core.database.db_manager import get_global_mapping_config
+        data = get_global_mapping_config()
 
         if mapping_type == "shipping_header_map":
             # Flatten to {col_id: "kw1, kw2"} for the UI
@@ -235,13 +256,8 @@ async def update_mappings(request: MappingsUpdateRequest):
     and is converted back to the structured format on save.
     """
     try:
-        from core.system_config import sys_config
-        config_path = sys_config.mapping_config_path
-
-        data = {}
-        if config_path.exists():
-            with open(config_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
+        from core.database.db_manager import get_global_mapping_config, save_global_mapping_config
+        data = get_global_mapping_config()
 
         if request.mapping_type == "shipping_header_map":
             # Unflatten from {col_id: "kw1, kw2"} back to structured format
@@ -262,8 +278,7 @@ async def update_mappings(request: MappingsUpdateRequest):
                 data[request.mapping_type] = {"mappings": {}}
             data[request.mapping_type]["mappings"] = request.mappings
 
-        with open(config_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
+        save_global_mapping_config(data)
 
         # Reload the mappings dynamically so the server doesn't need to be restarted
         try:

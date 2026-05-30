@@ -30,8 +30,8 @@ export default {
                     <div v-if="selectedFiles.length === 1" class="mt-3 flex items-center gap-3">
                         <label class="text-secondary text-sm">Version suffix:</label>
                         <select v-model="singleFileSuffix" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all w-40">
-                            <option value="_KH">KH version</option>
-                            <option value="_VN">VN version</option>
+                            <option value="KH">KH version</option>
+                            <option value="VN">VN version</option>
                         </select>
                     </div>
 
@@ -77,10 +77,10 @@ export default {
                     
                     <!-- Show preview of what will be created -->
                     <div v-if="filePrefix && isDualMode" class="mt-2 py-2 px-3 bg-blue-100 border border-blue-200 rounded-md text-sm text-blue-300">
-                        📁 Will create: <strong>{{ filePrefix }}_KH</strong> + <strong>{{ filePrefix }}_VN</strong> in <code>bundled/{{ filePrefix }}/</code>
+                        📁 Will create: <strong>{{ filePrefix }}</strong> (KH + VN variants) in database
                     </div>
                     <div v-else-if="filePrefix && singleFileSuffix" class="mt-2 py-2 px-3 bg-blue-100 border border-blue-200 rounded-md text-sm text-blue-300">
-                        📁 Will create: <strong>{{ filePrefix }}{{ singleFileSuffix }}</strong> in <code>bundled/{{ filePrefix }}/</code>
+                        📁 Will create: <strong>{{ filePrefix }}</strong> ({{ singleFileSuffix }} variant) in database
                     </div>
                 </div>
 
@@ -264,7 +264,7 @@ export default {
     setup() {
         const currentStep = ref(1);
         const selectedFiles = ref([]);
-        const singleFileSuffix = ref("_KH");
+        const singleFileSuffix = ref("KH");
         const isProcessing = ref(false);
         const statusMessage = ref("");
         const statusType = ref("info");
@@ -440,7 +440,7 @@ export default {
         const handleFileUpload = (e) => {
             const files = Array.from(e.target.files).slice(0, 2);
             selectedFiles.value = files;
-            singleFileSuffix.value = "_KH";
+            singleFileSuffix.value = "KH";
             statusMessage.value = "";
         };
 
@@ -570,18 +570,20 @@ export default {
 
                 if (isDualMode.value) {
                     // --- DUAL MODE: 2 files → KH + VN ---
-                    const suffixes = ['_KH', '_VN'];
+                    const suffixes = ['KH', 'VN'];
                     const baseName = filePrefix.value;
 
                     for (let i = 0; i < Math.min(fileTokens.value.length, 2); i++) {
-                        const suffixedPrefix = `${baseName}${suffixes[i]}`;
-                        statusMessage.value = `Generating ${suffixedPrefix}...`;
+                        const localeVal = suffixes[i];
+                        const displayPrefix = `${baseName}_${localeVal}`;
+                        statusMessage.value = `Generating ${displayPrefix}...`;
 
                         const res = await fetch('/api/template/generate', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
-                                file_prefix: suffixedPrefix,
+                                customer_code: baseName,
+                                locale: localeVal,
                                 user_mappings: finalMappings,
                                 temp_filename: fileTokens.value[i].filename,
                                 bundle_dir_name: baseName,
@@ -593,10 +595,10 @@ export default {
                         const data = await res.json();
 
                         if (!res.ok) {
-                            throw new Error(data.error || `Generation failed for ${suffixedPrefix}`);
+                            throw new Error(data.error || `Generation failed for ${displayPrefix}`);
                         }
 
-                        generatedPrefixes.value.push(suffixedPrefix);
+                        generatedPrefixes.value.push(displayPrefix);
                         bundlePath.value = data.bundle_path || '';
                     }
 
@@ -604,17 +606,19 @@ export default {
 
                 } else {
                     // --- SINGLE MODE: 1 file ---
-                    const effectivePrefix = `${filePrefix.value}${singleFileSuffix.value}`;
-                    const useBundleDir = singleFileSuffix.value ? filePrefix.value : "";
+                    const baseName = filePrefix.value;
+                    const localeVal = singleFileSuffix.value;
+                    const displayPrefix = `${baseName}_${localeVal}`;
 
                     const res = await fetch('/api/template/generate', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            file_prefix: effectivePrefix,
+                            customer_code: baseName,
+                            locale: localeVal,
                             user_mappings: finalMappings,
                             temp_filename: fileTokens.value[0].filename,
-                            bundle_dir_name: useBundleDir,
+                            bundle_dir_name: baseName,
                             confirmed_footers: confirmedFooters.value,
                             pricing_mode: pricingMode.value,
                             ignore_missing_description: ignoreMissingDescription.value
@@ -626,7 +630,7 @@ export default {
                         throw new Error(data.error || "Generation failed");
                     }
 
-                    generatedPrefixes.value.push(effectivePrefix);
+                    generatedPrefixes.value.push(displayPrefix);
                     bundlePath.value = data.bundle_path || '';
                     currentStep.value = 3;
                 }
@@ -642,7 +646,7 @@ export default {
         const resetFlow = () => {
             currentStep.value = 1;
             selectedFiles.value = [];
-            singleFileSuffix.value = "_KH";
+            singleFileSuffix.value = "KH";
             filePrefix.value = "";
             allMissingHeaders.value = [];
             statusMessage.value = "";

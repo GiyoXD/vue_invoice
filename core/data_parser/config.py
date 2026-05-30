@@ -138,19 +138,10 @@ def load_and_update_mappings():
 
     Reads from two sections of mapping_config.json:
     - 'header_text_mappings': explicit text → col_id overrides (e.g. template headers)
-    - 'shipping_header_map': col_id → {keywords, ...} — keywords are reversed into
-      the TARGET_HEADERS_MAP so the data parser recognizes them automatically.
     """
     try:
-        from core.system_config import sys_config
-        json_path = sys_config.mapping_config_path
-
-        if not json_path.exists():
-            print(f"Warning: Mapping config file not found at {json_path}. Using default TARGET_HEADERS_MAP.")
-            return
-
-        with open(json_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
+        from core.database.db_manager import get_global_mapping_config
+        data = get_global_mapping_config()
 
         # --- Source 1: header_text_mappings (explicit text → col_id) ---
         mappings = data.get('header_text_mappings', {}).get('mappings', {})

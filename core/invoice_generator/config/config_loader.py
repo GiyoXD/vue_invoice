@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, List
 import logging
 import re
+from openpyxl.utils.cell import column_index_from_string
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +50,22 @@ class BundledConfigLoader:
         self._data_bundle: Dict[str, Any] = {}
         
         self._load()
+    
+    @classmethod
+    def from_dict(cls, config_data: dict, template_json_data: dict = None):
+        """Create a config loader directly from parsed data (no file I/O)."""
+        instance = cls.__new__(cls)
+        instance.config_path = Path("<db>")
+        instance.raw_config = config_data
+        instance.version = config_data.get('_meta', {}).get('config_version', 'unknown')
+        instance.customer = config_data.get('_meta', {}).get('customer', 'unknown')
+        instance._processing = config_data.get('processing', {})
+        instance._styling_bundle = config_data.get('styling_bundle', {})
+        instance._layout_bundle = config_data.get('layout_bundle', {})
+        instance._data_bundle = config_data.get('data_bundle', {})
+        instance.template_json_config = template_json_data.get('template_layout', {}) if template_json_data else None
+        logger.info(f"Configuration loaded from in-memory data. Version: {instance.version}")
+        return instance
     
     def _load(self) -> None:
         """Load and parse the config file."""
@@ -308,19 +325,32 @@ class BundledConfigLoader:
         """
         template_config = self.get_template_json_config()
         if template_config and sheet_name in template_config:
-            header_content = template_config[sheet_name].get('template_header_content', {})
+            sheet_layout = template_config[sheet_name]
+            max_col = 0
+            
+            # 1. Scan cell text coordinates (e.g. "A1", "E3")
+            header_content = sheet_layout.get('template_header_content', {})
             if isinstance(header_content, dict) and header_content:
-                max_col = 0
                 for cell_ref in header_content.keys():
                     match = re.match(r"([A-Z]+)(\d+)", cell_ref)
                     if match:
-                        col_letter = match.group(1)
-                        col_idx = column_index_from_string(col_letter)
+                        col_idx = column_index_from_string(match.group(1))
                         if col_idx > max_col:
                             max_col = col_idx
-                if max_col > 0:
-                    logger.debug(f"[PrintArea] Max column {max_col} from template header for '{sheet_name}'")
-                    return max_col
+            
+            # 2. Scan merged ranges (e.g. "E3:F4") to capture full span width
+            header_merges = sheet_layout.get('template_header_merges', {})
+            if isinstance(header_merges, dict) and header_merges:
+                for merge_ref in header_merges.keys():
+                    match = re.search(r":([A-Z]+)\d+", merge_ref)
+                    if match:
+                        col_idx = column_index_from_string(match.group(1))
+                        if col_idx > max_col:
+                            max_col = col_idx
+                            
+            if max_col > 0:
+                logger.debug(f"[PrintArea] Safe max column {max_col} from template JSON for '{sheet_name}'")
+                return max_col
 
         layout = self.get_layout_config(sheet_name)
         columns = layout.get('structure', {}).get('columns', [])

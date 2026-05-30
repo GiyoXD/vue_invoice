@@ -2,7 +2,7 @@
 import sys
 import os
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Any
 
 # Import the logic directly!
 from core.invoice_generator.generate_invoice import run_invoice_generation
@@ -102,12 +102,14 @@ class Orchestrator:
 
     def generate_blueprint_bundle(self, 
                                 template_path: Path, 
-                                output_dir: Path, 
+                                output_dir: Optional[Path] = None, 
                                 custom_prefix: str = None,
                                 runtime_mappings: Dict[str, str] = None,
                                 bundle_dir_name: str = None,
                                 pricing_mode: str = "standard",
-                                ignore_missing_description: bool = False) -> Path:
+                                ignore_missing_description: bool = False,
+                                in_memory: bool = False,
+                                existing_template_json: Optional[Dict[str, Any]] = None) -> Any:
         """
         Wraps BlueprintGenerator.generate.
         Generates the config and clean template bundle.
@@ -119,13 +121,15 @@ class Orchestrator:
             
             result_path = generator.generate(
                 template_path=str(template_path),
-                output_dir=str(output_dir),
+                output_dir=str(output_dir) if output_dir else None,
                 dry_run=False,
                 custom_prefix=custom_prefix,
                 runtime_mappings=runtime_mappings,
                 bundle_dir_name=bundle_dir_name,
                 pricing_mode=pricing_mode,
-                ignore_missing_description=ignore_missing_description
+                ignore_missing_description=ignore_missing_description,
+                in_memory=in_memory,
+                existing_template_json=existing_template_json
             )
             
             return result_path

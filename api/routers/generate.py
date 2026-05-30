@@ -225,7 +225,10 @@ def generate_invoice(request: GenerateRequest):
                             custom_mode=task["custom_mode"],
                             enable_auto_fit=request.auto_fit,
                             split_sheets=request.split_sheets,
-                            return_bytes=True
+                            return_bytes=True,
+                            explicit_config_data=variant.get("config_data"),
+                            explicit_template_json_data=variant.get("template_json_data"),
+                            explicit_template_xlsx_bytes=variant.get("template_xlsx_bytes")
                         )
     
                         result = orchestrator.generate_invoice(

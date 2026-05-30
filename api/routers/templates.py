@@ -17,7 +17,8 @@ logger = logging.getLogger(__name__)
 orchestrator = Orchestrator()
 
 class TemplateConfig(BaseModel):
-    file_prefix: str
+    customer_code: str
+    locale: str = "KH"
     user_mappings: dict
     temp_filename: str
     bundle_dir_name: str = ""
@@ -26,15 +27,15 @@ class TemplateConfig(BaseModel):
     ignore_missing_description: bool = False
 
 class CellOverrideRequest(BaseModel):
-    template_name: str
-    bundle_name: str = ""
+    customer_code: str
+    locale: str = "KH"
     sheet_name: str
     cell_address: str
     overrides: Dict[str, str]
 
 class TemplateNotesRequest(BaseModel):
-    template_name: str
-    bundle_name: str = ""
+    customer_code: str
+    locale: str = "KH"
     notes: str
 
 # --- Helpers ---
@@ -83,35 +84,18 @@ def get_missing_footers(analysis_file_path: str):
 
 def update_mapping_config(new_mappings: dict):
     try:
-        mapping_path = sys_config.mapping_config_path
-        mapping_data = {"header_text_mappings": {"mappings": {}}}
-        if mapping_path.exists():
-            with open(mapping_path, 'r', encoding='utf-8') as f:
-                mapping_data = json.load(f)
+        from core.database.db_manager import get_global_mapping_config, save_global_mapping_config
+        mapping_data = get_global_mapping_config()
         if "header_text_mappings" not in mapping_data: mapping_data["header_text_mappings"] = {"mappings": {}}
         filtered = {k: v for k, v in new_mappings.items() if v and v != "col_unknown"}
         if filtered:
             mapping_data["header_text_mappings"]["mappings"].update(filtered)
-            with open(mapping_path, 'w', encoding='utf-8') as f:
-                json.dump(mapping_data, f, indent=2, ensure_ascii=False)
+            save_global_mapping_config(mapping_data)
         return True
     except Exception:
         logger.exception("Failed to update mapping config")
         return False
 
-def read_table_info_from_config(template_dir: Path, prefix: str) -> dict:
-    """Read table_info summary index from the matching variant config file."""
-    config_file = template_dir / f"{prefix}_config.json"
-    if not config_file.exists():
-        logger.warning("Config file %s does not exist for template view", config_file)
-        return {}
-    try:
-        with open(config_file, 'r', encoding='utf-8') as f:
-            cfg = json.load(f)
-        return cfg.get("table_info", {})
-    except Exception:
-        logger.exception("Failed to read table info from config %s", config_file)
-        return {}
 
 # --- Routes ---
 
@@ -136,84 +120,187 @@ def analyze_template(file: UploadFile = File(...), ignore_missing_description: b
         return res
     except Exception as e: return JSONResponse(status_code=500, content={"error": str(e)})
 
+def save_blueprint_to_db(customer_code: str, locale: str, config_data: dict, template_json_data: dict, xlsx_bytes: bytes, filename: str):
+    """
+    Saves the generated blueprint configuration and template directly to the SQLite database.
+    """
+    from core.database.db_manager import SessionLocal, Blueprint, BlueprintTemplate
+    
+    config_str = json.dumps(config_data, ensure_ascii=False)
+    template_str = json.dumps(template_json_data, ensure_ascii=False)
+    description = config_data.get("_meta", {}).get("description", f"Generated blueprint for {customer_code}_{locale}")
+    
+    db = SessionLocal()
+    try:
+        existing = db.query(Blueprint).filter(
+            Blueprint.customer_code == customer_code,
+            Blueprint.locale == locale
+        ).first()
+        
+        if existing:
+            existing.description = description
+            existing.config_json = config_str
+            existing.template_json = template_str
+            if existing.template_binary:
+                existing.template_binary.filename = filename
+                existing.template_binary.xlsx_blob = xlsx_bytes
+            else:
+                existing.template_binary = BlueprintTemplate(
+                    filename=filename,
+                    xlsx_blob=xlsx_bytes
+                )
+        else:
+            blueprint = Blueprint(
+                customer_code=customer_code,
+                locale=locale,
+                description=description,
+                config_json=config_str,
+                template_json=template_str
+            )
+            blueprint.template_binary = BlueprintTemplate(
+                filename=filename,
+                xlsx_blob=xlsx_bytes
+            )
+            db.add(blueprint)
+            
+        db.commit()
+        
+        # Clear temp cache for this customer
+        try:
+            from core.system_config import sys_config
+            temp_dir = sys_config.temp_uploads_dir / "runtime_blueprints" / f"{customer_code}_{locale}"
+            if temp_dir.exists():
+                shutil.rmtree(temp_dir)
+        except Exception:
+            pass
+            
+    except Exception as e:
+        db.rollback()
+        raise e
+    finally:
+        db.close()
+
 @router.post("/template/generate")
 def generate_template(config: TemplateConfig):
+    temp_path = sys_config.temp_uploads_dir / config.temp_filename
     try:
         if config.user_mappings and not update_mapping_config(config.user_mappings):
             return JSONResponse(status_code=500, content={"error": "Mapping update failed"})
         
         # Footer label update
         if config.confirmed_footers:
-            mapping_path = sys_config.mapping_config_path
-            if mapping_path.exists():
-                with open(mapping_path, 'r', encoding='utf-8') as f: data = json.load(f)
-                if "footer_label_mappings" not in data: data["footer_label_mappings"] = {"keywords": []}
-                existing = data["footer_label_mappings"].get("keywords", [])
-                for fm in config.confirmed_footers:
-                    if fm not in existing: existing.append(fm)
-                data["footer_label_mappings"]["keywords"] = existing
-                with open(mapping_path, 'w', encoding='utf-8') as f: json.dump(data, f, indent=4, ensure_ascii=False)
+            from core.database.db_manager import get_global_mapping_config, save_global_mapping_config
+            data = get_global_mapping_config()
+            if "footer_label_mappings" not in data: data["footer_label_mappings"] = {"keywords": []}
+            existing = data["footer_label_mappings"].get("keywords", [])
+            for fm in config.confirmed_footers:
+                if fm not in existing: existing.append(fm)
+            data["footer_label_mappings"]["keywords"] = existing
+            save_global_mapping_config(data)
 
-        temp_path = sys_config.temp_uploads_dir / config.temp_filename
-        result_path = orchestrator.generate_blueprint_bundle(
+        customer_code = config.customer_code
+        locale = config.locale
+        
+        from core.database.db_manager import SessionLocal, Blueprint
+        db = SessionLocal()
+        existing_template_json = None
+        try:
+            existing = db.query(Blueprint).filter(
+                Blueprint.customer_code == customer_code,
+                Blueprint.locale == locale
+            ).first()
+            if existing:
+                existing_template_json = json.loads(existing.template_json)
+        finally:
+            db.close()
+
+        config_data, template_json_data, template_xlsx_bytes = orchestrator.generate_blueprint_bundle(
             template_path=temp_path,
-            output_dir=sys_config.bundled_dir,
-            custom_prefix=config.file_prefix,
+            custom_prefix=customer_code,
             runtime_mappings=config.user_mappings,
             bundle_dir_name=config.bundle_dir_name or None,
             pricing_mode=config.pricing_mode,
-            ignore_missing_description=config.ignore_missing_description
+            ignore_missing_description=config.ignore_missing_description,
+            in_memory=True,
+            existing_template_json=existing_template_json
         )
         
+        # Save to SQLite and remove files from disk
+        save_blueprint_to_db(
+            customer_code=customer_code,
+            locale=locale,
+            config_data=config_data,
+            template_json_data=template_json_data,
+            xlsx_bytes=template_xlsx_bytes,
+            filename=f"{customer_code}_{locale}.xlsx"
+        )
+        
+        return {"status": "success", "message": "Blueprint saved to database."}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
         try:
             if temp_path.exists():
                 temp_path.unlink()
         except Exception as cleanup_err:
             logger.warning(f"Failed to delete temporary blueprint file {temp_path}: {cleanup_err}")
-            
-        return {"status": "success", "bundle_path": str(result_path.parent)}
-    except Exception as e: return JSONResponse(status_code=500, content={"error": str(e)})
+
+def _clear_cache(customer_code: str, locale: str):
+    try:
+        from core.system_config import sys_config
+        temp_dir = sys_config.temp_uploads_dir / "runtime_blueprints" / f"{customer_code}_{locale}"
+        if temp_dir.exists():
+            import shutil
+            shutil.rmtree(temp_dir)
+            logger.info(f"Cleared cache for {customer_code}_{locale}")
+    except Exception as e:
+        logger.warning(f"Failed to clear cache for {customer_code}_{locale}: {e}")
 
 @router.get("/templates")
 async def list_templates():
-    bundled_dir = sys_config.bundled_dir
+    from core.database.db_manager import SessionLocal, Blueprint
+    db = SessionLocal()
     templates = []
-    if bundled_dir.exists():
-        for b_folder in bundled_dir.iterdir():
-            if b_folder.is_dir():
-                for t_json in b_folder.glob("*_template.json"):
-                    try:
-                        stats = t_json.stat()
-                        with open(t_json, 'r', encoding='utf-8') as f:
-                            data = json.load(f)
-                            source = data.get("fingerprint", {}).get("source_file", "Unknown")
-                        templates.append({
-                            "name": t_json.name.replace("_template.json", ""),
-                            "bundle_name": b_folder.name,
-                            "modified": datetime.datetime.fromtimestamp(stats.st_mtime).isoformat(),
-                            "source_file": source
-                        })
-                    except Exception:
-                        logger.exception("Failed to read template %s", t_json)
+    try:
+        rows = db.query(Blueprint).all()
+        for row in rows:
+            try:
+                data = json.loads(row.template_json)
+                source = data.get("fingerprint", {}).get("source_file", "Unknown")
+                templates.append({
+                    "name": f"{row.customer_code}_{row.locale}",
+                    "customer_code": row.customer_code,
+                    "locale": row.locale,
+                    "bundle_name": row.customer_code,
+                    "modified": row.updated_at.isoformat() if row.updated_at else datetime.datetime.now().isoformat(),
+                    "source_file": source
+                })
+            except Exception:
+                logger.exception("Failed to parse DB blueprint %s_%s", row.customer_code, row.locale)
+    finally:
+        db.close()
     return templates
 
 @router.get("/template/view")
-async def view_template(name: str, bundle: Optional[str] = None):
-    bundled_dir = sys_config.bundled_dir
-    safe_name = Path(name).name
-    template_dir = bundled_dir / (Path(bundle).name if bundle else safe_name)
-    if not template_dir.exists():
-        for b_dir in bundled_dir.iterdir():
-            if b_dir.is_dir() and (b_dir / f"{safe_name}_template.json").exists():
-                template_dir = b_dir; break
+async def view_template(customer_code: str, locale: str = "KH"):
+    from core.database.db_manager import SessionLocal, Blueprint
     
-    t_path = template_dir / f"{safe_name}_template.json"
-    if not t_path.exists(): return JSONResponse(status_code=404, content={"error": "Not found"})
+    db = SessionLocal()
     try:
-        with open(t_path, 'r', encoding='utf-8') as f: data = json.load(f)
-        info = read_table_info_from_config(template_dir, safe_name)
+        row = db.query(Blueprint).filter(
+            Blueprint.customer_code == customer_code,
+            Blueprint.locale == locale
+        ).first()
+        
+        if not row:
+            return JSONResponse(status_code=404, content={"error": "Not found"})
+            
+        data = json.loads(row.template_json)
+        config_data = json.loads(row.config_json)
+        info = config_data.get("table_info", {})
         if info:
-            if "table_info" not in data: data["table_info"] = {}
+            if "table_info" not in data:
+                data["table_info"] = {}
             data["table_info"].update(info)
 
         # Inject parsed client profile so the Template Inspector can display it
@@ -229,26 +316,32 @@ async def view_template(name: str, bundle: Optional[str] = None):
             }
 
         return data
-    except Exception as e: return JSONResponse(status_code=500, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        db.close()
 
 @router.patch("/api/template/cell")
-# Note: I used /api/template/cell in main.py but the router prefix is /api, so it should be /template/cell
 @router.patch("/template/cell")
 async def update_template_cell(req: CellOverrideRequest):
-    bundled_dir = sys_config.bundled_dir
-    safe_name = Path(req.template_name).name
-    template_dir = bundled_dir / (Path(req.bundle_name).name if req.bundle_name else safe_name)
-    if not template_dir.exists():
-        for b_dir in bundled_dir.iterdir():
-            if b_dir.is_dir() and (b_dir / f"{safe_name}_template.json").exists():
-                template_dir = b_dir; break
+    from core.database.db_manager import SessionLocal, Blueprint
+    customer_code = req.customer_code
+    locale = req.locale
     
-    t_path = template_dir / f"{safe_name}_template.json"
-    if not t_path.exists(): return JSONResponse(status_code=404, content={"error": "Not found"})
+    db = SessionLocal()
     try:
-        with open(t_path, 'r', encoding='utf-8') as f: data = json.load(f)
+        row = db.query(Blueprint).filter(
+            Blueprint.customer_code == customer_code,
+            Blueprint.locale == locale
+        ).first()
+        
+        if not row:
+            return JSONResponse(status_code=404, content={"error": "Not found"})
+            
+        data = json.loads(row.template_json)
         sheet = data.get("template_layout", {}).get(req.sheet_name)
-        if not sheet: return JSONResponse(status_code=404, content={"error": "Sheet not found"})
+        if not sheet:
+            return JSONResponse(status_code=404, content={"error": "Sheet not found"})
         
         def get_max_row(content, merges, styles=None):
             max_r = 0
@@ -257,18 +350,12 @@ async def update_template_cell(req: CellOverrideRequest):
             m_list = merges if isinstance(merges, list) else merges.keys() if isinstance(merges, dict) else []
             for m in m_list:
                 _, _, _, mr = range_boundaries(m); max_r = max(max_r, mr)
-            # Also scan header styles — the frontend includes styled-but-empty
-            # cells when computing headerMaxRow, so we must match that logic
-            # to avoid off-by-one shifts in footer relative_index.
             if styles:
-                style_palette = sheet.get("style_palette", {})
                 for key, value in styles.items():
                     if isinstance(value, list):
-                        # Grouped format: key = style_id, value = [coords]
                         for coord in value:
                             _, r = coordinate_from_string(coord); max_r = max(max_r, r)
                     elif isinstance(value, (dict, str)):
-                        # Legacy per-cell format: key = coord
                         try:
                             _, r = coordinate_from_string(key); max_r = max(max_r, r)
                         except Exception:
@@ -285,17 +372,17 @@ async def update_template_cell(req: CellOverrideRequest):
         if is_f:
             rel = row_val - h_max - 1
             f_rows = sheet.get("template_footer_rows") or sheet.get("footer_rows", [])
-            row = next((r for r in f_rows if r.get('relative_index') == rel), None)
-            if not row:
-                row = {"relative_index": rel, "cells": [], "merges": []}
-                f_rows.append(row)
+            row_item = next((r for r in f_rows if r.get('relative_index') == rel), None)
+            if not row_item:
+                row_item = {"relative_index": rel, "cells": [], "merges": []}
+                f_rows.append(row_item)
                 sheet["template_footer_rows"] = sorted(f_rows, key=lambda x: x.get('relative_index', 0))
-            cells = row.get("cells", [])
+            cells = row_item.get("cells", [])
             cell = next((c for c in cells if c.get('col_index') == col_idx), None)
             if not cell:
                 cell = {"col_index": col_idx, "value": ""}
                 cells.append(cell)
-                row["cells"] = sorted(cells, key=lambda x: x.get('col_index', 1))
+                row_item["cells"] = sorted(cells, key=lambda x: x.get('col_index', 1))
             val = cell.get("value")
             curr_map = val if isinstance(val, dict) else {"default": str(val) if val is not None else ""}
             for m, v in req.overrides.items():
@@ -317,62 +404,70 @@ async def update_template_cell(req: CellOverrideRequest):
                 if req.cell_address in h_content: del h_content[req.cell_address]
             else: h_content[req.cell_address] = curr_map
 
-        with open(t_path, 'w', encoding='utf-8') as f: json.dump(data, f, indent=2, ensure_ascii=False)
+        row.template_json = json.dumps(data, ensure_ascii=False)
+        db.commit()
+        
+        # Clear cache file so it regenerates from updated DB
+        _clear_cache(customer_code, locale)
+        
         return {"status": "success"}
-    except Exception as e: return JSONResponse(status_code=500, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        db.close()
 
 @router.patch("/template/notes")
 async def update_template_notes(req: TemplateNotesRequest):
-    bundled_dir = sys_config.bundled_dir
-    safe_name = Path(req.template_name).name
-    template_dir = bundled_dir / (Path(req.bundle_name).name if req.bundle_name else safe_name)
-    if not template_dir.exists():
-        for b_dir in bundled_dir.iterdir():
-            if b_dir.is_dir() and (b_dir / f"{safe_name}_template.json").exists():
-                template_dir = b_dir; break
-    t_path = template_dir / f"{safe_name}_template.json"
-    if not t_path.exists(): return JSONResponse(status_code=404, content={"error": "Not found"})
+    from core.database.db_manager import SessionLocal, Blueprint
+    customer_code = req.customer_code
+    locale = req.locale
+    
+    db = SessionLocal()
     try:
-        with open(t_path, 'r', encoding='utf-8') as f: data = json.load(f)
-        data["notes"] = req.notes
-        with open(t_path, 'w', encoding='utf-8') as f: json.dump(data, f, indent=2, ensure_ascii=False)
-        return {"status": "success"}
-    except Exception as e: return JSONResponse(status_code=500, content={"error": str(e)})
-
-@router.delete("/template/{name}")
-async def delete_template(name: str, bundle: Optional[str] = None):
-    bundled_dir = sys_config.bundled_dir
-    safe_name = Path(name).name
-    template_dir = bundled_dir / (Path(bundle).name if bundle else safe_name)
-    
-    # Try to find the directory if the direct path doesn't exist
-    if not template_dir.exists():
-        for b_dir in bundled_dir.iterdir():
-            if b_dir.is_dir() and (b_dir / f"{safe_name}_template.json").exists():
-                template_dir = b_dir; break
-    
-    if not template_dir.exists(): return JSONResponse(status_code=404, content={"error": "Not found"})
-    
-    try:
-        # Surgical deletion of specific files
-        files_to_delete = [
-            template_dir / f"{safe_name}_template.json",
-            template_dir / f"{safe_name}_config.json",
-            template_dir / f"{safe_name}.xlsx"
-        ]
+        row = db.query(Blueprint).filter(
+            Blueprint.customer_code == customer_code,
+            Blueprint.locale == locale
+        ).first()
         
-        deleted_count = 0
-        for f in files_to_delete:
-            if f.exists():
-                f.unlink()
-                deleted_count += 1
-        
-        # If the directory is now empty, remove it too
-        if template_dir.exists() and not any(template_dir.iterdir()):
-            shutil.rmtree(template_dir)
+        if not row:
+            return JSONResponse(status_code=404, content={"error": "Not found"})
             
-        if deleted_count == 0:
-             return JSONResponse(status_code=404, content={"error": f"No files found for template '{safe_name}' in bundle '{template_dir.name}'"})
+        data = json.loads(row.template_json)
+        data["notes"] = req.notes
+        row.template_json = json.dumps(data, ensure_ascii=False)
+        db.commit()
+        
+        # Clear cache
+        _clear_cache(customer_code, locale)
+        
+        return {"status": "success"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        db.close()
 
-        return {"status": "success", "deleted_files": deleted_count}
-    except Exception as e: return JSONResponse(status_code=500, content={"error": str(e)})
+@router.delete("/template/{customer_code}")
+async def delete_template(customer_code: str, locale: str = "KH"):
+    from core.database.db_manager import SessionLocal, Blueprint
+    
+    db = SessionLocal()
+    try:
+        row = db.query(Blueprint).filter(
+            Blueprint.customer_code == customer_code,
+            Blueprint.locale == locale
+        ).first()
+        
+        if not row:
+            return JSONResponse(status_code=404, content={"error": "Not found"})
+            
+        db.delete(row)
+        db.commit()
+        
+        # Clear cache
+        _clear_cache(customer_code, locale)
+        
+        return {"status": "success"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+    finally:
+        db.close()

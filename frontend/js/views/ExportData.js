@@ -76,16 +76,6 @@ export default {
                     </button>
                 </div>
             </div>
-
-            <div class="mt-16 p-8 border border-red-500/30 rounded-2xl bg-red-500/10 backdrop-blur-sm">
-                <h3 class="text-red-400 mt-0 text-xl font-bold mb-2">Danger Zone</h3>
-                <p class="text-red-400/80 text-sm">Resetting the database will permanently delete all stored invoice processing history and the master list table.</p>
-                <div class="mt-6">
-                    <button @click="confirmReset" class="px-6 py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-lg shadow-lg shadow-red-500/20 transition-all transform hover:-translate-y-0.5">
-                        Reset Database Registry
-                    </button>
-                </div>
-            </div>
         </div>
     `,
     setup() {
@@ -162,23 +152,6 @@ export default {
             }
         };
 
-        const confirmReset = async () => {
-            if (confirm('CRITICAL ACTION: This will permanently delete ALL data in the registry and the master list. It will also delete the processed JSON files on disk. PROCEED?')) {
-                try {
-                    const response = await fetch('/api/registry/reset', { method: 'POST' });
-                    if (response.ok) {
-                        alert('Database and files have been successfully reset.');
-                        fetchRecentInvoices();
-                    } else {
-                        const errData = await response.json();
-                        alert('Reset failed: ' + errData.error);
-                    }
-                } catch (err) {
-                    alert('Reset failed: ' + err.message);
-                }
-            }
-        };
-
         // Initial fetch
         fetchRecentInvoices();
 
@@ -191,8 +164,7 @@ export default {
             recentInvoices,
             exportData,
             fetchRecentInvoices,
-            formatDate,
-            confirmReset
+            formatDate
         };
     }
 };

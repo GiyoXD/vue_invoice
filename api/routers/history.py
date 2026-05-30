@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 from pathlib import Path
 from typing import Optional, List
 from core.system_config import sys_config
-from core.database.db_manager import get_db, ProcessedData, InvoiceItem, get_cambodia_time, init_db, engine, Base
+from core.database.db_manager import get_db, ProcessedData, InvoiceItem
+from core.utils.clock import now as ict_now
 
 router = APIRouter(prefix="/api", tags=["history"])
 logger = logging.getLogger(__name__)
@@ -177,7 +178,7 @@ async def accept_invoice(req: HistoryRequest, db: Session = Depends(get_db)):
                         col_unit_price=to_float(row.get("col_unit_price")),
                         col_amount=amount_val,
                         is_adjustment=0,
-                        timestamp=get_cambodia_time()
+                        timestamp=ict_now()
                     )
                     items_to_add.append(item)
 
@@ -193,7 +194,7 @@ async def accept_invoice(req: HistoryRequest, db: Session = Depends(get_db)):
                     col_desc=str(adj.get("description", "")),
                     col_amount=amt,
                     is_adjustment=1,
-                    timestamp=get_cambodia_time()
+                    timestamp=ict_now()
                 )
                 items_to_add.append(item)
         
@@ -201,7 +202,7 @@ async def accept_invoice(req: HistoryRequest, db: Session = Depends(get_db)):
         existing = db.query(ProcessedData).filter(ProcessedData.filename == req.filename).first()
         if existing:
             existing.item_count, existing.total_sqft, existing.total_net, existing.total_amount, existing.total_pallets = item_count, total_sqft, total_net, total_amount, total_pallets
-            existing.data_payload, existing.timestamp = data, get_cambodia_time()
+            existing.data_payload, existing.timestamp = data, ict_now()
         else:
             db.add(ProcessedData(filename=req.filename, item_count=item_count, total_sqft=total_sqft, total_net=total_net, total_amount=total_amount, total_pallets=total_pallets, data_payload=data))
         db.commit()
@@ -291,7 +292,7 @@ async def export_registry(start_date: Optional[str] = None, end_date: Optional[s
         
         output.seek(0)
         csv_data = "\ufeff" + output.getvalue()
-        filename = f"export_{get_cambodia_time().strftime('%Y%m%d_%H%M%S')}.csv"
+        filename = f"export_{ict_now().strftime('%Y%m%d_%H%M%S')}.csv"
         return StreamingResponse(iter([csv_data]), media_type="text/csv", headers={"Content-Disposition": f"attachment; filename={filename}"})
     except Exception as e: return JSONResponse(status_code=500, content={"error": str(e)})
 
@@ -311,15 +312,4 @@ async def list_registry(db: Session = Depends(get_db)):
                 "total_amount": r.total_amount
             } for r in results
         ]
-    except Exception as e: return JSONResponse(status_code=500, content={"error": str(e)})
-
-@router.post("/registry/reset")
-async def reset_registry(db: Session = Depends(get_db)):
-    try:
-        Base.metadata.drop_all(bind=engine)
-        init_db()
-        processed_dir = sys_config.temp_uploads_dir / "processed"
-        if processed_dir.exists():
-            for f in processed_dir.glob("*.json"): f.unlink()
-        return {"status": "success"}
     except Exception as e: return JSONResponse(status_code=500, content={"error": str(e)})
