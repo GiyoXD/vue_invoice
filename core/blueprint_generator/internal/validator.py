@@ -103,14 +103,12 @@ class BlueprintLogicValidator:
     @staticmethod
     def verify_strict_mode(sheet_analysis) -> None:
         """
-        Enforce Strict Mode: All column IDs must exist in BlueprintRules.COLUMNS.
-        Raises ValueError if invaid/unknown ID is found.
+        Enforce Strict Mode: All column IDs must exist in BlueprintSchema.COLUMNS.
+        Raises ValueError if invalid/unknown ID is found.
         """
-        # Avoid circular imports by importing inside method if necessary, 
-        # but generally safe if structured correctly.
-        from ..rules import BlueprintRules
+        from ..schema import BlueprintSchema
 
-        allowed_ids = set(BlueprintRules.COLUMNS.keys())
+        allowed_ids = set(BlueprintSchema.COLUMNS.keys())
         
         for col in sheet_analysis.columns:
             # 1. Verify Parent Column ID
@@ -118,7 +116,7 @@ class BlueprintLogicValidator:
                 raise ValueError(
                     f"Blueprint Verification Failed: Column '{col.header}' has Invalid ID '{col.id}'. "
                     f"It must be one of: {sorted(list(allowed_ids))}. "
-                    "Please update BlueprintRules or fix the input template mapping."
+                    "Please update BlueprintSchema or fix the input template mapping."
                 )
             
             # 2. Verify Child Column ID

@@ -19,7 +19,7 @@ PALLET_PATTERN = re.compile(r'\d+\s*PALLETS?', re.IGNORECASE)
 PALLET_FORMULA_PATTERN = re.compile(r'PALLETS?', re.IGNORECASE)
 
 from core.utils.loop_profiler import tick, loop_profiler
-from core.blueprint_generator.rules import BlueprintRules
+from core.blueprint_generator.schema import BlueprintSchema
 
 # --- HELPER ---
 @loop_profiler.watch("content_extractor.get_cell_merge_colspan")
@@ -55,7 +55,7 @@ def _get_cell_value_safe(worksheet: Worksheet, cell) -> Optional[str]:
                 val = str(top_left_cell.value)
                 
                 # Clamp column boundary to prevent huge lateral scans
-                capped_max_col = min(max_col, max(50, BlueprintRules.MAX_SCAN_COLUMN))
+                capped_max_col = min(max_col, max(50, BlueprintSchema.MAX_SCAN_COLUMN))
                 
                 # Expand only the columns (max ~50 iterations per merge, instead of 100,000)
                 for c in range(min_col, capped_max_col + 1):
@@ -165,7 +165,7 @@ def find_footer_hs_code(worksheet: Worksheet, start_row: int, end_row: int) -> T
     hs_keywords = {"HS.CODE", "HS CODE", "HS-CODE", "H.S. CODE", "H.S CODE", "H.S.CODE", "HS. CODE"}
     
     for row in range(start_row, end_row + 1):
-        for col in range(1, min(worksheet.max_column + 1, BlueprintRules.MAX_SCAN_COLUMN)):
+        for col in range(1, min(worksheet.max_column + 1, BlueprintSchema.MAX_SCAN_COLUMN)):
             tick("content_extractor.find_footer_hs_code", sub="cells_scanned")
             cell = worksheet.cell(row=row, column=col)
             val = _get_cell_value_safe(worksheet, cell)
@@ -204,7 +204,7 @@ def find_total_label_cell(worksheet: Worksheet, start_row: int, end_row: int, ma
     best_match = None
     
     for row in range(start_row, end_row + 1):
-        for col in range(1, min(worksheet.max_column + 1, BlueprintRules.MAX_SCAN_COLUMN)):
+        for col in range(1, min(worksheet.max_column + 1, BlueprintSchema.MAX_SCAN_COLUMN)):
             tick("content_extractor.find_total_label_cell", sub="cells_scanned")
             cell = worksheet.cell(row=row, column=col)
             val = _get_cell_value_safe(worksheet, cell)
@@ -227,7 +227,7 @@ def find_pallet_count_column(worksheet: Worksheet, footer_row: int, columns: Lis
     """
     Scan the footer row for a pallet count pattern.
     """
-    for col in range(1, min(worksheet.max_column + 1, BlueprintRules.MAX_SCAN_COLUMN)):
+    for col in range(1, min(worksheet.max_column + 1, BlueprintSchema.MAX_SCAN_COLUMN)):
         tick("content_extractor.find_pallet_count_column", sub="cols_scanned")
         cell = worksheet.cell(row=footer_row, column=col)
         val = _get_cell_value_safe(worksheet, cell)

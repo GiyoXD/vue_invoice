@@ -85,6 +85,8 @@ class BlueprintGenerator:
              raise FileNotFoundError(f"Template not found: {template_path}")
              
         mapping_config = self._load_mapping_config()
+        from .schema import BlueprintSchema
+        BlueprintSchema.load_dynamic_columns(mapping_config)
         if ignore_missing_description:
             mapping_config["ignore_missing_description"] = True
         analysis = self.scanner.scan_template(str(template_path), mapping_config=mapping_config)
@@ -164,19 +166,9 @@ class BlueprintGenerator:
             
             # Update the config used for scanning
             mapping_config["header_text_mappings"]["mappings"].update(runtime_mappings)
-            
-            # [Smart Feature] "One-Shot Learning": Save new mappings globally
-            try:
-                import copy
-                to_save = copy.deepcopy(mapping_config)
-                if "ignore_missing_description" in to_save:
-                    del to_save["ignore_missing_description"]
-                
-                from core.database.db_manager import save_global_mapping_config
-                save_global_mapping_config(to_save)
-                self.logger.info(f"   [Learning] Saved {len(runtime_mappings)} new mappings to global mapping configuration database.")
-            except Exception as e:
-                self.logger.warning(f"   [Learning Failed] Could not save mappings: {e}")
+
+        from .schema import BlueprintSchema
+        BlueprintSchema.load_dynamic_columns(mapping_config)
 
         analysis = self.scanner.scan_template(str(template_path), mapping_config=mapping_config, workbook=wb)
         

@@ -94,11 +94,11 @@ def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo]
     # --- Step 5: Find HS Code row ---
     hs_code_text, hs_code_colspan, hs_code_col_idx = None, 1, None
     if not skip_hs_scan:
-        from core.blueprint_generator.rules import BlueprintRules
+        from core.blueprint_generator.schema import BlueprintSchema
         # HS code is a footer element — always near the TOTAL row, never in the data area.
         # Anchor to found_cell.row ± window to avoid O(rows×cols) scan through all data rows.
-        hs_start_row = max(start_scan, found_cell.row - BlueprintRules.FOOTER_HS_SEARCH_WINDOW)
-        hs_end_row = min(end_scan, found_cell.row + BlueprintRules.FOOTER_HS_SEARCH_WINDOW)
+        hs_start_row = max(start_scan, found_cell.row - BlueprintSchema.FOOTER_HS_SEARCH_WINDOW)
+        hs_end_row = min(end_scan, found_cell.row + BlueprintSchema.FOOTER_HS_SEARCH_WINDOW)
         hs_code_text, hs_code_colspan, hs_code_col_idx = find_footer_hs_code(worksheet, hs_start_row, hs_end_row)
         
     hs_code_col_id = None

@@ -18,7 +18,7 @@ import openpyxl
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.utils import get_column_letter
 
-from ..rules import BlueprintRules
+from ..schema import BlueprintSchema
 from core.utils.snitch import snitch
 from core.utils.loop_profiler import loop_profiler, tick
 from ..utils.footer_scanner import FooterInfo, scan_footer
@@ -164,7 +164,7 @@ class ExcelLayoutScanner:
             cells = []
             max_col_idx = 0
             # Cap structural scan at 50 columns
-            for col in range(1, min(worksheet.max_column + 1, BlueprintRules.MAX_SCAN_COLUMN)):
+            for col in range(1, min(worksheet.max_column + 1, BlueprintSchema.MAX_SCAN_COLUMN)):
                 tick("scanner._find_header_row", sub="structural_cells_checked")
                 cell = worksheet.cell(row=row, column=col)
                 if cell.value is not None and str(cell.value).strip():
@@ -225,7 +225,7 @@ class ExcelLayoutScanner:
             
             has_content = False
             # Cap header scan at 25 (Col Y)
-            for col in range(1, min(worksheet.max_column + 1, BlueprintRules.MAX_SCAN_COLUMN)):
+            for col in range(1, min(worksheet.max_column + 1, BlueprintSchema.MAX_SCAN_COLUMN)):
                 tick("scanner._find_header_row", sub="cells_checked")
                 cell = worksheet.cell(row=row, column=col)
                 value = self._get_cell_value(cell)
@@ -248,7 +248,7 @@ class ExcelLayoutScanner:
                     # 2. Check system rules
                     if not is_match:
                         tick("scanner._find_header_row", sub="rules_keyword_lookups")
-                        if BlueprintRules.get_column_by_keyword(value):
+                        if BlueprintSchema.get_column_by_keyword(value):
                             is_match = True
                         
                     if is_match:
@@ -292,7 +292,7 @@ class ExcelLayoutScanner:
                  best_row = fallback_row
                  # Re-extract cells with CAP
                  best_header_cells = []
-                 for col in range(1, min(worksheet.max_column + 1, BlueprintRules.MAX_SCAN_COLUMN)):
+                 for col in range(1, min(worksheet.max_column + 1, BlueprintSchema.MAX_SCAN_COLUMN)):
                      cell = worksheet.cell(row=fallback_row, column=col)
                      val = self._get_cell_value(cell)
                      if val:
@@ -324,6 +324,9 @@ class ExcelLayoutScanner:
         customer_code = path.stem.upper()
         
         self.logger.info(f"Scanning template: {path.name} (customer: {customer_code})")
+        
+        if mapping_config:
+            BlueprintSchema.load_dynamic_columns(mapping_config)
         
         if workbook is None:
              self.logger.debug("Loading workbook from disk...")
@@ -457,7 +460,7 @@ class ExcelLayoutScanner:
             
             # 1. Exact match check (important for mapped system names like "summary_packing_list")
             for variant in variants_to_check:
-                if variant in BlueprintRules.ALLOWED_SEARCH_SHEETS:
+                if variant in BlueprintSchema.ALLOWED_SEARCH_SHEETS:
                     is_supported = True
                     break
                     
@@ -570,7 +573,7 @@ class ExcelLayoutScanner:
                 all_merges_at_header.append(merged)
         
         # Cap column analysis at 25 (Col Y)
-        safe_max = min(worksheet.max_column + 1, BlueprintRules.MAX_SCAN_COLUMN)
+        safe_max = min(worksheet.max_column + 1, BlueprintSchema.MAX_SCAN_COLUMN)
         
         for col in range(1, safe_max):
             if col in processed_cols:
@@ -807,7 +810,7 @@ class ExcelLayoutScanner:
                     return mapped_id
 
         # 2. Use simple rule-based matching (System Defaults)
-        col_def = BlueprintRules.get_column_by_keyword(header_text)
+        col_def = BlueprintSchema.get_column_by_keyword(header_text)
         if col_def:
             return col_def.id
         
@@ -819,7 +822,7 @@ class ExcelLayoutScanner:
     
     def _determine_format(self, col_id: str, header_text: str) -> str:
         """Determine number format for column using Rules."""
-        return BlueprintRules.get_format_for_id(col_id)
+        return BlueprintSchema.get_format_for_id(col_id)
     
     def _determine_data_source(self, sheet_name: str, columns: List[ColumnInfo], mapping_config: Optional[Dict[str, Any]] = None) -> str:
         """
@@ -841,11 +844,13 @@ class ExcelLayoutScanner:
             normalized_name.replace('_', ' ')
         }
         
-        # 1. Exact match check against BlueprintRules definitions
+        # 1. Exact match check against BlueprintSchema definitions
         for variant in variants_to_check:
-            if variant in BlueprintRules.AGGREGATION_SHEETS:
+            if variant in BlueprintSchema.AGGREGATION_SHEETS:
+                if variant.replace(' ', '_') == "summary_packing_list":
+                    return "summary_packing_list"
                 return "aggregation"
-            elif variant in BlueprintRules.PROCESSED_TABLES_SHEETS:
+            elif variant in BlueprintSchema.PROCESSED_TABLES_SHEETS:
                 return "processed_tables_multi"
             
         # Fallback (Should not be reached if ALLOWED_SEARCH_SHEETS is strict)
