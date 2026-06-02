@@ -1,31 +1,17 @@
-# tests/test_api_routers.py
 import json
 import pytest
-from fastapi.testclient import TestClient
-from api.main import app
-from core.database.db_manager import SessionLocal, Blueprint, BlueprintTemplate
+from core.database.db_manager import Blueprint, BlueprintTemplate
 
-client = TestClient(app)
-
-@pytest.fixture(autouse=True)
-def clean_db():
-    db = SessionLocal()
+def test_api_template_flow(client, db):
+    # 1. Clean up any existing test records first
     db.query(Blueprint).filter(Blueprint.customer_code == "APITEST").delete()
     db.commit()
-    db.close()
-    yield
-    db = SessionLocal()
-    db.query(Blueprint).filter(Blueprint.customer_code == "APITEST").delete()
-    db.commit()
-    db.close()
 
-def test_api_template_flow():
-    # 1. View non-existent template
+    # 2. View non-existent template
     response = client.get("/api/template/view?customer_code=APITEST&locale=KH")
     assert response.status_code == 404
 
-    # 2. Insert mock blueprint directly into DB so we can test view, patch, and delete
-    db = SessionLocal()
+    # 3. Insert mock blueprint directly into DB so we can test view, patch, and delete
     mock_config = {
         "_meta": {
             "config_version": "2.2_strict_mode",
@@ -60,9 +46,8 @@ def test_api_template_flow():
     )
     db.add(blueprint)
     db.commit()
-    db.close()
 
-    # 3. List templates and verify the response contains customer_code and locale
+    # 4. List templates and verify the response contains customer_code and locale
     response = client.get("/api/templates")
     assert response.status_code == 200
     templates_list = response.json()
@@ -71,13 +56,13 @@ def test_api_template_flow():
     assert api_test_tmpl["customer_code"] == "APITEST"
     assert api_test_tmpl["locale"] == "KH"
 
-    # 4. View template details
+    # 5. View template details
     response = client.get("/api/template/view?customer_code=APITEST&locale=KH")
     assert response.status_code == 200
     data = response.json()
     assert data["template_layout"]["Invoice"]["header_content"]["A1"] == "Original Value"
 
-    # 5. Patch template cell overrides
+    # 6. Patch template cell overrides
     response = client.patch("/api/template/cell", json={
         "customer_code": "APITEST",
         "locale": "KH",
@@ -87,7 +72,7 @@ def test_api_template_flow():
     })
     assert response.status_code == 200
 
-    # 6. Verify cell patch was saved
+    # 7. Verify cell patch was saved
     response = client.get("/api/template/view?customer_code=APITEST&locale=KH")
     assert response.status_code == 200
     data = response.json()
@@ -95,7 +80,7 @@ def test_api_template_flow():
     assert isinstance(cell_val, dict)
     assert cell_val["standard"] == "New Overridden Value"
 
-    # 7. Patch template notes
+    # 8. Patch template notes
     response = client.patch("/api/template/notes", json={
         "customer_code": "APITEST",
         "locale": "KH",
@@ -103,16 +88,16 @@ def test_api_template_flow():
     })
     assert response.status_code == 200
 
-    # 8. Verify notes were saved
+    # 9. Verify notes were saved
     response = client.get("/api/template/view?customer_code=APITEST&locale=KH")
     assert response.status_code == 200
     data = response.json()
     assert data["notes"] == "Test Client Notes"
 
-    # 9. Delete template
+    # 10. Delete template
     response = client.delete("/api/template/APITEST?locale=KH")
     assert response.status_code == 200
 
-    # 10. Verify template deleted
+    # 11. Verify template deleted
     response = client.get("/api/template/view?customer_code=APITEST&locale=KH")
     assert response.status_code == 404

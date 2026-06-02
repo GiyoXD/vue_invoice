@@ -3,23 +3,13 @@ import os
 import json
 import pytest
 from pathlib import Path
-from core.database.db_manager import init_db, SessionLocal, Blueprint, BlueprintTemplate
+from typing import List, Optional
+from core.database.db_manager import Blueprint, BlueprintTemplate
 from core.invoice_generator.resolvers import InvoiceAssetResolver
 from core.system_config import sys_config
 
-@pytest.fixture(scope="module")
-def setup_db():
-    init_db()
-    yield
-
-def test_database_blueprint_resolution(setup_db):
-    db = SessionLocal()
-    
-    # 1. Clean up any existing test records
-    db.query(Blueprint).filter(Blueprint.customer_code == "DBTEST").delete()
-    db.commit()
-    
-    # 2. Create mock configuration JSONs
+def test_database_blueprint_resolution(db):
+    # 1. Create mock configuration JSONs
     mock_config = {
         "_meta": {
             "config_version": "2.2_strict_mode",
@@ -43,10 +33,9 @@ def test_database_blueprint_resolution(setup_db):
     }
     
     # Simple valid minimal Excel file mock bytes
-    # (Just some dummy binary bytes to simulate template XLSX)
     mock_xlsx_bytes = b"PK\x03\x04MockExcelTemplateBinaryDataBytes"
     
-    # 3. Save to database
+    # 2. Save to database
     blueprint = Blueprint(
         customer_code="DBTEST",
         locale="KH",
@@ -62,28 +51,24 @@ def test_database_blueprint_resolution(setup_db):
     db.commit()
     
     try:
-        # 4. Use InvoiceAssetResolver with default bundled directory to trigger database lookup
+        # 3. Use InvoiceAssetResolver with default bundled directory to trigger database lookup
         resolver = InvoiceAssetResolver(
             base_config_dir=sys_config.bundled_dir,
             base_template_dir=sys_config.bundled_dir
         )
         
-        # 5. Resolve assets
+        # 4. Resolve assets
         assets = resolver.resolve_assets_for_input_file("DBTEST25058.json")
         
-        # 6. Verify assertions
+        # 5. Verify assertions
         assert assets is not None, "Failed to resolve assets from database."
-        assert assets.config_data is not None, "config_data should be loaded directly from DB."
-        assert assets.template_xlsx_bytes is not None, "template_xlsx_bytes should be loaded directly from DB."
+        assert assets.config_data is not None
+        assert assets.template_xlsx_bytes is not None
         
-        # Verify config content
         assert assets.config_data["_meta"]["customer"] == "DBTEST_KH"
         assert assets.config_data["_meta"]["description"] == "Mock Database Config for Testing"
-            
-        # Verify template binary content
         assert assets.template_xlsx_bytes == mock_xlsx_bytes
             
-        # Verify variant resolution works
         variants = resolver.resolve_all_variants("DBTEST25058.json")
         assert len(variants) == 1
         assert variants[0]["suffix"] == "_KH"
@@ -91,18 +76,13 @@ def test_database_blueprint_resolution(setup_db):
         assert variants[0]["template_xlsx_bytes"] == mock_xlsx_bytes
         
     finally:
-        # 7. Clean up DB record
-        db.query(Blueprint).filter(Blueprint.customer_code == "DBTEST").delete()
-        db.commit()
-        db.close()
-        
-        # Clean up temp files
+        # Clean up temp files created during resolution
         temp_dir = sys_config.temp_uploads_dir / "runtime_blueprints" / "DBTEST_KH"
         if temp_dir.exists():
             import shutil
             shutil.rmtree(temp_dir)
 
-def test_in_memory_blueprint_generation(setup_db):
+def test_in_memory_blueprint_generation():
     import openpyxl
     from core.orchestrator import Orchestrator
     
@@ -167,3 +147,100 @@ def test_in_memory_blueprint_generation(setup_db):
     finally:
         if temp_excel_path.exists():
             temp_excel_path.unlink()
+
+
+def test_blueprint_repository_direct_methods(db):
+    """
+    Test BlueprintRepository methods directly to ensure they execute SQL/ORM operations correctly.
+    """
+    from core.database.repositories import BlueprintRepository
+    
+    repo = BlueprintRepository(db)
+    
+    # 1. Test save_blueprint
+    config_data = {"_meta": {"customer": "REPO_TEST_KH", "description": "Unit testing repository"}}
+    template_json = {"template_layout": {}}
+    xlsx_bytes = b"PK\x03\x04MockBytes"
+    
+    blueprint = repo.save_blueprint(
+        customer_code="REPO_TEST",
+        locale="KH",
+        config_data=config_data,
+        template_json_data=template_json,
+        xlsx_bytes=xlsx_bytes,
+        filename="REPO_TEST_KH.xlsx"
+    )
+    assert blueprint.customer_code == "REPO_TEST"
+    assert blueprint.locale == "KH"
+    
+    # 2. Test get_blueprint
+    fetched = repo.get_blueprint("REPO_TEST", "KH")
+    assert fetched is not None
+    assert fetched.customer_code == "REPO_TEST"
+    
+    # 3. Test get_customer_variants
+    variants = repo.get_customer_variants("REPO_TEST")
+    assert len(variants) == 1
+    assert variants[0].locale == "KH"
+    
+    # 4. Test get_all_blueprints
+    all_blueprints = repo.get_all_blueprints()
+    assert len(all_blueprints) >= 1
+    
+    # 5. Test delete_blueprint
+    deleted = repo.delete_blueprint("REPO_TEST", "KH")
+    assert deleted is True
+    
+    # Verify it was actually deleted
+    assert repo.get_blueprint("REPO_TEST", "KH") is None
+
+
+def test_resolver_with_mock_repository():
+    """
+    Test InvoiceAssetResolver with a mock repository, proving it is decoupled
+    and can run without an active SQLite database connection.
+    """
+    from core.database.db_manager import Blueprint, BlueprintTemplate
+    
+    # Define a mock repository class
+    class MockBlueprintRepository:
+        def __init__(self):
+            # Pre-populate with dummy blueprint entity
+            self.mock_blueprint = Blueprint(
+                customer_code="MOCKCUST",
+                locale="KH",
+                config_json=json.dumps({"_meta": {"customer": "MOCKCUST_KH"}}),
+                template_json=json.dumps({"template_layout": {}})
+            )
+            self.mock_blueprint.template_binary = BlueprintTemplate(
+                filename="MOCKCUST_KH.xlsx",
+                xlsx_blob=b"MockData"
+            )
+
+        def get_blueprint(self, customer_code: str, locale: str = "KH") -> Optional[Blueprint]:
+            if customer_code == "MOCKCUST" and locale == "KH":
+                return self.mock_blueprint
+            return None
+
+        def get_customer_variants(self, customer_code: str) -> List[Blueprint]:
+            if customer_code == "MOCKCUST":
+                return [self.mock_blueprint]
+            return []
+
+    # Instantiate resolver passing the Mock repository
+    mock_repo = MockBlueprintRepository()
+    resolver = InvoiceAssetResolver(repository=mock_repo)
+    
+    # Resolve assets (should match MOCKCUST)
+    assets = resolver.resolve_assets_for_input_file("MOCKCUST25001.json")
+    
+    assert assets is not None
+    assert assets.config_data["_meta"]["customer"] == "MOCKCUST_KH"
+    assert assets.template_xlsx_bytes == b"MockData"
+    
+    # Resolve variants
+    variants = resolver.resolve_all_variants("MOCKCUST25001.json")
+    assert len(variants) == 1
+    assert variants[0]["suffix"] == "_KH"
+    assert variants[0]["config_data"]["_meta"]["customer"] == "MOCKCUST_KH"
+
