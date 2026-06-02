@@ -32,15 +32,16 @@ class InvoiceAssets:
 class InvoiceAssetResolver:
     """
     Responsible for locating the Configuration and Template files required to generate an invoice.
-    Resolves directly from the database.
+    Resolves directly from the database using a BlueprintRepository.
     """
 
     VARIANT_SUFFIXES = ["_KH", "_VN"]
 
-    def __init__(self, base_config_dir: Path = None, base_template_dir: Path = None):
+    def __init__(self, base_config_dir: Path = None, base_template_dir: Path = None, repository=None):
         # We store these only for backwards-compatibility of constructor signature
         self.config_dir = Path(base_config_dir) if base_config_dir else None
         self.template_dir = Path(base_template_dir) if base_template_dir else None
+        self._repository = repository
 
     def _resolve_from_db_row(self, row) -> Optional[InvoiceAssets]:
         """Build InvoiceAssets directly from a DB row without writing temp files."""
@@ -77,15 +78,18 @@ class InvoiceAssetResolver:
                 locale = suffix.lstrip('_')
                 break
         
-        from core.database.db_manager import SessionLocal, Blueprint
+        if self._repository:
+            row = self._repository.get_blueprint(prefix, locale)
+            if row:
+                return self._resolve_from_db_row(row)
+            return None
+
+        from core.database.db_manager import SessionLocal
+        from core.database.repositories import BlueprintRepository
         db = SessionLocal()
         try:
-            # Query exact match
-            row = db.query(Blueprint).filter(
-                Blueprint.customer_code == prefix,
-                Blueprint.locale == locale
-            ).first()
-                
+            repo = BlueprintRepository(db)
+            row = repo.get_blueprint(prefix, locale)
             if row:
                 return self._resolve_from_db_row(row)
         except Exception as e:
@@ -147,10 +151,28 @@ class InvoiceAssetResolver:
         if not prefix:
             return []
             
-        from core.database.db_manager import SessionLocal, Blueprint
+        if self._repository:
+            db_rows = self._repository.get_customer_variants(prefix)
+            variants = []
+            for row in db_rows:
+                assets = self._resolve_from_db_row(row)
+                if assets:
+                    variants.append({
+                        "suffix": f"_{row.locale}",
+                        "config_path": assets.config_path,
+                        "template_path": assets.template_path,
+                        "config_data": assets.config_data,
+                        "template_json_data": assets.template_json_data,
+                        "template_xlsx_bytes": assets.template_xlsx_bytes
+                    })
+            return variants
+
+        from core.database.db_manager import SessionLocal
+        from core.database.repositories import BlueprintRepository
         db = SessionLocal()
         try:
-            db_rows = db.query(Blueprint).filter(Blueprint.customer_code == prefix).all()
+            repo = BlueprintRepository(db)
+            db_rows = repo.get_customer_variants(prefix)
             if db_rows:
                 variants = []
                 for row in db_rows:
@@ -171,3 +193,4 @@ class InvoiceAssetResolver:
             db.close()
         
         return []
+

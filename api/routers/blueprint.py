@@ -33,8 +33,6 @@ class GenerateRequest(BaseModel):
 
 class GenerateResult(BaseModel):
     status: str
-    config_path: str
-    template_path: str
     message: str
 
 # --- Endpoints ---
@@ -109,21 +107,35 @@ async def generate_config(request: GenerateRequest):
         raise HTTPException(status_code=404, detail="File token expired or invalid. Please re-scan.")
         
     try:
-        # Save newly confirmed footer labels to global Config permanently
-        if request.footer_mappings:
+        # Save newly confirmed header and footer labels to global Config permanently
+        if request.mappings or request.footer_mappings:
             from core.database.db_manager import get_global_mapping_config, save_global_mapping_config
             data = get_global_mapping_config()
             
-            if "footer_label_mappings" not in data:
-                data["footer_label_mappings"] = {"keywords": []}
+            updated = False
             
-            existing_footers = data["footer_label_mappings"].get("keywords", [])
-            for fm in request.footer_mappings:
-                if fm not in existing_footers:
-                    existing_footers.append(fm)
-            data["footer_label_mappings"]["keywords"] = existing_footers
+            if request.footer_mappings:
+                if "footer_label_mappings" not in data:
+                    data["footer_label_mappings"] = {"keywords": []}
+                existing_footers = data["footer_label_mappings"].get("keywords", [])
+                for fm in request.footer_mappings:
+                    if fm not in existing_footers:
+                        existing_footers.append(fm)
+                data["footer_label_mappings"]["keywords"] = existing_footers
+                updated = True
+                
+            if request.mappings:
+                filtered_mappings = {k: v for k, v in request.mappings.items() if v and v != "col_unknown"}
+                if filtered_mappings:
+                    if "header_text_mappings" not in data:
+                        data["header_text_mappings"] = {"mappings": {}}
+                    if "mappings" not in data["header_text_mappings"]:
+                        data["header_text_mappings"]["mappings"] = {}
+                    data["header_text_mappings"]["mappings"].update(filtered_mappings)
+                    updated = True
             
-            save_global_mapping_config(data)
+            if updated:
+                save_global_mapping_config(data)
                      
         # Run Generator
         orchestrator = Orchestrator()
@@ -131,14 +143,13 @@ async def generate_config(request: GenerateRequest):
         customer_code = request.customer_code
         locale = request.locale
         
-        from core.database.db_manager import SessionLocal, Blueprint
+        from core.database.db_manager import SessionLocal
+        from core.database.repositories import BlueprintRepository
         db = SessionLocal()
         existing_template_json = None
         try:
-            existing = db.query(Blueprint).filter(
-                Blueprint.customer_code == customer_code,
-                Blueprint.locale == locale
-            ).first()
+            repo = BlueprintRepository(db)
+            existing = repo.get_blueprint(customer_code, locale)
             if existing:
                 existing_template_json = json.loads(existing.template_json)
         finally:
@@ -166,8 +177,6 @@ async def generate_config(request: GenerateRequest):
         
         return GenerateResult(
             status="success",
-            config_path=f"db://blueprints/{customer_code}",
-            template_path=f"db://templates/{customer_code}.xlsx",
             message=f"Blueprint generated and saved to database for {customer_code}"
         )
 
@@ -198,11 +207,11 @@ async def get_mapping_options():
     Return list of valid system columns for mapping.
     Frontend uses this to populate the dropdown.
     """
-    from core.blueprint_generator.rules import BlueprintRules
+    from core.blueprint_generator.schema import BlueprintSchema
     
     options = []
-    # Sort by ID or Priority? valid columns are in BlueprintRules.COLUMNS
-    sorted_cols = sorted(BlueprintRules.COLUMNS.values(), key=lambda c: c.id)
+    # Sort by ID or Priority? valid columns are in BlueprintSchema.COLUMNS
+    sorted_cols = sorted(BlueprintSchema.COLUMNS.values(), key=lambda c: c.id)
     
     for col in sorted_cols:
         options.append({
@@ -289,9 +298,8 @@ async def update_mappings(request: MappingsUpdateRequest):
             import core.data_parser.sheet_parser as _sp_module
             _sp_module._ALIAS_REVERSE_LOOKUP = _build_alias_lookup()
             
-            from core.blueprint_generator.rules import BlueprintRules
-            BlueprintRules._load_from_config()
-            BlueprintRules._rebuild_keyword_index()  # Rebuild index after config reload
+            from core.blueprint_generator.schema import BlueprintSchema
+            BlueprintSchema.load_dynamic_columns(data)
         except Exception as e:
             logger.warning(f"Could not automatically reload mappings: {e}")
 

@@ -1,4 +1,22 @@
 {
+    "aggregation_sheets": [
+        "invoice",
+        "contract",
+        "inv",
+        "commercial",
+        "shipping",
+        "bill",
+        "summary_packing_list"
+    ],
+    "processed_tables_sheets": [
+        "packing list",
+        "packing",
+        "pl",
+        "detail",
+        "content",
+        "weight",
+        "detail_packing_list"
+    ],
     "sheet_name_mappings": {
         "comment": "Map quantity data sheet names to template config sheet names",
         "mappings": {
@@ -249,17 +267,22 @@
             "keywords": [
                 "hs code",
                 "h.s. code",
-                "税号"
+                "税号",
+                "hscode"
             ],
-            "format": "@"
+            "format": "@",
+            "width": 15.0
         },
         "col_container_no": {
             "keywords": [
                 "container no",
                 "集装箱号",
-                "container"
+                "container",
+                "container no.",
+                "container #"
             ],
-            "format": "@"
+            "format": "@",
+            "width": 18.0
         },
         "col_po": {
             "keywords": [
@@ -270,9 +293,15 @@
                 "order no",
                 "Po Nb",
                 "客户订单号",
-                "TEST PO"
+                "TEST PO",
+                "p.o",
+                "p.o.",
+                "p.o nº",
+                "p.o. nº",
+                "po no"
             ],
-            "format": "@"
+            "format": "@",
+            "width": 28.0
         },
         "col_unit_price": {
             "keywords": [
@@ -282,9 +311,12 @@
                 "unit",
                 "单价USD",
                 "价格",
-                "单价 USD"
+                "单价 USD",
+                "unit price (usd)",
+                "unit price(usd)"
             ],
-            "format": "@"
+            "format": "@",
+            "width": 15.0
         },
         "col_amount": {
             "keywords": [
@@ -295,9 +327,13 @@
                 "amount",
                 "总价",
                 "Total Amount",
-                "total"
+                "total",
+                "value",
+                "amount (usd)",
+                "total value(usd)"
             ],
-            "format": "@"
+            "format": "@",
+            "width": 18.0
         },
         "col_qty_sf": {
             "keywords": [
@@ -309,9 +345,11 @@
                 "出货数量 SF",
                 "尺码",
                 "出货数量（SF）",
-                "test sqft"
+                "test sqft",
+                "quantity(sf)"
             ],
-            "format": "@"
+            "format": "@",
+            "width": 15.0
         },
         "col_item": {
             "keywords": [
@@ -322,9 +360,14 @@
                 "客户品名",
                 "物料编码",
                 "产品编号",
-                "品名"
+                "品名",
+                "item n",
+                "item nº",
+                "item. no",
+                "item. nº"
             ],
-            "format": "@"
+            "format": "@",
+            "width": 22.14
         },
         "col_qty_pcs": {
             "keywords": [
@@ -332,7 +375,8 @@
                 "总张数",
                 "张数"
             ],
-            "format": "@"
+            "format": "@",
+            "width": 15.0
         },
         "col_net": {
             "keywords": [
@@ -340,7 +384,9 @@
                 "net weight",
                 "净重kg",
                 "净重",
-                "net"
+                "net",
+                "n.w",
+                "n.w (kgs)"
             ],
             "format": "@"
         },
@@ -353,7 +399,9 @@
                 "毛重量KG",
                 "重量KG",
                 "重量",
-                "毛重KG"
+                "毛重KG",
+                "g.w",
+                "g.w (kgs)"
             ],
             "format": "@"
         },
@@ -361,7 +409,8 @@
             "keywords": [
                 "cbm",
                 "材积",
-                "备注"
+                "备注",
+                "m3"
             ],
             "format": "@"
         },
@@ -370,9 +419,14 @@
                 "remarks",
                 "备注",
                 "Remark",
-                "低"
+                "低",
+                "note",
+                "notes",
+                "comment",
+                "comments"
             ],
-            "format": "@"
+            "format": "@",
+            "width": 20.0
         },
         "col_desc": {
             "keywords": [
@@ -382,13 +436,17 @@
                 "描述",
                 "desc"
             ],
-            "format": "@"
+            "format": "@",
+            "width": 26.0
         },
         "col_dc": {
             "keywords": [
-                "DC"
+                "DC",
+                "dc no",
+                "dc #"
             ],
-            "format": "@"
+            "format": "@",
+            "width": 12.0
         },
         "col_pallet_count": {
             "keywords": [
@@ -396,7 +454,9 @@
                 "拖数",
                 "PALLET",
                 "件数",
-                "托数"
+                "托数",
+                "pallet qty",
+                "plt count"
             ],
             "format": "@"
         },
@@ -414,7 +474,8 @@
                 "pallet no.#",
                 "pallet no. #",
                 "托盒号",
-                "箱号"
+                "箱号",
+                "托盘号"
             ],
             "format": "@"
         },
@@ -429,6 +490,48 @@
                 "container"
             ],
             "format": "@"
+        },
+        "col_static": {
+            "keywords": [
+                "mark & n",
+                "mark & no",
+                "mark & nº",
+                "mark and no"
+            ],
+            "format": "@",
+            "width": 24.71
+        },
+        "col_qty_header": {
+            "keywords": [
+                "quantity"
+            ],
+            "format": "@",
+            "width": 15.0
+        },
+        "col_unit_sf": {
+            "keywords": [
+                "unit/sf",
+                "unit sf",
+                "unit(sf)"
+            ],
+            "format": "#,##0.00",
+            "width": 15.0
+        },
+        "col_no": {
+            "keywords": [
+                "no",
+                "no."
+            ],
+            "format": "@"
+        },
+        "col_sqm": {
+            "keywords": [
+                "sqm",
+                "m²",
+                "square meter"
+            ],
+            "format": "#,##0.00",
+            "width": 16.0
         }
     },
     "footer_label_mappings": {

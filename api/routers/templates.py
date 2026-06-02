@@ -124,58 +124,25 @@ def save_blueprint_to_db(customer_code: str, locale: str, config_data: dict, tem
     """
     Saves the generated blueprint configuration and template directly to the SQLite database.
     """
-    from core.database.db_manager import SessionLocal, Blueprint, BlueprintTemplate
-    
-    config_str = json.dumps(config_data, ensure_ascii=False)
-    template_str = json.dumps(template_json_data, ensure_ascii=False)
-    description = config_data.get("_meta", {}).get("description", f"Generated blueprint for {customer_code}_{locale}")
+    from core.database.db_manager import SessionLocal
+    from core.database.repositories import BlueprintRepository
     
     db = SessionLocal()
     try:
-        existing = db.query(Blueprint).filter(
-            Blueprint.customer_code == customer_code,
-            Blueprint.locale == locale
-        ).first()
-        
-        if existing:
-            existing.description = description
-            existing.config_json = config_str
-            existing.template_json = template_str
-            if existing.template_binary:
-                existing.template_binary.filename = filename
-                existing.template_binary.xlsx_blob = xlsx_bytes
-            else:
-                existing.template_binary = BlueprintTemplate(
-                    filename=filename,
-                    xlsx_blob=xlsx_bytes
-                )
-        else:
-            blueprint = Blueprint(
-                customer_code=customer_code,
-                locale=locale,
-                description=description,
-                config_json=config_str,
-                template_json=template_str
-            )
-            blueprint.template_binary = BlueprintTemplate(
-                filename=filename,
-                xlsx_blob=xlsx_bytes
-            )
-            db.add(blueprint)
-            
-        db.commit()
+        repo = BlueprintRepository(db)
+        repo.save_blueprint(
+            customer_code=customer_code,
+            locale=locale,
+            config_data=config_data,
+            template_json_data=template_json_data,
+            xlsx_bytes=xlsx_bytes,
+            filename=filename
+        )
         
         # Clear temp cache for this customer
-        try:
-            from core.system_config import sys_config
-            temp_dir = sys_config.temp_uploads_dir / "runtime_blueprints" / f"{customer_code}_{locale}"
-            if temp_dir.exists():
-                shutil.rmtree(temp_dir)
-        except Exception:
-            pass
+        _clear_cache(customer_code, locale)
             
     except Exception as e:
-        db.rollback()
         raise e
     finally:
         db.close()
@@ -201,14 +168,13 @@ def generate_template(config: TemplateConfig):
         customer_code = config.customer_code
         locale = config.locale
         
-        from core.database.db_manager import SessionLocal, Blueprint
+        from core.database.db_manager import SessionLocal
+        from core.database.repositories import BlueprintRepository
         db = SessionLocal()
         existing_template_json = None
         try:
-            existing = db.query(Blueprint).filter(
-                Blueprint.customer_code == customer_code,
-                Blueprint.locale == locale
-            ).first()
+            repo = BlueprintRepository(db)
+            existing = repo.get_blueprint(customer_code, locale)
             if existing:
                 existing_template_json = json.loads(existing.template_json)
         finally:
@@ -258,11 +224,13 @@ def _clear_cache(customer_code: str, locale: str):
 
 @router.get("/templates")
 async def list_templates():
-    from core.database.db_manager import SessionLocal, Blueprint
+    from core.database.db_manager import SessionLocal
+    from core.database.repositories import BlueprintRepository
     db = SessionLocal()
     templates = []
     try:
-        rows = db.query(Blueprint).all()
+        repo = BlueprintRepository(db)
+        rows = repo.get_all_blueprints()
         for row in rows:
             try:
                 data = json.loads(row.template_json)
@@ -283,14 +251,13 @@ async def list_templates():
 
 @router.get("/template/view")
 async def view_template(customer_code: str, locale: str = "KH"):
-    from core.database.db_manager import SessionLocal, Blueprint
+    from core.database.db_manager import SessionLocal
+    from core.database.repositories import BlueprintRepository
     
     db = SessionLocal()
     try:
-        row = db.query(Blueprint).filter(
-            Blueprint.customer_code == customer_code,
-            Blueprint.locale == locale
-        ).first()
+        repo = BlueprintRepository(db)
+        row = repo.get_blueprint(customer_code, locale)
         
         if not row:
             return JSONResponse(status_code=404, content={"error": "Not found"})
@@ -324,16 +291,15 @@ async def view_template(customer_code: str, locale: str = "KH"):
 @router.patch("/api/template/cell")
 @router.patch("/template/cell")
 async def update_template_cell(req: CellOverrideRequest):
-    from core.database.db_manager import SessionLocal, Blueprint
+    from core.database.db_manager import SessionLocal
+    from core.database.repositories import BlueprintRepository
     customer_code = req.customer_code
     locale = req.locale
     
     db = SessionLocal()
     try:
-        row = db.query(Blueprint).filter(
-            Blueprint.customer_code == customer_code,
-            Blueprint.locale == locale
-        ).first()
+        repo = BlueprintRepository(db)
+        row = repo.get_blueprint(customer_code, locale)
         
         if not row:
             return JSONResponse(status_code=404, content={"error": "Not found"})
@@ -418,16 +384,15 @@ async def update_template_cell(req: CellOverrideRequest):
 
 @router.patch("/template/notes")
 async def update_template_notes(req: TemplateNotesRequest):
-    from core.database.db_manager import SessionLocal, Blueprint
+    from core.database.db_manager import SessionLocal
+    from core.database.repositories import BlueprintRepository
     customer_code = req.customer_code
     locale = req.locale
     
     db = SessionLocal()
     try:
-        row = db.query(Blueprint).filter(
-            Blueprint.customer_code == customer_code,
-            Blueprint.locale == locale
-        ).first()
+        repo = BlueprintRepository(db)
+        row = repo.get_blueprint(customer_code, locale)
         
         if not row:
             return JSONResponse(status_code=404, content={"error": "Not found"})
@@ -448,21 +413,17 @@ async def update_template_notes(req: TemplateNotesRequest):
 
 @router.delete("/template/{customer_code}")
 async def delete_template(customer_code: str, locale: str = "KH"):
-    from core.database.db_manager import SessionLocal, Blueprint
+    from core.database.db_manager import SessionLocal
+    from core.database.repositories import BlueprintRepository
     
     db = SessionLocal()
     try:
-        row = db.query(Blueprint).filter(
-            Blueprint.customer_code == customer_code,
-            Blueprint.locale == locale
-        ).first()
+        repo = BlueprintRepository(db)
+        deleted = repo.delete_blueprint(customer_code, locale)
         
-        if not row:
+        if not deleted:
             return JSONResponse(status_code=404, content={"error": "Not found"})
             
-        db.delete(row)
-        db.commit()
-        
         # Clear cache
         _clear_cache(customer_code, locale)
         
