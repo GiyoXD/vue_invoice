@@ -246,6 +246,24 @@ async def get_mappings(mapping_type: str = "header_text_mappings"):
         elif mapping_type == "footer_label_mappings":
             keywords = data.get("footer_label_mappings", {}).get("keywords", [])
             return {kw: "Footer Keyword" for kw in keywords}
+        elif mapping_type == "sheet_classifications":
+            flat = {}
+            for s in data.get("aggregation_sheets", []):
+                flat[s] = "aggregation"
+            for s in data.get("processed_tables_sheets", []):
+                flat[s] = "processed_tables"
+            return flat
+        elif mapping_type == "sheet_mappings":
+            from core.database.db_manager import SessionLocal, GlobalMapSheet
+            db = SessionLocal()
+            try:
+                sheets = db.query(GlobalMapSheet).all()
+                res_dict = {}
+                for s in sheets:
+                    res_dict[s.sheet_name] = s.processing_type
+                return res_dict
+            finally:
+                db.close()
 
         return data.get(mapping_type, {}).get("mappings", {})
     except Exception as e:
@@ -254,7 +272,7 @@ async def get_mappings(mapping_type: str = "header_text_mappings"):
 
 class MappingsUpdateRequest(BaseModel):
     mapping_type: str = "header_text_mappings"
-    mappings: Dict[str, str]
+    mappings: Dict[str, Any]
 
 @router.post("/mappings")
 async def update_mappings(request: MappingsUpdateRequest):
@@ -282,6 +300,27 @@ async def update_mappings(request: MappingsUpdateRequest):
             existing = data.get("footer_label_mappings", {})
             existing["keywords"] = list(request.mappings.keys())
             data["footer_label_mappings"] = existing
+        elif request.mapping_type == "sheet_classifications":
+            agg_sheets = []
+            proc_sheets = []
+            for name, p_type in request.mappings.items():
+                if p_type == "processed_tables":
+                    proc_sheets.append(name)
+                else:
+                    agg_sheets.append(name)
+            data["aggregation_sheets"] = agg_sheets
+            data["processed_tables_sheets"] = proc_sheets
+        elif request.mapping_type == "sheet_mappings":
+            agg_sheets = []
+            proc_sheets = []
+            for sheet_name, processing_type in request.mappings.items():
+                if processing_type == "processed_tables":
+                    proc_sheets.append(sheet_name)
+                else:
+                    agg_sheets.append(sheet_name)
+            data["sheet_name_mappings"] = {"mappings": {}}
+            data["aggregation_sheets"] = sorted(list(set(agg_sheets)))
+            data["processed_tables_sheets"] = sorted(list(set(proc_sheets)))
         else:
             if request.mapping_type not in data:
                 data[request.mapping_type] = {"mappings": {}}

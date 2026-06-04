@@ -157,13 +157,14 @@ def extract_static_column_values(worksheet: Worksheet, header_row: int, columns:
 
 
 
+HS_CODE_PATTERN = re.compile(r'\bH\.?\s*S\.?\s*[-_.]?\s*C\s*O\s*D\s*E\b', re.IGNORECASE)
+
+
 @loop_profiler.watch("content_extractor.find_footer_hs_code")
 def find_footer_hs_code(worksheet: Worksheet, start_row: int, end_row: int) -> Tuple[Optional[str], int, Optional[int]]:
     """
     Scan specifically in the footer bounds for HS Code to determine if it's there, its colspan, and its column.
     """
-    hs_keywords = {"HS.CODE", "HS CODE", "HS-CODE", "H.S. CODE", "H.S CODE", "H.S.CODE", "HS. CODE"}
-    
     for row in range(start_row, end_row + 1):
         for col in range(1, min(worksheet.max_column + 1, BlueprintSchema.MAX_SCAN_COLUMN)):
             tick("content_extractor.find_footer_hs_code", sub="cells_scanned")
@@ -172,13 +173,13 @@ def find_footer_hs_code(worksheet: Worksheet, start_row: int, end_row: int) -> T
             if not val:
                 continue
                 
-            upper_val = val.upper()
-            if any(kw in upper_val for kw in hs_keywords):
+            if HS_CODE_PATTERN.search(val):
                 # Calculate colspan
                 colspan = get_cell_merge_colspan(worksheet, cell)
                 return val, colspan, col
                 
     return None, 1, None
+
 
 
 # --- 3. FOOTER ELEMENTS (PALLET & TOTAL LABELS) ---

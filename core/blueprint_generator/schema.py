@@ -150,7 +150,8 @@ class BlueprintSchema:
                             disk_config.update(mapping_config)
                         mapping_config = disk_config
             except Exception as e:
-                logger.error(f"[BlueprintSchema] Failed to load fallback config from disk: {e}")
+                logger.exception("[BlueprintSchema] Failed to load fallback config from disk")
+                raise e
 
         try:
             col_defs = mapping_config.get("shipping_header_map", {})
@@ -184,7 +185,8 @@ class BlueprintSchema:
                 logger.info(f"[BlueprintSchema] Loaded {loaded} new column definition(s) from mapping_config.")
 
         except Exception as e:
-            logger.error(f"[BlueprintSchema] Failed to load shipping_header_map from mapping_config: {e}")
+            logger.exception("[BlueprintSchema] Failed to load shipping_header_map from mapping_config")
+            raise e
 
         # Load Sheet Classification Rules dynamically
         aggregation_sheets = mapping_config.get("aggregation_sheets")

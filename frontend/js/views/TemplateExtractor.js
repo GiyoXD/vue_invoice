@@ -101,7 +101,7 @@ export default {
                 </div>
 
                 <div v-else class="flex flex-col gap-2 mt-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                    <div v-for="(headerText, index) in allMissingHeaders" :key="index" class="grid grid-cols-[1fr_2fr_auto] gap-4 items-center bg-white/5 p-3 rounded-md">
+                    <div v-for="(headerText, index) in allMissingHeaders" :key="index" style="display: grid; grid-template-columns: 1fr 2fr auto; gap: 1rem; align-items: center;" class="bg-white/5 p-3 rounded-md">
                         <div class="font-bold text-yellow-400 truncate" :title="headerText">"{{ headerText }}"</div>
                         <select v-model="userMappings[headerText]" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" :disabled="confirmedHeaders.includes(headerText)">
                             <option value="" disabled selected>Select a field...</option>
@@ -197,7 +197,7 @@ export default {
                     <div class="flex gap-4 mb-4">
                         <select v-model="activeMappingType" @change="switchMappingType($event.target.value)" class="flex-none bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all w-72 font-bold">
                             <option value="header_text_mappings">Header Mappings</option>
-                            <option value="sheet_name_mappings">Sheet Name Mappings</option>
+                            <option value="sheet_mappings">Sheet Mappings</option>
                             <option value="shipping_header_map">Shipping Header Map</option>
                             <option value="footer_label_mappings">Footer Labels (Total)</option>
                         </select>
@@ -207,10 +207,19 @@ export default {
                     </div>
 
                     <!-- Add New Mapping Row -->
-                    <div class="grid grid-cols-[1fr_1fr_auto] gap-2 mb-4 p-2 bg-emerald-500/5 border border-emerald-500/30 border-dashed rounded-md items-center">
+                    <div v-if="activeMappingType === 'sheet_mappings'" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: center;" class="mb-4 p-2 bg-emerald-500/5 border border-emerald-500/30 border-dashed rounded-md">
+                        <input type="text" v-model="newMappingKey" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="Sheet Name (e.g. INV)" />
+                        <select v-model="newMappingVal" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all">
+                            <option value="" disabled selected>Select classification...</option>
+                            <option value="aggregation">Aggregation (Invoice / Contract)</option>
+                            <option value="processed_tables">Processed Tables (Packing List)</option>
+                        </select>
+                        <button class="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px]" @click.prevent="addNewMapping" :disabled="!newMappingKey || !newMappingVal">Add</button>
+                    </div>
+                    <div v-else style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: center;" class="mb-4 p-2 bg-emerald-500/5 border border-emerald-500/30 border-dashed rounded-md">
                         <input type="text" v-model="newMappingKey" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" :placeholder="activeMappingType === 'shipping_header_map' ? 'Col ID (e.g. col_grade)' : (activeMappingType === 'footer_label_mappings' ? 'New Footer Label (e.g. GRAND TOTAL)' : 'New Input Text (e.g. Qty(SF))')" />
                         
-                        <input v-if="activeMappingType === 'sheet_name_mappings' || activeMappingType === 'shipping_header_map' || activeMappingType === 'footer_label_mappings'" type="text" v-model="newMappingVal" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" :placeholder="activeMappingType === 'shipping_header_map' ? 'Keywords (comma-separated)' : (activeMappingType === 'footer_label_mappings' ? 'Auto-filled' : 'Target Name (e.g. Packing list)')" :disabled="activeMappingType === 'footer_label_mappings'" />
+                        <input v-if="activeMappingType === 'shipping_header_map' || activeMappingType === 'footer_label_mappings'" type="text" v-model="newMappingVal" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" :placeholder="activeMappingType === 'shipping_header_map' ? 'Keywords (comma-separated)' : (activeMappingType === 'footer_label_mappings' ? 'Auto-filled' : '')" :disabled="activeMappingType === 'footer_label_mappings'" />
                         <select v-else v-model="newMappingVal" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all">
                             <option value="" disabled selected>Select system field...</option>
                             <option v-for="opt in systemOptions" :value="opt.id">{{ opt.label }} ({{ opt.id }})</option>
@@ -222,26 +231,45 @@ export default {
                     <div class="max-h-[400px] overflow-y-auto border border-white/10 rounded-md p-2">
                         <div class="mapping-grid grid gap-2">
                             <!-- Header Row -->
-                            <div class="grid grid-cols-[1fr_1fr_auto] gap-2 font-bold p-2 border-b border-white/10">
+                            <div v-if="activeMappingType === 'sheet_mappings'" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: center;" class="font-bold p-2 border-b border-white/10">
+                                <div>Sheet Name</div>
+                                <div>Classification</div>
+                                <div class="w-20 text-center">Action</div>
+                            </div>
+                            <div v-else style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: center;" class="font-bold p-2 border-b border-white/10">
                                 <div>{{ activeMappingType === 'shipping_header_map' ? 'Column ID' : (activeMappingType === 'footer_label_mappings' ? 'Footer Target Text' : 'Original Text (Excel)') }}</div>
                                 <div>{{ activeMappingType === 'shipping_header_map' ? 'Keywords (comma-separated)' : (activeMappingType === 'footer_label_mappings' ? 'Type' : 'Mapped Target (System)') }}</div>
                                 <div class="w-20 text-center">Action</div>
                             </div>
                             
-                            <div v-for="(colId, headerText) in filteredMappings" :key="headerText" class="grid grid-cols-[1fr_1fr_auto] gap-2 items-center bg-white/5 p-2 rounded">
-                                <input type="text" :value="headerText" @change="updateMappingHeader(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" />
-                                
-                                <input v-if="activeMappingType === 'sheet_name_mappings' || activeMappingType === 'shipping_header_map' || activeMappingType === 'footer_label_mappings'" type="text" :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" :disabled="activeMappingType === 'footer_label_mappings'" />
-                                
-                                <select v-else :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm">
-                                    <option v-for="opt in systemOptions" :value="opt.id">
-                                        {{ opt.label }} ({{ opt.id }})
-                                    </option>
-                                    <option v-if="!systemOptions.find(o => o.id === colId)" :value="colId">{{ colId }} (Unknown)</option>
-                                </select>
-                                
-                                <button class="h-9 px-4 bg-red-500/80 hover:bg-red-500 text-white rounded cursor-pointer transition-colors w-full text-sm font-medium" @click="deleteMapping(headerText)">Delete</button>
-                            </div>
+                            <template v-if="activeMappingType === 'sheet_mappings'">
+                                <div v-for="(val, headerText) in filteredMappings" :key="headerText" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: center;" class="bg-white/5 p-2 rounded">
+                                    <input type="text" :value="headerText" @change="updateMappingHeader(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" />
+                                    
+                                    <select :value="val" @change="updateMappingColId(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm">
+                                        <option value="aggregation">Aggregation (Invoice / Contract)</option>
+                                        <option value="processed_tables">Processed Tables (Packing List)</option>
+                                    </select>
+                                    
+                                    <button class="h-9 px-4 bg-red-500/80 hover:bg-red-500 text-white rounded cursor-pointer transition-colors w-full text-sm font-medium" @click="deleteMapping(headerText)">Delete</button>
+                                </div>
+                            </template>
+                            <template v-else>
+                                <div v-for="(colId, headerText) in filteredMappings" :key="headerText" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: center;" class="bg-white/5 p-2 rounded">
+                                    <input type="text" :value="headerText" @change="updateMappingHeader(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" />
+                                    
+                                    <input v-if="activeMappingType === 'shipping_header_map' || activeMappingType === 'footer_label_mappings'" type="text" :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" :disabled="activeMappingType === 'footer_label_mappings'" />
+                                    
+                                    <select v-else :value="colId" @change="updateMappingColId(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm">
+                                        <option v-for="opt in systemOptions" :value="opt.id">
+                                            {{ opt.label }} ({{ opt.id }})
+                                        </option>
+                                        <option v-if="!systemOptions.find(o => o.id === colId)" :value="colId">{{ colId }} (Unknown)</option>
+                                    </select>
+                                    
+                                    <button class="h-9 px-4 bg-red-500/80 hover:bg-red-500 text-white rounded cursor-pointer transition-colors w-full text-sm font-medium" @click="deleteMapping(headerText)">Delete</button>
+                                </div>
+                            </template>
                             <div v-if="Object.keys(filteredMappings).length === 0" class="p-4 text-center text-secondary">
                                 No mappings found matching your search.
                             </div>
@@ -279,6 +307,7 @@ export default {
         const activeMappingType = ref("header_text_mappings");
         const newMappingKey = ref("");
         const newMappingVal = ref("");
+        const newMappingType = ref("aggregation");
         const footerKeywords = ref([]);
 
         // Data
@@ -344,7 +373,7 @@ export default {
             const term = mappingSearch.value.toLowerCase();
             const result = {};
             for (const [key, val] of Object.entries(globalMappings.value)) {
-                if (key.toLowerCase().includes(term) || val.toLowerCase().includes(term)) {
+                if (key.toLowerCase().includes(term) || (typeof val === 'string' && val.toLowerCase().includes(term))) {
                     result[key] = val;
                 }
             }
@@ -384,7 +413,11 @@ export default {
                     [newMappingKey.value]: newMappingVal.value
                 };
                 newMappingKey.value = "";
-                newMappingVal.value = "";
+                if (activeMappingType.value === 'sheet_mappings') {
+                    newMappingVal.value = "";
+                } else {
+                    newMappingVal.value = activeMappingType.value === 'footer_label_mappings' ? 'Footer Keyword' : '';
+                }
             }
         };
 
@@ -393,7 +426,12 @@ export default {
             await fetchMappings();
             mappingStatusMessage.value = "";
             newMappingKey.value = "";
-            newMappingVal.value = type === 'footer_label_mappings' ? 'Footer Keyword' : '';
+            
+            if (type === 'sheet_mappings') {
+                newMappingVal.value = "";
+            } else {
+                newMappingVal.value = type === 'footer_label_mappings' ? 'Footer Keyword' : '';
+            }
             
             if (type === 'footer_label_mappings') {
                 footerKeywords.value = Object.keys(globalMappings.value).map(k => k.toUpperCase());
@@ -710,6 +748,7 @@ export default {
             switchMappingType,
             newMappingKey,
             newMappingVal,
+            newMappingType,
             addNewMapping,
             proactiveWarnings,
             pricingMode

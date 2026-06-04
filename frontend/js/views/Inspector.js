@@ -10,6 +10,7 @@ export default {
                 <!-- Sidebar: History -->
                 <div class="w-[300px] bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl p-6 flex flex-col flex-shrink-0">
                     <h3 class="text-xl font-bold text-slate-100 mb-4 mt-0">Recent Runs</h3>
+                    <button class="w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg shadow-sm transition-colors mt-4 flex-shrink-0" @click="fetchHistory">Refresh List</button>
                      <div v-if="historyList.length === 0" class="text-secondary text-sm">No history found.</div>
                     <div class="flex-1 overflow-y-auto flex flex-col gap-2 pr-2">
                         <div v-for="run in historyList" :key="run.filename" 
@@ -21,7 +22,6 @@ export default {
                             </div>
                         </div>
                     </div>
-                    <button class="w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg shadow-sm transition-colors mt-4 flex-shrink-0" @click="fetchHistory">Refresh List</button>
                 </div>
 
                 <!-- Main: Details -->
@@ -193,7 +193,7 @@ export default {
         const inspectorTotals = computed(() => {
             const data = inspectorData.value;
             const gt = data?.footer_data?.grand_total || {};
-            
+
             // Add any extra price adjustments to the backend amount total
             let adjustmentSum = 0;
             if (data?.price_adjustment && Array.isArray(data.price_adjustment)) {
@@ -241,9 +241,9 @@ export default {
         const inspectorItems = computed(() => {
             const data = inspectorData.value;
             if (!data) return [];
-            
+
             let items = [];
-            
+
             // 1. Add Price Adjustments as top rows (highest rows)
             if (data.price_adjustment && Array.isArray(data.price_adjustment)) {
                 data.price_adjustment.forEach(adj => {
@@ -254,12 +254,12 @@ export default {
                     });
                 });
             }
-            
+
             // 2. Add Main Items — raw_data only (unprocessed, never distributed).
             // Flatten all tables into one list.
             const mainItems = (data.raw_data || []).flat();
             items = items.concat(mainItems);
-            
+
             return items;
         });
 
@@ -293,7 +293,7 @@ export default {
                     const data = await res.json();
                     uploadedMetadata.value = data;
                     currentRun.value = run;
-                    
+
                     // Immediately check if this file already exists in the DB
                     if (run.type === 'processed') {
                         try {
@@ -325,7 +325,7 @@ export default {
 
         const acceptCurrentRun = async () => {
             if (!currentRun.value || !currentRun.value.filename) return;
-            
+
             try {
                 // Check if already in DB
                 const checkRes = await fetch('/api/registry/check', {
@@ -333,7 +333,7 @@ export default {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ filename: currentRun.value.filename })
                 });
-                
+
                 if (checkRes.ok) {
                     const checkData = await checkRes.json();
                     if (checkData.exists) {
@@ -350,7 +350,7 @@ export default {
                 console.error("Failed to check registry", e);
                 if (!confirm(`Accept and save "${currentRun.value.filename}" to database?`)) return;
             }
-            
+
             try {
                 const res = await fetch('/api/registry/accept', {
                     method: 'POST',
@@ -382,7 +382,7 @@ export default {
         const rejectCurrentRun = async () => {
             if (!currentRun.value || !currentRun.value.filename) return;
             if (!confirm(`Reject and delete "${currentRun.value.filename}"? This cannot be undone.`)) return;
-            
+
             try {
                 const res = await fetch('/api/registry/reject', {
                     method: 'POST',
