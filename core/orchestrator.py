@@ -115,12 +115,11 @@ class Orchestrator:
         Generates the config and clean template bundle.
         """
         try:
-            from core.blueprint_generator import BlueprintGenerator
+            from core.blueprint_generator.generator import BlueprintGenerator, BlueprintGenerationOptions
             
             generator = BlueprintGenerator(self.project_root)
             
-            result_path = generator.generate(
-                template_path=str(template_path),
+            options = BlueprintGenerationOptions(
                 output_dir=str(output_dir) if output_dir else None,
                 dry_run=False,
                 custom_prefix=custom_prefix,
@@ -130,6 +129,11 @@ class Orchestrator:
                 ignore_missing_description=ignore_missing_description,
                 in_memory=in_memory,
                 existing_template_json=existing_template_json
+            )
+            
+            result_path = generator.generate(
+                template_path=str(template_path),
+                options=options
             )
             
             return result_path
