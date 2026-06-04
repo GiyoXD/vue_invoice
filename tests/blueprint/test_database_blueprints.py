@@ -384,4 +384,78 @@ def test_mapping_cascade_delete(db):
     assert db.query(GlobalMapHeaderTextMapping).count() == 0
 
 
+def test_mapping_service_get_and_update(db):
+    from core.services.mapping_service import MappingService
+    from core.database.db_manager import (
+        GlobalMapColumn, GlobalMapColumnKeyword, GlobalMapSheet,
+        GlobalMapFooterLabelKeyword, GlobalMapHeaderTextMapping
+    )
+
+    # Clean tables first
+    db.query(GlobalMapHeaderTextMapping).delete()
+    db.query(GlobalMapSheet).delete()
+    db.query(GlobalMapColumnKeyword).delete()
+    db.query(GlobalMapColumn).delete()
+    db.query(GlobalMapFooterLabelKeyword).delete()
+    db.commit()
+
+    service = MappingService(db)
+
+    # 1. Test shipping_header_map updates
+    service.update_mappings("shipping_header_map", {"po": "col_po", "item": "col_item"})
+    
+    # Assert database state
+    assert db.query(GlobalMapColumn).count() == 2
+    assert db.query(GlobalMapColumnKeyword).count() == 2
+    
+    kws = service.get_mappings("shipping_header_map")
+    assert kws == {"po": "col_po", "item": "col_item"}
+
+    # Update with delta (keep po, remove item, add qty)
+    service.update_mappings("shipping_header_map", {"po": "col_po", "qty": "col_qty_pcs"})
+    assert db.query(GlobalMapColumnKeyword).count() == 2
+    
+    # Verify exact keyword records
+    db_kws = {kw.keyword: kw.col_id for kw in db.query(GlobalMapColumnKeyword).all()}
+    assert "item" not in db_kws
+    assert db_kws["po"] == "col_po"
+    assert db_kws["qty"] == "col_qty_pcs"
+
+    # 2. Test footer_label_mappings delta
+    service.update_mappings("footer_label_mappings", {"TOTAL": "Footer Keyword", "SUBTOTAL": "Footer Keyword"})
+    assert db.query(GlobalMapFooterLabelKeyword).count() == 2
+    assert {f.keyword for f in db.query(GlobalMapFooterLabelKeyword).all()} == {"TOTAL", "SUBTOTAL"}
+
+    service.update_mappings("footer_label_mappings", {"TOTAL": "Footer Keyword", "GRAND TOTAL": "Footer Keyword"})
+    assert db.query(GlobalMapFooterLabelKeyword).count() == 2
+    assert {f.keyword for f in db.query(GlobalMapFooterLabelKeyword).all()} == {"TOTAL", "GRAND TOTAL"}
+
+    # 3. Test sheet mappings / sheet classifications delta
+    service.update_mappings("sheet_mappings", {"inv": "aggregation", "pl": "processed_tables"})
+    assert db.query(GlobalMapSheet).count() == 2
+    
+    sheets = {s.sheet_name: s.processing_type for s in db.query(GlobalMapSheet).all()}
+    assert sheets["inv"] == "aggregation"
+    assert sheets["pl"] == "processed_tables"
+
+    service.update_mappings("sheet_mappings", {"inv": "processed_tables", "packing": "processed_tables"})
+    assert db.query(GlobalMapSheet).count() == 2
+    sheets = {s.sheet_name: s.processing_type for s in db.query(GlobalMapSheet).all()}
+    assert "pl" not in sheets
+    assert sheets["inv"] == "processed_tables"
+    assert sheets["packing"] == "processed_tables"
+
+    # 4. Test header_text_mappings overrides delta
+    service.update_mappings("header_text_mappings", {"P.O.": "col_po", "Item No": "col_item"})
+    assert db.query(GlobalMapHeaderTextMapping).count() == 2
+
+    service.update_mappings("header_text_mappings", {"P.O.": "col_qty_pcs", "Description": "col_desc"})
+    assert db.query(GlobalMapHeaderTextMapping).count() == 2
+    overrides = {o.raw_text: o.canonical_col_id for o in db.query(GlobalMapHeaderTextMapping).all()}
+    assert "Item No" not in overrides
+    assert overrides["P.O."] == "col_qty_pcs"
+    assert overrides["Description"] == "col_desc"
+
+
+
 

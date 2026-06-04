@@ -178,12 +178,26 @@ class BlueprintSchema:
 
         # Load Sheet Classification Rules dynamically
         aggregation_sheets = mapping_config.get("aggregation_sheets")
-        if aggregation_sheets:
+        if aggregation_sheets is not None:
             cls.AGGREGATION_SHEETS = set(aggregation_sheets)
+        else:
+            try:
+                from core.database.db_manager import get_global_mapping_config
+                db_config = get_global_mapping_config()
+                cls.AGGREGATION_SHEETS = set(db_config.get("aggregation_sheets", []))
+            except Exception:
+                pass
 
         processed_tables_sheets = mapping_config.get("processed_tables_sheets")
-        if processed_tables_sheets:
+        if processed_tables_sheets is not None:
             cls.PROCESSED_TABLES_SHEETS = set(processed_tables_sheets)
+        else:
+            try:
+                from core.database.db_manager import get_global_mapping_config
+                db_config = get_global_mapping_config()
+                cls.PROCESSED_TABLES_SHEETS = set(db_config.get("processed_tables_sheets", []))
+            except Exception:
+                pass
 
         cls.ALLOWED_SEARCH_SHEETS = cls.AGGREGATION_SHEETS | cls.PROCESSED_TABLES_SHEETS
 

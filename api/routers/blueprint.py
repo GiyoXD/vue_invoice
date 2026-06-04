@@ -1,6 +1,7 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from typing import Dict, List, Optional, Any
 from pathlib import Path
 import shutil
@@ -9,6 +10,8 @@ import logging
 
 from core.system_config import sys_config
 from core.orchestrator import Orchestrator
+from core.database.db_manager import get_db
+from core.services.mapping_service import MappingService
 
 router = APIRouter(prefix="/api/blueprint", tags=["blueprint"])
 logger = logging.getLogger(__name__)
@@ -96,7 +99,7 @@ async def scan_template(file: UploadFile = File(...)):
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @router.post("/generate", response_model=GenerateResult)
-async def generate_config(request: GenerateRequest):
+async def generate_config(request: GenerateRequest, db: Session = Depends(get_db)):
     """
     Step 2: Generate final config using verified/mapped headers.
     """
@@ -110,7 +113,7 @@ async def generate_config(request: GenerateRequest):
         # Save newly confirmed header and footer labels to global Config permanently
         if request.mappings or request.footer_mappings:
             from core.database.db_manager import get_global_mapping_config, save_global_mapping_config
-            data = get_global_mapping_config()
+            data = get_global_mapping_config(db)
             
             updated = False
             
@@ -135,7 +138,7 @@ async def generate_config(request: GenerateRequest):
                     updated = True
             
             if updated:
-                save_global_mapping_config(data)
+                save_global_mapping_config(data, db)
                      
         # Run Generator
         orchestrator = Orchestrator()
@@ -143,17 +146,12 @@ async def generate_config(request: GenerateRequest):
         customer_code = request.customer_code
         locale = request.locale
         
-        from core.database.db_manager import SessionLocal
         from core.database.repositories import BlueprintRepository
-        db = SessionLocal()
         existing_template_json = None
-        try:
-            repo = BlueprintRepository(db)
-            existing = repo.get_blueprint(customer_code, locale)
-            if existing:
-                existing_template_json = json.loads(existing.template_json)
-        finally:
-            db.close()
+        repo = BlueprintRepository(db)
+        existing = repo.get_blueprint(customer_code, locale)
+        if existing:
+            existing_template_json = json.loads(existing.template_json)
         
         config_data, template_json_data, template_xlsx_bytes = orchestrator.generate_blueprint_bundle(
             template_path=file_path,
@@ -223,49 +221,14 @@ async def get_mapping_options():
     return options
 
 @router.get("/mappings")
-async def get_mappings(mapping_type: str = "header_text_mappings"):
+async def get_mappings(mapping_type: str = "header_text_mappings", db: Session = Depends(get_db)):
     """
     Get the global mapping dictionary of the specified type.
     Options: header_text_mappings, sheet_name_mappings, shipping_header_map
-
-    For shipping_header_map, returns a flat dict of {col_id: "kw1, kw2, ..."}
-    so the frontend can use the same key-value editor UI.
     """
     try:
-        from core.database.db_manager import get_global_mapping_config
-        data = get_global_mapping_config()
-
-        if mapping_type == "shipping_header_map":
-            # Flatten to {col_id: "kw1, kw2"} for the UI
-            col_defs = data.get("shipping_header_map", {})
-            flat = {}
-            for col_id, props in col_defs.items():
-                if isinstance(props, dict):
-                    flat[col_id] = ", ".join(props.get("keywords", []))
-            return flat
-        elif mapping_type == "footer_label_mappings":
-            keywords = data.get("footer_label_mappings", {}).get("keywords", [])
-            return {kw: "Footer Keyword" for kw in keywords}
-        elif mapping_type == "sheet_classifications":
-            flat = {}
-            for s in data.get("aggregation_sheets", []):
-                flat[s] = "aggregation"
-            for s in data.get("processed_tables_sheets", []):
-                flat[s] = "processed_tables"
-            return flat
-        elif mapping_type == "sheet_mappings":
-            from core.database.db_manager import SessionLocal, GlobalMapSheet
-            db = SessionLocal()
-            try:
-                sheets = db.query(GlobalMapSheet).all()
-                res_dict = {}
-                for s in sheets:
-                    res_dict[s.sheet_name] = s.processing_type
-                return res_dict
-            finally:
-                db.close()
-
-        return data.get(mapping_type, {}).get("mappings", {})
+        service = MappingService(db)
+        return service.get_mappings(mapping_type)
     except Exception as e:
         logger.error(f"Failed to get mappings: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -275,73 +238,13 @@ class MappingsUpdateRequest(BaseModel):
     mappings: Dict[str, Any]
 
 @router.post("/mappings")
-async def update_mappings(request: MappingsUpdateRequest):
+async def update_mappings(request: MappingsUpdateRequest, db: Session = Depends(get_db)):
     """
     Overwrite the specified global mapping dictionary.
-
-    For column_definitions, the mappings dict is {col_id: "kw1, kw2, ..."}
-    and is converted back to the structured format on save.
     """
     try:
-        from core.database.db_manager import get_global_mapping_config, save_global_mapping_config
-        data = get_global_mapping_config()
-
-        if request.mapping_type == "shipping_header_map":
-            # Unflatten from {col_id: "kw1, kw2"} back to structured format
-            existing = data.get("shipping_header_map", {})
-            for col_id, kw_str in request.mappings.items():
-                keywords = [k.strip() for k in kw_str.split(",") if k.strip()]
-                if col_id in existing and isinstance(existing[col_id], dict):
-                    existing[col_id]["keywords"] = keywords
-                else:
-                    existing[col_id] = {"keywords": keywords, "format": "@"}
-            data["shipping_header_map"] = existing
-        elif request.mapping_type == "footer_label_mappings":
-            existing = data.get("footer_label_mappings", {})
-            existing["keywords"] = list(request.mappings.keys())
-            data["footer_label_mappings"] = existing
-        elif request.mapping_type == "sheet_classifications":
-            agg_sheets = []
-            proc_sheets = []
-            for name, p_type in request.mappings.items():
-                if p_type == "processed_tables":
-                    proc_sheets.append(name)
-                else:
-                    agg_sheets.append(name)
-            data["aggregation_sheets"] = agg_sheets
-            data["processed_tables_sheets"] = proc_sheets
-        elif request.mapping_type == "sheet_mappings":
-            agg_sheets = []
-            proc_sheets = []
-            for sheet_name, processing_type in request.mappings.items():
-                if processing_type == "processed_tables":
-                    proc_sheets.append(sheet_name)
-                else:
-                    agg_sheets.append(sheet_name)
-            data["sheet_name_mappings"] = {"mappings": {}}
-            data["aggregation_sheets"] = sorted(list(set(agg_sheets)))
-            data["processed_tables_sheets"] = sorted(list(set(proc_sheets)))
-        else:
-            if request.mapping_type not in data:
-                data[request.mapping_type] = {"mappings": {}}
-            data[request.mapping_type]["mappings"] = request.mappings
-
-        save_global_mapping_config(data)
-
-        # Reload the mappings dynamically so the server doesn't need to be restarted
-        try:
-            from core.data_parser.config import load_and_update_mappings
-            load_and_update_mappings()
-            # Rebuild sheet_parser's pre-computed alias lookup after config change
-            from core.data_parser.sheet_parser import _build_alias_lookup, _ALIAS_REVERSE_LOOKUP
-            import core.data_parser.sheet_parser as _sp_module
-            _sp_module._ALIAS_REVERSE_LOOKUP = _build_alias_lookup()
-            
-            from core.blueprint_generator.schema import BlueprintSchema
-            BlueprintSchema.load_dynamic_columns(data)
-        except Exception as e:
-            logger.warning(f"Could not automatically reload mappings: {e}")
-
+        service = MappingService(db)
+        service.update_mappings(request.mapping_type, request.mappings)
         return {"status": "success"}
     except Exception as e:
         logger.error(f"Failed to update mappings: {e}")
