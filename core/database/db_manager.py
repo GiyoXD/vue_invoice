@@ -212,50 +212,12 @@ def get_db():
         db.close()
 
 def get_global_mapping_config(db=None) -> dict:
-    from core.system_config import sys_config
-    
-    # Load fallback from local disk mapping_config.json first if needed
-    disk_data = {}
-    try:
-        # Check default database inside docker if it exists (contains latest defaults)
-        default_docker_path = Path("/app/default_database/blueprints/mapper/mapping_config.json")
-        if default_docker_path.exists():
-            with open(default_docker_path, 'r', encoding='utf-8') as f:
-                disk_data = json.load(f)
-                
-        # Merge with volume mapping config on disk if it exists (contains user overrides)
-        disk_path = sys_config.mapping_config_path
-        if disk_path.exists():
-            with open(disk_path, 'r', encoding='utf-8') as f:
-                volume_data = json.load(f)
-                for k, v in volume_data.items():
-                    if v is not None:
-                        disk_data[k] = v
-        elif not disk_data:
-            # Fallback if running locally outside Docker
-            # Try to resolve relative to workspace parent path
-            local_fallback = Path(__file__).resolve().parent.parent.parent / "database/blueprints/mapper/mapping_config.json"
-            if local_fallback.exists():
-                with open(local_fallback, 'r', encoding='utf-8') as f:
-                    disk_data = json.load(f)
-    except Exception as e:
-        logger.warning(f"Error loading fallback mapping config from disk: {e}")
-
     close_session = False
     if db is None:
         db = SessionLocal()
         close_session = True
         
     try:
-        # Check if relational tables are empty
-        column_count = db.query(GlobalMapColumn).count()
-        if column_count == 0:
-            # Seed the database from disk_data
-            if disk_data:
-                save_global_mapping_config(disk_data, db)
-            else:
-                return {}
-        
         # Load from relational tables and reconstruct dictionary
         config = {}
         
@@ -306,18 +268,6 @@ def get_global_mapping_config(db=None) -> dict:
             elif val.replace('.', '', 1).isdigit(): val = float(val) if '.' in val else int(val)
             config["fallback_strategies"][s.strategy_key] = val
             
-        # Merge missing/null keys from disk config to keep DB setting up-to-date with new defaults
-        merged = False
-        for key, val in disk_data.items():
-            if key not in config or config[key] is None or config[key] == [] or config[key] == {}:
-                config[key] = val
-                merged = True
-        if merged:
-            try:
-                save_global_mapping_config(config, db)
-            except Exception:
-                db.rollback()
-                
         return config
 
     except Exception as e:
@@ -328,17 +278,6 @@ def get_global_mapping_config(db=None) -> dict:
             db.close()
 
 def save_global_mapping_config(data: dict, db=None) -> None:
-    from core.system_config import sys_config
-    
-    # Save to disk backup
-    try:
-        disk_path = sys_config.mapping_config_path
-        disk_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(disk_path, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
-    except Exception:
-        pass
-
     close_session = False
     if db is None:
         db = SessionLocal()

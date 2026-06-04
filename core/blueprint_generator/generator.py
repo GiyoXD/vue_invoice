@@ -73,8 +73,7 @@ class BlueprintGenerator:
         else:
             self.output_base_dir = sys_config.registry_dir
             
-        # Set Mapping config path
-        self.mapping_config_path = sys_config.mapping_config_path
+        # Set Logger
         self.logger = logging.getLogger(self.__class__.__name__)
         
     def _load_mapping_config(self) -> Dict[str, Any]:
@@ -84,12 +83,6 @@ class BlueprintGenerator:
             return get_global_mapping_config()
         except Exception as e:
             self.logger.warning(f"Failed to load mapping config from DB: {e}")
-            if self.mapping_config_path.exists():
-                try:
-                    with open(self.mapping_config_path, 'r', encoding='utf-8') as f:
-                        return json.load(f)
-                except Exception:
-                    pass
         return {}
 
     def analyze(self, template_path: str, legacy_format: bool = True, ignore_missing_description: bool = False) -> str:
@@ -238,7 +231,7 @@ class BlueprintGenerator:
                     
         if conflict_details:
             details_str = " | ".join(conflict_details)
-            raise ValueError(f"Mapping conflicts detected: {details_str}. Please fix mapping_config.json or the template.")
+            raise ValueError(f"Mapping conflicts detected: {details_str}. Please fix global mappings via the database or the template.")
 
     def _assemble_blueprint_bundle(self, analysis: TemplateAnalysisResult, pricing_mode: str, custom_prefix: Optional[str]) -> Dict[str, Any]:
         """Compile scanned template analysis into standard blueprint configuration dict."""

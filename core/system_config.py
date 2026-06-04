@@ -92,11 +92,6 @@ class SystemConfig:
         return self.bundled_dir
 
     @property
-    def mapping_config_path(self) -> Path:
-        # This one is a file path, not directory usually, but logic is same
-        return self._resolve_path("mapping_config", "database/blueprints/mapper/mapping_config.json", env_key="MAPPING_CONFIG")
-    
-    @property
     def temp_uploads_dir(self) -> Path:
         return self._resolve_path("temp_uploads", "database/temp_uploads", env_key="TEMP_UPLOADS_DIR")
         

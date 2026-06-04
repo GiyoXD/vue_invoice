@@ -137,21 +137,9 @@ class BlueprintSchema:
         # Reset COLUMNS to the base set
         cls.COLUMNS = dict(cls._BASE_COLUMNS)
 
-        # Fallback to disk config file if mapping_config is empty or lacks shipping_header_map
-        if not mapping_config or "shipping_header_map" not in mapping_config:
-            try:
-                from core.system_config import sys_config
-                disk_path = sys_config.mapping_config_path
-                if disk_path.exists():
-                    with open(disk_path, 'r', encoding='utf-8') as f:
-                        disk_config = json.load(f)
-                        if mapping_config:
-                            # Keep whatever original keys were passed in (e.g. footer_label_mappings)
-                            disk_config.update(mapping_config)
-                        mapping_config = disk_config
-            except Exception as e:
-                logger.exception("[BlueprintSchema] Failed to load fallback config from disk")
-                raise e
+        # Fallback to empty dict if mapping_config is empty
+        if not mapping_config:
+            mapping_config = {}
 
         try:
             col_defs = mapping_config.get("shipping_header_map", {})
@@ -226,14 +214,11 @@ class BlueprintSchema:
 # Initialize COLUMNS to base columns
 BlueprintSchema.COLUMNS = dict(BlueprintSchema._BASE_COLUMNS)
 
-# Load configuration from disk to initialize sheet categories and baseline columns at import time safely
+# Load configuration from database to initialize sheet categories and baseline columns at import time safely
 try:
-    from core.system_config import sys_config
-    disk_path = sys_config.mapping_config_path
-    if disk_path.exists():
-        with open(disk_path, 'r', encoding='utf-8') as f:
-            disk_config = json.load(f)
-            BlueprintSchema.load_dynamic_columns(disk_config)
+    from core.database.db_manager import get_global_mapping_config
+    db_config = get_global_mapping_config()
+    BlueprintSchema.load_dynamic_columns(db_config)
 except Exception as e:
-    # Build keyword index fallback if disk config load fails
+    # Build keyword index fallback if db load fails
     BlueprintSchema._rebuild_keyword_index()

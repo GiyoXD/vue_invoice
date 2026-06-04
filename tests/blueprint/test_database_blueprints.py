@@ -245,19 +245,18 @@ def test_resolver_with_mock_repository():
     assert variants[0]["config_data"]["_meta"]["customer"] == "MOCKCUST_KH"
 
 
-def test_get_global_mapping_config_seeding_and_reassembly(db):
+def test_get_global_mapping_config_reassembly(db):
     from core.database.db_manager import (
         GlobalMapColumn, GlobalMapColumnKeyword, GlobalMapSheet,
         get_global_mapping_config
     )
     
-    # 1. Clear existing relational tables
-    db.query(GlobalMapSheet).delete()
-    db.query(GlobalMapColumnKeyword).delete()
-    db.query(GlobalMapColumn).delete()
-    db.commit()
+    # 1. Assert SQLite tables are populated (due to automatic seeding in the db fixture)
+    assert db.query(GlobalMapColumn).count() > 0
+    assert db.query(GlobalMapColumnKeyword).count() > 0
+    assert db.query(GlobalMapSheet).count() > 0
     
-    # 2. Call get_global_mapping_config to trigger auto-seeding from disk
+    # 2. Call get_global_mapping_config to check correct reassembly
     config = get_global_mapping_config(db)
     
     # 3. Assert config dict was correctly reassembled
@@ -266,10 +265,19 @@ def test_get_global_mapping_config_seeding_and_reassembly(db):
     assert "shipping_header_map" in config
     assert "footer_label_mappings" in config
     
-    # 4. Assert SQLite tables are populated
-    assert db.query(GlobalMapColumn).count() > 0
-    assert db.query(GlobalMapColumnKeyword).count() > 0
-    assert db.query(GlobalMapSheet).count() > 0
+    # 4. Clear existing relational tables
+    from core.database.db_manager import GlobalMapHeaderTextMapping, GlobalMapFooterLabelKeyword, GlobalMapFallbackStrategy
+    db.query(GlobalMapSheet).delete()
+    db.query(GlobalMapHeaderTextMapping).delete()
+    db.query(GlobalMapColumnKeyword).delete()
+    db.query(GlobalMapColumn).delete()
+    db.query(GlobalMapFooterLabelKeyword).delete()
+    db.query(GlobalMapFallbackStrategy).delete()
+    db.commit()
+    
+    # 5. Verify it returns empty structures when empty
+    empty_config = get_global_mapping_config(db)
+    assert empty_config.get("shipping_header_map") == {}
 
 def test_save_global_mapping_config_upserts(db):
     from core.database.db_manager import (

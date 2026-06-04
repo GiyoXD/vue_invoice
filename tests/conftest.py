@@ -1,20 +1,12 @@
 import os
 import shutil
-import tempfile
 import pytest
 from pathlib import Path
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
 
-# 1. Isolate the mapping_config.json file to prevent tests from modifying the git-tracked file
-ORIGINAL_MAPPING_CONFIG = Path("database/blueprints/mapper/mapping_config.json").resolve()
-temp_dir = tempfile.mkdtemp()
-TEMP_MAPPING_CONFIG = Path(temp_dir) / "mapping_config.json"
-shutil.copy2(ORIGINAL_MAPPING_CONFIG, TEMP_MAPPING_CONFIG)
-os.environ["MAPPING_CONFIG"] = str(TEMP_MAPPING_CONFIG)
-
-# 2. Setup test database engine and session before importing the app
+# 1. Setup test database engine and session before importing the app
 import core.database.db_manager as db_manager
 
 TEST_DB_PATH = Path("database/test_invoice_registry.db")
@@ -48,8 +40,12 @@ def setup_test_db():
         except Exception:
             pass
         
-    # Initialize the test database schema
-    init_db()
+    # Copy the master database to the test database location to initialize with seeded data
+    master_db_path = Path("database/invoice_registry.db")
+    if master_db_path.exists():
+        shutil.copy2(master_db_path, TEST_DB_PATH)
+    else:
+        init_db()
     
     yield
     
@@ -63,56 +59,27 @@ def setup_test_db():
         except Exception:
             pass
 
-    # Clean up the temporary mapping config file and directory
-    try:
-        if TEMP_MAPPING_CONFIG.exists():
-            TEMP_MAPPING_CONFIG.unlink()
-        Path(temp_dir).rmdir()
-    except Exception:
-        pass
 
 @pytest.fixture(scope="function", autouse=True)
-def reset_mapping_config_on_disk():
-    yield
-    # Restore the temporary mapping config file to original defaults after each test
-    try:
-        shutil.copy2(ORIGINAL_MAPPING_CONFIG, TEMP_MAPPING_CONFIG)
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Failed to reset mapping config: {e}")
-
-
-@pytest.fixture(scope="function")
 def db():
-    """Provides a database session for testing and cleans up test data tables after execution."""
+    """Provides a database session for testing and resets the database from the master file before execution."""
+    # Dispose engine to ensure no locked connections on Windows
+    test_engine.dispose()
+    
+    # Reset test db from master db file before running test
+    master_db_path = Path("database/invoice_registry.db")
+    if master_db_path.exists():
+        shutil.copy2(master_db_path, TEST_DB_PATH)
+    else:
+        init_db()
+        
     session = TestSessionLocal()
     try:
         yield session
     finally:
         session.rollback()
-        from core.database.db_manager import (
-            Blueprint, BlueprintTemplate, ProcessedData, InvoiceItem,
-            GlobalMapSheet,
-            GlobalMapHeaderTextMapping, GlobalMapColumnKeyword,
-            GlobalMapColumn, GlobalMapFooterLabelKeyword, GlobalMapFallbackStrategy
-        )
-        try:
-            session.query(BlueprintTemplate).delete()
-            session.query(Blueprint).delete()
-            session.query(ProcessedData).delete()
-            session.query(InvoiceItem).delete()
-            # Clean up global mapping tables (children first)
-            session.query(GlobalMapSheet).delete()
-            session.query(GlobalMapHeaderTextMapping).delete()
-            session.query(GlobalMapColumnKeyword).delete()
-            session.query(GlobalMapColumn).delete()
-            session.query(GlobalMapFooterLabelKeyword).delete()
-            session.query(GlobalMapFallbackStrategy).delete()
-            session.commit()
-        except Exception:
-            session.rollback()
-        finally:
-            session.close()
+        session.close()
+        test_engine.dispose()
 
 
 @pytest.fixture(scope="function")
