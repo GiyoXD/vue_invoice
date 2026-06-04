@@ -244,3 +244,136 @@ def test_resolver_with_mock_repository():
     assert variants[0]["suffix"] == "_KH"
     assert variants[0]["config_data"]["_meta"]["customer"] == "MOCKCUST_KH"
 
+
+def test_get_global_mapping_config_seeding_and_reassembly(db):
+    from core.database.db_manager import (
+        GlobalMapColumn, GlobalMapColumnKeyword, GlobalMapSheet,
+        get_global_mapping_config
+    )
+    
+    # 1. Clear existing relational tables
+    db.query(GlobalMapSheet).delete()
+    db.query(GlobalMapColumnKeyword).delete()
+    db.query(GlobalMapColumn).delete()
+    db.commit()
+    
+    # 2. Call get_global_mapping_config to trigger auto-seeding from disk
+    config = get_global_mapping_config(db)
+    
+    # 3. Assert config dict was correctly reassembled
+    assert "aggregation_sheets" in config
+    assert "processed_tables_sheets" in config
+    assert "shipping_header_map" in config
+    assert "footer_label_mappings" in config
+    
+    # 4. Assert SQLite tables are populated
+    assert db.query(GlobalMapColumn).count() > 0
+    assert db.query(GlobalMapColumnKeyword).count() > 0
+    assert db.query(GlobalMapSheet).count() > 0
+
+def test_save_global_mapping_config_upserts(db):
+    from core.database.db_manager import (
+        GlobalMapColumn, GlobalMapHeaderTextMapping, GlobalMapSheet,
+        get_global_mapping_config, save_global_mapping_config
+    )
+    
+    # 1. Clear existing tables
+    db.query(GlobalMapHeaderTextMapping).delete()
+    db.query(GlobalMapColumn).delete()
+    db.query(GlobalMapSheet).delete()
+    db.commit()
+    
+    # 2. Define custom mapping configuration
+    custom_config = {
+        "aggregation_sheets": ["my_invoice"],
+        "processed_tables_sheets": ["my_pl"],
+        "sheet_name_mappings": {"mappings": {}},
+        "shipping_header_map": {
+            "col_po": {"keywords": ["my_po"], "format": "@"}
+        },
+        "header_text_mappings": {"mappings": {"Purchase Order": "col_po"}},
+        "footer_label_mappings": {"keywords": ["MY TOTAL"]},
+        "fallback_strategies": {"my_strategy": True}
+    }
+    
+    # 3. Save to database
+    save_global_mapping_config(custom_config, db)
+    
+    # 4. Assert values are in individual tables
+    cols = db.query(GlobalMapColumn).all()
+    assert len(cols) == 1
+    assert cols[0].col_id == "col_po"
+    assert cols[0].excel_format == "@"
+    
+    overrides = db.query(GlobalMapHeaderTextMapping).all()
+    assert len(overrides) == 1
+    assert overrides[0].raw_text == "Purchase Order"
+    assert overrides[0].canonical_col_id == "col_po"
+    
+    # Assert values in global_map_sheets
+    sheets = db.query(GlobalMapSheet).all()
+    assert len(sheets) == 2
+    sheet_names = {s.sheet_name for s in sheets}
+    assert "my_invoice" in sheet_names
+    assert "my_pl" in sheet_names
+    
+    invoice_row = db.query(GlobalMapSheet).filter(GlobalMapSheet.sheet_name == "my_invoice").first()
+    assert invoice_row.processing_type == "aggregation"
+    
+    # 5. Read back and assert dict matches
+    config = get_global_mapping_config(db)
+    assert "my_invoice" in config["aggregation_sheets"]
+    assert "my_pl" in config["processed_tables_sheets"]
+    assert config["shipping_header_map"]["col_po"]["keywords"] == ["my_po"]
+    assert config["header_text_mappings"]["mappings"] == {"Purchase Order": "col_po"}
+
+def test_mapping_foreign_key_constraint(db):
+    from core.database.db_manager import GlobalMapColumn, GlobalMapHeaderTextMapping
+    from sqlalchemy.exc import IntegrityError
+    
+    # 1. Clear tables
+    db.query(GlobalMapHeaderTextMapping).delete()
+    db.query(GlobalMapColumn).delete()
+    db.commit()
+    
+    # 2. Add an override pointing to a non-existent column
+    # This should fail because canonical_col_id doesn't exist in global_map_columns
+    override = GlobalMapHeaderTextMapping(raw_text="Bad Header", canonical_col_id="non_existent_col")
+    db.add(override)
+    
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
+
+def test_mapping_cascade_delete(db):
+    from core.database.db_manager import (
+        GlobalMapColumn, GlobalMapColumnKeyword, GlobalMapHeaderTextMapping
+    )
+    
+    # 1. Clear tables
+    db.query(GlobalMapHeaderTextMapping).delete()
+    db.query(GlobalMapColumnKeyword).delete()
+    db.query(GlobalMapColumn).delete()
+    db.commit()
+    
+    # 2. Add column, keyword, and override
+    col = GlobalMapColumn(col_id="col_test", excel_format="@")
+    db.add(col)
+    db.commit()
+    
+    db.add(GlobalMapColumnKeyword(col_id="col_test", keyword="test_kw"))
+    db.add(GlobalMapHeaderTextMapping(raw_text="Test Override", canonical_col_id="col_test"))
+    db.commit()
+    
+    assert db.query(GlobalMapColumnKeyword).count() == 1
+    assert db.query(GlobalMapHeaderTextMapping).count() == 1
+    
+    # 3. Delete parent column and verify cascade delete
+    db.delete(col)
+    db.commit()
+    
+    assert db.query(GlobalMapColumnKeyword).count() == 0
+    assert db.query(GlobalMapHeaderTextMapping).count() == 0
+
+
+

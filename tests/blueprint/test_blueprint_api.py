@@ -78,9 +78,3 @@ def test_blueprint_scan_and_generate_flow(client, db):
     assert "template_layout" in template_data
     assert "Invoice" in template_data["template_layout"]
     
-
-
-def test_deliberate_failure_for_demo():
-    """A deliberate failing test to verify that pytest is running and reporting failures correctly."""
-    assert False, "This is a deliberate failure to show that pytest is executing and reporting errors."
-

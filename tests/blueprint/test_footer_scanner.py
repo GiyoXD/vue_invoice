@@ -275,11 +275,37 @@ class TestFindHsCode(unittest.TestCase):
         self.assertEqual(val, "HS.CODE: 4107.12.00")
         self.assertEqual(colspan, 2)
 
+    def test_finds_hs_code_no_delimiter(self):
+        ws = make_mock_worksheet({(5, 2): "HSCODE: 4107.12.00"})
+        val, colspan, _ = find_footer_hs_code(ws, 1, 10)
+        self.assertEqual(val, "HSCODE: 4107.12.00")
+
+    def test_finds_hs_code_underscore(self):
+        ws = make_mock_worksheet({(5, 2): "HS_CODE: 4107.12.00"})
+        val, colspan, _ = find_footer_hs_code(ws, 1, 10)
+        self.assertEqual(val, "HS_CODE: 4107.12.00")
+
+    def test_finds_hs_code_spaces_between_letters(self):
+        ws = make_mock_worksheet({(5, 2): "H S CODE: 4107.12.00"})
+        val, colspan, _ = find_footer_hs_code(ws, 1, 10)
+        self.assertEqual(val, "H S CODE: 4107.12.00")
+
+    def test_finds_hs_code_dot_colon(self):
+        ws = make_mock_worksheet({(5, 2): "HS.CODE: 4107.12.00"})
+        val, colspan, _ = find_footer_hs_code(ws, 1, 10)
+        self.assertEqual(val, "HS.CODE: 4107.12.00")
+
+    def test_finds_hs_code_substring(self):
+        ws = make_mock_worksheet({(5, 2): "COMMODITY HSCODE: 4107"})
+        val, colspan, _ = find_footer_hs_code(ws, 1, 10)
+        self.assertEqual(val, "COMMODITY HSCODE: 4107")
+
     def test_no_match_returns_none(self):
         ws = make_mock_worksheet({(1, 1): "Total:", (2, 1): "Grand Summary"})
         val, colspan, _ = find_footer_hs_code(ws, 1, 10)
         self.assertIsNone(val)
         self.assertEqual(colspan, 1)
+
 
 
 class TestExcelLayoutScannerHsCode(unittest.TestCase):

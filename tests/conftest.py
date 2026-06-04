@@ -71,6 +71,17 @@ def setup_test_db():
     except Exception:
         pass
 
+@pytest.fixture(scope="function", autouse=True)
+def reset_mapping_config_on_disk():
+    yield
+    # Restore the temporary mapping config file to original defaults after each test
+    try:
+        shutil.copy2(ORIGINAL_MAPPING_CONFIG, TEMP_MAPPING_CONFIG)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Failed to reset mapping config: {e}")
+
+
 @pytest.fixture(scope="function")
 def db():
     """Provides a database session for testing and cleans up test data tables after execution."""
@@ -79,17 +90,30 @@ def db():
         yield session
     finally:
         session.rollback()
-        from core.database.db_manager import Blueprint, BlueprintTemplate, ProcessedData, InvoiceItem
+        from core.database.db_manager import (
+            Blueprint, BlueprintTemplate, ProcessedData, InvoiceItem,
+            GlobalMapSheet,
+            GlobalMapHeaderTextMapping, GlobalMapColumnKeyword,
+            GlobalMapColumn, GlobalMapFooterLabelKeyword, GlobalMapFallbackStrategy
+        )
         try:
             session.query(BlueprintTemplate).delete()
             session.query(Blueprint).delete()
             session.query(ProcessedData).delete()
             session.query(InvoiceItem).delete()
+            # Clean up global mapping tables (children first)
+            session.query(GlobalMapSheet).delete()
+            session.query(GlobalMapHeaderTextMapping).delete()
+            session.query(GlobalMapColumnKeyword).delete()
+            session.query(GlobalMapColumn).delete()
+            session.query(GlobalMapFooterLabelKeyword).delete()
+            session.query(GlobalMapFallbackStrategy).delete()
             session.commit()
         except Exception:
             session.rollback()
         finally:
             session.close()
+
 
 @pytest.fixture(scope="function")
 def client(db):
