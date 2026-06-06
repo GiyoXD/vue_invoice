@@ -271,22 +271,14 @@ def generate_invoice(request: GenerateRequest):
 
         final_payload_files = []
         if generated_files:
-            import zipfile
             import base64
-            import io
-            zip_buffer = io.BytesIO()
-            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-                for fname, fbytes in generated_files:
-                    zf.writestr(fname, fbytes)
-            
-            zip_buffer.seek(0)
-            zip_b64 = base64.b64encode(zip_buffer.read()).decode('utf-8')
-            zip_name = f"Invoices_{request.identifier}.zip"
-            final_payload_files.append({
-                "filename": zip_name,
-                "mime_type": "application/zip",
-                "content": zip_b64
-            })
+            for fname, fbytes in generated_files:
+                f_b64 = base64.b64encode(fbytes).decode('utf-8')
+                final_payload_files.append({
+                    "filename": fname,
+                    "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "content": f_b64
+                })
             
         # Read the final saved JSON back to send as metadata to the frontend
         serialized_metadata = {}

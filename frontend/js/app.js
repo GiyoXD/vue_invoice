@@ -1,4 +1,5 @@
 import { createApp, ref } from 'vue';
+import { createPinia } from 'pinia';
 import GeneratorView from './views/Generator.js?v=7';
 import InspectorView from './views/Inspector.js?v=6';
 import TemplateExtractorView from './views/TemplateExtractor.js?v=9';
@@ -79,4 +80,6 @@ const App = {
     }
 };
 
-createApp(App).mount('#app');
+const app = createApp(App);
+app.use(createPinia());
+app.mount('#app');
