@@ -1,9 +1,7 @@
-# core/database/repositories.py
-import json
 import logging
 from typing import Optional, List
 from sqlalchemy.orm import Session
-from core.database.db_manager import Blueprint, BlueprintTemplate
+from core.database.models import Blueprint, BlueprintTemplate
 
 logger = logging.getLogger(__name__)
 
@@ -72,16 +70,14 @@ class BlueprintRepository:
         Saves or updates a blueprint template and configuration in the database.
         """
         try:
-            config_str = json.dumps(config_data, ensure_ascii=False)
-            template_str = json.dumps(template_json_data, ensure_ascii=False)
             description = config_data.get("_meta", {}).get("description", f"Generated blueprint for {customer_code}_{locale}")
 
             existing = self.get_blueprint(customer_code, locale)
 
             if existing:
                 existing.description = description
-                existing.config_json = config_str
-                existing.template_json = template_str
+                existing.config_json = config_data
+                existing.template_json = template_json_data
                 if existing.template_binary:
                     existing.template_binary.filename = filename
                     existing.template_binary.xlsx_blob = xlsx_bytes
@@ -96,8 +92,8 @@ class BlueprintRepository:
                     customer_code=customer_code,
                     locale=locale,
                     description=description,
-                    config_json=config_str,
-                    template_json=template_str
+                    config_json=config_data,
+                    template_json=template_json_data
                 )
                 blueprint.template_binary = BlueprintTemplate(
                     filename=filename,
