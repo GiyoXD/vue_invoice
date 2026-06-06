@@ -2,7 +2,7 @@ import { createApp, ref } from 'vue';
 import { createPinia } from 'pinia';
 import GeneratorView from './views/Generator.js?v=7';
 import InspectorView from './views/Inspector.js?v=6';
-import TemplateExtractorView from './views/TemplateExtractor.js?v=9';
+import TemplateExtractorView from './views/TemplateExtractor.js?v=10';
 import TemplateInspectorView from './views/TemplateInspector.js?v=10';
 import LogViewerView from './views/LogViewer.js?v=6';
 import ExportDataView from './views/ExportData.js?v=6';
