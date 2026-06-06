@@ -11,7 +11,8 @@ export default {
                 <p class="text-slate-400 mb-6">Select your Excel file to begin processing.</p>
                 
                 <div class="flex items-center gap-4">
-                    <input type="file" @change="onFileChange" accept=".xlsx, .xls" class="block w-full text-sm text-slate-400 file:mr-4 file:py-2.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-500/10 file:text-blue-400 hover:file:bg-blue-500/20 transition-all cursor-pointer" />
+                    <input type="file" @change="onFileChange" accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" class="block w-full text-sm text-slate-400 file:mr-4 file:py-2.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-500/10 file:text-blue-400 hover:file:bg-blue-500/20 transition-all cursor-pointer" />
+
                     
                     <button class="whitespace-nowrap px-6 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-medium rounded-full shadow-lg shadow-blue-500/30 transition-all transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none" @click="uploadFile" :disabled="!selectedFile || isUploading">
                         {{ isUploading ? 'Processing...' : 'Upload & Process' }}

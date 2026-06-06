@@ -9,7 +9,8 @@ export default {
                 Upload a sample invoice file. Upload <strong>2 files</strong> to auto-create KH + VN versions.
             </p>
             
-            <input type="file" @change="store.handleFileUpload" accept=".xlsx, .xls" multiple class="block w-full text-sm text-slate-400 file:mr-4 file:py-2.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-500/10 file:text-blue-400 hover:file:bg-blue-500/20 transition-all cursor-pointer" />
+            <input type="file" @change="store.handleFileUpload" accept="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" multiple class="block w-full text-sm text-slate-400 file:mr-4 file:py-2.5 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-500/10 file:text-blue-400 hover:file:bg-blue-500/20 transition-all cursor-pointer" />
+
             
             <!-- Show selected files with KH/VN labels -->
             <div v-if="store.selectedFiles.length > 0" class="mt-4">
