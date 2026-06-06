@@ -1,4 +1,4 @@
-import { useTemplateInspectorStore } from '../stores/templateInspectorStore.js';
+import { useTemplateInspectorStore } from '../../stores/templateInspectorStore.js';
 import { computed } from 'vue';
 
 export default {

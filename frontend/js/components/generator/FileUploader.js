@@ -1,4 +1,4 @@
-import { useGeneratorStore } from '../stores/generatorStore.js';
+import { useGeneratorStore } from '../../stores/generatorStore.js';
 import { storeToRefs } from 'pinia';
 
 export default {
@@ -49,8 +49,8 @@ export default {
                      class="traceback-toggle" 
                      :class="{ open: showUploadTraceback }"
                      @click="showUploadTraceback = !showUploadTraceback">
-                    <span>📋 View Technical Details</span>
-                    <span class="chevron">▼</span>
+                     <span>📋 View Technical Details</span>
+                     <span class="chevron">▼</span>
                 </div>
                 <div class="traceback-content" :class="{ open: showUploadTraceback }">
                     <pre>{{ uploadError.traceback }}</pre>

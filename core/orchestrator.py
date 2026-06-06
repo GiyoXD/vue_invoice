@@ -80,6 +80,41 @@ class Orchestrator:
             tb = traceback.format_exc()
             raise RuntimeError(f"Invoice Generation Failed:\n{tb}") from e
 
+    def package_files(self, generated_files, identifier: str) -> list:
+        """
+        Packages generated files into a list of file dictionaries.
+        If there are multiple files, they are zipped together.
+        """
+        import base64
+        final_payload_files = []
+        if not generated_files:
+            return final_payload_files
+            
+        if len(generated_files) == 1:
+            fname, fbytes = generated_files[0]
+            f_b64 = base64.b64encode(fbytes).decode('utf-8')
+            final_payload_files.append({
+                "filename": fname,
+                "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "content": f_b64
+            })
+        else:
+            import zipfile
+            import io
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+                for fname, fbytes in generated_files:
+                    zf.writestr(fname, fbytes)
+            zip_buffer.seek(0)
+            zip_b64 = base64.b64encode(zip_buffer.read()).decode('utf-8')
+            zip_name = f"Invoices_{identifier}.zip"
+            final_payload_files.append({
+                "filename": zip_name,
+                "mime_type": "application/zip",
+                "content": zip_b64
+            })
+        return final_payload_files
+
     # --- Blueprint / Template Management ---
 
     def analyze_template(self, template_path: Path, legacy_format: bool = True, ignore_missing_description: bool = False) -> str:

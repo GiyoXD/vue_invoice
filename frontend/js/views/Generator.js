@@ -1,6 +1,6 @@
-import FileUploader from '../components/FileUploader.js';
-import InvoiceDetailsForm from '../components/InvoiceDetailsForm.js';
-import ValidationStats from '../components/ValidationStats.js';
+import FileUploader from '../components/generator/FileUploader.js';
+import InvoiceDetailsForm from '../components/generator/InvoiceDetailsForm.js';
+import ValidationStats from '../components/generator/ValidationStats.js';
 
 export default {
     name: 'GeneratorView',

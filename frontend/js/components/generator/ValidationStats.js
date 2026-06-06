@@ -1,4 +1,4 @@
-import { useGeneratorStore } from '../stores/generatorStore.js';
+import { useGeneratorStore } from '../../stores/generatorStore.js';
 import { storeToRefs } from 'pinia';
 
 export default {

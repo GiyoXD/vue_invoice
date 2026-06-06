@@ -1,8 +1,8 @@
 import { onMounted } from 'vue';
 import { useTemplateInspectorStore } from '../stores/templateInspectorStore.js';
-import TemplateSidebar from '../components/TemplateSidebar.js';
-import TemplateInfo from '../components/TemplateInfo.js';
-import TemplateGrid from '../components/TemplateGrid.js';
+import TemplateSidebar from '../components/template-inspector/TemplateSidebar.js';
+import TemplateInfo from '../components/template-inspector/TemplateInfo.js';
+import TemplateGrid from '../components/template-inspector/TemplateGrid.js';
 
 export default {
     name: 'TemplateInspectorView',

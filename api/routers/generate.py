@@ -269,16 +269,7 @@ def generate_invoice(request: GenerateRequest):
                 "details": errors
             })
 
-        final_payload_files = []
-        if generated_files:
-            import base64
-            for fname, fbytes in generated_files:
-                f_b64 = base64.b64encode(fbytes).decode('utf-8')
-                final_payload_files.append({
-                    "filename": fname,
-                    "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    "content": f_b64
-                })
+        final_payload_files = orchestrator.package_files(generated_files, request.identifier)
             
         # Read the final saved JSON back to send as metadata to the frontend
         serialized_metadata = {}
