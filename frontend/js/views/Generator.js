@@ -354,6 +354,7 @@ export default {
     setup() {
         // --- Generator State ---
         const selectedFile = ref(null);
+        let rawFile = null; // Non-reactive variable for native File object
         const isUploading = ref(false);
         const uploadStatus = ref(null);
         const uploadError = ref(null);
@@ -401,7 +402,9 @@ export default {
 
         // --- Generator Actions ---
         const handleFileUpload = (event) => {
-            selectedFile.value = event.target.files[0];
+            const file = event.target.files[0];
+            rawFile = file || null;
+            selectedFile.value = file ? { name: file.name } : null;
             uploadStatus.value = null;
             uploadError.value = null;
             showUploadTraceback.value = false;
@@ -429,7 +432,7 @@ export default {
          * appropriate state variables for UI display.
          */
         const uploadFile = async () => {
-            if (!selectedFile.value) return;
+            if (!rawFile) return;
 
             isUploading.value = true;
             uploadStatus.value = { type: 'info', message: 'Uploading and processing...' };
@@ -438,7 +441,7 @@ export default {
             validationWarnings.value = []; // Clear previous warnings
 
             const formData = new FormData();
-            formData.append('file', selectedFile.value);
+            formData.append('file', rawFile);
             formData.append('ignore_tare', ignoreTareError.value);
             formData.append('ignore_cbm', ignoreCbmError.value);
 

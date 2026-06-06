@@ -31,8 +31,8 @@ def create_db_client(db, customer_code: str, locale: str = "KH"):
         customer_code=customer_code,
         locale=locale,
         description=f"Test blueprint for {customer_code}",
-        config_json=json.dumps(mock_config),
-        template_json=json.dumps(mock_template_layout)
+        config_json=mock_config,
+        template_json=mock_template_layout
     )
     blueprint.template_binary = BlueprintTemplate(
         filename=f"{customer_code}_{locale}.xlsx",

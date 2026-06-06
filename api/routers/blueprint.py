@@ -8,9 +8,8 @@ import shutil
 import json
 import logging
 
-from core.system_config import sys_config
-from core.orchestrator import Orchestrator
 from core.database.db_manager import get_db
+from core.services.blueprint_service import BlueprintService
 from core.services.mapping_service import MappingService
 
 router = APIRouter(prefix="/api/blueprint", tags=["blueprint"])
@@ -41,59 +40,15 @@ class GenerateResult(BaseModel):
 # --- Endpoints ---
 
 @router.post("/scan", response_model=ScanResult)
-async def scan_template(file: UploadFile = File(...)):
+async def scan_template(file: UploadFile = File(...), db: Session = Depends(get_db)):
     """
     Step 1: Scan uploaded template.
     Returns 'needs_mapping' if unknown columns are found.
     """
-    temp_dir = sys_config.temp_uploads_dir
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    
-    file_token = f"scan_{file.filename}"
-    file_path = temp_dir / file_token
-    
     try:
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
-        # Run Scanner (We'll use Orchestrator logic here)
-        orchestrator = Orchestrator()
-        analysis_json_str = orchestrator.analyze_template(file_path)
-        analysis = json.loads(analysis_json_str)
-        
-        # Check for unknowns
-        unknown_headers = []
-        unconfirmed_footers = []
-        for sheet in analysis.get("sheets", []):
-            for header in sheet.get("header_positions", []):
-                if StringUtils.is_unknown_col_id(header.get("col_id")):
-                    unknown_headers.append(header.get("keyword"))
-            uf = sheet.get("unconfirmed_footer")
-            if uf:
-                unconfirmed_footers.append(uf)
-        
-        # Deduplicate
-        unknown_headers = list(set(unknown_headers))
-        unconfirmed_footers = list(set(unconfirmed_footers))
-        
-        if unknown_headers or unconfirmed_footers:
-            return ScanResult(
-                status="needs_mapping",
-                file_token=file_token,
-                unknown_headers=unknown_headers,
-                unconfirmed_footers=unconfirmed_footers,
-                warnings=analysis.get("warnings", []),
-                preview_analysis=analysis
-            )
-        else:
-             return ScanResult(
-                status="clean",
-                file_token=file_token,
-                warnings=analysis.get("warnings", []),
-                preview_analysis=analysis,
-                unconfirmed_footers=[]
-            )
-
+        service = BlueprintService(db)
+        res = service.scan_and_analyze_template(file.filename, file.file)
+        return res
     except Exception as e:
         logger.error(f"Scan failed: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
@@ -103,101 +58,20 @@ async def generate_config(request: GenerateRequest, db: Session = Depends(get_db
     """
     Step 2: Generate final config using verified/mapped headers.
     """
-    temp_dir = sys_config.temp_uploads_dir
-    file_path = temp_dir / request.file_token
-    
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File token expired or invalid. Please re-scan.")
-        
     try:
-        # Save newly confirmed header and footer labels to global Config permanently
-        if request.mappings or request.footer_mappings:
-            from core.database.db_manager import get_global_mapping_config, save_global_mapping_config
-            data = get_global_mapping_config(db)
-            
-            updated = False
-            
-            if request.footer_mappings:
-                if "footer_label_mappings" not in data:
-                    data["footer_label_mappings"] = {"keywords": []}
-                existing_footers = data["footer_label_mappings"].get("keywords", [])
-                for fm in request.footer_mappings:
-                    if fm not in existing_footers:
-                        existing_footers.append(fm)
-                data["footer_label_mappings"]["keywords"] = existing_footers
-                updated = True
-                
-            if request.mappings:
-                filtered_mappings = {k: v for k, v in request.mappings.items() if v and v != "col_unknown"}
-                if filtered_mappings:
-                    if "header_text_mappings" not in data:
-                        data["header_text_mappings"] = {"mappings": {}}
-                    if "mappings" not in data["header_text_mappings"]:
-                        data["header_text_mappings"]["mappings"] = {}
-                    data["header_text_mappings"]["mappings"].update(filtered_mappings)
-                    updated = True
-            
-            if updated:
-                save_global_mapping_config(data, db)
-                     
-        # Run Generator
-        orchestrator = Orchestrator()
-        
-        customer_code = request.customer_code
-        locale = request.locale
-        
-        from core.database.repositories import BlueprintRepository
-        existing_template_json = None
-        repo = BlueprintRepository(db)
-        existing = repo.get_blueprint(customer_code, locale)
-        if existing:
-            existing_template_json = json.loads(existing.template_json)
-        
-        config_data, template_json_data, template_xlsx_bytes = orchestrator.generate_blueprint_bundle(
-            template_path=file_path,
-            custom_prefix=customer_code,
-            runtime_mappings=request.mappings,
-            pricing_mode=request.pricing_mode,
-            in_memory=True,
-            existing_template_json=existing_template_json
+        service = BlueprintService(db)
+        res = service.generate_blueprint(
+            file_token=request.file_token,
+            customer_code=request.customer_code,
+            locale=request.locale,
+            mappings=request.mappings,
+            footer_mappings=request.footer_mappings,
+            pricing_mode=request.pricing_mode
         )
-        
-        # Save to SQLite directly in-memory
-        from api.routers.templates import save_blueprint_to_db
-        save_blueprint_to_db(
-            customer_code=customer_code,
-            locale=locale,
-            config_data=config_data,
-            template_json_data=template_json_data,
-            xlsx_bytes=template_xlsx_bytes,
-            filename=f"{customer_code}_{locale}.xlsx"
-        )
-        
-        return GenerateResult(
-            status="success",
-            message=f"Blueprint generated and saved to database for {customer_code}"
-        )
-
+        return res
     except Exception as e:
         logger.error(f"Blueprint generation failed: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
-    finally:
-        # Clean up the uploaded Excel file now that the blueprint is generated
-        try:
-            if file_path.exists():
-                file_path.unlink()
-        except Exception as cleanup_err:
-            logger.warning(f"Failed to delete temporary blueprint file {file_path}: {cleanup_err}")
-
-class StringUtils:
-    @staticmethod
-    def is_unknown_col_id(col_id: str) -> bool:
-        return col_id and col_id.startswith("col_unknown")
-
-# --- Helper ---
-def _format_label(col_id: str) -> str:
-    """col_qty_pcs -> Qty Pcs"""
-    return col_id.replace("col_", "").replace("_", " ").title()
 
 @router.get("/options")
 async def get_mapping_options():
@@ -205,20 +79,7 @@ async def get_mapping_options():
     Return list of valid system columns for mapping.
     Frontend uses this to populate the dropdown.
     """
-    from core.blueprint_generator.schema import BlueprintSchema
-    
-    options = []
-    # Sort by ID or Priority? valid columns are in BlueprintSchema.COLUMNS
-    sorted_cols = sorted(BlueprintSchema.COLUMNS.values(), key=lambda c: c.id)
-    
-    for col in sorted_cols:
-        options.append({
-            "id": col.id,
-            "label": _format_label(col.id),
-            "description": f"Internal ID: {col.id}" 
-        })
-        
-    return options
+    return BlueprintService.get_mapping_options()
 
 @router.get("/mappings")
 async def get_mappings(mapping_type: str = "header_text_mappings", db: Session = Depends(get_db)):

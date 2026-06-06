@@ -40,8 +40,8 @@ def test_database_blueprint_resolution(db):
         customer_code="DBTEST",
         locale="KH",
         description="Database Resolution Test",
-        config_json=json.dumps(mock_config),
-        template_json=json.dumps(mock_template_layout)
+        config_json=mock_config,
+        template_json=mock_template_layout
     )
     blueprint.template_binary = BlueprintTemplate(
         filename="DBTEST_KH.xlsx",
@@ -209,8 +209,8 @@ def test_resolver_with_mock_repository():
             self.mock_blueprint = Blueprint(
                 customer_code="MOCKCUST",
                 locale="KH",
-                config_json=json.dumps({"_meta": {"customer": "MOCKCUST_KH"}}),
-                template_json=json.dumps({"template_layout": {}})
+                config_json={"_meta": {"customer": "MOCKCUST_KH"}},
+                template_json={"template_layout": {}}
             )
             self.mock_blueprint.template_binary = BlueprintTemplate(
                 filename="MOCKCUST_KH.xlsx",
@@ -275,6 +275,10 @@ def test_get_global_mapping_config_reassembly(db):
     db.query(GlobalMapFallbackStrategy).delete()
     db.commit()
     
+    # Manually invalidate cache since we bypassed save_global_mapping_config
+    from core.utils.cache import mapping_cache
+    mapping_cache.invalidate()
+
     # 5. Verify it returns empty structures when empty
     empty_config = get_global_mapping_config(db)
     assert empty_config.get("shipping_header_map") == {}
@@ -455,6 +459,123 @@ def test_mapping_service_get_and_update(db):
     assert "Item No" not in overrides
     assert overrides["P.O."] == "col_qty_pcs"
     assert overrides["Description"] == "col_desc"
+
+
+def test_mapping_config_cache(db):
+    """
+    Verify get_global_mapping_config utilizes mapping_cache,
+    and save_global_mapping_config/update_mappings invalidates it.
+    """
+    from core.database.db_manager import get_global_mapping_config, save_global_mapping_config
+    from core.utils.cache import mapping_cache
+    from core.services.mapping_service import MappingService
+
+    # 1. Invalidate cache to start fresh
+    mapping_cache.invalidate()
+
+    # 2. Fetch config and assert cache is populated
+    config_1 = get_global_mapping_config(db)
+    cached_val = mapping_cache.get()
+    assert cached_val is not None
+    assert cached_val == config_1
+
+    # 3. Manually modify cache to prove caching is used
+    spy_config = {"fake_key": "fake_value"}
+    mapping_cache.set(spy_config)
+    config_cached = get_global_mapping_config(db)
+    assert config_cached == spy_config
+
+    # 4. Save mapping config and verify cache is invalidated
+    save_global_mapping_config(config_1, db)
+    assert mapping_cache.get() is None
+
+    # 5. Load again to repopulate cache
+    config_2 = get_global_mapping_config(db)
+    assert mapping_cache.get() == config_2
+
+    # 6. Call mapping_service.update_mappings and verify cache is invalidated and then repopulated with updated data
+    service = MappingService(db)
+    service.update_mappings("footer_label_mappings", {"TEST_TOTAL": "Footer Keyword"})
+    updated_cached = mapping_cache.get()
+    assert updated_cached is not None
+    assert "TEST_TOTAL" in updated_cached.get("footer_label_mappings", {}).get("keywords", [])
+
+
+def test_blueprint_service_operations(db):
+    """
+    Verify BlueprintService operations (list, view, update cell, update notes, delete).
+    """
+    from core.services.blueprint_service import BlueprintService
+    from core.database.db_manager import Blueprint, BlueprintTemplate
+
+    # Setup initial mock data in db
+    mock_config = {
+        "_meta": {
+            "config_version": "2.2_strict_mode",
+            "customer": "SERVTEST_KH",
+            "description": "Mock Database Config"
+        },
+        "table_info": {
+            "title": "Invoice"
+        }
+    }
+    mock_template_layout = {
+        "fingerprint": {
+            "source_file": "SERVTEST_raw.xlsx"
+        },
+        "template_layout": {
+            "Invoice": {
+                "header_content": {"A1": "Address"},
+                "header_merges": [],
+                "header_styles": {}
+            }
+        }
+    }
+    
+    blueprint = Blueprint(
+        customer_code="SERVTEST",
+        locale="KH",
+        description="Service Ops Test",
+        config_json=mock_config,
+        template_json=mock_template_layout
+    )
+    blueprint.template_binary = BlueprintTemplate(
+        filename="SERVTEST_KH.xlsx",
+        xlsx_blob=b"MockData"
+    )
+    db.add(blueprint)
+    db.commit()
+
+    service = BlueprintService(db)
+
+    # 1. Test listing
+    listed = service.list_blueprints()
+    found = [x for x in listed if x["customer_code"] == "SERVTEST"]
+    assert len(found) == 1
+    assert found[0]["source_file"] == "SERVTEST_raw.xlsx"
+
+    # 2. Test view
+    view_data = service.view_blueprint("SERVTEST", "KH")
+    assert view_data is not None
+    assert "template_layout" in view_data
+    assert view_data["table_info"]["title"] == "Invoice"
+
+    # 3. Test cell update
+    success = service.update_blueprint_cell("SERVTEST", "KH", "Invoice", "A1", {"default": "New Address"})
+    assert success is True
+    updated_view = service.view_blueprint("SERVTEST", "KH")
+    assert updated_view["template_layout"]["Invoice"]["header_content"]["A1"] == "New Address"
+
+    # 4. Test notes update
+    success = service.update_blueprint_notes("SERVTEST", "KH", "This is a test note")
+    assert success is True
+    updated_view = service.view_blueprint("SERVTEST", "KH")
+    assert updated_view["notes"] == "This is a test note"
+
+    # 5. Test delete
+    success = service.delete_blueprint("SERVTEST", "KH")
+    assert success is True
+    assert service.view_blueprint("SERVTEST", "KH") is None
 
 
 

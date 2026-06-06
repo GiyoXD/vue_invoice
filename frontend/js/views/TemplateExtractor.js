@@ -292,6 +292,7 @@ export default {
     setup() {
         const currentStep = ref(1);
         const selectedFiles = ref([]);
+        let rawFiles = []; // Non-reactive list for native File objects
         const singleFileSuffix = ref("KH");
         const isProcessing = ref(false);
         const statusMessage = ref("");
@@ -477,7 +478,8 @@ export default {
          */
         const handleFileUpload = (e) => {
             const files = Array.from(e.target.files).slice(0, 2);
-            selectedFiles.value = files;
+            rawFiles = files;
+            selectedFiles.value = files.map(f => ({ name: f.name }));
             singleFileSuffix.value = "KH";
             statusMessage.value = "";
         };
@@ -503,7 +505,7 @@ export default {
         };
 
         const analyzeFiles = async () => {
-            if (selectedFiles.value.length === 0) return;
+            if (rawFiles.length === 0) return;
             isProcessing.value = true;
             statusMessage.value = "Scanning template structure...";
             allMissingHeaders.value = [];
@@ -518,7 +520,7 @@ export default {
                 const footerSet = new Set();
                 const warningSet = new Set();
 
-                for (const file of selectedFiles.value) {
+                for (const file of rawFiles) {
                     const formData = new FormData();
                     formData.append('file', file);
 
@@ -684,6 +686,7 @@ export default {
         const resetFlow = () => {
             currentStep.value = 1;
             selectedFiles.value = [];
+            rawFiles = [];
             singleFileSuffix.value = "KH";
             filePrefix.value = "";
             allMissingHeaders.value = [];

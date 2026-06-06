@@ -37,8 +37,8 @@ def test_api_template_flow(client, db):
         customer_code="APITEST",
         locale="KH",
         description="API Test Blueprint",
-        config_json=json.dumps(mock_config),
-        template_json=json.dumps(mock_template)
+        config_json=mock_config,
+        template_json=mock_template
     )
     blueprint.template_binary = BlueprintTemplate(
         filename="APITEST_KH.xlsx",

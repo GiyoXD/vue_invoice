@@ -30,6 +30,8 @@ db_manager.SessionLocal = TestSessionLocal
 
 from api.main import app
 from core.database.db_manager import init_db, get_db
+from core.utils.cache import mapping_cache
+from core.services.mapping_service import MappingService
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_db():
@@ -73,13 +75,18 @@ def db():
     else:
         init_db()
         
+    # Invalidate mapping cache to ensure test isolation
+    mapping_cache.invalidate()
+    
     session = TestSessionLocal()
     try:
+        MappingService(session).reload_dynamic_state()
         yield session
     finally:
         session.rollback()
         session.close()
         test_engine.dispose()
+        mapping_cache.invalidate()
 
 
 @pytest.fixture(scope="function")

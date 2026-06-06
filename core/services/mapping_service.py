@@ -7,6 +7,8 @@ from core.database.db_manager import (
 
 logger = logging.getLogger(__name__)
 
+from core.utils.cache import mapping_cache
+
 class MappingService:
     """
     Service layer handles business logic for global mapping operations,
@@ -147,6 +149,7 @@ class MappingService:
                         existing_map[clean_text].canonical_col_id = col_id
             
             self.db.commit()
+            mapping_cache.invalidate()
         except Exception as e:
             self.db.rollback()
             logger.error(f"Failed to update mappings in database: {e}")

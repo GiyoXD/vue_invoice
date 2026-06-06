@@ -9,7 +9,6 @@ This module provides the logic to "resolve" (find) the necessary assets for invo
 These assets are resolved directly from the SQLite database.
 """
 
-import json
 import re
 import logging
 from dataclasses import dataclass
@@ -46,8 +45,8 @@ class InvoiceAssetResolver:
     def _resolve_from_db_row(self, row) -> Optional[InvoiceAssets]:
         """Build InvoiceAssets directly from a DB row without writing temp files."""
         try:
-            config_data = json.loads(row.config_json)
-            template_json_data = json.loads(row.template_json)
+            config_data = row.config_json
+            template_json_data = row.template_json
             xlsx_bytes = row.template_binary.xlsx_blob if row.template_binary else None
             
             return InvoiceAssets(
