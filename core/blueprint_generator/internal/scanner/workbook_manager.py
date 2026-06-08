@@ -7,20 +7,18 @@ from core.blueprint_generator.schema import BlueprintSchema
 from core.utils.snitch import snitch
 from .models import ColumnInfo, SheetAnalysis, TemplateAnalysisResult
 from .header_detector import HeaderDetector
-from .column_analyzer import ColumnAnalyzer
-from .sheet_analyzer import SheetAnalyzer
+from .template_scanner import SheetAnalyzer
 
 logger = logging.getLogger(__name__)
 
 
-class ExcelLayoutScanner:
-    """Analyzes Excel templates to extract structure for config generation."""
+class WorkbookManager:
+    """Orchestrates sheet-level analysis across an entire Excel workbook."""
     
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
         self.header_detector = HeaderDetector()
-        self.column_analyzer = ColumnAnalyzer()
-        self.sheet_analyzer = SheetAnalyzer(self.header_detector, self.column_analyzer)
+        self.sheet_analyzer = SheetAnalyzer(self.header_detector)
 
     @snitch
     def scan_template(self, template_path: str, mapping_config: Optional[Dict[str, Any]] = None, 
@@ -88,7 +86,7 @@ class ExcelLayoutScanner:
                         global_hs_code = analysis.footer_info.hs_code_text
                         global_hs_colspan = analysis.footer_info.hs_code_colspan
                         global_hs_col_id = analysis.footer_info.hs_code_col_id
-
+ 
         # Check mapping config options to ignore missing description fallback
         ignore_missing_desc = False
         if mapping_config:
@@ -159,10 +157,10 @@ if __name__ == "__main__":
     setup_logging(log_dir=sys_config.run_log_dir)
     
     if len(sys.argv) < 2:
-        print("Usage: python scanner.py <template.xlsx>")
+        print("Usage: python workbook_manager.py <template.xlsx>")
         sys.exit(1)
     
-    analyzer = ExcelLayoutScanner()
+    analyzer = WorkbookManager()
     result = analyzer.scan_template(sys.argv[1])
     
     print(f"\nTemplate: {result.customer_code}")

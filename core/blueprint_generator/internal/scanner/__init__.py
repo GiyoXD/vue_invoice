@@ -1,8 +1,8 @@
-from .scanner import ExcelLayoutScanner
+from .workbook_manager import WorkbookManager
 from .models import TemplateAnalysisResult, SheetAnalysis, ColumnInfo
 
 __all__ = [
-    "ExcelLayoutScanner",
+    "WorkbookManager",
     "TemplateAnalysisResult",
     "SheetAnalysis",
     "ColumnInfo"
