@@ -454,7 +454,7 @@ class ConfigBuilder:
 if __name__ == "__main__":
     import sys
     import json
-    from .scanner import ExcelLayoutScanner
+    from .scanner import WorkbookManager
     
     from core.logger_config import setup_logging
     from core.system_config import sys_config
@@ -464,7 +464,7 @@ if __name__ == "__main__":
         print("Usage: python config_builder.py <template.xlsx>")
         sys.exit(1)
     
-    scanner = ExcelLayoutScanner()
+    scanner = WorkbookManager()
     result = scanner.scan_template(sys.argv[1])
     
     builder = ConfigBuilder()

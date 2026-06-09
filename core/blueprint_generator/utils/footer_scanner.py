@@ -54,7 +54,7 @@ def find_column_id_by_index(col_index: int, columns: List[ColumnInfo]) -> Option
 
 
 @loop_profiler.watch("footer_scanner.scan_footer")
-def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo], logger: logging.Logger, sheet_name: str = "Unknown", mapping_config: Optional[Dict[str, Any]] = None, skip_hs_scan: bool = False) -> Optional[FooterInfo]:
+def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo], logger: logging.Logger, sheet_name: str = "Unknown", mapping_config: Optional[Dict[str, Any]] = None, skip_hs_scan: bool = False, footer_row: Optional[int] = None) -> Optional[FooterInfo]:
     """
     Analyze the footer structure by searching for 'TOTAL' and 'X PALLETS'.
     
@@ -66,6 +66,7 @@ def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo]
         sheet_name: Name of the sheet being scanned (for log context).
         mapping_config: Optional global mapping config containing 'footer_label_mappings'.
         skip_hs_scan: If True, skips the HS code scan.
+        footer_row: Optional pre-calculated footer row index.
         
     Returns:
         FooterInfo if found, or None.
@@ -74,11 +75,28 @@ def scan_footer(worksheet: Worksheet, header_row: int, columns: List[ColumnInfo]
     end_scan = min(worksheet.max_row, header_row + 500)
     
     # --- Step 1: Find the TOTAL label cell ---
-    result = find_total_label_cell(worksheet, start_scan, end_scan, mapping_config, logger, sheet_name)
-    if not result:
-        return None
-        
-    found_cell, is_exact = result
+    if footer_row is not None:
+        result = find_total_label_cell(worksheet, footer_row, footer_row, mapping_config, logger, sheet_name)
+        if not result:
+            from core.blueprint_generator.utils.content_extractor import _get_cell_value_safe
+            from core.blueprint_generator.schema import BlueprintSchema
+            found_cell = None
+            for col in range(1, min(worksheet.max_column + 1, BlueprintSchema.MAX_SCAN_COLUMN)):
+                cell = worksheet.cell(row=footer_row, column=col)
+                val = _get_cell_value_safe(worksheet, cell)
+                if val and not val.strip().startswith('='):
+                    found_cell = cell
+                    break
+            if not found_cell:
+                found_cell = worksheet.cell(row=footer_row, column=1)
+            is_exact = False
+        else:
+            found_cell, is_exact = result
+    else:
+        result = find_total_label_cell(worksheet, start_scan, end_scan, mapping_config, logger, sheet_name)
+        if not result:
+            return None
+        found_cell, is_exact = result
     
     # --- Step 2: Determine merge colspan at the TOTAL cell ---
     colspan = get_cell_merge_colspan(worksheet, found_cell)

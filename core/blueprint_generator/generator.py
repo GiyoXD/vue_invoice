@@ -24,7 +24,7 @@ from core.utils.snitch import snitch
 from core.utils.loop_profiler import loop_profiler
 from core.system_config import sys_config
 
-from .internal.scanner import ExcelLayoutScanner, TemplateAnalysisResult
+from .internal.scanner import WorkbookManager, TemplateAnalysisResult
 from .internal.builder import ConfigBuilder
 from .internal.validator import ConfigValidator
 from .internal.sanitizer import ExcelTemplateSanitizer
@@ -63,7 +63,7 @@ class BlueprintGenerator:
             output_base_dir: Base directory for config output.
                            Defaults to invoice_generator/src/config_bundled/
         """
-        self.scanner = ExcelLayoutScanner()
+        self.scanner = WorkbookManager()
         self.builder = ConfigBuilder()
         self.validator = ConfigValidator()
 

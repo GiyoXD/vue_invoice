@@ -6,8 +6,8 @@ import openpyxl
 from core.blueprint_generator.schema import BlueprintSchema
 from core.utils.snitch import snitch
 from .models import ColumnInfo, SheetAnalysis, TemplateAnalysisResult
-from .header_detector import HeaderDetector
-from .template_scanner import SheetAnalyzer
+from .header_detector import BoundaryDetector
+from .sheet_manager import SheetManager
 
 logger = logging.getLogger(__name__)
 
@@ -17,8 +17,8 @@ class WorkbookManager:
     
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.header_detector = HeaderDetector()
-        self.sheet_analyzer = SheetAnalyzer(self.header_detector)
+        self.boundary_detector = BoundaryDetector()
+        self.sheet_manager = SheetManager(self.boundary_detector)
 
     @snitch
     def scan_template(self, template_path: str, mapping_config: Optional[Dict[str, Any]] = None, 
@@ -62,8 +62,11 @@ class WorkbookManager:
         
         supported_sheet_names = set()
         for sheet_name in workbook.sheetnames:
+            if not self._is_sheet_supported(sheet_name, mapping_config):
+                self.logger.info(f"  Skipping sheet '{sheet_name}': Not in allowed search list.")
+                continue
             worksheet = workbook[sheet_name]
-            analysis = self.sheet_analyzer.analyze_sheet(
+            analysis = self.sheet_manager.analyze_sheet(
                 worksheet, 
                 sheet_name, 
                 mapping_config,
@@ -148,6 +151,36 @@ class WorkbookManager:
             warnings=warnings,
             has_static_sheets=has_static
         )
+
+    def _is_sheet_supported(self, sheet_name: str, mapping_config: Optional[Dict[str, Any]] = None) -> bool:
+        """Check if a sheet name is in the allowed search list."""
+        normalized_name = sheet_name.lower().strip()
+        
+        # Fast mapping resolution using nested structure
+        if mapping_config and isinstance(mapping_config, dict):
+            sheet_mappings = mapping_config.get('sheet_name_mappings', {}).get('mappings', {})
+            if isinstance(sheet_mappings, dict):
+                # Fast case-insensitive exact matching
+                lower_mappings = {k.lower().strip(): v for k, v in sheet_mappings.items()}
+                if normalized_name in lower_mappings:
+                    normalized_name = lower_mappings[normalized_name].lower().strip()
+
+        is_supported = False
+        
+        # Create a set of variants for matching (with/without underscores/spaces)
+        variants_to_check = {
+            normalized_name,
+            normalized_name.replace(' ', '_'),
+            normalized_name.replace('_', ' ')
+        }
+        
+        # Exact match check
+        for variant in variants_to_check:
+            if variant in BlueprintSchema.ALLOWED_SEARCH_SHEETS:
+                is_supported = True
+                break
+                
+        return is_supported
 
 
 if __name__ == "__main__":

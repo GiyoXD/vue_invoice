@@ -308,8 +308,8 @@ class TestFindHsCode(unittest.TestCase):
 
 
 
-class TestExcelLayoutScannerHsCode(unittest.TestCase):
-    """Tests that ExcelLayoutScanner scans HS codes for different sheets separately."""
+class TestWorkbookManagerHsCode(unittest.TestCase):
+    """Tests that WorkbookManager scans HS codes for different sheets separately."""
 
     def setUp(self):
         self.mapping_config = {
@@ -319,7 +319,7 @@ class TestExcelLayoutScannerHsCode(unittest.TestCase):
         }
 
     def test_scans_separate_hs_codes_per_sheet(self):
-        from core.blueprint_generator.internal.scanner import ExcelLayoutScanner
+        from core.blueprint_generator.internal.scanner import WorkbookManager
         
         wb = MagicMock()
         wb.sheetnames = ["Invoice", "PL"]
@@ -342,7 +342,7 @@ class TestExcelLayoutScannerHsCode(unittest.TestCase):
             raise KeyError(name)
         wb.__getitem__.side_effect = mock_getitem
  
-        scanner = ExcelLayoutScanner()
+        scanner = WorkbookManager()
         result = scanner.scan_template("tests/experiment_sample/shipping_list/JF25057.xlsx", self.mapping_config, workbook=wb)
         
         self.assertEqual(len(result.sheets), 2)
@@ -358,7 +358,7 @@ class TestExcelLayoutScannerHsCode(unittest.TestCase):
         self.assertEqual(sheet2_analysis.footer_info.hs_code_colspan, 3)
 
     def test_missing_description_raises_error(self):
-        from core.blueprint_generator.internal.scanner import ExcelLayoutScanner
+        from core.blueprint_generator.internal.scanner import WorkbookManager
         wb = MagicMock()
         wb.sheetnames = ["Invoice"]
         
@@ -369,13 +369,13 @@ class TestExcelLayoutScannerHsCode(unittest.TestCase):
         ws1 = make_mock_worksheet(sheet1_values, sheet_name="Invoice")
         wb.__getitem__.return_value = ws1
 
-        scanner = ExcelLayoutScanner()
+        scanner = WorkbookManager()
         with self.assertRaises(ValueError) as ctx:
             scanner.scan_template("tests/experiment_sample/shipping_list/JF25057.xlsx", self.mapping_config, workbook=wb)
         self.assertIn("Missing Description Fallback", str(ctx.exception))
 
     def test_missing_description_ignored_by_config(self):
-        from core.blueprint_generator.internal.scanner import ExcelLayoutScanner
+        from core.blueprint_generator.internal.scanner import WorkbookManager
         wb = MagicMock()
         wb.sheetnames = ["Invoice"]
         
@@ -386,7 +386,7 @@ class TestExcelLayoutScannerHsCode(unittest.TestCase):
         ws1 = make_mock_worksheet(sheet1_values, sheet_name="Invoice")
         wb.__getitem__.return_value = ws1
 
-        scanner = ExcelLayoutScanner()
+        scanner = WorkbookManager()
         custom_mapping = self.mapping_config.copy()
         custom_mapping["ignore_missing_description"] = True
         
@@ -498,8 +498,8 @@ class TestExcelTemplateSanitizer(unittest.TestCase):
         self.assertIsNone(remaining_ws["B1"].value)
 
 
-class TestExcelLayoutScannerSheetClassification(unittest.TestCase):
-    """Tests that ExcelLayoutScanner correctly classifies sheets including Summary Packing List."""
+class TestWorkbookManagerSheetClassification(unittest.TestCase):
+    """Tests that WorkbookManager correctly classifies sheets including Summary Packing List."""
 
     def setUp(self):
         self.mapping_config = {
@@ -515,7 +515,7 @@ class TestExcelLayoutScannerSheetClassification(unittest.TestCase):
         }
 
     def test_classifies_summary_packing_list_correctly(self):
-        from core.blueprint_generator.internal.scanner import ExcelLayoutScanner
+        from core.blueprint_generator.internal.scanner import WorkbookManager
         
         wb = MagicMock()
         wb.sheetnames = ["Invoice", "PL", "Summary Packing List"]
@@ -536,7 +536,7 @@ class TestExcelLayoutScannerSheetClassification(unittest.TestCase):
             raise KeyError(name)
         wb.__getitem__.side_effect = mock_getitem
         
-        scanner = ExcelLayoutScanner()
+        scanner = WorkbookManager()
         result = scanner.scan_template("tests/experiment_sample/shipping_list/JF25057.xlsx", self.mapping_config, workbook=wb)
         
         self.assertEqual(len(result.sheets), 3)
@@ -547,6 +547,72 @@ class TestExcelLayoutScannerSheetClassification(unittest.TestCase):
         self.assertEqual(sheet_inv.data_source, "aggregation")
         self.assertEqual(sheet_pl.data_source, "processed_tables_multi")
         self.assertEqual(sheet_spl.data_source, "summary_packing_list")
+class TestBoundaryDetectorFooter(unittest.TestCase):
+    """Tests for BoundaryDetector footer/boundary resolution logic."""
+
+    def setUp(self):
+        from core.blueprint_generator.internal.scanner.header_detector import BoundaryDetector
+        self.detector = BoundaryDetector()
+        self.mapping_config = {
+            "footer_label_mappings": {
+                "keywords": ["TOTAL", "TOTAL:", "TOTAL OF:", "TOTAL："]
+            }
+        }
+        # A mock worksheet with header on row 3 and some columns
+        self.base_cells = {
+            (3, 1): "Item",
+            (3, 2): "Qty",
+            (3, 3): "Price",
+            (3, 4): "Amount",
+        }
+
+    def test_detects_via_formula_adjacency(self):
+        # Row 8 has adjacent formulas
+        cells = self.base_cells.copy()
+        cells.update({
+            (4, 1): "A", (4, 2): 10, (4, 3): 5, (4, 4): 50,
+            (8, 2): "=SUM(B4:B7)",
+            (8, 3): "=SUM(C4:C7)",
+        })
+        ws = make_mock_worksheet(cells, max_row=10, max_column=5)
+        
+        self.detector.find_header_row = MagicMock(return_value=3)
+        
+        boundaries = self.detector.detect_boundaries(ws, mapping_config=self.mapping_config)
+        self.assertIsNotNone(boundaries)
+        self.assertEqual(boundaries.footer_row, 8)
+
+    def test_detects_via_keyword_fallback(self):
+        # No formula adjacency, but row 7 has "TOTAL:" keyword
+        cells = self.base_cells.copy()
+        cells.update({
+            (4, 1): "A", (4, 2): 10, (4, 3): 5, (4, 4): 50,
+            (7, 1): "TOTAL:",
+        })
+        ws = make_mock_worksheet(cells, max_row=10, max_column=5)
+        
+        self.detector.find_header_row = MagicMock(return_value=3)
+        
+        boundaries = self.detector.detect_boundaries(ws, mapping_config=self.mapping_config)
+        self.assertIsNotNone(boundaries)
+        self.assertEqual(boundaries.footer_row, 7)
+
+    def test_detects_via_strict_bottom_up_total(self):
+        # No formula adjacency, keyword not in mapping config, but row 9 has strict total "TOTAL AMOUNT:"
+        cells = self.base_cells.copy()
+        cells.update({
+            (4, 1): "A", (4, 2): 10, (4, 3): 5, (4, 4): 50,
+            (9, 1): "TOTAL AMOUNT:",
+        })
+        ws = make_mock_worksheet(cells, max_row=10, max_column=5)
+        
+        self.detector.find_header_row = MagicMock(return_value=3)
+        
+        # Pass empty mapping config so keyword match fails
+        empty_config = {"footer_label_mappings": {"keywords": []}}
+        boundaries = self.detector.detect_boundaries(ws, mapping_config=empty_config)
+        self.assertIsNotNone(boundaries)
+        self.assertEqual(boundaries.footer_row, 9)
 
 
 if __name__ == '__main__':
