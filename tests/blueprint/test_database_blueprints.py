@@ -525,9 +525,20 @@ def test_blueprint_service_operations(db):
         },
         "template_layout": {
             "Invoice": {
-                "header_content": {"A1": "Address"},
-                "header_merges": [],
-                "header_styles": {}
+                "header_rows": [
+                    {
+                        "relative_index": 0,
+                        "height": 20.0,
+                        "cells": [
+                            {
+                                "col_index": 1,
+                                "value": "Address"
+                            }
+                        ]
+                    }
+                ],
+                "footer_rows": [],
+                "col_widths": {}
             }
         }
     }
@@ -564,7 +575,10 @@ def test_blueprint_service_operations(db):
     success = service.update_blueprint_cell("SERVTEST", "KH", "Invoice", "A1", {"default": "New Address"})
     assert success is True
     updated_view = service.view_blueprint("SERVTEST", "KH")
-    assert updated_view["template_layout"]["Invoice"]["header_content"]["A1"] == "New Address"
+    sheet = updated_view["template_layout"]["Invoice"]
+    row0 = next(r for r in sheet["header_rows"] if r["relative_index"] == 0)
+    cell_a1 = next(c for c in row0["cells"] if c["col_index"] == 1)
+    assert cell_a1["value"] == "New Address"
 
     # 4. Test notes update
     success = service.update_blueprint_notes("SERVTEST", "KH", "This is a test note")

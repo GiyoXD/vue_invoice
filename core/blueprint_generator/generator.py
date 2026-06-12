@@ -263,7 +263,7 @@ class BlueprintGenerator:
         layout_metadata = {}
         for sheet_analysis in analysis.sheets:
             if sheet_analysis.static_layout:
-                layout_metadata[sheet_analysis.name] = sheet_analysis.static_layout
+                layout_metadata[sheet_analysis.name] = sheet_analysis.static_layout.to_dict()
             else:
                 self.logger.warning(f"  Missing static layout for sheet: {sheet_analysis.name}")
 
@@ -358,67 +358,70 @@ class BlueprintGenerator:
                 return None
         
         try:
+            from core.blueprint_generator.internal.scanner.models import TemplateLayout
+
             preserved_notes = old_data.get("notes")
-            old_layout = old_data.get("template_layout", {})
+            old_layout_dict = old_data.get("template_layout", {})
             
             override_count = 0
-            for sheet_name, old_sheet in old_layout.items():
+            for sheet_name, old_sheet in old_layout_dict.items():
                 if sheet_name not in layout_metadata:
                     continue
                 
-                # --- HEADER CONTENT OVERRIDES ---
-                old_hc = old_sheet.get("template_header_content") or old_sheet.get("header_content", {})
-                new_hc = layout_metadata[sheet_name].get("template_header_content") or layout_metadata[sheet_name].get("header_content", {})
+                new_layout = TemplateLayout.from_dict(layout_metadata.get(sheet_name))
+                old_layout = TemplateLayout.from_dict(old_sheet)
+                if not new_layout or not old_layout:
+                    continue
+
+                overrides_map = {}
                 
-                for cell_addr, old_val in old_hc.items():
-                    if isinstance(old_val, dict):
-                        new_plain = new_hc.get(cell_addr)
-                        preserved_override = {
-                            "default": new_plain if (new_plain is not None and not isinstance(new_plain, dict)) else ""
-                        }
-                        if "standard" in old_val:
-                            preserved_override["standard"] = old_val["standard"]
-                        if "daf" in old_val:
-                            preserved_override["daf"] = old_val["daf"]
-                        new_hc[cell_addr] = preserved_override
-                        override_count += 1
-                
-                if "template_header_content" in layout_metadata[sheet_name]:
-                    layout_metadata[sheet_name]["template_header_content"] = new_hc
-                else:
-                    layout_metadata[sheet_name]["header_content"] = new_hc
-                
-                # --- FOOTER ROW OVERRIDES ---
-                old_footer_rows = old_sheet.get("template_footer_rows") or old_sheet.get("footer_rows", [])
-                new_footer_rows = layout_metadata[sheet_name].get("template_footer_rows") or layout_metadata[sheet_name].get("footer_rows", [])
-                
-                old_footer_overrides = {}
-                for old_row in old_footer_rows:
-                    rel_idx = old_row.get("relative_index")
-                    for old_cell in old_row.get("cells", []):
-                        old_cell_val = old_cell.get("value")
-                        if isinstance(old_cell_val, dict):
-                            col_idx = old_cell.get("col_index")
-                            old_footer_overrides[(rel_idx, col_idx)] = old_cell_val
-                
-                if old_footer_overrides:
-                    for new_row in new_footer_rows:
-                        rel_idx = new_row.get("relative_index")
-                        for new_cell in new_row.get("cells", []):
-                            col_idx = new_cell.get("col_index")
-                            key = (rel_idx, col_idx)
-                            if key in old_footer_overrides:
-                                old_override = old_footer_overrides[key]
-                                new_plain = new_cell.get("value")
-                                preserved_override = {
-                                    "default": new_plain if (new_plain is not None and not isinstance(new_plain, dict)) else ""
-                                }
-                                if "standard" in old_override:
-                                    preserved_override["standard"] = old_override["standard"]
-                                if "daf" in old_override:
-                                    preserved_override["daf"] = old_override["daf"]
-                                new_cell["value"] = preserved_override
-                                override_count += 1
+                # Extract from old header
+                for row in old_layout.header_rows:
+                    for cell in row.cells:
+                        if isinstance(cell.value, dict):
+                            overrides_map[(True, row.relative_index, cell.col_index)] = cell.value
+                            
+                # Extract from old footer
+                for row in old_layout.footer_rows:
+                    for cell in row.cells:
+                        if isinstance(cell.value, dict):
+                            overrides_map[(False, row.relative_index, cell.col_index)] = cell.value
+
+                # Apply to new header
+                for row in new_layout.header_rows:
+                    for cell in row.cells:
+                        key = (True, row.relative_index, cell.col_index)
+                        if key in overrides_map:
+                            old_val = overrides_map[key]
+                            new_plain = cell.value
+                            preserved_override = {
+                                "default": new_plain if (new_plain is not None and not isinstance(new_plain, dict)) else ""
+                            }
+                            if "standard" in old_val:
+                                preserved_override["standard"] = old_val["standard"]
+                            if "daf" in old_val:
+                                preserved_override["daf"] = old_val["daf"]
+                            cell.value = preserved_override
+                            override_count += 1
+
+                # Apply to new footer
+                for row in new_layout.footer_rows:
+                    for cell in row.cells:
+                        key = (False, row.relative_index, cell.col_index)
+                        if key in overrides_map:
+                            old_val = overrides_map[key]
+                            new_plain = cell.value
+                            preserved_override = {
+                                "default": new_plain if (new_plain is not None and not isinstance(new_plain, dict)) else ""
+                            }
+                            if "standard" in old_val:
+                                preserved_override["standard"] = old_val["standard"]
+                            if "daf" in old_val:
+                                preserved_override["daf"] = old_val["daf"]
+                            cell.value = preserved_override
+                            override_count += 1
+
+                layout_metadata[sheet_name] = new_layout.to_dict()
             
             if override_count > 0:
                 self.logger.info(f"   [Override Preservation] Merged {override_count} user overrides from existing template.")

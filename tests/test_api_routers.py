@@ -28,8 +28,20 @@ def test_api_template_flow(client, db):
         },
         "template_layout": {
             "Invoice": {
-                "header_content": {"A1": "Original Value"},
-                "header_styles": {}
+                "header_rows": [
+                    {
+                        "relative_index": 0,
+                        "height": 20.0,
+                        "cells": [
+                            {
+                                "col_index": 1,
+                                "value": "Original Value"
+                            }
+                        ]
+                    }
+                ],
+                "footer_rows": [],
+                "col_widths": {}
             }
         }
     }
@@ -60,7 +72,10 @@ def test_api_template_flow(client, db):
     response = client.get("/api/template/view?customer_code=APITEST&locale=KH")
     assert response.status_code == 200
     data = response.json()
-    assert data["template_layout"]["Invoice"]["header_content"]["A1"] == "Original Value"
+    sheet = data["template_layout"]["Invoice"]
+    row0 = next(r for r in sheet["header_rows"] if r["relative_index"] == 0)
+    cell_a1 = next(c for c in row0["cells"] if c["col_index"] == 1)
+    assert cell_a1["value"] == "Original Value"
 
     # 6. Patch template cell overrides
     response = client.patch("/api/template/cell", json={
@@ -76,7 +91,10 @@ def test_api_template_flow(client, db):
     response = client.get("/api/template/view?customer_code=APITEST&locale=KH")
     assert response.status_code == 200
     data = response.json()
-    cell_val = data["template_layout"]["Invoice"]["header_content"]["A1"]
+    sheet = data["template_layout"]["Invoice"]
+    row0 = next(r for r in sheet["header_rows"] if r["relative_index"] == 0)
+    cell_a1 = next(c for c in row0["cells"] if c["col_index"] == 1)
+    cell_val = cell_a1["value"]
     assert isinstance(cell_val, dict)
     assert cell_val["standard"] == "New Overridden Value"
 

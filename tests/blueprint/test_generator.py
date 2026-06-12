@@ -79,18 +79,24 @@ def test_generator_preserve_user_overrides():
     # Mock newly generated layout metadata
     layout_metadata = {
         "Invoice": {
-            "template_header_content": {
-                "A1": "New Value A1",
-                "B2": "New Value B2"
-            },
-            "template_footer_rows": [
+            "header_rows": [
+                {
+                    "relative_index": 0,
+                    "cells": [
+                        {"col_index": 1, "value": "New Value A1"},
+                        {"col_index": 2, "value": "New Value B2"}
+                    ]
+                }
+            ],
+            "footer_rows": [
                 {
                     "relative_index": 0,
                     "cells": [
                         {"col_index": 1, "value": "New Footer 1"}
                     ]
                 }
-            ]
+            ],
+            "col_widths": {}
         }
     }
     
@@ -99,17 +105,29 @@ def test_generator_preserve_user_overrides():
         "notes": "User saved notes",
         "template_layout": {
             "Invoice": {
-                "template_header_content": {
-                    "A1": {"default": "Old Plain", "standard": "Override Standard", "daf": "Override Daf"}
-                },
-                "template_footer_rows": [
+                "header_rows": [
                     {
                         "relative_index": 0,
                         "cells": [
-                            {"col_index": 1, "value": {"default": "Old Footer", "standard": "Override Footer Standard"}}
+                            {
+                                "col_index": 1,
+                                "value": {"default": "Old Plain", "standard": "Override Standard", "daf": "Override Daf"}
+                            }
                         ]
                     }
-                ]
+                ],
+                "footer_rows": [
+                    {
+                        "relative_index": 0,
+                        "cells": [
+                            {
+                                "col_index": 1,
+                                "value": {"default": "Old Footer", "standard": "Override Footer Standard"}
+                            }
+                        ]
+                    }
+                ],
+                "col_widths": {}
             }
         }
     }
@@ -117,21 +135,26 @@ def test_generator_preserve_user_overrides():
     preserved_notes = generator._preserve_user_overrides(None, layout_metadata, old_data=old_data)
     
     assert preserved_notes == "User saved notes"
+    sheet = layout_metadata["Invoice"]
+    
     # A1 override should merge the NEW default value with the OLD standard/daf overrides
-    header_a1 = layout_metadata["Invoice"]["template_header_content"]["A1"]
-    assert isinstance(header_a1, dict)
-    assert header_a1["default"] == "New Value A1"
-    assert header_a1["standard"] == "Override Standard"
-    assert header_a1["daf"] == "Override Daf"
+    row0 = next(r for r in sheet["header_rows"] if r["relative_index"] == 0)
+    cell_a1 = next(c for c in row0["cells"] if c["col_index"] == 1)
+    assert isinstance(cell_a1["value"], dict)
+    assert cell_a1["value"]["default"] == "New Value A1"
+    assert cell_a1["value"]["standard"] == "Override Standard"
+    assert cell_a1["value"]["daf"] == "Override Daf"
     
     # B2 was not overridden in old, so it remains a plain string
-    assert layout_metadata["Invoice"]["template_header_content"]["B2"] == "New Value B2"
+    cell_b2 = next(c for c in row0["cells"] if c["col_index"] == 2)
+    assert cell_b2["value"] == "New Value B2"
     
     # Footer row relative_index=0 col_index=1 should merge the NEW default with the OLD overrides
-    footer_cell = layout_metadata["Invoice"]["template_footer_rows"][0]["cells"][0]
-    assert isinstance(footer_cell["value"], dict)
-    assert footer_cell["value"]["default"] == "New Footer 1"
-    assert footer_cell["value"]["standard"] == "Override Footer Standard"
+    frow0 = next(r for r in sheet["footer_rows"] if r["relative_index"] == 0)
+    fcell1 = next(c for c in frow0["cells"] if c["col_index"] == 1)
+    assert isinstance(fcell1["value"], dict)
+    assert fcell1["value"]["default"] == "New Footer 1"
+    assert fcell1["value"]["standard"] == "Override Footer Standard"
 
 
 def test_generator_analyze_and_generate_in_memory(tmp_path):

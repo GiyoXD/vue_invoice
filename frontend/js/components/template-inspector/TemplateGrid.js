@@ -119,9 +119,13 @@ export default {
 
         const zoomPercentage = computed(() => Math.round(zoomLevel.value * 100));
 
-        const currentSheetData = computed(() => {
+        const currentSheetDataRaw = computed(() => {
             if (!store.currentSheetName || !store.templateLayout) return null;
             return store.templateLayout[store.currentSheetName];
+        });
+
+        const currentSheetData = computed(() => {
+            return currentSheetDataRaw.value;
         });
 
         // --- Helper functions for Grid ---
@@ -252,43 +256,39 @@ export default {
             const sheet = currentSheetData.value;
             if (!sheet) return { maxRow: 0, maxCol: 0, headerMaxRow: 0, footerBaseRow: 0 };
 
-            const content = sheet.template_header_content || sheet.header_content || {};
-            const stylePalette = sheet.style_palette || {};
-            const styles = flattenStyles(sheet.template_header_styles || sheet.header_styles || {}, stylePalette);
-            const mergesRaw = sheet.template_header_merges || sheet.header_merges || {};
-            const merges = Array.isArray(mergesRaw) ? mergesRaw : Object.keys(mergesRaw);
-            const footerRows = sheet.template_footer_rows || sheet.footer_rows || [];
-
             let headerMaxRow = 0;
             let maxCol = 0;
-            Object.keys(content).forEach(addr => {
-                const { row, col } = parseAddress(addr);
-                if (row > headerMaxRow) headerMaxRow = row;
-                if (col > maxCol) maxCol = col;
-            });
-            Object.keys(styles).forEach(addr => {
-                const { row, col } = parseAddress(addr);
-                if (row > headerMaxRow) headerMaxRow = row;
-                if (col > maxCol) maxCol = col;
-            });
-            merges.forEach(range => {
-                const parts = range.split(":");
-                if (parts.length === 2) {
-                    const e = parseAddress(parts[1]);
-                    if (e.row > headerMaxRow) headerMaxRow = e.row;
-                    if (e.col > maxCol) maxCol = e.col;
+
+            const headerRows = sheet.header_rows || [];
+            headerRows.forEach(rowDict => {
+                const absRow = rowDict.relative_index ?? 0;
+                if (absRow > headerMaxRow) headerMaxRow = absRow;
+                for (const cellDict of (rowDict.cells || [])) {
+                    const ci = (cellDict.col_index || 1) - 1;
+                    if (ci > maxCol) maxCol = ci;
+                    
+                    if (cellDict.merge) {
+                        const mc = (cellDict.merge.max_col || 1) - 1;
+                        if (mc > maxCol) maxCol = mc;
+                    }
                 }
             });
 
             const footerBaseRow = headerMaxRow + 1;
             let maxRow = headerMaxRow;
 
+            const footerRows = sheet.template_footer_rows || sheet.footer_rows || [];
             footerRows.forEach(rowDict => {
                 const absRow = footerBaseRow + (rowDict.relative_index ?? 0);
                 if (absRow > maxRow) maxRow = absRow;
                 for (const cellDict of (rowDict.cells || [])) {
                     const ci = (cellDict.col_index || 1) - 1;
                     if (ci > maxCol) maxCol = ci;
+                    
+                    if (cellDict.merge) {
+                        const mc = (cellDict.merge.max_col || 1) - 1;
+                        if (mc > maxCol) maxCol = mc;
+                    }
                 }
                 for (const m of (rowDict.merges || [])) {
                     const mc = (m.max_col || 1) - 1;
@@ -300,81 +300,105 @@ export default {
         });
 
         const gridCells = computed(() => {
-            if (!currentSheetData.value) return [];
-
             const sheet = currentSheetData.value;
-            const content = sheet.template_header_content || sheet.header_content || {};
+            if (!sheet) return [];
+
             const stylePalette = sheet.style_palette || {};
-            const styles = flattenStyles(sheet.template_header_styles || sheet.header_styles || {}, stylePalette);
-            const mergesRaw = sheet.template_header_merges || sheet.header_merges || {};
-            const merges = Array.isArray(mergesRaw) ? mergesRaw : Object.keys(mergesRaw);
-
-            const footerContent = {};
-            const footerStyles = {};
-            const footerMergeRanges = [];
-            const footerRows = sheet.template_footer_rows || sheet.footer_rows || [];
-
             const { maxRow, maxCol, footerBaseRow } = sheetBounds.value;
-
-            footerRows.forEach(rowDict => {
-                const relIdx = rowDict.relative_index ?? 0;
-                const absRow = footerBaseRow + relIdx;
-
-                for (const cellDict of (rowDict.cells || [])) {
-                    const colIdx = cellDict.col_index;
-                    const addr = `${colToLetter(colIdx - 1)}${absRow + 1}`;
-
-                    if (cellDict.value !== undefined && cellDict.value !== null) {
-                        footerContent[addr] = cellDict.value;
-                    }
-                    if (cellDict.style_id) {
-                        footerStyles[addr] = stylePalette[cellDict.style_id] || {};
-                    }
-                }
-
-                for (const mDict of (rowDict.merges || [])) {
-                    const minCol = mDict.min_col;
-                    const maxColM = mDict.max_col;
-                    const rowSpan = mDict.row_span || 1;
-                    const startAddr = `${colToLetter(minCol - 1)}${absRow + 1}`;
-                    const endAddr = `${colToLetter(maxColM - 1)}${absRow + rowSpan}`;
-                    footerMergeRanges.push(`${startAddr}:${endAddr}`);
-                }
-            });
-
-            const allContent = { ...content, ...footerContent };
-            const allStyles = { ...styles, ...footerStyles };
-            const allMerges = [...merges, ...footerMergeRanges];
 
             const cells = [];
             const occupied = new Set();
             const mergedRanges = {};
 
-            allMerges.forEach(range => {
-                const parts = range.split(":");
-                if (parts.length !== 2) return;
-                const [start, end] = parts;
-                const s = parseAddress(start);
-                const e = parseAddress(end);
-                mergedRanges[start] = { rowspan: e.row - s.row + 1, colspan: e.col - s.col + 1 };
+            const gridCellsMap = {};
 
-                for (let r = s.row; r <= e.row; r++) {
-                    for (let c = s.col; c <= e.col; c++) {
-                        if (r !== s.row || c !== s.col) {
-                            occupied.add(`${r},${c}`);
+            // --- 1. PROCESS HEADER ---
+            const headerRows = sheet.header_rows || [];
+            headerRows.forEach(rowDict => {
+                const absRow = rowDict.relative_index ?? 0;
+
+                (rowDict.cells || []).forEach(cellDict => {
+                    const colIdx = cellDict.col_index - 1;
+                    gridCellsMap[`${absRow},${colIdx}`] = cellDict;
+
+                    if (cellDict.merge) {
+                        const minCol = cellDict.merge.min_col - 1;
+                        const maxColM = cellDict.merge.max_col - 1;
+                        const rowSpan = cellDict.merge.row_span || 1;
+                        mergedRanges[`${absRow},${minCol}`] = { rowspan: rowSpan, colspan: maxColM - minCol + 1 };
+
+                        for (let r = absRow; r < absRow + rowSpan; r++) {
+                            for (let c = minCol; c <= maxColM; c++) {
+                                if (r !== absRow || c !== minCol) {
+                                    occupied.add(`${r},${c}`);
+                                }
+                            }
                         }
                     }
-                }
+                });
             });
 
+            // --- 2. PROCESS FOOTER ---
+            const footerRows = sheet.template_footer_rows || sheet.footer_rows || [];
+            footerRows.forEach(rowDict => {
+                const relIdx = rowDict.relative_index ?? 0;
+                const absRow = footerBaseRow + relIdx;
+
+                (rowDict.cells || []).forEach(cellDict => {
+                    const colIdx = cellDict.col_index - 1;
+                    gridCellsMap[`${absRow},${colIdx}`] = cellDict;
+
+                    if (cellDict.merge) {
+                        const minCol = cellDict.merge.min_col - 1;
+                        const maxColM = cellDict.merge.max_col - 1;
+                        const rowSpan = cellDict.merge.row_span || 1;
+                        mergedRanges[`${absRow},${minCol}`] = { rowspan: rowSpan, colspan: maxColM - minCol + 1 };
+
+                        for (let r = absRow; r < absRow + rowSpan; r++) {
+                            for (let c = minCol; c <= maxColM; c++) {
+                                if (r !== absRow || c !== minCol) {
+                                    occupied.add(`${r},${c}`);
+                                }
+                            }
+                        }
+                    }
+                });
+
+                (rowDict.merges || []).forEach(mDict => {
+                    const minCol = mDict.min_col - 1;
+                    const maxColM = mDict.max_col - 1;
+                    const rowSpan = mDict.row_span || 1;
+                    mergedRanges[`${absRow},${minCol}`] = { rowspan: rowSpan, colspan: maxColM - minCol + 1 };
+
+                    for (let r = absRow; r < absRow + rowSpan; r++) {
+                        for (let c = minCol; c <= maxColM; c++) {
+                            if (r !== absRow || c !== minCol) {
+                                occupied.add(`${r},${c}`);
+                            }
+                        }
+                    }
+                });
+            });
+
+            // --- 3. BUILD GRID CELLS ARRAY ---
             for (let r = 0; r <= maxRow; r++) {
                 for (let c = 0; c <= maxCol; c++) {
                     if (occupied.has(`${r},${c}`)) continue;
 
                     const address = `${colToLetter(c)}${r + 1}`;
-                    const cellContent = allContent[address] || "";
-                    const cellStyle = allStyles[address] || {};
-                    const mergeInfo = mergedRanges[address];
+                    let cellContent = "";
+                    let cellStyle = {};
+                    const mergeInfo = mergedRanges[`${r},${c}`];
+
+                    const cellDict = gridCellsMap[`${r},${c}`];
+                    if (cellDict) {
+                        cellContent = cellDict.value !== undefined && cellDict.value !== null ? cellDict.value : "";
+                        if (cellDict.style) {
+                            cellStyle = cellDict.style;
+                        } else if (cellDict.style_id) {
+                            cellStyle = stylePalette[cellDict.style_id] || {};
+                        }
+                    }
 
                     cells.push({
                         id: address,
@@ -418,6 +442,14 @@ export default {
             }
             base.gridTemplateColumns = cols.join(' ');
 
+            const headerHeightLookup = {};
+            const headerRows = sheet.header_rows || [];
+            headerRows.forEach(rowDict => {
+                if (rowDict.height != null) {
+                    headerHeightLookup[rowDict.relative_index] = rowDict.height;
+                }
+            });
+
             const footerHeightLookup = {};
             footerRows.forEach(rowDict => {
                 if (rowDict.height != null) {
@@ -426,7 +458,7 @@ export default {
             });
             const rows = [];
             for (let r = 0; r <= maxRow; r++) {
-                const hdrH = rowHeightsMap[String(r + 1)];
+                const hdrH = rowHeightsMap[String(r + 1)] || headerHeightLookup[r];
                 const ftrH = footerHeightLookup[r];
                 const h = hdrH || ftrH;
                 rows.push(h ? Math.max(Math.round(h * 1.333), 14) + 'px' : '20px');

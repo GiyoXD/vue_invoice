@@ -5,6 +5,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment, Color
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.cell import coordinate_from_string, column_index_from_string
+from core.blueprint_generator.internal.scanner.models import TemplateLayout
 
 # Utils
 
@@ -95,71 +96,109 @@ class JsonTemplateStateBuilder:
     def _parse_layout_data(self):
         """
         Parses the raw JSON layout data into internal state structures.
-        
-        This method iterates through the JSON dictionary provided to __init__ and:
-        1.  Extracts column widths.
-        2.  Builds the `header_state` grid and detects header boundaries.
-        3.  Builds the `footer_state` grid and detects footer boundaries.
-        4.  Identifies merged cells for both header and footer.
-        5.  Populates row heights.
-        6.  Calculates `template_footer_start_row` to determine where static footer content begins.
-            
-            WHY THIS IS NEEDED:
-            The template's footer is defined at absolute coordinates (e.g., Row 50). When we generate a dynamic
-            data table that might end at Row 100, we need to know the original "reference point" (Row 50)
-            to calculate the vertical shift needed (Offset = 100 - 50 = +50 rows).
-            Without this starting row, we cannot correctly reposition the footer below the variable-length table.
-        
-        It handles missing keys gracefully and attempts to infer structure where possible (e.g., fallback logic).
         """
         logger.info("[JsonTemplateStateBuilder] Parsing Layout Data")
         
+        # Initialize TemplateLayout from dict
+        self.layout_obj = TemplateLayout.from_dict(self.layout_data)
+        
         # 1. Parse Dimensions and Basic Props
-        # Note: JSON 'col_widths' keys are letters 'A', 'B'...
-        col_widths = self.layout_data.get('col_widths', {})
-        for col_letter, width in col_widths.items():
+        for col_letter, width in self.layout_obj.col_widths.items():
             self.column_widths[column_index_from_string(col_letter)] = width
-            
-        def _flatten_grouped_styles(style_dict_in: Dict[str, Any]) -> Dict[str, Any]:
-            """
-            Option B Support: Check if the style map is using grouped IDs (Style -> [Coord1, Coord2]).
-            If yes, flatten it back to Coord -> StyleID for the legacy grid builder.
-            """
-            if not style_dict_in: return {}
-            # Quick check if first value is a list (which means it's grouped)
-            first_val = next(iter(style_dict_in.values()))
-            if isinstance(first_val, list):
-                flattened = {}
-                for style_id, coord_list in style_dict_in.items():
-                    for coord in coord_list:
-                        flattened[coord] = style_id
-                return flattened
-            return style_dict_in
 
-        # 2. Parse Header State
-        # 'header_content' is {"A1": {...}, "B1": {...}}
-        header_content = self.layout_data.get('template_header_content') or self.layout_data.get('header_content', {})
-        header_styles_raw = self.layout_data.get('template_header_styles') or self.layout_data.get('header_styles', {})
-        header_styles = _flatten_grouped_styles(header_styles_raw)
+        # 2. Parse Header State and find header boundaries
+        header_end_row = 0
+        max_col = 1
+        for row in self.layout_obj.header_rows:
+            r_idx = row.relative_index + 1
+            header_end_row = max(header_end_row, r_idx)
+            for cell in row.cells:
+                max_col = max(max_col, cell.col_index)
+                if cell.merge:
+                    max_col = max(max_col, cell.merge.max_col)
         
-        self.style_palette = self.layout_data.get('style_palette', {}) # Option B Support
-        header_merges_raw = self.layout_data.get('template_header_merges') or self.layout_data.get('header_merges', [])
-        self.header_merged_cells = list(header_merges_raw.keys()) if isinstance(header_merges_raw, dict) else header_merges_raw
+        self.header_end_row = header_end_row
+        self.max_col = max_col
+
+        # Populate row heights for header
+        for row in self.layout_obj.header_rows:
+            r_idx = row.relative_index + 1
+            if row.height is not None:
+                self.row_heights[r_idx] = row.height
+
+        # Populate header merged cells list
+        self.header_merged_cells = []
+        for row in self.layout_obj.header_rows:
+            row_idx = row.relative_index + 1
+            for cell in row.cells:
+                if cell.merge:
+                    range_str = f"{get_column_letter(cell.merge.min_col)}{row_idx}:{get_column_letter(cell.merge.max_col)}{row_idx + cell.merge.row_span - 1}"
+                    self.header_merged_cells.append(range_str)
+
+        # Build header_state grid
+        header_state = []
+        for r in range(1, header_end_row + 1):
+            row_data = []
+            for c in range(1, max_col + 1):
+                row_data.append({
+                    'value': None,
+                    'font': None,
+                    'fill': None,
+                    'border': None,
+                    'alignment': None,
+                    'number_format': 'General'
+                })
+            header_state.append(row_data)
+
+        for row in self.layout_obj.header_rows:
+            r_idx = row.relative_index + 1
+            for cell in row.cells:
+                g_r = r_idx - 1
+                g_c = cell.col_index - 1
+                
+                style_dict = cell.style.to_dict() if cell.style else {}
+                
+                cell_info = {
+                    'value': cell.value,
+                    'font': self._create_font(style_dict.get('font')),
+                    'fill': self._create_fill(style_dict.get('fill')),
+                    'border': self._create_border(style_dict.get('border')),
+                    'alignment': self._create_alignment(style_dict.get('alignment')),
+                    'number_format': style_dict.get('number_format', 'General')
+                }
+                
+                if 0 <= g_r < len(header_state) and 0 <= g_c < len(header_state[g_r]):
+                    header_state[g_r][g_c] = cell_info
         
-        self.header_state, self.header_end_row = self._build_state_grid(header_content, header_styles, is_header=True)
-        
-        # Load header row heights
-        header_row_heights = self.layout_data.get('template_header_row_heights') or self.layout_data.get('header_row_heights', {})
-        for r_str, h in header_row_heights.items():
-            self.row_heights[int(r_str)] = h
+        self.header_state = header_state
 
         # 3. Parse Template Footer State
-        self.template_footer_rows = self.layout_data.get('template_footer_rows') or self.layout_data.get('footer_rows')
-        
-        if self.template_footer_rows is not None:
-            # --- NEW GRID-ROW FORMAT ---
-            logger.info(f"[JsonTemplateStateBuilder] Using new template_footer_rows grid format ({len(self.template_footer_rows)} rows)")
-            
+        self.template_footer_rows = []
+        for row in self.layout_obj.footer_rows:
+            row_dict = {
+                "relative_index": row.relative_index,
+                "height": row.height,
+                "cells": [],
+                "merges": []
+            }
+            for cell in row.cells:
+                c_dict = {"col_index": cell.col_index}
+                if cell.value is not None:
+                    c_dict["value"] = cell.value
+                if cell.style:
+                    c_dict["style"] = cell.style.to_dict()
+                row_dict["cells"].append(c_dict)
+                
+                if cell.merge:
+                    row_dict["merges"].append({
+                        "min_col": cell.merge.min_col,
+                        "max_col": cell.merge.max_col,
+                        "row_span": cell.merge.row_span,
+                        "value": cell.merge.value
+                    })
+            self.template_footer_rows.append(row_dict)
+
+        if self.template_footer_rows:
             if self.header_end_row <= 0:
                 logger.error(
                     "[JsonTemplateStateBuilder] header_end_row is 0 or negative — "
@@ -169,192 +208,30 @@ class JsonTemplateStateBuilder:
                 self.template_footer_start_row = -1
             else:
                 self.template_footer_start_row = self.header_end_row + 1
-            max_rel_idx = max((r.get('relative_index', 0) for r in self.template_footer_rows), default=-1)
+            max_rel_idx = max((r.relative_index for r in self.layout_obj.footer_rows), default=-1)
             self.template_footer_end_row = (self.template_footer_start_row + max_rel_idx) if max_rel_idx >= 0 else -1
             
             # Update max_col based on new footer cells
-            for r_dict in self.template_footer_rows:
-                for c_dict in r_dict.get('cells', []):
-                    c_idx = c_dict.get('col_index', 1)
-                    if not hasattr(self, 'max_col') or c_idx > self.max_col:
-                        self.max_col = c_idx
-                for m_dict in r_dict.get('merges', []):
-                    c_idx = m_dict.get('max_col', 1)
-                    if not hasattr(self, 'max_col') or c_idx > self.max_col:
-                        self.max_col = c_idx
+            for row in self.layout_obj.footer_rows:
+                for cell in row.cells:
+                    self.max_col = max(self.max_col, cell.col_index)
+                    if cell.merge:
+                        self.max_col = max(self.max_col, cell.merge.max_col)
         else:
-            # --- OLD COORDINATE FORMAT (Fallback) ---
-            logger.info(f"[JsonTemplateStateBuilder] Using old coordinate-based footer format")
-            footer_content = self.layout_data.get('footer_content', {})
-            footer_styles_raw = self.layout_data.get('footer_styles', {})
-            footer_styles = _flatten_grouped_styles(footer_styles_raw)
-            footer_merges_raw = self.layout_data.get('footer_merges', [])
-            self.footer_merged_cells = list(footer_merges_raw.keys()) if isinstance(footer_merges_raw, dict) else footer_merges_raw
-            
-            self.footer_state, self.template_footer_end_row = self._build_state_grid(footer_content, footer_styles, is_header=False)
-            
-            # Determine footer start row
-            footer_row_heights = self.layout_data.get('footer_row_heights', {})
-            
-            if footer_content or footer_styles or self.footer_merged_cells or footer_row_heights:
-                all_keys = list(footer_content.keys()) + list(footer_styles.keys())
-                min_r = float('inf')
-                
-                # Check content and styles coordinates
-                for k in all_keys:
-                    try:
-                        _, r = coordinate_from_string(k)
-                        if r < min_r: min_r = r
-                    except Exception as e:
-                        logger.warning(f"[JsonTemplateStateBuilder] Bad coordinate key '{k}' in old footer format: {e}")
-                    
-                # Check merged cells
-                from openpyxl.utils.cell import range_boundaries
-                for merge in self.footer_merged_cells:
-                    try:
-                        _, min_row, _, _ = range_boundaries(merge)
-                        if min_row < min_r: min_r = min_row
-                    except Exception as e:
-                        logger.warning(f"[JsonTemplateStateBuilder] Bad merge range '{merge}' in old footer format: {e}")
-                    
-                # Prevent overlap
-                minimum_safe_footer_row = (self.header_end_row + 1) if self.header_end_row > 0 else 1
-                
-                if min_r != float('inf'):
-                    self.template_footer_start_row = max(min_r, minimum_safe_footer_row)
-                    if min_r < minimum_safe_footer_row:
-                        logger.warning(
-                            f"[JsonTemplateStateBuilder] Detected footer marker at row {min_r}, "
-                            f"but this overlaps with header/data area. Forcing footer start to {minimum_safe_footer_row}."
-                        )
-                else:
-                    self.template_footer_start_row = -1
-                    
-                if self.template_footer_start_row == -1:
-                    fallback_row = (self.header_end_row + 1) if self.header_end_row > 0 else -1
-                    if fallback_row > 0:
-                        self.template_footer_start_row = fallback_row
-                    else:
-                        logger.error("[JsonTemplateStateBuilder] Failed to resolve old footer logic.")
-                        
-            # Normalize Footer State to Relative Coordinates
-            if self.template_footer_start_row > 0:
-                for r_str, h in footer_row_heights.items():
-                    try:
-                        r = int(r_str)
-                        if r >= self.template_footer_start_row:
-                            rel_r = r - self.template_footer_start_row
-                            self.relative_footer_row_heights[rel_r] = h
-                    except ValueError:
-                        logger.warning(f"[JsonTemplateStateBuilder] Non-integer row key '{r_str}' in footer_row_heights — skipped.")
-                    
-                from openpyxl.utils.cell import range_boundaries
-                for merge in self.footer_merged_cells:
-                    try:
-                        min_col, min_row, max_col, max_row = range_boundaries(merge)
-                        if min_row >= self.template_footer_start_row:
-                            rel_min = min_row - self.template_footer_start_row
-                            rel_max = max_row - self.template_footer_start_row
-                            self.relative_footer_merges.append((min_col, rel_min, max_col, rel_max))
-                    except ValueError as e:
-                        logger.warning(f"[JsonTemplateStateBuilder] Bad merge range '{merge}' in relative_footer_merges: {e}")
-            
+            self.template_footer_start_row = -1
+            self.template_footer_end_row = -1
+
         # Update max_col
         if self.column_widths:
-            self.max_col = max(self.column_widths.keys())
+            self.max_col = max(self.max_col, max(self.column_widths.keys()))
         
-        # CRITICAL FIX: Update max_row to reflect the actual last row in the template
-        # This is used by layout_builder.py line 608 to calculate footer row count:
-        #   template_footer_rows = self.template_state_builder.max_row - self.template_state_builder.template_footer_start_row + 1
-        # Without this, max_row stays at default value of 1, causing wrong footer placement
+        # Update max_row
         if self.template_footer_end_row > 0:
             self.max_row = self.template_footer_end_row
         elif self.header_end_row > 0:
             self.max_row = self.header_end_row
 
-    def _build_state_grid(self, content_map: Dict, style_map: Dict, is_header: bool) -> tuple:
-        """
-        Converts coordinate-based maps (e.g., "A1": val) into a row-major list-of-lists grid.
 
-        Args:
-            content_map: Dictionary mapping coordinates to cell values (e.g., {"A1": "Invoice"}).
-            style_map: Dictionary mapping coordinates to style dictionaries.
-            is_header: Boolean flag used for debug logging context.
-
-        Returns:
-            A tuple (state_grid, max_row_index):
-                - state_grid: List[List[Dict]] where each inner Dict represents a cell's properties
-                  (value, font, border, fill, alignment, number_format).
-                - max_row_index: The highest 1-based row index found in the input maps.
-        """
-        # DEBUG INPUT
-        logger.debug(f"[JsonTemplateStateBuilder] _build_state_grid INPUT: is_header={is_header}, content_keys={len(content_map) if content_map else 0}")
-
-        if not content_map and not style_map:
-            return [], 0
-
-        # Find bounds
-        all_coords = set(content_map.keys()) | set(style_map.keys())
-        if not all_coords:
-            return [], 0
-            
-        rows = set()
-        cols = set()
-        for coord in all_coords:
-            try:
-                c, r = coordinate_from_string(coord)
-                rows.add(r)
-                cols.add(column_index_from_string(c))
-            except Exception as e:
-                logger.warning(f"[JsonTemplateStateBuilder] _build_state_grid: bad coordinate '{coord}': {e}")
-                continue
-                
-        if not rows: return [], 0
-        
-        min_r = min(rows)
-        max_r = max(rows)
-        max_c = max(cols) if cols else 1
-        
-        # Ensure we cover at least the columns defined in widths or arbitrary max
-        final_max_c = max(max_c, max(self.column_widths.keys()) if self.column_widths else 0)
-        
-        grid = []
-        
-        # Iterate row by row
-        for r in range(min_r, max_r + 1):
-            row_data = []
-            for c in range(1, final_max_c + 1):
-                col_letter = get_column_letter(c)
-                coord = f"{col_letter}{r}"
-                
-                # Extract value
-                raw_val = content_map.get(coord, None)
-                
-                # Extract style dict
-                style_entry = style_map.get(coord, {})
-                
-                # Option B Support: If the style is a string (hash ID), locate it in the palette 
-                if isinstance(style_entry, str):
-                    style_dict = self.style_palette.get(style_entry, {})
-                else:
-                    style_dict = style_entry
-                
-                # Convert style dict to OpenPyXL objects
-                cell_info = {
-                    'value': raw_val,
-                    'font': self._create_font(style_dict.get('font')),
-                    'fill': self._create_fill(style_dict.get('fill')),
-                    'border': self._create_border(style_dict.get('border')),
-                    'alignment': self._create_alignment(style_dict.get('alignment')),
-                    'number_format': style_dict.get('number_format', 'General')
-                }
-                row_data.append(cell_info)
-            grid.append(row_data)
-            
-            
-        # DEBUG OUTPUT
-        logger.debug(f"[JsonTemplateStateBuilder] _build_state_grid OUTPUT: grid_rows={len(grid)}, max_r={max_r}")
-        return grid, max_r
 
     def _parse_color(self, c_val) -> Optional[str]:
         if not c_val: return None
@@ -529,10 +406,8 @@ class JsonTemplateStateBuilder:
                         if resolved is not None:
                             target_cell.value = resolved
                         
-                    style_id = cell_dict.get('style_id')
-                    if style_id:
-                        style_dict = self.style_palette.get(style_id, {})
-                        
+                    style_dict = cell_dict.get('style')
+                    if style_dict:
                         font = self._create_font(style_dict.get('font'))
                         fill = self._create_fill(style_dict.get('fill'))
                         border = self._create_border(style_dict.get('border'))
@@ -562,49 +437,7 @@ class JsonTemplateStateBuilder:
                             logger.warning(f"[JsonTemplateStateBuilder] Skipped overlapping merge {new_range} on '{target_worksheet.title}'.")
             return
             
-        # --- OLD COORDINATE FORMAT (Fallback) ---
 
-        # GUARD: Refuse to restore if footer parsing failed.
-        if self.template_footer_start_row <= 0:
-            logger.error(
-                f"[JsonTemplateStateBuilder] Cannot restore footer: template_footer_start_row "
-                f"is {self.template_footer_start_row}. Footer parsing likely failed or no footer data found."
-            )
-            return
-
-        try:
-            # Check for empty state
-            if not getattr(self, 'footer_state', []) and not getattr(self, 'relative_footer_merges', []) and not getattr(self, 'relative_footer_row_heights', {}):
-                logger.warning(f"[JsonTemplateStateBuilder] Footer state is empty for '{target_worksheet.title}'. Nothing to restore.")
-
-            # 1. Restore Cell Values & Styles
-            for row_idx, row_data in enumerate(getattr(self, 'footer_state', [])):
-                # row_idx is already 0-indexed relative to start
-                actual_row = footer_start_row + row_idx
-                
-                for col_idx, cell_info in enumerate(row_data):
-                    template_col = col_idx + self.min_col
-                    output_col = self._get_mapped_column(template_col)
-                    
-                    if output_col is None: continue
-                    
-                    target_cell = target_worksheet.cell(row=actual_row, column=output_col)
-                    self._write_cell(target_cell, cell_info, mode=mode)
-
-            # 2. Restore Merged Cells (from relative tuples)
-            for merge_tuple in getattr(self, 'relative_footer_merges', []):
-                 self._apply_merge(target_worksheet, merge_tuple, start_row_offset=footer_start_row)
-                 
-            # 3. Restore Row Heights (from relative dict)
-            for rel_r, h in getattr(self, 'relative_footer_row_heights', {}).items():
-                actual_r = footer_start_row + rel_r
-                target_worksheet.row_dimensions[actual_r].height = h
-                
-        except Exception as e:
-            logger.error(
-                f"[JsonTemplateStateBuilder] Failed to restore footer on '{target_worksheet.title}': {e}",
-                exc_info=True
-            )
 
     @staticmethod
     def _resolve_mode_value(raw_value, mode: str = "standard"):

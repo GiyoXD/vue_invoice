@@ -326,31 +326,18 @@ class BundledConfigLoader:
         template_config = self.get_template_json_config()
         if template_config and sheet_name in template_config:
             sheet_layout = template_config[sheet_name]
-            max_col = 0
-            
-            # 1. Scan cell text coordinates (e.g. "A1", "E3")
-            header_content = sheet_layout.get('template_header_content', {})
-            if isinstance(header_content, dict) and header_content:
-                for cell_ref in header_content.keys():
-                    match = re.match(r"([A-Z]+)(\d+)", cell_ref)
-                    if match:
-                        col_idx = column_index_from_string(match.group(1))
-                        if col_idx > max_col:
-                            max_col = col_idx
-            
-            # 2. Scan merged ranges (e.g. "E3:F4") to capture full span width
-            header_merges = sheet_layout.get('template_header_merges', {})
-            if isinstance(header_merges, dict) and header_merges:
-                for merge_ref in header_merges.keys():
-                    match = re.search(r":([A-Z]+)\d+", merge_ref)
-                    if match:
-                        col_idx = column_index_from_string(match.group(1))
-                        if col_idx > max_col:
-                            max_col = col_idx
-                            
-            if max_col > 0:
-                logger.debug(f"[PrintArea] Safe max column {max_col} from template JSON for '{sheet_name}'")
-                return max_col
+            from core.blueprint_generator.internal.scanner.models import TemplateLayout
+            layout = TemplateLayout.from_dict(sheet_layout)
+            if layout:
+                max_col = 0
+                for row in layout.header_rows:
+                    for cell in row.cells:
+                        max_col = max(max_col, cell.col_index)
+                        if cell.merge:
+                            max_col = max(max_col, cell.merge.max_col)
+                if max_col > 0:
+                    logger.debug(f"[PrintArea] Safe max column {max_col} from template JSON for '{sheet_name}'")
+                    return max_col
 
         layout = self.get_layout_config(sheet_name)
         columns = layout.get('structure', {}).get('columns', [])

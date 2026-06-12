@@ -294,20 +294,33 @@ class BlueprintService:
 
         # Inject parsed client profile so the Template Inspector can display it
         from core.invoice_generator.extractors.template_client_profile_parser import TemplateClientProfileParser
+        from core.blueprint_generator.internal.scanner.models import TemplateLayout
+        from openpyxl.utils import get_column_letter
+
         invoice_sheet = data.get("template_layout", {}).get("Invoice", {})
-        header_content = invoice_sheet.get("template_header_content") or invoice_sheet.get("header_content")
-        if header_content:
-            parser = TemplateClientProfileParser(header_content)
-            data["client_profile"] = {
-                "fullname": parser.get_client_fullname(),
-                "address":  parser.get_client_address(),
-                "contact":  parser.get_client_contact(),
-                "shipping": parser.get_shipping_method(),
-            }
+        if invoice_sheet:
+            layout = TemplateLayout.from_dict(invoice_sheet)
+            header_content = {}
+            for row_obj in layout.header_rows:
+                r_idx = row_obj.relative_index + 1
+                for cell in row_obj.cells:
+                    if cell.value is not None:
+                        coord = f"{get_column_letter(cell.col_index)}{r_idx}"
+                        header_content[coord] = cell.value
+
+            if header_content:
+                parser = TemplateClientProfileParser(header_content)
+                data["client_profile"] = {
+                    "fullname": parser.get_client_fullname(),
+                    "address":  parser.get_client_address(),
+                    "contact":  parser.get_client_contact(),
+                    "shipping": parser.get_shipping_method(),
+                }
         return data
 
     def update_blueprint_cell(self, customer_code: str, locale: str, sheet_name: str, cell_address: str, overrides: Dict[str, str]) -> bool:
-        from openpyxl.utils.cell import coordinate_from_string, column_index_from_string, range_boundaries
+        from openpyxl.utils.cell import coordinate_from_string, column_index_from_string
+        from core.blueprint_generator.internal.scanner.models import TemplateLayout, UnitRow, UnitCell
         row = self.repository.get_blueprint(customer_code, locale)
         if not row:
             return False
@@ -316,80 +329,70 @@ class BlueprintService:
         sheet = data.get("template_layout", {}).get(sheet_name)
         if not sheet:
             return False
-        
-        def get_max_row(content, merges, styles=None):
-            max_r = 0
-            for addr in content.keys():
-                try:
-                    _, r = coordinate_from_string(addr); max_r = max(max_r, r)
-                except Exception:
-                    pass
-            m_list = merges if isinstance(merges, list) else merges.keys() if isinstance(merges, dict) else []
-            for m in m_list:
-                try:
-                    _, _, _, mr = range_boundaries(m); max_r = max(max_r, mr)
-                except Exception:
-                    pass
-            if styles:
-                for key, value in styles.items():
-                    if isinstance(value, list):
-                        for coord in value:
-                            try:
-                                _, r = coordinate_from_string(coord); max_r = max(max_r, r)
-                            except Exception:
-                                pass
-                    elif isinstance(value, (dict, str)):
-                        try:
-                            _, r = coordinate_from_string(key); max_r = max(max_r, r)
-                        except Exception:
-                            pass
-            return max_r
 
-        h_content = sheet.get("template_header_content") or sheet.get("header_content", {})
-        h_styles = sheet.get("template_header_styles") or sheet.get("header_styles", {})
-        h_max = get_max_row(h_content, sheet.get("template_header_merges") or sheet.get("header_merges", []), styles=h_styles)
+        layout = TemplateLayout.from_dict(sheet)
+        if not layout:
+            return False
+
         try:
             col_letter, row_val = coordinate_from_string(cell_address)
             col_idx = column_index_from_string(col_letter)
         except Exception:
             return False
-        is_f = row_val > h_max
+
+        max_header_r = max((r.relative_index + 1 for r in layout.header_rows), default=0)
+        is_f = row_val > max_header_r
 
         if is_f:
-            rel = row_val - h_max - 1
-            f_rows = sheet.get("template_footer_rows") or sheet.get("footer_rows", [])
-            row_item = next((r for r in f_rows if r.get('relative_index') == rel), None)
+            rel = row_val - max_header_r - 1
+            # Find or create UnitRow in footer_rows
+            row_item = next((r for r in layout.footer_rows if r.relative_index == rel), None)
             if not row_item:
-                row_item = {"relative_index": rel, "cells": [], "merges": []}
-                f_rows.append(row_item)
-                sheet["template_footer_rows"] = sorted(f_rows, key=lambda x: x.get('relative_index', 0))
-            cells = row_item.get("cells", [])
-            cell = next((c for c in cells if c.get('col_index') == col_idx), None)
+                row_item = UnitRow(relative_index=rel, cells=[])
+                layout.footer_rows.append(row_item)
+                layout.footer_rows.sort(key=lambda r: r.relative_index)
+            
+            # Find or create UnitCell
+            cell = next((c for c in row_item.cells if c.col_index == col_idx), None)
             if not cell:
-                cell = {"col_index": col_idx, "value": ""}
-                cells.append(cell)
-                row_item["cells"] = sorted(cells, key=lambda x: x.get('col_index', 1))
-            val = cell.get("value")
-            curr_map = val if isinstance(val, dict) else {"default": str(val) if val is not None else ""}
-            for m, v in overrides.items():
-                if v is None or (isinstance(v, str) and not v.strip()):
-                    if m in curr_map: del curr_map[m]
-                else: curr_map[m] = v
-            if len(curr_map) == 1 and "default" in curr_map: cell["value"] = curr_map["default"]
-            elif not curr_map: cell["value"] = ""
-            else: cell["value"] = curr_map
+                cell = UnitCell(col_index=col_idx)
+                row_item.cells.append(cell)
+                row_item.cells.sort(key=lambda c: c.col_index)
         else:
-            val = h_content.get(cell_address)
-            curr_map = val if isinstance(val, dict) else {"default": str(val) if val is not None else ""}
-            for m, v in overrides.items():
-                if v is None or (isinstance(v, str) and not v.strip()):
-                    if m in curr_map: del curr_map[m]
-                else: curr_map[m] = v
-            if len(curr_map) == 1 and "default" in curr_map: h_content[cell_address] = curr_map["default"]
-            elif not curr_map:
-                if cell_address in h_content: del h_content[cell_address]
-            else: h_content[cell_address] = curr_map
+            rel = row_val - 1
+            # Find or create UnitRow in header_rows
+            row_item = next((r for r in layout.header_rows if r.relative_index == rel), None)
+            if not row_item:
+                row_item = UnitRow(relative_index=rel, cells=[])
+                layout.header_rows.append(row_item)
+                layout.header_rows.sort(key=lambda r: r.relative_index)
+            
+            # Find or create UnitCell
+            cell = next((c for c in row_item.cells if c.col_index == col_idx), None)
+            if not cell:
+                cell = UnitCell(col_index=col_idx)
+                row_item.cells.append(cell)
+                row_item.cells.sort(key=lambda c: c.col_index)
 
+        # Apply overrides
+        val = cell.value
+        curr_map = val if isinstance(val, dict) else {"default": str(val) if val is not None else ""}
+        for m, v in overrides.items():
+            if v is None or (isinstance(v, str) and not v.strip()):
+                if m in curr_map:
+                    del curr_map[m]
+            else:
+                curr_map[m] = v
+
+        if len(curr_map) == 1 and "default" in curr_map:
+            cell.value = curr_map["default"]
+        elif not curr_map:
+            cell.value = ""
+        else:
+            cell.value = curr_map
+
+        # Save back to database representation
+        data["template_layout"][sheet_name] = layout.to_dict()
         row.template_json = data
         self.db.commit()
         
