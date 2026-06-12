@@ -4,15 +4,12 @@ Template Cleaner - Cleans raw Excel files to create blank templates.
 This module is responsible for:
 1. Stripping data rows from populated invoices/packing lists.
 2. Preserving header rows and styling.
-3. Injecting system placeholders (JFINV, JFTIME, etc.) into specific cells.
 """
 
 import logging
-from typing import Dict, Any, Tuple
+from typing import List
 import openpyxl
 from openpyxl.cell.cell import MergedCell
-
-from .scanner import TemplateAnalysisResult
 
 logger = logging.getLogger(__name__)
 
@@ -22,28 +19,18 @@ class ExcelTemplateSanitizer:
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    def sanitize_template(self, workbook: openpyxl.Workbook, analysis: TemplateAnalysisResult) -> Tuple[openpyxl.Workbook, Dict[str, Any]]:
+    def sanitize_template(self, workbook: openpyxl.Workbook, analyzed_sheet_names: List[str]) -> openpyxl.Workbook:
         """
-        Clean the provided workbook based on analysis.
+        Clean the provided workbook by removing/clearing analyzed sheets.
         
         Args:
             workbook: openpyxl Workbook object (raw file)
-            analysis: TemplateAnalysisResult
+            analyzed_sheet_names: List of sheet names that were analyzed
             
         Returns:
-            Tuple of (Cleaned Workbook, layout_metadata_dict)
+            Cleaned Workbook object
         """
-        self.logger.info(f"Cleaning template for {analysis.customer_code}...")
-        
-        layout_metadata = {}
-        
-        for sheet_analysis in analysis.sheets:
-            if sheet_analysis.name in workbook.sheetnames:
-                # Retrieve the static layout that was captured by the TemplateScanner during the scanning phase
-                if sheet_analysis.static_layout:
-                    layout_metadata[sheet_analysis.name] = sheet_analysis.static_layout
-                else:
-                    self.logger.warning(f"  Missing static layout for sheet: {sheet_analysis.name}")
+        self.logger.info("Cleaning template sheets...")
         
         # === NEW OPTIMIZATION ===
         # Delete all mapped sheets from the workbook entirely!
@@ -51,10 +38,10 @@ class ExcelTemplateSanitizer:
         # the "Unknown/Static" sheets (like Terms & Conditions). 
         # By deleting the mapped sheets, we guarantee no customer data is leaked, 
         # and we avoid all openpyxl row-shifting overhead.
-        analyzed_sheet_names = {sheet.name for sheet in analysis.sheets}
+        analyzed_set = set(analyzed_sheet_names)
         remaining_sheets = list(workbook.sheetnames)
         for sheet_name in list(workbook.sheetnames):
-            if sheet_name in analyzed_sheet_names:
+            if sheet_name in analyzed_set:
                 if len(remaining_sheets) > 1:
                     self.logger.info(f"Removing mapped sheet '{sheet_name}' from bundled XLSX (JSON-only mode)")
                     del workbook[sheet_name]
@@ -67,4 +54,5 @@ class ExcelTemplateSanitizer:
                             if not isinstance(cell, MergedCell):
                                 cell.value = None
                 
-        return workbook, layout_metadata
+        return workbook
+

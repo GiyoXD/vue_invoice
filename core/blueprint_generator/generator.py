@@ -260,8 +260,15 @@ class BlueprintGenerator:
     def _compile_template_assets(self, wb: openpyxl.Workbook, analysis: TemplateAnalysisResult, 
                                  template_path: Path, existing_template_json: Optional[Dict[str, Any]] = None) -> Tuple[Dict[str, Any], bytes]:
         """Sanitize workbook template and build template JSON layout metadata and XLSX bytes."""
+        layout_metadata = {}
+        for sheet_analysis in analysis.sheets:
+            if sheet_analysis.static_layout:
+                layout_metadata[sheet_analysis.name] = sheet_analysis.static_layout
+            else:
+                self.logger.warning(f"  Missing static layout for sheet: {sheet_analysis.name}")
+
         sanitizer = ExcelTemplateSanitizer()
-        cleaned_wb, layout_metadata = sanitizer.sanitize_template(wb, analysis)
+        cleaned_wb = sanitizer.sanitize_template(wb, [sheet.name for sheet in analysis.sheets])
         
         preserved_notes = self._preserve_user_overrides(None, layout_metadata, old_data=existing_template_json)
         

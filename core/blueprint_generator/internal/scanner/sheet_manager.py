@@ -60,7 +60,6 @@ class SheetManager:
             static_layout = self.template_scanner.scan_static_content(
                 worksheet=worksheet, 
                 boundaries=boundaries, 
-                footer_info=table_layout.footer_info, 
                 columns=table_layout.columns, 
                 sheet_name=sheet_name
             )
@@ -87,7 +86,7 @@ class SheetManager:
                 warning_msg = (
                     f"[{sheet_name}] ⚠️ Footer (Total row) NOT detected. "
                     f"WHAT TO DO: Ensure the sheet has a row starting with 'TOTAL' or 'TOTAL AMOUNT'. "
-                    f"If the label is different, update 'footer_scanner.py' or 'mapping_config.json'."
+                    f"If the label is different, update 'tabular_scanner.py' or 'mapping_config.json'."
                 )
                 self.logger.warning(warning_msg)
                 setattr(sheet_analysis, "_temp_warning", warning_msg)

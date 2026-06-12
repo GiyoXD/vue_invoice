@@ -17,10 +17,8 @@ class MockColumnInfo:
     colspan: int = 1
 
 
-# Import the functions under test
-from core.blueprint_generator.utils.footer_scanner import (
+from core.blueprint_generator.internal.scanner.tabular_scanner import (
     find_column_id_by_index,
-    scan_footer,
 )
 from core.blueprint_generator.utils.content_extractor import (
     find_total_label_cell,
@@ -476,20 +474,8 @@ class TestExcelTemplateSanitizer(unittest.TestCase):
         ws2.merge_cells("B1:C2")
         ws2["B1"] = "Merged Secret Data"
 
-        sheet_analysis1 = MagicMock(spec=SheetAnalysis)
-        sheet_analysis1.name = "Sheet1"
-        
-        sheet_analysis2 = MagicMock(spec=SheetAnalysis)
-        sheet_analysis2.name = "Sheet2"
-
-        analysis = MagicMock(spec=TemplateAnalysisResult)
-        analysis.customer_code = "TEST"
-        analysis.sheets = [sheet_analysis1, sheet_analysis2]
-
         sanitizer = ExcelTemplateSanitizer()
-        sanitizer._clean_sheet = MagicMock(return_value={})
-
-        cleaned_wb, layout = sanitizer.sanitize_template(wb, analysis)
+        cleaned_wb = sanitizer.sanitize_template(wb, ["Sheet1", "Sheet2"])
 
         self.assertEqual(len(cleaned_wb.sheetnames), 1)
         remaining_sheet_name = cleaned_wb.sheetnames[0]

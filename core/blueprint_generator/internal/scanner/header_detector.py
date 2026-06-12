@@ -274,7 +274,8 @@ class BoundaryDetector:
         return ZoneBoundaries(
             header_row=header_row,
             data_start_row=data_start_row,
-            footer_row=footer_row
+            footer_row=footer_row,
+            max_col=max_col
         )
 
     def _find_footer_row_by_formula_adjacency(self, ws: Worksheet, start_row: int, end_row: int, max_col: int) -> Optional[int]:

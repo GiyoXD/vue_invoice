@@ -8,8 +8,7 @@ from openpyxl.cell.cell import Cell, MergedCell
 from openpyxl.utils import get_column_letter
 
 from core.utils.loop_profiler import tick
-from core.blueprint_generator.utils.footer_scanner import FooterInfo
-from .models import ZoneBoundaries, ColumnInfo
+from .models import ZoneBoundaries, ColumnInfo, FooterInfo
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,7 @@ class TemplateScanner:
         self.DEFAULT_ROW_HEIGHT = 15.0  # Excel default row height in points
         self.DEFAULT_COL_WIDTH = 8.43   # Excel default column width in characters
 
-    def scan_static_content(self, worksheet: Worksheet, boundaries: ZoneBoundaries, footer_info: Optional[FooterInfo], columns: List[ColumnInfo], sheet_name: str) -> Dict[str, Any]:
+    def scan_static_content(self, worksheet: Worksheet, boundaries: ZoneBoundaries, columns: List[ColumnInfo], sheet_name: str) -> Dict[str, Any]:
         """
         Scan static content zones outside the table area (Zone 1 & 3).
         Returns the layout metadata dictionary.
@@ -50,35 +49,14 @@ class TemplateScanner:
                 local_style_palette[style_hash] = style_dict
             return style_hash
             
-        safe_max_column = self._determine_safe_max_column(worksheet, columns, boundaries)
-        table_footer_row = boundaries.footer_row if boundaries.footer_row is not None else (footer_info.row_num if footer_info else None)
+        safe_max_column = boundaries.max_col
         
         self._capture_global_layout(worksheet, safe_max_column, preserved_layout)
         self._capture_template_header_layout(worksheet, boundaries, safe_max_column, preserved_layout, process_and_store_style)
-        self._capture_template_footer(worksheet, boundaries, safe_max_column, preserved_layout, process_and_store_style, table_footer_row, sheet_name)
+        self._capture_template_footer(worksheet, boundaries, safe_max_column, preserved_layout, process_and_store_style, sheet_name)
         
         preserved_layout["style_palette"] = local_style_palette
         return preserved_layout
-
-    def _determine_safe_max_column(self, ws: Worksheet, columns: List[ColumnInfo], boundaries: ZoneBoundaries) -> int:
-        table_cur_max = 0
-        if columns:
-            for col in columns:
-                end_col = col.col_index + (col.colspan - 1)
-                if end_col > table_cur_max:
-                    table_cur_max = end_col
-        
-        header_max_col = 0
-        if boundaries.header_row > 1:
-            for row in ws.iter_rows(min_row=1, max_row=boundaries.header_row - 1, min_col=1, max_col=40):
-                for cell in row:
-                    if cell.value is not None and cell.column > header_max_col:
-                        header_max_col = cell.column
-        
-        dynamic_limit = max(table_cur_max, header_max_col) + 1
-        safe_max_column = min(ws.max_column, 40, dynamic_limit)
-        self.logger.info(f"    Dynamic Column Scan Limit: {safe_max_column} (Table Max: {table_cur_max}, Header Max: {header_max_col})")
-        return safe_max_column
 
     def _capture_global_layout(self, ws: Worksheet, safe_max_column: int, preserved_layout: dict):
         # Cache grouped dimension ranges (openpyxl stores <col min="1" max="5" width="20"/>
@@ -108,7 +86,7 @@ class TemplateScanner:
                  val_clean = val.strip()
                  preserved_layout["template_header_merges"][range_str] = val_clean
                  
-        for r in range(1, boundaries.header_row):
+        for r in boundaries.template_header_range:
             if r in ws.row_dimensions:
                 h = ws.row_dimensions[r].height
                 if h is not None:
@@ -137,17 +115,16 @@ class TemplateScanner:
                             preserved_layout["template_header_styles"][style_id] = []
                         preserved_layout["template_header_styles"][style_id].append(coord)
 
-    def _capture_template_footer(self, ws: Worksheet, boundaries: ZoneBoundaries, safe_max_column: int, preserved_layout: dict, process_and_store_style, table_footer_row: Optional[int], sheet_name: str):
-        if table_footer_row is None:
+    def _capture_template_footer(self, ws: Worksheet, boundaries: ZoneBoundaries, safe_max_column: int, preserved_layout: dict, process_and_store_style, sheet_name: str):
+        if boundaries.footer_row is None:
             self.logger.warning(
                 f"    [SKIP] Sheet '{sheet_name}': table footer (TOTAL row) not found "
                 f"(scanned from row {boundaries.header_row + 1} to end-of-sheet). "
                 f"Treating as Form/Static sheet."
             )
             return
-        else:
-            end_delete = table_footer_row
 
+        end_delete = boundaries.footer_row
         start_delete = boundaries.header_row
         
         preserved_layout["template_header_images"] = []
@@ -155,7 +132,6 @@ class TemplateScanner:
         
         self.logger.info(f"    Capturing footer data (Rows {end_delete + 1} to EOF)")
         
-        template_footer_merges = []
         footer_merge_map_by_row = {}
         # Capture merges for JSON metadata
         for merged_range in list(ws.merged_cells):
@@ -167,13 +143,9 @@ class TemplateScanner:
                     footer_merge_map_by_row[m_min_row] = []
                 footer_merge_map_by_row[m_min_row].append(merge_tuple)
 
-        template_footer_heights = []
         template_footer_rows = []
-        # CAP THE FOOTER SCAN to prevent a corrupted max_row (e.g. 1,000,000) from hanging the loop.
-        # An invoice footer is rarely more than 100 rows.
-        current_max_row = min(ws.max_row, end_delete + 100)
         
-        for r in range(end_delete + 1, current_max_row + 1):
+        for r in boundaries.template_footer_range(ws.max_row):
             tick("scanner._capture_template_footer", sub="rows_processed")
             rel_r = r - (end_delete + 1)
             row_dict = {
@@ -187,7 +159,6 @@ class TemplateScanner:
                 h = ws.row_dimensions[r].height
                 if h is not None:
                     row_dict["height"] = h
-                    template_footer_heights.append((r, h))
                     
             if r in footer_merge_map_by_row:
                 for (old_min_r, min_c, old_max_r, max_c) in footer_merge_map_by_row[r]:

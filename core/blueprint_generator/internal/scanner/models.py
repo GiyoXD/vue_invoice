@@ -1,6 +1,20 @@
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
-from core.blueprint_generator.utils.footer_scanner import FooterInfo
+
+@dataclass
+class FooterInfo:
+    """Information about the footer structure."""
+    row_num: int
+    total_text: str
+    total_text_col_id: str
+    merge_curr_colspan: int
+    pallet_count_col_id: Optional[str] = None
+    has_hs_code: bool = False
+    hs_code_text: Optional[str] = None
+    hs_code_colspan: int = 1
+    hs_code_col_id: Optional[str] = None
+    is_exact: bool = True
+
 
 @dataclass
 class ZoneBoundaries:
@@ -8,6 +22,27 @@ class ZoneBoundaries:
     header_row: int
     data_start_row: int
     footer_row: Optional[int] = None
+    max_col: int = 40
+
+    @property
+    def template_header_range(self) -> range:
+        """Range of rows for template header content (Zone 1)."""
+        return range(1, self.header_row)
+
+    @property
+    def table_range(self) -> range:
+        """Range of rows for the entire table (Zone 2), from header to footer inclusive."""
+        if self.footer_row is None:
+            return range(self.header_row, self.header_row + 1)
+        return range(self.header_row, self.footer_row + 1)
+
+    def template_footer_range(self, max_row: int) -> range:
+        """Range of rows for template footer content (Zone 3)."""
+        if self.footer_row is None:
+            return range(0, 0)
+        limit_row = min(max_row, self.footer_row + 100)  # prevent ghost rows
+        return range(self.footer_row + 1, limit_row + 1)
+
 
 
 @dataclass

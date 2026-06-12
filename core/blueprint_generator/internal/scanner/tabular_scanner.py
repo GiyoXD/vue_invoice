@@ -6,12 +6,16 @@ from openpyxl.worksheet.worksheet import Worksheet
 from core.blueprint_generator.schema import BlueprintSchema
 from core.utils.loop_profiler import loop_profiler, tick
 from core.blueprint_generator.utils.openpyxl_utils import get_actual_column_width
-from .models import ColumnInfo, TableLayout, ZoneBoundaries
+from .models import ColumnInfo, TableLayout, ZoneBoundaries, FooterInfo
 from .header_detector import get_cell_value
-from core.blueprint_generator.utils.footer_scanner import scan_footer
 from core.blueprint_generator.utils.content_extractor import (
     detect_static_description_label,
-    extract_static_column_values
+    extract_static_column_values,
+    find_total_label_cell,
+    find_pallet_count_column,
+    find_footer_hs_code,
+    get_cell_merge_colspan,
+    _get_cell_value_safe
 )
 
 logger = logging.getLogger(__name__)
@@ -264,6 +268,22 @@ def scan_columns(worksheet: Worksheet,
     return scanner.scan()
 
 
+def find_column_id_by_index(col_index: int, columns: List[ColumnInfo]) -> Optional[str]:
+    """
+    Map a raw Excel column index (1-based) to its corresponding column ID.
+    
+    Checks both exact match and colspan range (for merged header columns).
+    Returns None if no matching column is found.
+    """
+    for col in columns:
+        if col.col_index == col_index:
+            return col.id
+        if col.col_index <= col_index < col.col_index + col.colspan:
+            return col.id
+    logger.warning(f"    ⚠ Column index {col_index} not covered by any detected column. Check template header detection.")
+    return None
+
+
 class TabularScanner:
     """Scans the entire table zone (Zone 2): columns, styling, and footer."""
 
@@ -282,10 +302,9 @@ class TabularScanner:
         row_heights = self.extract_row_heights(worksheet, boundaries.header_row, "dataset_default", boundaries.data_start_row)
         
         # 4. Scan footer
-        footer_info = scan_footer(
-            worksheet, boundaries.header_row, columns, logger,
-            sheet_name=sheet_name, mapping_config=mapping_config, skip_hs_scan=skip_hs_scan,
-            footer_row=boundaries.footer_row
+        footer_info = self.scan_footer(
+            worksheet, boundaries, columns, 
+            mapping_config=mapping_config, skip_hs_scan=skip_hs_scan
         )
         
         # 5. Detect static content hints (description fallback, static lines) from the table
@@ -304,6 +323,70 @@ class TabularScanner:
             has_multi_row_header=has_multi_row,
             footer_info=footer_info,
             static_content_hints=static_hints
+        )
+
+    @loop_profiler.watch("tabular_scanner.scan_footer")
+    def scan_footer(self, worksheet: Worksheet, boundaries: ZoneBoundaries, 
+                    columns: List[ColumnInfo], mapping_config: Optional[Dict[str, Any]] = None, 
+                    skip_hs_scan: bool = False) -> Optional[FooterInfo]:
+        """
+        Analyze the footer structure by extracting cell info at the pre-detected footer row.
+        """
+        if boundaries.footer_row is None:
+            return None
+            
+        footer_row = boundaries.footer_row
+        sheet_name = worksheet.title
+
+        # --- Step 1: Find the TOTAL label cell on the footer row ---
+        result = find_total_label_cell(worksheet, footer_row, footer_row, mapping_config, logger, sheet_name)
+        if not result:
+            found_cell = None
+            for col in range(1, boundaries.max_col + 1):
+                cell = worksheet.cell(row=footer_row, column=col)
+                val = _get_cell_value_safe(worksheet, cell)
+                if val and not val.strip().startswith('='):
+                    found_cell = cell
+                    break
+            if not found_cell:
+                found_cell = worksheet.cell(row=footer_row, column=1)
+            is_exact = False
+        else:
+            found_cell, is_exact = result
+
+        # --- Step 2: Determine merge colspan at the TOTAL cell ---
+        colspan = get_cell_merge_colspan(worksheet, found_cell)
+
+        # --- Step 3: Map TOTAL cell position to column ID ---
+        total_col_id = find_column_id_by_index(found_cell.column, columns)
+        if not total_col_id:
+            logger.warning(f"    ⚠ [{sheet_name}] TOTAL label at column {found_cell.column} could not be mapped to a column ID.")
+
+        # --- Step 4: Find pallet count column on the same row ---
+        pallet_col_id = find_pallet_count_column(worksheet, footer_row, columns, find_column_id_by_index, logger, sheet_name)
+
+        # --- Step 5: Find HS Code around the footer row ---
+        hs_code_text, hs_code_colspan, hs_code_col_idx = None, 1, None
+        if not skip_hs_scan:
+            hs_start_row = max(boundaries.header_row + 1, footer_row - BlueprintSchema.FOOTER_HS_SEARCH_WINDOW)
+            hs_end_row = min(worksheet.max_row, footer_row + BlueprintSchema.FOOTER_HS_SEARCH_WINDOW)
+            hs_code_text, hs_code_colspan, hs_code_col_idx = find_footer_hs_code(worksheet, hs_start_row, hs_end_row)
+
+        hs_code_col_id = None
+        if hs_code_col_idx:
+            hs_code_col_id = find_column_id_by_index(hs_code_col_idx, columns)
+
+        return FooterInfo(
+            row_num=footer_row,
+            total_text=str(found_cell.value).strip() if found_cell.value is not None else "",
+            total_text_col_id=total_col_id,
+            merge_curr_colspan=colspan,
+            pallet_count_col_id=pallet_col_id,
+            has_hs_code=bool(hs_code_text),
+            hs_code_text=hs_code_text,
+            hs_code_colspan=hs_code_colspan,
+            hs_code_col_id=hs_code_col_id,
+            is_exact=is_exact
         )
 
     @loop_profiler.watch("scanner._detect_static_content")
