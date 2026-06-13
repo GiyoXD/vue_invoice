@@ -230,6 +230,6 @@ class TemplateLayout:
             header_rows=[UnitRow.from_dict(r) for r in d.get("header_rows", [])],
             footer_rows=[UnitRow.from_dict(r) for r in d.get("footer_rows", [])],
             col_widths=d.get("col_widths", {}),
-            header_images=d.get("header_images", []) or d.get("template_header_images", []),
-            footer_images=d.get("footer_images", []) or d.get("template_footer_images", [])
+            header_images=d.get("header_images", []),
+            footer_images=d.get("footer_images", [])
         )

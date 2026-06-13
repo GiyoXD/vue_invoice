@@ -13,8 +13,6 @@ from ..builders.footer_builder import TableFooterBuilder
 from ..styling.models import StylingConfigModel, FooterData
 from ..config.builder_config_resolver import BuilderConfigResolver
 
-from ..extractors.header_extractor import HeaderExtractor
-
 logger = logging.getLogger(__name__)
 from core.system_config import ConfigurationError
 
@@ -129,11 +127,6 @@ class MultiTableProcessor(SheetProcessor):
                     sheet_layout_data=sheet_layout_json,
                     debug=getattr(self.args, 'debug', False)
                 )
-                
-                # Extract header info
-                if self.args and self.invoice_data:
-                    self.header_info = HeaderExtractor.extract(template_state_builder.header_state)
-                    
                 return template_state_builder
             except Exception as e:
                 logger.critical(f"CRITICAL: JsonTemplateStateBuilder failed: {e}", exc_info=True)
