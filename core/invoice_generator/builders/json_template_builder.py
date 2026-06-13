@@ -36,19 +36,15 @@ class JsonTemplateStateBuilder:
         builder.restore_template_footer(target_ws, footer_start_row=50)
     """
     
-    DEBUG = False
-
-    def __init__(self, sheet_layout_data: Dict[str, Any], debug: bool = False):
+    def __init__(self, sheet_layout_data: Dict[str, Any]):
         """
         Initialize and populate state from JSON data.
         
         Args:
             sheet_layout_data: The dictionary for a specific sheet from the layout_template.json
                                (e.g., loaded_json['template_layout']['Invoice'])
-            debug: Enable debug printing
         """
         self.layout_data = sheet_layout_data
-        self.debug = debug or self.DEBUG
         
         # DEBUG INPUT
         logger.debug(f"[JsonTemplateStateBuilder] __init__ INPUT: sheet_layout_data keys={list(sheet_layout_data.keys()) if sheet_layout_data else 'None'}")

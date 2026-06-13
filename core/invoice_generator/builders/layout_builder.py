@@ -184,8 +184,7 @@ class LayoutBuilder:
             try:
                 sheet_layout_json = self.template_json_config[self.sheet_name]
                 self.template_state_builder = JsonTemplateStateBuilder(
-                    sheet_layout_data=sheet_layout_json,
-                    debug=getattr(self.args, 'debug', False) if self.args else False
+                    sheet_layout_data=sheet_layout_json
                 )
                 
                 # Setup critical boundaries from the loaded builder

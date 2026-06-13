@@ -124,8 +124,7 @@ class MultiTableProcessor(SheetProcessor):
             try:
                 sheet_layout_json = json_config[self.sheet_name]
                 template_state_builder = JsonTemplateStateBuilder(
-                    sheet_layout_data=sheet_layout_json,
-                    debug=getattr(self.args, 'debug', False)
+                    sheet_layout_data=sheet_layout_json
                 )
                 return template_state_builder
             except Exception as e:
