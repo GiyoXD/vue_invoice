@@ -303,12 +303,22 @@ class LayoutBuilder:
                     sheet_styling_config=styling_model,
                 )
                 logger.debug(f"Calling HeaderBuilder.build() starting at row {header_row_for_builder}")
-                self.header_info = header_builder.build()
-                
-                if not self.header_info or not self.header_info.get('column_map'):
+                header_result = header_builder.build()
+                if not header_result:
                     logger.error(f"HeaderBuilder failed for sheet '{self.sheet_name}'")
                     logger.error(f"header_info or column_map is missing - HALTING EXECUTION")
                     logger.error(f"start_row: {header_row_for_builder}, bundled_columns: {len(bundled_columns) if bundled_columns else 0}")
+                    return False
+                    
+                self.header_info, header_models = header_result
+                
+                # Phase 2: Write header models to sheet
+                from ..utils.cell_converter import write_models_to_worksheet
+                if header_models:
+                    write_models_to_worksheet(self.worksheet, header_models, start_row=header_row_for_builder)
+                
+                if not self.header_info or not self.header_info.get('column_map'):
+                    logger.error(f"HeaderBuilder failed for sheet '{self.sheet_name}'")
                     return False
                 
                 header_end_row = self.header_info.get('second_row_index', header_row_for_builder)
@@ -427,10 +437,15 @@ class LayoutBuilder:
                         vertical_merge_columns=merge_cols,
                         is_global_unique_desc=is_global_unique_desc
                     )
-                    result = data_builder.build()
-                    if not result:
+                    data_models = data_builder.build()
+                    if data_models is None:
                         logger.error("LayoutBuilder: DataTableBuilder failed.")
                         return False
+                        
+                    # Phase 2: Write data models to sheet
+                    from ..utils.cell_converter import write_models_to_worksheet
+                    if data_models:
+                        write_models_to_worksheet(self.worksheet, data_models, start_row=expected_row_start)
                 else:
                     logger.info("LayoutBuilder: Skipping data table build as requested.")
 
@@ -574,14 +589,25 @@ class LayoutBuilder:
                 
                 logger.debug(f"Calling TableFooterBuilder.build() with footer_row_position={footer_row_position}")
                 footer_start = footer_row_position
-                self.next_row_after_footer = footer_builder.build()
+                footer_result = footer_builder.build()
+                
+                if footer_result is None:
+                    logger.error(f"TableFooterBuilder failed for sheet '{self.sheet_name}'")
+                    logger.error(f"Invalid footer_result - HALTING EXECUTION")
+                    logger.error(f"footer_row_position={footer_row_position}, sum_ranges={data_range_to_sum}")
+                    logger.error(f"footer_config: {footer_config}")
+                    return False
+                    
+                self.next_row_after_footer, footer_models = footer_result
+                
+                # Phase 2: Write footer models to sheet
+                from ..utils.cell_converter import write_models_to_worksheet
+                if footer_models:
+                    write_models_to_worksheet(self.worksheet, footer_models, start_row=footer_row_position)
                 
                 # Validate footer builder result
                 if self.next_row_after_footer is None or self.next_row_after_footer <= 0:
-                    logger.error(f"TableFooterBuilder failed for sheet '{self.sheet_name}'")
-                    logger.error(f"Invalid next_row_after_footer={self.next_row_after_footer} - HALTING EXECUTION")
-                    logger.error(f"footer_row_position={footer_row_position}, sum_ranges={data_range_to_sum}")
-                    logger.error(f"footer_config: {footer_config}")
+                    logger.error(f"TableFooterBuilder returned invalid next_row_after_footer")
                     return False
                 
                 footer_rows_written = self.next_row_after_footer - footer_start

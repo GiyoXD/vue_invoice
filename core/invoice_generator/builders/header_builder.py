@@ -1,13 +1,13 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from openpyxl.worksheet.worksheet import Worksheet
+from ..utils.cell_converter import convert_registry_style_to_cell_style
+from core.models.cell import UnitRow, UnitCell, TemplateMerge
 
 logger = logging.getLogger(__name__)
 
 from ..styling.models import StylingConfigModel
-from ..styling.style_applier import apply_header_style  # apply_cell_style removed - using StyleRegistry only
 from ..styling.style_registry import StyleRegistry
-from ..styling.cell_styler import CellStyler
 from ..utils.layout import calculate_header_dimensions
 from openpyxl.utils import get_column_letter
 
@@ -33,9 +33,8 @@ class HeaderBuilderStyler:
         self.sheet_styling_config = sheet_styling_config
         self.bundled_columns_original = bundled_columns  # Store for later reference
         
-        # Initialize StyleRegistry and CellStyler for ID-driven styling
+        # Initialize StyleRegistry for ID-driven styling
         self.style_registry = None
-        self.cell_styler = CellStyler()
         
         if sheet_styling_config:
             try:
@@ -63,11 +62,8 @@ class HeaderBuilderStyler:
         else:
             logger.error("HeaderBuilder: No bundled columns provided!")
             raise ValueError("No bundled columns provided")
-        
-        # Track rows that have had height applied to avoid redundant operations
-        self._rows_with_height_applied = set()
 
-    def build(self) -> Optional[Dict[str, Any]]:
+    def build(self) -> Optional[Tuple[Dict[str, Any], List[UnitRow]]]:
         if not self.header_layout_config or self.start_row <= 0:
             return None
 
@@ -87,6 +83,9 @@ class HeaderBuilderStyler:
                 if 'children' in col and col['children']:
                     parent_column_ids.add(col.get('id'))
 
+        row_height = self.style_registry.get_row_height('header') if self.style_registry else None
+        rows_dict = {r: [] for r in range(num_header_rows)}
+
         for cell_config in self.header_layout_config:
             row_offset = cell_config.get('row', 0)
             col_offset = cell_config.get('col', 0)
@@ -101,39 +100,36 @@ class HeaderBuilderStyler:
             last_row_index = max(last_row_index, cell_row + rowspan - 1)
             max_col = max(max_col, cell_col + colspan - 1)
 
-            # Get cell (don't write value yet if it's going to be merged)
-            cell = self.worksheet.cell(row=cell_row, column=cell_col)
-            
-            # Only write value if cell is not already a MergedCell
-            from openpyxl.cell.cell import MergedCell
-            if not isinstance(cell, MergedCell):
-                cell.value = text
-            else:
-                logger.debug(f"Skipping value write to {cell.coordinate} - already a MergedCell")
-            
             # Use StyleRegistry (strict - no legacy fallback)
             if not self.style_registry or not cell_id:
-                logger.error(f"❌ CRITICAL: StyleRegistry not initialized or no cell_id for header cell {cell.coordinate}")
-                logger.error(f"   → Ensure config uses bundled format with 'columns' and 'row_contexts'")
+                logger.error(f"❌ CRITICAL: StyleRegistry not initialized or no cell_id for header cell {cell_id}")
                 continue
             
             # Check if column is defined
             if not self.style_registry.has_column(cell_id):
                 logger.warning(f"❌ Column '{cell_id}' not found in StyleRegistry! Available columns: {list(self.style_registry.columns.keys())}")
-                logger.warning(f"   Add to config: styling_bundle.{self.worksheet.title}.columns.{cell_id}")
             
             # Get column-specific header style (column base + header context)
-            style = self.style_registry.get_style(cell_id, context='header')
-            self.cell_styler.apply(cell, style)
-            logger.debug(f"Applied StyleRegistry style to header cell {cell_id}")
-            
-            # Apply row height ONCE per row (only on first column processed for each row)
-            if cell_row not in self._rows_with_height_applied:
-                row_height = self.style_registry.get_row_height('header')
-                if row_height:
-                    self.cell_styler.apply_row_height(self.worksheet, cell_row, row_height)
-                    logger.debug(f"Applied header row height {row_height} to row {cell_row}")
-                self._rows_with_height_applied.add(cell_row)
+            style_dict = self.style_registry.get_style(cell_id, context='header')
+            cell_style = convert_registry_style_to_cell_style(style_dict)
+            logger.debug(f"Resolved StyleRegistry style for header cell {cell_id}")
+
+            merge_obj = None
+            if rowspan > 1 or colspan > 1:
+                merge_obj = TemplateMerge(
+                    min_col=cell_col,
+                    max_col=cell_col + colspan - 1,
+                    row_span=rowspan,
+                    value=text
+                )
+
+            unit_cell = UnitCell(
+                col_index=cell_col,
+                value=text,
+                style=cell_style,
+                merge=merge_obj
+            )
+            rows_dict[row_offset].append(unit_cell)
 
             if cell_id:
                 column_map[text] = get_column_letter(cell_col)
@@ -142,11 +138,15 @@ class HeaderBuilderStyler:
                 if cell_id not in parent_column_ids:
                     column_colspan[cell_id] = colspan
 
-            if rowspan > 1 or colspan > 1:
-                self.worksheet.merge_cells(start_row=cell_row, start_column=cell_col,
-                                      end_row=cell_row + rowspan - 1, end_column=cell_col + colspan - 1)
+        models = []
+        for r in range(num_header_rows):
+            models.append(UnitRow(
+                relative_index=r,
+                height=row_height,
+                cells=sorted(rows_dict[r], key=lambda c: c.col_index)
+            ))
 
-        return {
+        header_info = {
             'first_row_index': first_row_index,
             'second_row_index': last_row_index,
             'column_map': column_map,
@@ -155,6 +155,7 @@ class HeaderBuilderStyler:
             'column_colspan': column_colspan,  # Add colspan info for automatic merging
             'parent_column_ids': list(parent_column_ids)
         }
+        return header_info, models
     
     def _convert_bundled_columns(self, columns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """

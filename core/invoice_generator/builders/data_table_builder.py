@@ -1,25 +1,16 @@
 import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
 from openpyxl.worksheet.worksheet import Worksheet
-from openpyxl.styles import Alignment, Border, Side, Font
+from ..utils.cell_converter import convert_registry_style_to_cell_style
+from core.models.cell import UnitRow, UnitCell, TemplateMerge, AlignmentStyle
 from openpyxl.utils import get_column_letter
-from openpyxl.cell.cell import MergedCell
 import traceback
 
 logger = logging.getLogger(__name__)
 
 from ..data.data_preparer import prepare_data_rows, parse_mapping_rules
 from ..utils.layout import apply_column_widths, merge_contiguous_cells_by_id
-from ..styling.style_applier import apply_row_heights
-from ..utils.merge_utils import merge_vertical_cells_in_range, apply_horizontal_merge_by_id
-# Legacy apply_cell_style removed - using only StyleRegistry + CellStyler
 from ..styling.style_registry import StyleRegistry
-from ..styling.cell_styler import CellStyler
-# FooterBuilder is now called by LayoutBuilder (proper Director pattern)
-from ..styling.style_config import THIN_BORDER, NO_BORDER, CENTER_ALIGNMENT, LEFT_ALIGNMENT, BOLD_FONT, FORMAT_GENERAL, FORMAT_TEXT, FORMAT_NUMBER_COMMA_SEPARATED1, FORMAT_NUMBER_COMMA_SEPARATED2
-
-
-
 from ..styling.models import StylingConfigModel
 from .bundle_accessor import BundleAccessor
 
@@ -68,9 +59,8 @@ class DataTableBuilderStyler:
         self.idx_to_id_map = {v: k for k, v in self.col_id_map.items()}
         self.column_colspan = header_info.get('column_colspan', {})  # Colspan for automatic merging
         
-        # Initialize StyleRegistry and CellStyler for ID-driven styling
+        # Initialize StyleRegistry for ID-driven styling
         self.style_registry = None
-        self.cell_styler = CellStyler()
         if sheet_styling_config:
             try:
                 styling_dict = sheet_styling_config.model_dump() if hasattr(sheet_styling_config, 'model_dump') else sheet_styling_config
@@ -90,17 +80,11 @@ class DataTableBuilderStyler:
         # Static content is now injected into data_rows by TableDataResolver
         # No need to handle it separately here
         logger.debug(f"DataTableBuilder initialized with {len(self.data_rows)} total rows (including any static rows)")
-        
-        # Track rows that have had height applied to avoid redundant operations
-        self._rows_with_height_applied = set()
 
-
-
-
-    def build(self) -> bool:
+    def build(self) -> Optional[List[UnitRow]]:
         if not self.header_info or 'second_row_index' not in self.header_info:
             logger.error("Invalid header_info provided to DataTableBuilderStyler")
-            return False
+            return None
 
         num_columns = self.header_info.get('num_columns', 0)
         data_writing_start_row = self.header_info.get('second_row_index', 0) + 1
@@ -116,144 +100,108 @@ class DataTableBuilderStyler:
         
         # --- Fill Data Rows Loop ---
         try:
-            data_row_indices_written = []
+            grid = {r: {} for r in range(actual_rows_to_process)}
+
             for i in range(actual_rows_to_process):
                 current_row_idx = data_start_row + i
-                data_row_indices_written.append(current_row_idx)
-                
                 row_data = self.data_rows[i]
                 
                 # Filter row_data to only include columns in the filtered column_id_map
-                # This removes columns that were filtered by skip_in_daf or skip_in_custom
                 valid_col_indices = set(self.col_id_map.values())
                 row_data = {col_idx: value for col_idx, value in row_data.items() if col_idx in valid_col_indices}
                 
-                # First, write columns that have data
                 columns_with_data = set(row_data.keys())
 
-                # Write all columns for this row (including static if present in row_data)
+                # Write all columns for this row
                 for col_idx, value in row_data.items():
-                    cell = self.worksheet.cell(row=current_row_idx, column=col_idx)
-                    if not isinstance(cell, MergedCell):
-                        # Check if value is a formula dict
-                        if isinstance(value, dict) and value.get('type') == 'formula':
-                            # Convert formula dict to Excel formula string
-                            formula_str = self._build_formula_string(value, current_row_idx)
-                            cell.value = formula_str
-                        else:
-                            # Try to convert string numbers to actual numbers for Excel
-                            if isinstance(value, str):
-                                # Convert empty strings to None to avoid ' in Excel
-                                if not value.strip():
-                                    cell.value = None
-                                else:
-                                    try:
-                                        # Try converting to float first
-                                        float_val = float(value)
-                                        # If it's an integer (e.g. 10.0), convert to int
-                                        if float_val.is_integer():
-                                            cell.value = int(float_val)
-                                        else:
-                                            cell.value = float_val
-                                    except (ValueError, TypeError):
-                                        # Keep as string if conversion fails
-                                        cell.value = value
+                    val = None
+                    if isinstance(value, dict) and value.get('type') == 'formula':
+                        val = self._build_formula_string(value, current_row_idx)
+                    else:
+                        if isinstance(value, str):
+                            if not value.strip():
+                                val = None
                             else:
-                                cell.value = value
-                        
-                        # Apply styling using StyleRegistry if available
-                        col_id = self.idx_to_id_map.get(col_idx)
-                        if not col_id:
-                            logger.error(f"❌ CRITICAL: Column index {col_idx} has NO column ID mapping!")
-                            logger.error(f"   Available mappings: {self.col_id_map}")
-                            logger.error(f"   This cell will have NO styling applied!")
-                            continue
-                        
-                        if not self.style_registry:
-                            logger.error(f"❌ CRITICAL: StyleRegistry not initialized! Cannot apply styling to cell {cell.coordinate}")
-                            logger.error(f"   → Ensure config uses bundled format with 'columns' and 'row_contexts'")
-                            continue
-                        
-                        # Check if column is defined
-                        if not self.style_registry.has_column(col_id):
-                            logger.warning(f"❌ Column '{col_id}' not found in StyleRegistry! Available: {list(self.style_registry.columns.keys())}")
-                            logger.warning(f"   Add to config: styling_bundle.{self.worksheet.title}.columns.{col_id}")
-                        
-                        # Use 'data' context for regular data rows
-                        style = self.style_registry.get_style(col_id, context='data')
-                        
-                        # For col_static column, apply side borders only (no top/bottom)
-                        if col_id == 'col_static':
-                            from copy import deepcopy
-                            style = deepcopy(style)
-                            # Apply side borders only
-                            style['border_style'] = 'sides_only'
-                        
-                        self.cell_styler.apply(cell, style)
-                        
-                        # Apply row height ONCE per row (only on first column processed)
-                        if current_row_idx not in self._rows_with_height_applied:
-                            row_height = self.style_registry.get_row_height('data')
-                            if row_height:
-                                self.cell_styler.apply_row_height(self.worksheet, current_row_idx, row_height)
-                                logger.debug(f"Applied row height {row_height} to row {current_row_idx}")
-                            self._rows_with_height_applied.add(current_row_idx)
+                                try:
+                                    float_val = float(value)
+                                    if float_val.is_integer():
+                                        val = int(float_val)
+                                    else:
+                                        val = float_val
+                                except (ValueError, TypeError):
+                                    val = value
+                        else:
+                            val = value
+                    
+                    # Apply styling using StyleRegistry if available
+                    col_id = self.idx_to_id_map.get(col_idx)
+                    if not col_id:
+                        logger.error(f"❌ Column index {col_idx} has NO column ID mapping!")
+                        continue
+                    
+                    if not self.style_registry:
+                        logger.error(f"❌ StyleRegistry not initialized!")
+                        continue
+                    
+                    style_dict = self.style_registry.get_style(col_id, context='data')
+                    
+                    if col_id == 'col_static':
+                        from copy import deepcopy
+                        style_dict = deepcopy(style_dict)
+                        style_dict['border_style'] = 'sides_only'
+                    
+                    cell_style = convert_registry_style_to_cell_style(style_dict)
+                    grid[i][col_idx] = UnitCell(col_index=col_idx, value=val, style=cell_style)
                 
                 # Handle columns defined in header but missing from row_data
-                # Apply styling (borders) to ALL empty cells, not just col_no
                 all_column_indices = set(self.col_id_map.values())
                 missing_columns = all_column_indices - columns_with_data
                 
                 for col_idx in missing_columns:
                     col_id = self.idx_to_id_map.get(col_idx)
-                    cell = self.worksheet.cell(row=current_row_idx, column=col_idx)
-                    if isinstance(cell, MergedCell):
-                        continue
+                    val = None
                     
-                    # Auto-number for col_no
                     if col_id == 'col_no':
-                        cell.value = i + 1
+                        val = i + 1
                     
-                    # Apply styling (borders, alignment, format) to ALL empty cells
                     if not self.style_registry:
-                        logger.error(f"❌ CRITICAL: StyleRegistry not initialized for column {col_id}")
+                        logger.error(f"❌ StyleRegistry not initialized for column {col_id}")
                         continue
                     
-                    style = self.style_registry.get_style(col_id, context='data')
+                    style_dict = self.style_registry.get_style(col_id, context='data')
                     
-                    # For col_static column, apply side borders only
                     if col_id == 'col_static':
                         from copy import deepcopy
-                        style = deepcopy(style)
-                        style['border_style'] = 'sides_only'
+                        style_dict = deepcopy(style_dict)
+                        style_dict['border_style'] = 'sides_only'
                     
-                    self.cell_styler.apply(cell, style)
+                    cell_style = convert_registry_style_to_cell_style(style_dict)
+                    grid[i][col_idx] = UnitCell(col_index=col_idx, value=val, style=cell_style)
 
             # --- Apply Horizontal Merges (based on colspan from header structure) ---
             if self.column_colspan:
-                for row_idx in range(data_start_row, data_end_row + 1):
+                for r in range(actual_rows_to_process):
                     for col_id, colspan in self.column_colspan.items():
-                        if colspan > 1:  # Only merge if colspan > 1
+                        if colspan > 1:
                             col_idx = self.col_id_map.get(col_id)
-                            if col_idx:
-                                # Merge from col_idx to col_idx + colspan - 1
+                            if col_idx and col_idx in grid[r]:
                                 start_col = col_idx
                                 end_col = col_idx + colspan - 1
-                                self.worksheet.merge_cells(
-                                    start_row=row_idx,
-                                    start_column=start_col,
-                                    end_row=row_idx,
-                                    end_column=end_col
+                                grid[r][col_idx].merge = TemplateMerge(
+                                    min_col=start_col,
+                                    max_col=end_col,
+                                    row_span=1,
+                                    value=str(grid[r][col_idx].value) if grid[r][col_idx].value is not None else ""
                                 )
-                                logger.debug(f"Merged data row {row_idx}, columns {start_col}-{end_col} for {col_id} (colspan={colspan})")
+                                # Clear value of other cells in this colspan range, preserving style
+                                for clear_c in range(start_col + 1, end_col + 1):
+                                    if clear_c in grid[r]:
+                                        grid[r][clear_c].value = None
 
             # --- Apply Vertical Merges (Conditional based on GLOBAL col_desc uniqueness) ---
             if self.vertical_merge_columns and num_data_rows > 0:
-                # 1. We use self.is_global_unique_desc (passed from LayoutBuilder) 
-                # to determine the strategy for col_desc.
-                
-                # 2. Apply Merging Strategy
-                logger.info(f"DataTableBuilder: Applying vertical merges (Global Unique Description: {self.is_global_unique_desc})")
+                relative_start_row = 0
+                relative_end_row = num_data_rows - 1
                 
                 for col_id in self.vertical_merge_columns:
                     col_idx = self.col_id_map.get(col_id)
@@ -262,38 +210,94 @@ class DataTableBuilderStyler:
 
                     if col_id == 'col_desc':
                         if self.is_global_unique_desc:
-                            # Strategy: If GLOBALLY UNIQUE, enable normal merging
-                            logger.debug(f"  Merging contiguous cells in column '{col_id}' (index {col_idx})")
-                            merge_vertical_cells_in_range(
-                                worksheet=self.worksheet,
-                                scan_col=col_idx,
-                                start_row=data_start_row,
-                                end_row=actual_data_end_row,
-                                col_id=col_id
-                            )
-                        else:
-                            # Strategy: If GLOBALLY MIXED, skip merging for col_desc entirely ("mix no merge")
-                            logger.info("  Skipping vertical merge for col_desc because descriptions are mixed globally.")
                             pass
-                    else:
-                        # Strategy: For all OTHER columns, merge normally regardless of description state
-                        logger.debug(f"  Merging contiguous cells in column '{col_id}' (index {col_idx})")
-                        merge_vertical_cells_in_range(
-                            worksheet=self.worksheet,
-                            scan_col=col_idx,
-                            start_row=data_start_row,
-                            end_row=actual_data_end_row,
-                            col_id=col_id
-                        )
+                        else:
+                            logger.info("  Skipping vertical merge for col_desc because descriptions are mixed globally.")
+                            continue
+                    
+                    # Validate desc baseline uniformity if col_id is col_desc
+                    if col_id == "col_desc":
+                        buffer_value = None
+                        for r in range(relative_start_row, relative_end_row + 1):
+                            if r in grid and col_idx in grid[r]:
+                                val = grid[r][col_idx].value
+                                if val is not None and val != "":
+                                    buffer_value = val
+                                    break
+                        if buffer_value is not None:
+                            baseline = str(buffer_value).strip().lower()
+                            abort_merge = False
+                            for r in range(relative_start_row, relative_end_row + 1):
+                                if r in grid and col_idx in grid[r]:
+                                    val = grid[r][col_idx].value
+                                    if val is not None and val != "":
+                                        current = str(val).strip().lower()
+                                        if current != baseline:
+                                            abort_merge = True
+                                            break
+                            if abort_merge:
+                                logger.info("  Aborting vertical merge for col_desc because values are mixed in this range.")
+                                continue
+
+                    group_start = relative_start_row
+                    group_value = grid[relative_start_row][col_idx].value if (relative_start_row in grid and col_idx in grid[relative_start_row]) else None
+                    
+                    for r in range(relative_start_row + 1, relative_end_row + 2):
+                        if r <= relative_end_row:
+                            current_value = grid[r][col_idx].value if (r in grid and col_idx in grid[r]) else None
+                        else:
+                            current_value = None  # Sentinel to flush
+                            
+                        if current_value == group_value and r <= relative_end_row:
+                            continue
+                        else:
+                            group_end = r - 1
+                            if group_end > group_start and group_value is not None:
+                                skip_int = False
+                                try:
+                                    int(group_value)
+                                    skip_int = True
+                                except (ValueError, TypeError):
+                                    pass
+
+                                if not skip_int:
+                                    if group_start in grid and col_idx in grid[group_start]:
+                                        grid[group_start][col_idx].merge = TemplateMerge(
+                                            min_col=col_idx,
+                                            max_col=col_idx,
+                                            row_span=group_end - group_start + 1,
+                                            value=str(group_value)
+                                        )
+                                        if grid[group_start][col_idx].style:
+                                            if not grid[group_start][col_idx].style.alignment:
+                                                grid[group_start][col_idx].style.alignment = AlignmentStyle()
+                                            grid[group_start][col_idx].style.alignment.horizontal = 'center'
+                                            grid[group_start][col_idx].style.alignment.vertical = 'center'
+                                        for clear_r in range(group_start + 1, group_end + 1):
+                                            if clear_r in grid and col_idx in grid[clear_r]:
+                                                grid[clear_r][col_idx].value = None
+                            
+                            group_start = r
+                            group_value = current_value
 
         except Exception as fill_data_err:
             logger.error(f"Error during data filling loop: {fill_data_err}\n{traceback.format_exc()}")
-            return False
+            return None
 
         # Log completion summary
-        logger.info(f"DataTableBuilder completed: {actual_rows_to_process} data rows written (rows {data_start_row}-{data_end_row})")
+        logger.info(f"DataTableBuilder completed: {actual_rows_to_process} data rows generated")
 
-        return True
+        row_height = self.style_registry.get_row_height('data') if self.style_registry else None
+        models = []
+        for r in range(actual_rows_to_process):
+            cells = sorted(list(grid[r].values()), key=lambda c: c.col_index)
+            models.append(UnitRow(
+                relative_index=r,
+                height=row_height,
+                cells=cells
+            ))
+
+        return models
     
     def _build_formula_string(self, formula_dict: Dict[str, Any], row_num: int) -> str:
         """

@@ -246,7 +246,17 @@ class MultiTableProcessor(SheetProcessor):
             }
         )
         
-        return footer_builder.build()
+        footer_result = footer_builder.build()
+        if not footer_result:
+            logger.error("Failed to build grand total footer")
+            return current_row
+            
+        next_row, footer_models = footer_result
+        from ..utils.cell_converter import write_models_to_worksheet
+        if footer_models:
+            write_models_to_worksheet(self.output_worksheet, footer_models, start_row=current_row)
+            
+        return next_row
 
     def _restore_template_footer(self, template_state_builder, current_row, table_keys):
         """

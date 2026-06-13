@@ -4,16 +4,176 @@ from copy import deepcopy
 from decimal import Decimal, InvalidOperation
 from typing import Any, Dict, List, Optional, Tuple
 from openpyxl.worksheet.worksheet import Worksheet
-from openpyxl.styles import Alignment, Font, Side, Border
+from ..utils.cell_converter import convert_registry_style_to_cell_style
+from core.models.cell import (
+    UnitRow,
+    UnitCell,
+    TemplateMerge,
+    CellStyle,
+    FontStyle,
+    AlignmentStyle,
+    FillStyle,
+    BorderStyle
+)
 from openpyxl.utils import get_column_letter
+from openpyxl.styles import Side, Border
 
 logger = logging.getLogger(__name__)
 
 from ..styling.models import StylingConfigModel, FooterData
-# Legacy apply_cell_style removed - using only StyleRegistry + CellStyler
 from ..styling.style_registry import StyleRegistry
 from ..styling.cell_styler import CellStyler
 from .bundle_accessor import BundleAccessor
+
+class RowDimensionMock:
+    def __init__(self):
+        self.height = None
+
+class RowDimensionsMockDict(dict):
+    def __missing__(self, key):
+        self[key] = RowDimensionMock()
+        return self[key]
+
+class ModelCellWrapper:
+    def __init__(self, builder, row: int, column: int):
+        self._builder = builder
+        self.row = row
+        self.column = column
+        
+    @property
+    def cell_model(self):
+        return self._builder._get_or_create_grid_cell(self.row, self.column)
+        
+    @property
+    def value(self):
+        return self.cell_model.value
+        
+    @value.setter
+    def value(self, val):
+        self.cell_model.value = val
+        
+    @property
+    def coordinate(self) -> str:
+        return f"{get_column_letter(self.column)}{self.row}"
+        
+    @property
+    def font(self):
+        return None
+        
+    @font.setter
+    def font(self, font_obj):
+        if font_obj:
+            color_str = None
+            font_color = getattr(font_obj, 'color', None)
+            if font_color and getattr(font_color, 'rgb', None):
+                color_str = str(font_color.rgb)
+            self.cell_model.style.font = FontStyle(
+                name=font_obj.name,
+                size=font_obj.size,
+                bold=font_obj.bold,
+                italic=font_obj.italic,
+                color=color_str
+            )
+            
+    @property
+    def alignment(self):
+        return None
+        
+    @alignment.setter
+    def alignment(self, align_obj):
+        if align_obj:
+            self.cell_model.style.alignment = AlignmentStyle(
+                horizontal=align_obj.horizontal,
+                vertical=align_obj.vertical,
+                wrap_text=bool(align_obj.wrap_text)
+            )
+            
+    @property
+    def fill(self):
+        return None
+        
+    @fill.setter
+    def fill(self, fill_obj):
+        if fill_obj:
+            color = None
+            fg_color = getattr(fill_obj, 'fgColor', None)
+            if fill_obj.fill_type == 'solid' and fg_color and getattr(fg_color, 'rgb', None):
+                color = str(fg_color.rgb)
+            self.cell_model.style.fill = FillStyle(
+                fill_type=fill_obj.fill_type,
+                color=color
+            )
+            
+    @property
+    def border(self):
+        return None
+        
+    @border.setter
+    def border(self, border_obj):
+        if border_obj:
+            self.cell_model.style.border = BorderStyle(
+                left=border_obj.left.style if (border_obj.left and border_obj.left.style) else None,
+                right=border_obj.right.style if (border_obj.right and border_obj.right.style) else None,
+                top=border_obj.top.style if (border_obj.top and border_obj.top.style) else None,
+                bottom=border_obj.bottom.style if (border_obj.bottom and border_obj.bottom.style) else None
+            )
+            
+    @property
+    def number_format(self):
+        return self.cell_model.style.number_format
+        
+    @number_format.setter
+    def number_format(self, fmt):
+        self.cell_model.style.number_format = fmt
+
+class ModelWorksheetWrapper:
+    def __init__(self, builder, original_ws):
+        self._builder = builder
+        self.row_dimensions = RowDimensionsMockDict()
+        self.title = original_ws.title if original_ws else "Sheet"
+        
+    def cell(self, row: int, column: int, value=None):
+        wrapper = ModelCellWrapper(self._builder, row, column)
+        if value is not None:
+            wrapper.value = value
+        return wrapper
+        
+    def merge_cells(self, range_string=None, start_row=None, start_column=None, end_row=None, end_column=None):
+        if range_string:
+            from openpyxl.utils import range_boundaries
+            min_col, min_row, max_col, max_row = range_boundaries(range_string)
+        else:
+            min_row = start_row
+            min_col = start_column
+            max_row = end_row
+            max_col = end_column
+            
+        anchor = self._builder._get_or_create_grid_cell(min_row, min_col)
+        anchor.merge = TemplateMerge(
+            min_col=min_col,
+            max_col=max_col,
+            row_span=max_row - min_row + 1,
+            value=str(anchor.value) if anchor.value is not None else ""
+        )
+
+def is_cell_active(cell: UnitCell) -> bool:
+    if cell.value is not None:
+        return True
+    if cell.merge is not None:
+        return True
+    if cell.style:
+        s = cell.style
+        if s.font and (s.font.name or s.font.size or s.font.bold or s.font.italic or s.font.color):
+            return True
+        if s.alignment and (s.alignment.horizontal or s.alignment.vertical or s.alignment.wrap_text):
+            return True
+        if s.fill and (s.fill.fill_type or s.fill.color):
+            return True
+        if s.border and (s.border.left or s.border.right or s.border.top or s.border.bottom):
+            return True
+        if s.number_format and s.number_format != 'General':
+            return True
+    return False
 
 class TableFooterBuilder(BundleAccessor):
     """
@@ -73,6 +233,8 @@ class TableFooterBuilder(BundleAccessor):
         
         # Track rows that have had height applied to avoid redundant operations
         self._rows_with_height_applied = set()
+        self.grid = {}
+        self.initial_row = 0
     
     # ========== Properties for Frequently Accessed Config Values ==========
     # Note: sheet_name, sheet_styling_config inherited from BundleAccessor
@@ -127,6 +289,14 @@ class TableFooterBuilder(BundleAccessor):
         """Is last table flag from context config."""
         return self.context_config.get('is_last_table', False)
 
+    def _get_or_create_grid_cell(self, row: int, column: int) -> UnitCell:
+        r = row - self.initial_row
+        if r not in self.grid:
+            self.grid[r] = {}
+        if column not in self.grid[r]:
+            self.grid[r][column] = UnitCell(col_index=column, style=CellStyle())
+        return self.grid[r][column]
+
     def _apply_footer_cell_style(self, cell, col_id, row_context='footer', apply_border=True):
         """
         Apply footer cell style to a single cell using StyleRegistry (strict - no legacy fallback).
@@ -150,15 +320,16 @@ class TableFooterBuilder(BundleAccessor):
             style = deepcopy(style)
             style['border_style'] = None
         
-        self.cell_styler.apply(cell, style)
-        logger.debug(f"Applied StyleRegistry style to {row_context} cell {col_id} (borders={'yes' if apply_border else 'no'})")
+        # Direct conversion and mapping to avoid openpyxl object creation overhead
+        cell.cell_model.style = convert_registry_style_to_cell_style(style)
+        logger.debug(f"Directly mapped StyleRegistry style to {row_context} cell {col_id} (borders={'yes' if apply_border else 'no'})")
         
         # Apply row height ONCE per row (only on first column processed)
         row_num = cell.row
         if row_num not in self._rows_with_height_applied:
             row_height = self.style_registry.get_row_height(row_context)
             if row_height:
-                self.cell_styler.apply_row_height(self.worksheet, row_num, row_height)
+                self.worksheet.row_dimensions[row_num].height = row_height
                 logger.debug(f"Applied {row_context} row height {row_height} to row {row_num}")
             self._rows_with_height_applied.add(row_num)
 
@@ -176,7 +347,7 @@ class TableFooterBuilder(BundleAccessor):
         if row_num not in self._rows_with_height_applied:
             row_height = self.style_registry.get_row_height(context)
             if row_height:
-                self.cell_styler.apply_row_height(self.worksheet, row_num, row_height)
+                self.worksheet.row_dimensions[row_num].height = row_height
                 logger.debug(f"Applied {context} row height {row_height} to row {row_num}")
             self._rows_with_height_applied.add(row_num)
     
@@ -212,7 +383,7 @@ class TableFooterBuilder(BundleAccessor):
         
         return None
 
-    def build(self) -> int:
+    def build(self) -> Optional[Tuple[int, List[UnitRow]]]:
         logger.info(f"[FooterBuilder] build() called - footer_row_num={self.footer_row_num}")
         logger.debug(f"[FooterBuilder] footer_config exists: {bool(self.footer_config)}")
         logger.debug(f"[FooterBuilder] footer_config keys: {list(self.footer_config.keys()) if self.footer_config else 'None'}")
@@ -226,6 +397,12 @@ class TableFooterBuilder(BundleAccessor):
             )
             logger.error(error_msg)
             raise ValueError(error_msg)
+
+        original_ws = self.worksheet
+        self.grid = {}
+        self.initial_row = self.footer_row_num
+        self.worksheet = ModelWorksheetWrapper(self, original_ws)
+        self._rows_with_height_applied = set()
 
         try:
             current_footer_row = self.footer_row_num
@@ -295,12 +472,35 @@ class TableFooterBuilder(BundleAccessor):
             total_rows = current_footer_row - initial_row
             logger.info(f"[FooterBuilder] COMPLETE - Started at {initial_row}, ended at {current_footer_row - 1}, total rows: {total_rows}")
 
-            return current_footer_row
+            # Convert to models
+            models = []
+            num_rows = current_footer_row - initial_row
+            for r in range(num_rows):
+                row_num = initial_row + r
+                height = self.worksheet.row_dimensions[row_num].height
+                
+                cells = []
+                if r in self.grid:
+                    all_cells = self.grid[r].values()
+                    active_cells = [c for c in all_cells if is_cell_active(c)]
+                    cells = sorted(active_cells, key=lambda c: c.col_index)
+                
+                models.append(UnitRow(
+                    relative_index=r,
+                    height=height,
+                    cells=cells
+                ))
+
+            # Restore original worksheet reference
+            self.worksheet = original_ws
+
+            return current_footer_row, models
 
         except Exception as e:
             logger.error(f"[FooterBuilder] FATAL ERROR during footer generation starting at row {self.footer_row_num}: {e}")
             logger.error(traceback.format_exc())
-            return -1
+            self.worksheet = original_ws
+            return None
 
     def _build_regular_footer(self, current_footer_row: int):
         """Build regular footer with TOTAL OF: text."""
