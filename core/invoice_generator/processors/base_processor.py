@@ -5,65 +5,41 @@ from openpyxl.worksheet.worksheet import Worksheet
 import argparse
 from typing import Dict, Any, Optional
 from core.system_config import ConfigurationError
+from core.invoice_generator.models.context import ProcessorContext, TableLayoutRequest
 
 class SheetProcessor(ABC):
     """
     Abstract base class for processing a single worksheet in an invoice workbook.
     Defines the common interface for all concrete processor implementations.
     """
-    def __init__(
-        self,
-        template_workbook: Workbook,
-        output_workbook: Workbook,
-        template_worksheet: Worksheet,
-        output_worksheet: Worksheet,
-        sheet_name: str,
-        sheet_config: Dict[str, Any],
-        data_source_indicator: str,
-        invoice_data: Dict[str, Any],
-        cli_args: argparse.Namespace,
-        final_grand_total_pallets: int,
-        config_loader: Optional[Any] = None,
-        data_mapping_config: Optional[Dict[str, Any]] = None  # Deprecated, use config_loader instead
-    ):
+    def __init__(self, ctx: ProcessorContext):
         """
         Initializes the processor with all necessary data and configurations.
 
         Args:
-            template_workbook: The template workbook (READ-ONLY usage for state capture)
-            output_workbook: The output workbook (WRITABLE for final output)
-            template_worksheet: The template worksheet to read state from
-            output_worksheet: The output worksheet to write to
-            sheet_name: The name of the worksheet.
-            sheet_config: The specific configuration section for this sheet.
-            data_mapping_config: The entire 'data_mapping' section from the config.
-            data_source_indicator: The key indicating which data source to use.
-            invoice_data: The complete input data dictionary.
-            cli_args: The command-line arguments.
-            final_grand_total_pallets: The pre-calculated total number of pallets.
+            ctx: The structured ProcessorContext holding io, config, and data sub-contexts.
         """
-        self.template_workbook = template_workbook
-        self.output_workbook = output_workbook
-        self.template_worksheet = template_worksheet
-        self.output_worksheet = output_worksheet
+        self.template_workbook = ctx.io.template_workbook
+        self.output_workbook = ctx.io.output_workbook
+        self.template_worksheet = ctx.io.template_worksheet
+        self.output_worksheet = ctx.io.output_worksheet
         
         # Keep old names for backward compatibility during transition
-        self.workbook = output_workbook
-        self.worksheet = output_worksheet
+        self.workbook = ctx.io.output_workbook
+        self.worksheet = ctx.io.output_worksheet
+        self.output_worksheet = ctx.io.output_worksheet
         
-        self.sheet_name = sheet_name
-        self.sheet_config = sheet_config
-        self.data_mapping_config = data_mapping_config
-        self.data_source_indicator = data_source_indicator
-        self.invoice_data = invoice_data
-        self.args = cli_args
-        self.final_grand_total_pallets = final_grand_total_pallets
-        self.config_loader = config_loader  # Store config loader for resolver usage
+        self.sheet_name = ctx.config.sheet_name
+        self.sheet_config = ctx.config.sheet_config
+        self.data_source_indicator = ctx.config.data_source_indicator
+        self.config_loader = ctx.config.config_loader
+        
+        self.invoice_data = ctx.data.invoice_data
+        self.args = ctx.data.cli_args
+        self.final_grand_total_pallets = ctx.data.final_grand_total_pallets
         self.processing_successful = True
-        
-        # New: Store config loader for direct bundled config access
-        self.config_loader = config_loader
-        self._use_bundled = config_loader is not None
+        self._use_bundled = self.config_loader is not None
+        self.data_mapping_config = None  # Deprecated
         
         # New: Strict Header Row Validation (Mandatory for all table-based sheets)
         self.layout_config = self.sheet_config.get('layout_config', {}) if self.sheet_config else {}
@@ -134,3 +110,158 @@ class SheetProcessor(ABC):
             bool: True if processing was successful, False otherwise.
         """
         pass
+
+    def _build_table_layout(self, request: TableLayoutRequest):
+        """
+        Orchestrates the common workflow of BuilderConfigResolver resolution and LayoutBuilder execution.
+        Saves subclasses from duplicating this execution sequence.
+        """
+        resolver = self._init_resolver(
+            is_last_table=request.is_last_table,
+            total_net_weight=request.total_net_weight,
+            total_gross_weight=request.total_gross_weight
+        )
+        
+        style_config, context_config, layout_config = self._resolve_layout_configs(
+            resolver=resolver,
+            table_key=request.table_key,
+            is_last_table=request.is_last_table,
+            show_grand_total_addons=request.show_grand_total_addons,
+            next_free_row=request.layout_state.next_free_row
+        )
+        
+        if not self._resolve_table_data(resolver, request.table_key, layout_config):
+            return None
+            
+        return self._run_layout_builder(
+            layout_state=request.layout_state,
+            style_config=style_config,
+            context_config=context_config,
+            layout_config=layout_config,
+            template_state_builder=request.template_state_builder,
+            is_first_table=request.is_first_table,
+            skip_template_footer=request.skip_template_footer
+        )
+
+    def _init_resolver(
+        self,
+        is_last_table: bool,
+        total_net_weight: Optional[float],
+        total_gross_weight: Optional[float]
+    ):
+        """Initializes the BuilderConfigResolver with context overrides."""
+        from core.invoice_generator.config.builder_config_resolver import BuilderConfigResolver
+
+        context_overrides = {}
+        if total_net_weight is not None:
+            context_overrides["total_net_weight"] = total_net_weight
+        if total_gross_weight is not None:
+            context_overrides["total_gross_weight"] = total_gross_weight
+        
+        # Add final_grand_total_pallets context override
+        context_overrides["final_grand_total_pallets"] = self.final_grand_total_pallets
+        context_overrides["is_last_table"] = is_last_table
+
+        return BuilderConfigResolver(
+            config_loader=self.config_loader,
+            sheet_name=self.sheet_name,
+            worksheet=self.output_worksheet,
+            args=self.args,
+            invoice_data=self.invoice_data,
+            pallets=self.final_grand_total_pallets if is_last_table else 0,
+            **context_overrides
+        )
+
+    def _resolve_layout_configs(
+        self,
+        resolver,
+        table_key: Optional[str],
+        is_last_table: bool,
+        show_grand_total_addons: bool,
+        next_free_row: int
+    ):
+        """Resolves style, context, and layout config bundles."""
+        style_config = resolver.get_style_bundle()
+        context_config = resolver.get_context_bundle(
+            table_key=table_key,
+            is_last_table=is_last_table,
+            show_grand_total_addons=show_grand_total_addons
+        )
+        layout_config = resolver.get_layout_bundle()
+        
+        # Override header row position for legacy compatibility
+        if not 'structure' in layout_config.get('sheet_config', {}):
+            if 'sheet_config' not in layout_config:
+                layout_config['sheet_config'] = {}
+            layout_config['sheet_config']['structure'] = {}
+        layout_config['sheet_config']['structure']['header_row'] = next_free_row
+        
+        # Enable data table builder when processing a single table (meaning table_key is None)
+        if table_key is None:
+            layout_config['skip_data_table_builder'] = False
+
+        return style_config, context_config, layout_config
+
+    def _resolve_table_data(self, resolver, table_key: Optional[str], layout_config: Dict[str, Any]) -> bool:
+        """Resolves table data using TableDataAdapter and updates layout_config."""
+        import logging
+        logger = logging.getLogger(__name__)
+
+        data_bundle = resolver.get_data_bundle(table_key=table_key)
+        layout_config['header_info'] = data_bundle.get('header_info', {})
+        layout_config['mapping_rules'] = data_bundle.get('mapping_rules', {})
+        layout_config['data_source'] = data_bundle.get('data_source')
+        layout_config['data_source_type'] = data_bundle.get('data_source_type')
+        
+        # Resolve table data using TableDataAdapter
+        try:
+            table_resolver = resolver.get_table_data_resolver(table_key=table_key)
+            resolved_data = table_resolver.resolve()
+            layout_config['resolved_data'] = resolved_data
+            logger.info(f"Successfully resolved table data for table '{table_key or 'default'}' using TableDataAdapter")
+            return True
+        except Exception as e:
+            logger.error(f"Error resolving table data: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def _run_layout_builder(
+        self,
+        layout_state,
+        style_config: Dict[str, Any],
+        context_config: Dict[str, Any],
+        layout_config: Dict[str, Any],
+        template_state_builder: Optional[Any],
+        is_first_table: bool,
+        skip_template_footer: bool
+    ):
+        """Runs the LayoutBuilder and returns layout_builder if successful."""
+        import logging
+        logger = logging.getLogger(__name__)
+        from core.invoice_generator.builders.layout_builder import LayoutBuilder
+
+        layout_config['skip_template_header_restoration'] = (not is_first_table)
+        layout_config['skip_template_footer_restoration'] = skip_template_footer
+        layout_config['allow_col_desc_merge'] = getattr(self, 'allow_col_desc_merge', True)
+        layout_config['is_global_unique_desc'] = getattr(self, 'is_global_unique_desc', False)
+        
+        layout_builder = LayoutBuilder(
+            self.output_workbook,
+            self.output_worksheet,
+            self.template_worksheet,
+            style_config=style_config,
+            context_config=context_config,
+            layout_config=layout_config,
+            template_state_builder=template_state_builder,
+            template_json_config=self.config_loader.get_template_json_config(),
+            layout_state=layout_state
+        )
+        
+        success = layout_builder.build()
+        if not success:
+            logger.error("Failed to build layout")
+            return None
+            
+        return layout_builder
+

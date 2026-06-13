@@ -11,6 +11,7 @@ from .footer_builder import TableFooterBuilder
 from .json_template_builder import JsonTemplateStateBuilder
 from openpyxl.drawing.image import Image
 from ...system_config import sys_config, ConfigurationError
+from ..models.layout_state import SheetLayoutState
 
 # Initialize logger for this module
 logger = logging.getLogger(__name__)
@@ -56,7 +57,8 @@ class LayoutBuilder:
         context_config: Dict[str, Any],
         layout_config: Dict[str, Any],
         template_state_builder: Optional[JsonTemplateStateBuilder] = None,
-        template_json_config: Optional[Dict[str, Any]] = None
+        template_json_config: Optional[Dict[str, Any]] = None,
+        layout_state: Optional[SheetLayoutState] = None
     ):
         """
         Initialize LayoutBuilder with strict bundle architecture.
@@ -69,10 +71,13 @@ class LayoutBuilder:
             context_config: Bundle containing context (sheet_name, invoice_data, args, etc.)
             layout_config: Bundle containing layout rules, structure, and resolved data
             template_state_builder: Optional pre-captured template state (optimization)
+            template_json_config: Optional template JSON config
+            layout_state: Optional layout state tracking occupied rows
         """
         self.workbook = workbook
         self.worksheet = worksheet
         self.template_worksheet = template_worksheet
+        self.layout_state = layout_state
         
         # Unpack Style Bundle
         self.styling_config = style_config.get('styling_config')
@@ -151,8 +156,12 @@ class LayoutBuilder:
         # We MUST respect this injected value over the static global sheet_layout original value.
         sheet_layout = self.all_sheet_configs.get(self.sheet_name, {}) if self.all_sheet_configs else {}
         
+        if self.layout_state:
+            # Use top-level layout state allocator if available
+            table_header_row = self.layout_state.next_free_row
+            logger.info(f"Using layout_state.next_free_row for table_header_row: {table_header_row}")
         # Priority 1: Injected structure.header_row from multi_table_processor
-        if self.sheet_config and 'structure' in self.sheet_config and 'header_row' in self.sheet_config['structure']:
+        elif self.sheet_config and 'structure' in self.sheet_config and 'header_row' in self.sheet_config['structure']:
             table_header_row = self.sheet_config['structure']['header_row']
         # Priority 2: Original static template header_row
         else:
@@ -163,6 +172,7 @@ class LayoutBuilder:
 
         header_row_for_builder = table_header_row
         logger.debug(f"[LayoutBuilder DEBUG] sheet_name={self.sheet_name}, header_row={header_row}, table_header_row={table_header_row}")
+
         logger.debug(f"[LayoutBuilder DEBUG] all_sheet_configs keys: {list(self.all_sheet_configs.keys()) if self.all_sheet_configs else 'None'}")
         
         # Template decorative header spans from row 1 to the row BEFORE the table header

@@ -46,83 +46,25 @@ class SingleTableProcessor(SheetProcessor):
         
         logger.debug(f"Calculated weight totals for {self.sheet_name}: N.W={total_net_weight}, G.W={total_gross_weight}")
         
-        # Use BuilderConfigResolver to prepare bundles cleanly
-        resolver = BuilderConfigResolver(
-            config_loader=self.config_loader,
-            sheet_name=self.sheet_name,
-            worksheet=self.output_worksheet,
-            args=self.args,
-            invoice_data=self.invoice_data,
-            pallets=self.final_grand_total_pallets,
-            final_grand_total_pallets=self.final_grand_total_pallets,  # Context override
-            total_net_weight=float(total_net_weight),  # Add weight totals to context
+        from ..models.layout_state import SheetLayoutState
+        from core.invoice_generator.models.context import TableLayoutRequest
+        layout_state = SheetLayoutState()
+        layout_state.advance_to(self.header_row)
 
-            total_gross_weight=float(total_gross_weight),
-            is_last_table=True  # Single-table sheets are always the last table
+        layout_builder = self._build_table_layout(
+            TableLayoutRequest(
+                layout_state=layout_state,
+                table_key=None,
+                is_first_table=True,
+                is_last_table=True,
+                total_net_weight=float(total_net_weight),
+                total_gross_weight=float(total_gross_weight)
+            )
         )
         
-        # Get the bundles needed for LayoutBuilder
-        style_config = resolver.get_style_bundle()
-        context_config = resolver.get_context_bundle(
-            invoice_data=self.invoice_data
-        )
-        layout_config = resolver.get_layout_bundle()
-        layout_config['skip_data_table_builder'] = False  # IMPORTANT: Enable data table builder to use resolver
-        
-        logger.debug(f"layout_config keys: {list(layout_config.keys())}")
-        logger.debug(f"skip_data_table_builder in layout_config: {layout_config.get('skip_data_table_builder', 'NOT SET')}")
-        logger.debug(f"skip_data_table_builder in sheet_config: {layout_config.get('sheet_config', {}).get('skip_data_table_builder', 'NOT SET')}")
-        
-        # Get data bundle to extract header_info and mapping_rules
-        data_bundle = resolver.get_data_bundle()
-        layout_config['header_info'] = data_bundle.get('header_info', {})
-        layout_config['mapping_rules'] = data_bundle.get('mapping_rules', {})
-        layout_config['data_source'] = data_bundle.get('data_source')
-        layout_config['data_source_type'] = data_bundle.get('data_source_type')
-        # NOTE: header_info from config is just column metadata, NOT styled Excel rows
-        # HeaderBuilder still needs to run to write the actual styled header rows
-        
-        logger.debug(f"header_info keys: {list(data_bundle.get('header_info', {}).keys())}")
-        
-        # NEW: Use TableDataAdapter to prepare data
-        try:
-            table_resolver = resolver.get_table_data_resolver()
-            resolved_data = table_resolver.resolve()
-            layout_config['resolved_data'] = resolved_data
-            logger.info("Successfully resolved table data using TableDataAdapter")
-        except Exception as e:
-            logger.error(f"Error resolving table data: {e}")
-            import traceback
-            traceback.print_exc()
-            return False
-        
-        # self.is_global_unique_desc is already calculated by BaseProcessor (scanning data + fallbacks)
-        layout_config['is_global_unique_desc'] = self.is_global_unique_desc
-        logger.info(f"SingleTableProcessor: is_global_unique_desc={self.is_global_unique_desc}")
-
-        # Use LayoutBuilder to orchestrate the entire layout construction
-        layout_builder = LayoutBuilder(
-            self.output_workbook,
-            self.output_worksheet,
-            self.template_worksheet,
-            style_config=style_config,
-            context_config=context_config,
-            layout_config=layout_config,
-            template_json_config=self.config_loader.get_template_json_config()
-        )
-        
-        # Build the entire layout (header + table + footer)
-        success = layout_builder.build()
-        
-        if not success:
+        if not layout_builder:
             logger.error(f"Failed to build layout for sheet '{self.sheet_name}'")
             return False
             
         logger.info(f"Successfully filled table data/footer for sheet '{self.sheet_name}'")
-        
-        # TODO: Re-implement post-processing features using new architecture:
-        # - Weight summary (should be a builder add-on)
-        # - Column widths (should be handled by styling in builders)
-        # - Summary fields (should be part of data mapping)
-        
         return True

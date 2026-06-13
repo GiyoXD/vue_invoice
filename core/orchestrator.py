@@ -6,6 +6,7 @@ from typing import Dict, Optional, Tuple, Any
 
 # Import the logic directly!
 from core.invoice_generator.generate_invoice import run_invoice_generation
+from core.invoice_generator.models.request import InvoiceGenerationRequest, InvoicePathConfig, ExplicitOverrides
 from core.data_parser.main import run_invoice_automation
 from core.data_parser.data_processor import DataValidationError
 from core.utils.snitch import snitch
@@ -62,16 +63,23 @@ class Orchestrator:
         """
         try:
             # CALLING DIRECTLY
-            result = run_invoice_generation(
+            paths = InvoicePathConfig(
                 input_data_path=json_path,
                 output_path=output_path,
                 template_dir=template_dir,
-                config_dir=config_dir,
+                config_dir=config_dir
+            )
+            overrides = ExplicitOverrides(
                 explicit_config_path=explicit_config_path,
                 explicit_template_path=explicit_template_path,
-                input_data_dict=input_data_dict,
+                input_data_dict=input_data_dict
+            )
+            req = InvoiceGenerationRequest(
+                paths=paths,
+                overrides=overrides,
                 options=options
             )
+            result = run_invoice_generation(req)
             return result
 
         except Exception as e:

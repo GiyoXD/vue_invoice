@@ -13,6 +13,12 @@ from core.invoice_generator.config.config_loader import BundledConfigLoader
 from core.invoice_generator.builders.deep_sheet_builder import DeepSheetBuilder
 from core.invoice_generator.processors.single_table_processor import SingleTableProcessor
 from core.invoice_generator.processors.multi_table_processor import MultiTableProcessor
+from core.invoice_generator.models.context import (
+    ProcessorContext, ExcelIOContext, SheetConfigContext, RuntimeDataContext
+)
+from core.invoice_generator.models.request import (
+    GenerationOptions, InvoicePathConfig, ExplicitOverrides, InvoiceGenerationRequest
+)
 
 from core.invoice_generator.utils.generation_session import GenerationSession
 from core.invoice_generator.utils.workbook_utils import (
@@ -32,34 +38,12 @@ DEFAULT_TEMPLATE_DIR = sys_config.templates_dir
 DEFAULT_CONFIG_DIR = sys_config.registry_dir
 
 
-@dataclass
-class GenerationOptions:
-    """Encapsulates all generation mode flags and output options."""
-    daf_mode: bool = False
-    custom_mode: bool = False
-    enable_auto_fit: bool = True
-    split_sheets: bool = False
-    return_bytes: bool = False
-    explicit_config_data: Optional[Dict[str, Any]] = None
-    explicit_template_json_data: Optional[Dict[str, Any]] = None
-    explicit_template_xlsx_bytes: Optional[bytes] = None
-
-
-def run_invoice_generation(
-    input_data_path: Path,
-    output_path: Path,
-    template_dir: Optional[Path] = None,
-    config_dir: Optional[Path] = None,
-    explicit_config_path: Optional[Path] = None,
-    explicit_template_path: Optional[Path] = None,
-    input_data_dict: Optional[Dict[str, Any]] = None,
-    options: Optional[GenerationOptions] = None
-):
+def run_invoice_generation(req: InvoiceGenerationRequest):
     """
     Library entry point for invoice generation. 
     Uses GenerationSession context manager to ensure robust error handling.
     """
-    opts = options or GenerationOptions()
+    opts = req.options or GenerationOptions()
 
     # 0. FORCE CLEAR SESSION LOG (Per User Request)
     try:
@@ -70,13 +54,12 @@ def run_invoice_generation(
 
     # 1. Resolve Paths
     input_data_path, output_path, template_dir, config_dir = _resolve_generation_paths(
-        input_data_path, output_path, template_dir, config_dir
+        req.paths.input_data_path, req.paths.output_path, req.paths.template_dir, req.paths.config_dir
     )
 
     # 2. Initialize Context
     ctx = _initialize_context(
-        input_data_path, output_path, template_dir, config_dir,
-        explicit_config_path, explicit_template_path, input_data_dict, opts
+        input_data_path, output_path, template_dir, config_dir, req
     )
 
     # === CORE GENERATION LOGIC WITH MONITOR ===
@@ -172,20 +155,19 @@ class GeneratorContext:
 def _initialize_context(
     input_path: Path, output_path: Path, 
     template_dir: Path, config_dir: Path,
-    manual_config: Optional[Path], manual_template: Optional[Path],
-    data_dict: Optional[Dict], options: Optional[GenerationOptions] = None
+    req: InvoiceGenerationRequest
 ) -> GeneratorContext:
-    invoice_data = data_dict or {}
+    invoice_data = req.overrides.input_data_dict or {}
     if not invoice_data:
         logger.warning("No input data dictionary provided.")
 
-    ctx = GeneratorContext(input_path, output_path, invoice_data, options)
+    ctx = GeneratorContext(input_path, output_path, invoice_data, req.options)
     ctx.template_dir = template_dir
     ctx.config_dir = config_dir
     
     # Pre-resolve known manual paths
-    if manual_config: ctx.paths['config'] = manual_config.resolve()
-    if manual_template: ctx.paths['template'] = manual_template.resolve()
+    if req.overrides.explicit_config_path: ctx.paths['config'] = req.overrides.explicit_config_path.resolve()
+    if req.overrides.explicit_template_path: ctx.paths['template'] = req.overrides.explicit_template_path.resolve()
     
     return ctx
 
@@ -316,11 +298,26 @@ def _process_sheets(ctx: GeneratorContext, session: GenerationSession):
             if not ds_type:
                 continue
 
-            processor = _get_processor(
-                ds_type, tmpl_ws, out_ws, sheet_name, sheet_conf, 
-                ctx.config_loader, ctx.invoice_data, proc_args, ctx.final_grand_total_pallets,
-                ctx.template_workbook, ctx.output_workbook 
+            io_ctx = ExcelIOContext(
+                template_workbook=ctx.template_workbook,
+                output_workbook=ctx.output_workbook,
+                template_worksheet=tmpl_ws,
+                output_worksheet=out_ws
             )
+            config_ctx = SheetConfigContext(
+                sheet_name=sheet_name,
+                sheet_config=sheet_conf,
+                data_source_indicator=ds_type,
+                config_loader=ctx.config_loader
+            )
+            data_ctx = RuntimeDataContext(
+                invoice_data=ctx.invoice_data,
+                cli_args=proc_args,
+                final_grand_total_pallets=ctx.final_grand_total_pallets
+            )
+            proc_ctx = ProcessorContext(io=io_ctx, config=config_ctx, data=data_ctx)
+
+            processor = _get_processor(ds_type, proc_ctx)
 
             if processor and processor.process():
                  session.log_success(sheet_name)
@@ -334,31 +331,16 @@ def _process_sheets(ctx: GeneratorContext, session: GenerationSession):
             raise e
 
 
-def _get_processor(ds_type, tmpl_ws, out_ws, name, conf, loader, data, args, pallets, tmpl_wb, out_wb):
+def _get_processor(ds_type: str, ctx: ProcessorContext):
     """Factory method for processors."""
-    # Common kwargs
-    kwargs = {
-        "template_worksheet": tmpl_ws,
-        "output_worksheet": out_ws,
-        "sheet_name": name,
-        "sheet_config": conf,
-        "config_loader": loader,
-        "data_source_indicator": ds_type,
-        "invoice_data": data,
-        "cli_args": args,
-        "final_grand_total_pallets": pallets,
-        "template_workbook": tmpl_wb,
-        "output_workbook": out_wb
-    }
-
     if ds_type in ["processed_tables_multi", "processed_tables", "detail_packing_list"]:
-        return MultiTableProcessor(**kwargs)
+        return MultiTableProcessor(ctx)
     elif "aggregation" in ds_type or ds_type in ["DAF_aggregation", "summary_packing_list"]:
         # Fallback to aggregation for unknown/custom types that have 'aggregation' in the name
-        return SingleTableProcessor(**kwargs)
+        return SingleTableProcessor(ctx)
     else:
         logger.warning(f"Unknown data source type '{ds_type}', falling back to SingleTableProcessor")
-        return SingleTableProcessor(**kwargs)
+        return SingleTableProcessor(ctx)
 
 
 def _resolve_generation_paths(
@@ -436,16 +418,20 @@ def main():
             split_sheets=args.split_sheets
         )
 
-        run_invoice_generation(
+        paths = InvoicePathConfig(
             input_data_path=Path(args.input_data_file),
             output_path=output_path,
             template_dir=Path(args.templatedir) if args.templatedir else None,
-            config_dir=Path(args.configdir) if args.configdir else None,
+            config_dir=Path(args.configdir) if args.configdir else None
+        )
+        overrides = ExplicitOverrides(
             explicit_config_path=Path(args.config) if args.config else None,
             explicit_template_path=Path(args.template) if args.template else None,
-            input_data_dict=cli_data,
-            options=cli_options
+            input_data_dict=cli_data
         )
+        req = InvoiceGenerationRequest(paths=paths, overrides=overrides, options=cli_options)
+
+        run_invoice_generation(req)
         print(f"Successfully generated: {args.output}")
     except Exception as e:
         print(f"Generation failed: {e}")

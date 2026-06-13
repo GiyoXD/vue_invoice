@@ -45,6 +45,10 @@ class MultiTableProcessor(SheetProcessor):
             return False
 
         # 3. Initialize Tracking Variables
+        from ..models.layout_state import SheetLayoutState
+        layout_state = SheetLayoutState()
+        layout_state.advance_to(self.header_row)
+        
         current_row = self.header_row
         all_data_ranges = []
         grand_total_pallets = 0
@@ -52,27 +56,48 @@ class MultiTableProcessor(SheetProcessor):
         
         # 4. Process Each Table
         for i, table_key in enumerate(table_keys):
-            result = self._process_single_table(
-                table_key=table_key,
-                index=i,
-                total_tables=len(table_keys),
-                current_row=current_row,
-                all_tables_data=all_tables_data,
-                template_state_builder=template_state_builder
+            is_first_table = (i == 0)
+            is_last_table = (i == len(table_keys) - 1)
+            show_grand_total_addons = (len(table_keys) == 1)
+            
+            logger.info(f"Processing table '{table_key}' ({i+1}/{len(table_keys)})")
+            
+            from core.invoice_generator.models.context import TableLayoutRequest
+            layout_builder = self._build_table_layout(
+                TableLayoutRequest(
+                    layout_state=layout_state,
+                    table_key=table_key,
+                    is_first_table=is_first_table,
+                    is_last_table=is_last_table,
+                    skip_template_footer=True,
+                    template_state_builder=template_state_builder,
+                    show_grand_total_addons=show_grand_total_addons
+                )
             )
             
-            if not result:
+            if not layout_builder:
                 return False
             
-            # Unpack result
-            (next_row, table_pallets, data_range, header_info, table_leather_summary) = result
+            # Calculate next row
+            next_row = layout_builder.next_row_after_footer
+            if not is_last_table:
+                next_row += 1
+                
+            # Retrieve pallet count from LayoutBuilder (calculated by TableCalculator)
+            table_pallets = layout_builder.footer_data.total_pallets if layout_builder.footer_data else 0
+            
+            # Get data range
+            data_range = None
+            if layout_builder.data_start_row > 0 and layout_builder.data_end_row >= layout_builder.data_start_row:
+                data_range = (layout_builder.data_start_row, layout_builder.data_end_row)
             
             # Update tracking
-            current_row = next_row
+            layout_state.advance_to(next_row)
+            current_row = layout_state.next_free_row
             grand_total_pallets += table_pallets
             if data_range:
                 all_data_ranges.append(data_range)
-            last_header_info = header_info
+            last_header_info = layout_builder.header_info
 
         # 5. Build Grand Total Row
         if len(table_keys) > 1 and last_header_info:
@@ -134,84 +159,6 @@ class MultiTableProcessor(SheetProcessor):
         # JSON template is required - XLSX scanning has been removed
         logger.critical(f"CRITICAL: No JSON template found for sheet '{self.sheet_name}'. XLSX scanning has been removed.")
         return None
-
-    def _process_single_table(self, table_key, index, total_tables, current_row, all_tables_data, template_state_builder):
-        """Processes a single table iteration."""
-        is_first_table = (index == 0)
-        is_last_table = (index == total_tables - 1)
-        logger.info(f"Processing table '{table_key}' ({index+1}/{total_tables})")
-        
-        show_grand_total_addons = (total_tables == 1)
-        
-        resolver = BuilderConfigResolver(
-            config_loader=self.config_loader,
-            sheet_name=self.sheet_name,
-            worksheet=self.output_worksheet,
-            args=self.args,
-            invoice_data=self.invoice_data,
-            pallets=0
-        )
-        
-        style_config = resolver.get_style_bundle()
-        context_config = resolver.get_context_bundle(
-            is_last_table=is_last_table,
-            show_grand_total_addons=show_grand_total_addons
-        )
-        layout_config = resolver.get_layout_bundle()
-        
-        # Resolve table data
-        table_data_resolver = resolver.get_table_data_resolver(table_key=str(table_key))
-        resolved_data = table_data_resolver.resolve()
-        layout_config['resolved_data'] = resolved_data
-        
-        # Override header row position
-        if not 'structure' in layout_config.get('sheet_config', {}):
-            if 'sheet_config' not in layout_config:
-                layout_config['sheet_config'] = {}
-            layout_config['sheet_config']['structure'] = {}
-        layout_config['sheet_config']['structure']['header_row'] = current_row
-        
-        layout_config['skip_template_header_restoration'] = (not is_first_table)
-        layout_config['skip_template_footer_restoration'] = True
-        layout_config['allow_col_desc_merge'] = getattr(self, 'allow_col_desc_merge', True)
-        layout_config['is_global_unique_desc'] = getattr(self, 'is_global_unique_desc', False)
-        layout_config['data_source_type'] = self.sheet_config.get('data_source', 'processed_tables_multi') if self.sheet_config else 'processed_tables_multi'
-        
-        layout_builder = LayoutBuilder(
-            self.output_workbook,
-            self.output_worksheet,
-            self.template_worksheet,
-            style_config=style_config,
-            context_config=context_config,
-            layout_config=layout_config,
-            template_state_builder=template_state_builder
-        )
-        
-        success = layout_builder.build()
-        if not success:
-            logger.error(f"Failed to build layout for table '{table_key}'")
-            return None
-        
-        # Calculate next row
-        next_row = layout_builder.next_row_after_footer
-        if not is_last_table:
-            next_row += 1
-            
-        # Retrieve pallet count from LayoutBuilder (calculated by TableCalculator)
-        table_pallets = layout_builder.footer_data.total_pallets if layout_builder.footer_data else 0
-        
-        # Get data range
-        data_range = None
-        if layout_builder.data_start_row > 0 and layout_builder.data_end_row >= layout_builder.data_start_row:
-            data_range = (layout_builder.data_start_row, layout_builder.data_end_row)
-            
-        return (
-            next_row,
-            table_pallets,
-            data_range,
-            layout_builder.header_info,
-            getattr(layout_builder, 'leather_summary', None)
-        )
 
     def _build_grand_total_row(self, current_row, grand_total_pallets, all_data_ranges, last_header_info, 
                              all_tables_data, table_keys):

@@ -5,7 +5,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment, Color
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.cell import coordinate_from_string, column_index_from_string
-from core.blueprint_generator.internal.scanner.models import TemplateLayout
+from core.blueprint_generator.internal.scanner.models import TemplateLayout, ZoneBoundaries
 from core.blueprint_generator.internal.scanner.models.template import UnitRow
 
 # Utils
@@ -49,10 +49,8 @@ class JsonTemplateStateBuilder:
         # DEBUG INPUT
         logger.debug(f"[JsonTemplateStateBuilder] __init__ INPUT: sheet_layout_data keys={list(sheet_layout_data.keys()) if sheet_layout_data else 'None'}")
         
-        # Row tracking
-        self.template_footer_start_row: int = -1
-        self.template_footer_end_row: int = -1
-        self.header_end_row: int = -1
+        # Boundaries
+        self.boundaries: Optional[ZoneBoundaries] = None
         
         # Dimensions
         self.min_row = 1
@@ -83,23 +81,22 @@ class JsonTemplateStateBuilder:
                 max_col = max(max_col, cell.col_index)
                 if cell.merge:
                     max_col = max(max_col, cell.merge.max_col)
-        
-        self.header_end_row = header_end_row
         self.max_col = max_col
 
-        # 3. Calculate footer boundaries
+        # 2. Calculate footer boundaries
+        template_footer_start_row = -1
+        template_footer_end_row = -1
         if self.layout_obj.footer_rows:
-            if self.header_end_row <= 0:
+            if header_end_row <= 0:
                 logger.error(
                     "[JsonTemplateStateBuilder] header_end_row is 0 or negative — "
                     "cannot safely place footer. template_footer_start_row set to -1. "
                     "Check that header_content is non-empty in the layout JSON."
                 )
-                self.template_footer_start_row = -1
             else:
-                self.template_footer_start_row = self.header_end_row + 1
+                template_footer_start_row = header_end_row + 1
             max_rel_idx = max((r.relative_index for r in self.layout_obj.footer_rows), default=-1)
-            self.template_footer_end_row = (self.template_footer_start_row + max_rel_idx) if max_rel_idx >= 0 else -1
+            template_footer_end_row = (template_footer_start_row + max_rel_idx) if max_rel_idx >= 0 else -1
             
             # Update max_col based on footer cells
             for row in self.layout_obj.footer_rows:
@@ -107,21 +104,46 @@ class JsonTemplateStateBuilder:
                     self.max_col = max(self.max_col, cell.col_index)
                     if cell.merge:
                         self.max_col = max(self.max_col, cell.merge.max_col)
-        else:
-            self.template_footer_start_row = -1
-            self.template_footer_end_row = -1
-
-        # 4. Update max dimensions
+        
+        # 3. Update max dimensions
         if self.layout_obj.col_widths:
             self.max_col = max(
                 self.max_col,
                 max(column_index_from_string(col) for col in self.layout_obj.col_widths.keys())
             )
         
-        if self.template_footer_end_row > 0:
-            self.max_row = self.template_footer_end_row
-        elif self.header_end_row > 0:
-            self.max_row = self.header_end_row
+        if template_footer_end_row > 0:
+            self.max_row = template_footer_end_row
+        elif header_end_row > 0:
+            self.max_row = header_end_row
+        else:
+            self.max_row = 1
+
+        self.boundaries = ZoneBoundaries(
+            header_row=header_end_row + 1,
+            data_start_row=header_end_row + 2,
+            footer_row=template_footer_start_row - 1 if template_footer_start_row > 0 else None,
+            max_col=self.max_col
+        )
+
+    # --- Boundaries Compatibility Properties ---
+
+    @property
+    def header_end_row(self) -> int:
+        return self.boundaries.header_row - 1 if self.boundaries else -1
+
+    @property
+    def template_footer_start_row(self) -> int:
+        if not self.boundaries or self.boundaries.footer_row is None:
+            return -1
+        return self.boundaries.footer_row + 1
+
+    @property
+    def template_footer_end_row(self) -> int:
+        if not self.boundaries or self.boundaries.footer_row is None:
+            return -1
+        max_rel_idx = max((r.relative_index for r in self.layout_obj.footer_rows), default=-1)
+        return (self.template_footer_start_row + max_rel_idx) if max_rel_idx >= 0 else -1
 
     # --- Style Helpers ---
 
@@ -259,15 +281,31 @@ class JsonTemplateStateBuilder:
                 
                 # Merge
                 if cell.merge:
-                    merge_range = (
+                    merge_range_str = (
                         f"{get_column_letter(cell.merge.min_col)}{actual_row}:"
                         f"{get_column_letter(cell.merge.max_col)}"
                         f"{actual_row + cell.merge.row_span - 1}"
                     )
-                    try:
-                        ws.merge_cells(merge_range)
-                    except ValueError:
-                        logger.warning(f"[JsonTemplateStateBuilder] Skipped overlapping merge {merge_range} on '{ws.title}'.")
+                    
+                    # Check if cells are already merged to prevent ValueError
+                    from openpyxl.utils import range_boundaries
+                    min_col, min_row, max_col, max_row = range_boundaries(merge_range_str)
+                    
+                    overlap = False
+                    for existing_range in ws.merged_cells.ranges:
+                        # Check intersection
+                        if (min_row <= existing_range.max_row and max_row >= existing_range.min_row and
+                            min_col <= existing_range.max_col and max_col >= existing_range.min_col):
+                            overlap = True
+                            break
+                            
+                    if overlap:
+                        logger.warning(f"[JsonTemplateStateBuilder] Skipped overlapping merge {merge_range_str} on '{ws.title}'.")
+                    else:
+                        try:
+                            ws.merge_cells(merge_range_str)
+                        except ValueError as e:
+                            logger.warning(f"[JsonTemplateStateBuilder] Merge failed {merge_range_str}: {e}")
 
     # --- Public API (thin wrappers) ---
     
