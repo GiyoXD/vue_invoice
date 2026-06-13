@@ -46,15 +46,14 @@ class SingleTableProcessor(SheetProcessor):
         
         logger.debug(f"Calculated weight totals for {self.sheet_name}: N.W={total_net_weight}, G.W={total_gross_weight}")
         
-        from ..models.layout_state import SheetLayoutState
-        from core.invoice_generator.models.context import TableLayoutRequest
+        from core.invoice_generator.models.layout import SheetLayoutState, TableLayoutConfig
         layout_state = SheetLayoutState()
         layout_state.advance_to(self.header_row)
 
         layout_builder = self._build_table_layout(
-            TableLayoutRequest(
-                layout_state=layout_state,
-                table_key=None,
+            layout_state=layout_state,
+            table_key=None,
+            config=TableLayoutConfig(
                 is_first_table=True,
                 is_last_table=True,
                 total_net_weight=float(total_net_weight),

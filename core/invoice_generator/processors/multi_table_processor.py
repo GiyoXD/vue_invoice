@@ -45,7 +45,7 @@ class MultiTableProcessor(SheetProcessor):
             return False
 
         # 3. Initialize Tracking Variables
-        from ..models.layout_state import SheetLayoutState
+        from core.invoice_generator.models.layout import SheetLayoutState
         layout_state = SheetLayoutState()
         layout_state.advance_to(self.header_row)
         
@@ -62,17 +62,17 @@ class MultiTableProcessor(SheetProcessor):
             
             logger.info(f"Processing table '{table_key}' ({i+1}/{len(table_keys)})")
             
-            from core.invoice_generator.models.context import TableLayoutRequest
+            from core.invoice_generator.models.layout import TableLayoutConfig
             layout_builder = self._build_table_layout(
-                TableLayoutRequest(
-                    layout_state=layout_state,
-                    table_key=table_key,
+                layout_state=layout_state,
+                table_key=table_key,
+                config=TableLayoutConfig(
                     is_first_table=is_first_table,
                     is_last_table=is_last_table,
                     skip_template_footer=True,
-                    template_state_builder=template_state_builder,
                     show_grand_total_addons=show_grand_total_addons
-                )
+                ),
+                template_state_builder=template_state_builder
             )
             
             if not layout_builder:

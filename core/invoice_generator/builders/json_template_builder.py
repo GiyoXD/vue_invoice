@@ -6,7 +6,7 @@ from openpyxl.styles import Font, PatternFill, Border, Side, Alignment, Color
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.cell import coordinate_from_string, column_index_from_string
 from core.blueprint_generator.internal.scanner.models import TemplateLayout, ZoneBoundaries
-from core.blueprint_generator.internal.scanner.models.template import UnitRow
+from core.models.cell import UnitRow
 
 # Utils
 

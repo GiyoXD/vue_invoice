@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any, Dict
 
 @dataclass
 class TableZoneBoundary:
@@ -49,3 +49,29 @@ class SheetLayoutState:
             self.advance_to(data[1] + 1)
         elif header and header[1] >= header[0]:
             self.advance_to(header[1] + 1)
+
+@dataclass
+class TableData:
+    """Holds only the content to be rendered in the table grid."""
+    table_key: Optional[str]
+    columns: List[Dict[str, Any]]
+    data_rows: List[Dict[str, Any]]
+    local_totals: Dict[str, Any] = field(default_factory=dict)
+
+@dataclass
+class AddonSummaryRow:
+    """A generic key-value/summary row to append under the table (e.g., Grand Totals)."""
+    label: str
+    values: Dict[str, Any]
+    style_context: str = "grand_total"
+
+@dataclass
+class TableLayoutConfig:
+    """Explicit styling and layout commands for building a table layout block."""
+    is_first_table: bool = True
+    is_last_table: bool = True
+    skip_template_footer: bool = False
+    show_grand_total_addons: bool = False
+    total_net_weight: Optional[float] = None
+    total_gross_weight: Optional[float] = None
+    addons: List[AddonSummaryRow] = field(default_factory=list)

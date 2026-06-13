@@ -5,7 +5,8 @@ from openpyxl.worksheet.worksheet import Worksheet
 import argparse
 from typing import Dict, Any, Optional
 from core.system_config import ConfigurationError
-from core.invoice_generator.models.context import ProcessorContext, TableLayoutRequest
+from core.invoice_generator.models.context import ProcessorContext
+from core.invoice_generator.models.layout import SheetLayoutState, TableLayoutConfig
 
 class SheetProcessor(ABC):
     """
@@ -111,36 +112,42 @@ class SheetProcessor(ABC):
         """
         pass
 
-    def _build_table_layout(self, request: TableLayoutRequest):
+    def _build_table_layout(
+        self,
+        layout_state: SheetLayoutState,
+        table_key: Optional[str],
+        config: TableLayoutConfig,
+        template_state_builder: Optional[Any] = None
+    ):
         """
         Orchestrates the common workflow of BuilderConfigResolver resolution and LayoutBuilder execution.
         Saves subclasses from duplicating this execution sequence.
         """
         resolver = self._init_resolver(
-            is_last_table=request.is_last_table,
-            total_net_weight=request.total_net_weight,
-            total_gross_weight=request.total_gross_weight
+            is_last_table=config.is_last_table,
+            total_net_weight=config.total_net_weight,
+            total_gross_weight=config.total_gross_weight
         )
         
         style_config, context_config, layout_config = self._resolve_layout_configs(
             resolver=resolver,
-            table_key=request.table_key,
-            is_last_table=request.is_last_table,
-            show_grand_total_addons=request.show_grand_total_addons,
-            next_free_row=request.layout_state.next_free_row
+            table_key=table_key,
+            is_last_table=config.is_last_table,
+            show_grand_total_addons=config.show_grand_total_addons,
+            next_free_row=layout_state.next_free_row
         )
         
-        if not self._resolve_table_data(resolver, request.table_key, layout_config):
+        if not self._resolve_table_data(resolver, table_key, layout_config):
             return None
             
         return self._run_layout_builder(
-            layout_state=request.layout_state,
+            layout_state=layout_state,
             style_config=style_config,
             context_config=context_config,
             layout_config=layout_config,
-            template_state_builder=request.template_state_builder,
-            is_first_table=request.is_first_table,
-            skip_template_footer=request.skip_template_footer
+            template_state_builder=template_state_builder,
+            is_first_table=config.is_first_table,
+            skip_template_footer=config.skip_template_footer
         )
 
     def _init_resolver(

@@ -33,17 +33,3 @@ class ProcessorContext:
     config: SheetConfigContext
     data: RuntimeDataContext
 
-
-@dataclass
-class TableLayoutRequest:
-    """Encapsulates all layout configuration and state parameters required to build a table layout."""
-    layout_state: Any  # Avoid circular import of SheetLayoutState if type hint exists
-    table_key: Optional[str] = None
-    is_first_table: bool = True
-    is_last_table: bool = True
-    skip_template_footer: bool = False
-    template_state_builder: Optional[Any] = None
-    show_grand_total_addons: bool = False
-    total_net_weight: Optional[float] = None
-    total_gross_weight: Optional[float] = None
-

@@ -11,7 +11,7 @@ from .footer_builder import TableFooterBuilder
 from .json_template_builder import JsonTemplateStateBuilder
 from openpyxl.drawing.image import Image
 from ...system_config import sys_config, ConfigurationError
-from ..models.layout_state import SheetLayoutState
+from ..models.layout import SheetLayoutState
 
 # Initialize logger for this module
 logger = logging.getLogger(__name__)
