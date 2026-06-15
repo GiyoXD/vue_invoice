@@ -233,7 +233,8 @@ class JsonTemplateStateBuilder:
     # --- Core Restoration Logic ---
 
     def restore_rows(self, ws: Worksheet, rows: List[UnitRow],
-                     start_row: int, mode: str = "standard"):
+                     start_row: int, mode: str = "standard",
+                     layout_state: Optional[Any] = None):
         """
         Unified restoration: writes a list of UnitRow model objects to a worksheet.
         
@@ -246,6 +247,7 @@ class JsonTemplateStateBuilder:
             rows: List of UnitRow model objects (from layout_obj.header_rows or footer_rows).
             start_row: The worksheet row to map relative_index=0 onto.
             mode: Generation mode for resolving mode-dependent values ('standard', 'daf', 'custom').
+            layout_state: Optional layout state tracking occupied/merged cells.
         """
         for row in rows:
             actual_row = start_row + row.relative_index
@@ -287,29 +289,39 @@ class JsonTemplateStateBuilder:
                         f"{actual_row + cell.merge.row_span - 1}"
                     )
                     
-                    # Check if cells are already merged to prevent ValueError
-                    from openpyxl.utils import range_boundaries
-                    min_col, min_row, max_col, max_row = range_boundaries(merge_range_str)
-                    
-                    overlap = False
-                    for existing_range in ws.merged_cells.ranges:
-                        # Check intersection
-                        if (min_row <= existing_range.max_row and max_row >= existing_range.min_row and
-                            min_col <= existing_range.max_col and max_col >= existing_range.min_col):
-                            overlap = True
-                            break
-                            
-                    if overlap:
-                        logger.warning(f"[JsonTemplateStateBuilder] Skipped overlapping merge {merge_range_str} on '{ws.title}'.")
+                    if layout_state:
+                        # Register in coordinator to track occupied and merged cells
+                        layout_state.merge_cells(
+                            start_row=actual_row,
+                            start_col_id_or_idx=cell.merge.min_col,
+                            end_row=actual_row + cell.merge.row_span - 1,
+                            end_col_id_or_idx=cell.merge.max_col
+                        )
                     else:
-                        try:
-                            ws.merge_cells(merge_range_str)
-                        except ValueError as e:
-                            logger.warning(f"[JsonTemplateStateBuilder] Merge failed {merge_range_str}: {e}")
+                        # Fallback to direct merge without coordinator tracking
+                        # Check if cells are already merged to prevent ValueError
+                        from openpyxl.utils import range_boundaries
+                        min_col, min_row, max_col, max_row = range_boundaries(merge_range_str)
+                        
+                        overlap = False
+                        for existing_range in ws.merged_cells.ranges:
+                            # Check intersection
+                            if (min_row <= existing_range.max_row and max_row >= existing_range.min_row and
+                                min_col <= existing_range.max_col and max_col >= existing_range.min_col):
+                                overlap = True
+                                break
+                                
+                        if overlap:
+                            logger.warning(f"[JsonTemplateStateBuilder] Skipped overlapping merge {merge_range_str} on '{ws.title}'.")
+                        else:
+                            try:
+                                ws.merge_cells(merge_range_str)
+                            except ValueError as e:
+                                logger.warning(f"[JsonTemplateStateBuilder] Merge failed {merge_range_str}: {e}")
 
     # --- Public API (thin wrappers) ---
     
-    def restore_header_only(self, target_worksheet: Worksheet, actual_num_cols: int = None, mode: str = "standard"):
+    def restore_header_only(self, target_worksheet: Worksheet, actual_num_cols: int = None, mode: str = "standard", layout_state: Optional[Any] = None):
         """
         Restores ONLY the header to a worksheet.
         
@@ -317,16 +329,17 @@ class JsonTemplateStateBuilder:
             target_worksheet: The worksheet to write header content onto.
             actual_num_cols: Optional column count (kept for API compatibility, not used).
             mode: Generation mode ('standard', 'daf', 'custom').
+            layout_state: Optional layout state tracking occupied/merged cells.
         """
         logger.info(f"[JsonTemplateStateBuilder] Restoring Header to '{target_worksheet.title}' (mode={mode})")
         
-        self.restore_rows(target_worksheet, self.layout_obj.header_rows, start_row=1, mode=mode)
+        self.restore_rows(target_worksheet, self.layout_obj.header_rows, start_row=1, mode=mode, layout_state=layout_state)
         
         # Column widths are a header-only concern
         for col_letter, w in self.layout_obj.col_widths.items():
             target_worksheet.column_dimensions[col_letter].width = w
 
-    def restore_template_footer(self, target_worksheet: Worksheet, footer_start_row: int, actual_num_cols: int = None, mode: str = "standard"):
+    def restore_template_footer(self, target_worksheet: Worksheet, footer_start_row: int, actual_num_cols: int = None, mode: str = "standard", layout_state: Optional[Any] = None):
         """
         Restores the template footer content at a specific starting row.
         
@@ -335,6 +348,7 @@ class JsonTemplateStateBuilder:
             footer_start_row: The row number where the footer should begin.
             actual_num_cols: Optional column count (kept for API compatibility, not used).
             mode: Generation mode ('standard', 'daf', 'custom').
+            layout_state: Optional layout state tracking occupied/merged cells.
         """
         logger.info(f"[JsonTemplateStateBuilder] Restoring Footer to '{target_worksheet.title}' at row {footer_start_row} (mode={mode})")
         
@@ -342,7 +356,7 @@ class JsonTemplateStateBuilder:
             logger.warning(f"[JsonTemplateStateBuilder] Template footer rows is empty for '{target_worksheet.title}'.")
             return
         
-        self.restore_rows(target_worksheet, self.layout_obj.footer_rows, start_row=footer_start_row, mode=mode)
+        self.restore_rows(target_worksheet, self.layout_obj.footer_rows, start_row=footer_start_row, mode=mode, layout_state=layout_state)
 
     # --- Value Resolution ---
 

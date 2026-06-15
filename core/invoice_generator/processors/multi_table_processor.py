@@ -9,7 +9,7 @@ from openpyxl.utils import get_column_letter
 
 from .base_processor import SheetProcessor
 from ..builders.layout_builder import LayoutBuilder
-from ..builders.footer_builder import TableFooterBuilder
+from ..builders.table import TableFooterBuilder
 from ..styling.models import StylingConfigModel, FooterData
 from ..config.builder_config_resolver import BuilderConfigResolver
 

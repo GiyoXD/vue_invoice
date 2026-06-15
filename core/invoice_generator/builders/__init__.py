@@ -2,14 +2,20 @@
 from .bundle_accessor import BundleAccessor
 from .workbook_builder import WorkbookBuilder
 from .layout_builder import LayoutBuilder
-from .header_builder import HeaderBuilderStyler
-from .data_table_builder import DataTableBuilderStyler
-from .footer_builder import TableFooterBuilder
+from .table import (
+    TableBuilder,
+    TableSectionBuilder,
+    HeaderBuilderStyler,
+    DataTableBuilderStyler,
+    TableFooterBuilder,
+)
 
 __all__ = [
     'BundleAccessor',
     'WorkbookBuilder',
     'LayoutBuilder',
+    'TableBuilder',
+    'TableSectionBuilder',
     'HeaderBuilderStyler',
     'DataTableBuilderStyler',
     'TableFooterBuilder',
