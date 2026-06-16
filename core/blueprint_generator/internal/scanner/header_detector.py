@@ -271,10 +271,16 @@ class BoundaryDetector:
                 if footer_row:
                     break
                     
+        footer_end_row = None
+        if footer_row:
+            footer_end_row = self._detect_footer_end_row(worksheet, footer_row, max_col)
+            self.logger.info(f"    Contiguous footer block end detected at row {footer_end_row}")
+                    
         return ZoneBoundaries(
             header_row=header_row,
             data_start_row=data_start_row,
             footer_row=footer_row,
+            footer_end_row=footer_end_row,
             max_col=max_col
         )
 
@@ -304,6 +310,75 @@ class BoundaryDetector:
                 if has_adjacent:
                     last_candidate = row
         return last_candidate
+
+    def _detect_footer_end_row(self, ws: Worksheet, footer_row: int, max_col: int) -> int:
+        """Scan downwards from footer_row to find the end of the contiguous footer block (e.g. addon rows)."""
+        from core.blueprint_generator.utils.content_extractor import _get_cell_value_safe
+        
+        current_row = footer_row
+        max_search_row = min(ws.max_row, footer_row + 15)  # Scan at most 15 rows down
+        
+        addon_keywords = [
+            "LEATHER", "COW", "BUFFALO", "PALLET", "PALLETS", "WEIGHT", "NW", "GW", "KGS", "PCS", "CBM", 
+            "NET", "GROSS", "TOTAL", "SUBTOTAL", "SUM"
+        ]
+        
+        signature_keywords = [
+            "SIGNATURE", "APPROVED", "PREPARED", "CHECKED", "RECEIVER", "MANAGER", "DIRECTOR",
+            "CHOP", "STAMP", "COMPANY", "BANK", "BENEFICIARY", "ACCOUNT", "SWIFT"
+        ]
+        
+        for row in range(footer_row + 1, max_search_row + 1):
+            tick("scanner.detect_footer_end_row", sub="rows_scanned")
+            # Check if row is empty
+            row_has_content = False
+            has_addon_keyword = False
+            has_signature_keyword = False
+            has_numeric_value = False
+            
+            for col in range(1, max_col + 1):
+                tick("scanner.detect_footer_end_row", sub="cells_checked")
+                cell = ws.cell(row=row, column=col)
+                value = _get_cell_value_safe(ws, cell)
+                if value is not None and str(value).strip():
+                    row_has_content = True
+                    val_str = str(value).strip()
+                    val_upper = val_str.upper()
+                    
+                    # Check for addon keywords
+                    if any(kw in val_upper for kw in addon_keywords) or val_str.startswith("="):
+                        has_addon_keyword = True
+                        
+                    # Check for signature keywords (which mark the start of static wrapper)
+                    if any(kw in val_upper for kw in signature_keywords):
+                        has_signature_keyword = True
+                        
+                    # Check if the value is numeric
+                    if not val_str.startswith("="):
+                        try:
+                            clean_num = re.sub(r'[^\d.]', '', val_str)
+                            if clean_num:
+                                float(clean_num)
+                                has_numeric_value = True
+                        except ValueError:
+                            pass
+            
+            if not row_has_content:
+                # If we hit an empty row, the contiguous footer block ends at the previous row
+                break
+                
+            if has_signature_keyword:
+                # If we hit a signature block keyword, the dynamic footer block has ended
+                break
+                
+            # A row is identified as a footer block row if it contains keywords AND contains at least one numeric value
+            if has_addon_keyword and has_numeric_value:
+                current_row = row
+            else:
+                # If it doesn't meet the footer heuristics, it belongs to the static template wrapper
+                break
+                
+        return current_row
 
     def _check_multi_row_header(self, worksheet: Worksheet, header_row: int) -> bool:
         """Check if there's a multi-row header structure."""

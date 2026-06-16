@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from openpyxl.utils import get_column_letter
 
@@ -14,13 +14,20 @@ class Grid:
     Virtual translation layer for painting table sections.
     Translates logical IDs to physical indices and applies styles based on context.
     """
-    def __init__(self, column_mapping: Dict[str, int], style_registry: StyleRegistry):
+    def __init__(self, column_mapping: Dict[str, int], style_registry: StyleRegistry, column_colspan: Optional[Dict[str, int]] = None):
         self.column_mapping = column_mapping
         self.style_registry = style_registry
+        self.column_colspan = column_colspan or {}
         self._grid: Dict[int, Dict[int, UnitCell]] = {}
         self._row_heights: Dict[int, Optional[float]] = {}
         self.start_row_index = 0
         self._cursor_row = 0
+        self._sections: Dict[str, Tuple[int, int]] = {}
+
+    @property
+    def num_columns(self) -> int:
+        """Returns the maximum column index in the column mapping."""
+        return max(self.column_mapping.values()) if self.column_mapping else 0
 
     def advance_row(self, count: int = 1):
         """Advances the internal row cursor for subsequent sections."""
@@ -29,6 +36,41 @@ class Grid:
     def set_start_row(self, row: int):
         """Sets the absolute start row for this grid context, used for formulas."""
         self.start_row_index = row
+
+    def get_column_letter(self, col_id: str) -> str:
+        """Resolves logical column ID to Excel column letter."""
+        idx = self._resolve_column(col_id)
+        if not idx:
+            raise ValueError(f"Column ID '{col_id}' not found in grid mapping.")
+        return get_column_letter(idx)
+
+    def get_column_index(self, col_id: str) -> int:
+        """Resolves logical column ID to physical 1-based column index."""
+        idx = self._resolve_column(col_id)
+        if not idx:
+            raise ValueError(f"Column ID '{col_id}' not found in grid mapping.")
+        return idx
+
+    def mark_section_start(self, name: str):
+        """Marks the starting relative cursor row of a named section."""
+        self._sections[name] = (self._cursor_row, -1)
+
+    def mark_section_end(self, name: str):
+        """Marks the ending relative cursor row of a named section."""
+        start = self._sections.get(name, (self._cursor_row, -1))[0]
+        end = self._cursor_row - 1
+        self._sections[name] = (start, end)
+
+    def get_section_range(self, name: str) -> Tuple[int, int]:
+        """Returns the physical start and end row indices for the named section."""
+        if name not in self._sections:
+            # Fallback to current cursor position
+            phys = self.start_row_index + self._cursor_row
+            return phys, phys
+        start, end = self._sections[name]
+        phys_start = self.start_row_index + start
+        phys_end = self.start_row_index + end
+        return phys_start, phys_end
 
     def _resolve_column(self, col_id: str) -> Optional[int]:
         """Resolves a logical column ID to a physical 1-based index."""
@@ -60,12 +102,13 @@ class Grid:
             logger.debug(f"Grid: Column ID '{col_id}' not found in mapping.")
             return
 
-        cell = self._get_or_create_cell(row, col_idx)
+        actual_row = row + self._cursor_row
+        cell = self._get_or_create_cell(actual_row, col_idx)
         cell.value = value
 
         # Set row height if not already set
-        if row not in self._row_heights:
-            self._row_heights[row] = self.style_registry.get_row_height(context)
+        if actual_row not in self._row_heights:
+            self._row_heights[actual_row] = self.style_registry.get_row_height(context)
 
         # Apply style
         if self.style_registry:
@@ -96,7 +139,8 @@ class Grid:
                 formula = formula.replace(f'{{col_ref_{i}}}', f'{col_letter}{{row}}')
 
         # Calculate actual absolute row
-        absolute_row = self.start_row_index + row
+        actual_row = row + self._cursor_row
+        absolute_row = self.start_row_index + actual_row
         formula = formula.replace('{row}', str(absolute_row))
 
         if not formula.startswith('='):
@@ -115,7 +159,8 @@ class Grid:
         if not col_idx:
             return
 
-        cell = self._get_or_create_cell(row, col_idx)
+        actual_row = row + self._cursor_row
+        cell = self._get_or_create_cell(actual_row, col_idx)
         # Note: TemplateMerge uses absolute coordinates for Excel. We store relative or absolute?
         # The models usually expect physical column indices and physical row span.
         cell.merge = TemplateMerge(
@@ -126,12 +171,20 @@ class Grid:
         )
         
         # Clear out values in merged span
-        for r in range(row, row + rowspan):
+        for r in range(actual_row, actual_row + rowspan):
             for c in range(col_idx, col_idx + colspan):
-                if r == row and c == col_idx:
+                if r == actual_row and c == col_idx:
                     continue
                 clear_cell = self._get_or_create_cell(r, c)
                 clear_cell.value = None
+
+
+
+    def get_cell(self, row: int, col_id: Any) -> UnitCell:
+        """Gets or creates a cell at a relative row and column ID/index."""
+        col_idx = self._resolve_column(col_id)
+        actual_row = row + self._cursor_row
+        return self._get_or_create_cell(actual_row, col_idx)
 
     def get_row_models(self) -> List[UnitRow]:
         """

@@ -1,7 +1,6 @@
 import logging
 from sqlalchemy import create_engine, event
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base, sessionmaker
 from pathlib import Path
 
 logger = logging.getLogger(__name__)

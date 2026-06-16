@@ -45,9 +45,11 @@ class HeaderBuilderStyler(TableSectionBuilder):
             logger.error("HeaderBuilder: No bundled columns provided!")
             raise ValueError("No bundled columns provided")
 
-    def build(self) -> Optional[Dict[str, Any]]:
+    def build(self) -> None:
         if not self.header_layout_config or self.start_row <= 0:
             return None
+
+        self.grid.mark_section_start("header")
 
         num_header_rows, num_header_cols = calculate_header_dimensions(self.header_layout_config)
 
@@ -93,17 +95,8 @@ class HeaderBuilderStyler(TableSectionBuilder):
                 if cell_id not in parent_column_ids:
                     column_colspan[cell_id] = colspan
 
-        header_info = {
-            'first_row_index': first_row_index,
-            'second_row_index': last_row_index,
-            'column_map': column_map,
-            'column_id_map': column_id_map,
-            'num_columns': max_col,
-            'column_colspan': column_colspan,  # Add colspan info for automatic merging
-            'parent_column_ids': list(parent_column_ids)
-        }
         self.grid.advance_row(num_header_rows) if hasattr(self.grid, 'advance_row') else None
-        return header_info
+        self.grid.mark_section_end("header")
     
     def _convert_bundled_columns(self, columns: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """

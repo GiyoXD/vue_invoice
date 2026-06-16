@@ -1,9 +1,8 @@
 import logging
 import traceback
 from decimal import Decimal, InvalidOperation
-from typing import Any, Dict
-
-from ...styling.models import FooterData
+from typing import Any, Dict, Optional, Union
+from core.invoice_generator.models.footer import FooterData, WeightDetail, LeatherDetail
 from ..bundle_accessor import BundleAccessor
 from .base import TableSectionBuilder
 from .grid import Grid
@@ -37,11 +36,12 @@ class TableFooterBuilder(BundleAccessor, TableSectionBuilder):
         self.initial_row = 0  # Grid is relative, start at 0 internally
 
     @property
-    def header_info(self) -> Dict[str, Any]:
-        return self.context_config.get('header_info', {})
-    
-    @property
     def sum_ranges(self) -> list:
+        # Dynamically query data section from grid
+        if hasattr(self.grid, "_sections") and "data" in self.grid._sections:
+            start, end = self.grid.get_section_range("data")
+            if start > 0 and end >= start:
+                return [(start, end)]
         return self.data_config.get('sum_ranges', [])
     
     @property
@@ -109,6 +109,8 @@ class TableFooterBuilder(BundleAccessor, TableSectionBuilder):
         # We handle grand_total by applying 'footer_no_border' context or we assume grid handles context well.
         context = 'footer' if footer_type != 'grand_total' else 'footer'
         
+        written_cols = []
+
         # Write default cells
         footer_cells = self.footer_config.get("footer_cells", [])
         for cell_config in footer_cells:
@@ -125,6 +127,7 @@ class TableFooterBuilder(BundleAccessor, TableSectionBuilder):
                 text = text.replace("{multiple}", "S" if self.pallet_count > 1 else "")
                 
             self.grid.write(row, col_id, text, context=context)
+            written_cols.append(col_id)
 
         # Write sum formulas
         sum_column_ids = self.footer_config.get("sum_cols", [])
@@ -135,17 +138,16 @@ class TableFooterBuilder(BundleAccessor, TableSectionBuilder):
                 # But sum_ranges are absolute rows like [(10, 15)].
                 # Actually, our grid doesn't yet support absolute ranges in write_formula elegantly.
                 # Let's just build the string. Wait, we don't know the column letter!
-                # We can add `_get_column_letter` to grid, or let the grid support range formulas.
-                # Since grid maps ID to letter, let's use the grid's mapping directly if needed.
-                col_idx = self.grid._resolve_column(col_id)
-                if col_idx:
-                    from openpyxl.utils import get_column_letter
-                    col_letter = get_column_letter(col_idx)
+                try:
+                    col_letter = self.grid.get_column_letter(col_id)
                     sum_parts = [f"{col_letter}{start}:{col_letter}{end}" for start, end in self.sum_ranges]
                     formula = f"=SUM({','.join(sum_parts)})"
                     self.grid.write(row, col_id, formula, context=context)
+                    written_cols.append(col_id)
+                except ValueError:
+                    pass
 
-        self._pad_row_styles(row)
+        self._pad_row_styles(row, exclude_cols=written_cols)
 
         merge_rules = self.footer_config.get("merge_rules", [])
         for rule in merge_rules:
@@ -180,9 +182,11 @@ class TableFooterBuilder(BundleAccessor, TableSectionBuilder):
         grand_total_gross = Decimal('0')
         
         if self.footer_data and self.footer_data.weight_summary:
+            ws = self.footer_data.weight_summary
+            ws_dict = ws.model_dump() if hasattr(ws, 'model_dump') else ws
             try:
-                grand_total_net = Decimal(str(self.footer_data.weight_summary.get('net', 0)))
-                grand_total_gross = Decimal(str(self.footer_data.weight_summary.get('gross', 0)))
+                grand_total_net = Decimal(str(ws_dict.get('net', 0)))
+                grand_total_gross = Decimal(str(ws_dict.get('gross', 0)))
             except Exception:
                 pass
 
@@ -209,31 +213,48 @@ class TableFooterBuilder(BundleAccessor, TableSectionBuilder):
         current_row = row
         sum_column_ids = self.footer_config.get("sum_cols", [])
 
+        # Get configurable column IDs with backward-compatible defaults
+        label_col_id = config.get("label_col_id", "col_desc")
+        pallet_col_id = config.get("pallet_col_id", "col_pallet_count")
+
         for leather_type in ['BUFFALO', 'COW']:
             summary_data = leather_summary.get(leather_type)
             if not summary_data:
                 continue
 
-            pallet_count = int(summary_data.get('col_pallet_count', summary_data.get('pallet_count', 0)))
-            has_sum = any(col_id in summary_data for col_id in sum_column_ids)
+            if hasattr(summary_data, 'model_dump'):
+                summary_data_dict = {
+                    **summary_data.model_dump(by_alias=True),
+                    **summary_data.model_dump(by_alias=False),
+                    **(summary_data.model_extra or {})
+                }
+            else:
+                summary_data_dict = summary_data
+
+            pallet_count = int(summary_data_dict.get('col_pallet_count', summary_data_dict.get('pallet_count', 0)))
+            has_sum = any(col_id in summary_data_dict for col_id in sum_column_ids)
 
             if pallet_count == 0 and not has_sum:
                 continue
 
+            written_cols = []
+
             # Write label
             type_text = "LEATHER" if leather_type == 'COW' else f"{leather_type} LEATHER"
-            label_col_id = "col_desc" # Simplification for now
             self.grid.write(current_row, label_col_id, type_text, context='footer')
+            written_cols.append(label_col_id)
 
             # Write values
             if pallet_count > 0:
-                self.grid.write(current_row, "col_pallet_count", str(pallet_count), context='footer')
+                self.grid.write(current_row, pallet_col_id, str(pallet_count), context='footer')
+                written_cols.append(pallet_col_id)
 
             for col_id in sum_column_ids:
-                if col_id in summary_data:
-                    self.grid.write(current_row, col_id, summary_data[col_id], context='footer')
+                if col_id in summary_data_dict:
+                    self.grid.write(current_row, col_id, summary_data_dict[col_id], context='footer')
+                    written_cols.append(col_id)
 
-            self._pad_row_styles(current_row)
+            self._pad_row_styles(current_row, exclude_cols=written_cols)
             current_row += 1
 
         return current_row
@@ -241,7 +262,7 @@ class TableFooterBuilder(BundleAccessor, TableSectionBuilder):
     def _pad_row_styles(self, row: int, exclude_cols=None):
         """Writes None to empty cells to trigger their background/border styles."""
         exclude_cols = exclude_cols or []
-        for col_id in self.header_info.get('column_id_map', {}).keys():
+        for col_id in self.grid.column_mapping.keys():
             if col_id not in exclude_cols:
                 # Get or create ensures the cell exists in the grid for export
                 self.grid.write(row, col_id, None, context='footer')

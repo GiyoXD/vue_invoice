@@ -694,6 +694,14 @@ def run_invoice_automation(
         leather_summary = data_processor.calculate_leather_summary(normal_aggregate_per_po)
         logging.info(f"Leather Summary: {leather_summary}")
 
+        # Calculate weight summary across all tables
+        raw_weight_summary = data_processor.calculate_weight_summary(merged_processed_data)
+        weight_summary_addon = {
+            'net': float(raw_weight_summary.get('col_net', 0.0)),
+            'gross': float(raw_weight_summary.get('col_gross', 0.0))
+        }
+        logging.info(f"Weight Summary Addon: {weight_summary_addon}")
+
         # --- Calculate Footer Data ---
         logging.info("--- Calculating Footer Data ---")
         
@@ -773,6 +781,7 @@ def run_invoice_automation(
                      "grand_total": make_json_serializable(grand_total_footer),   # Overall grand total
                      "add_ons": {
                          "leather_summary_addon": make_json_serializable(leather_summary),  # BUFFALO vs COW summary
+                         "weight_summary_addon": make_json_serializable(weight_summary_addon),
                      }
                  },
 

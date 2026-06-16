@@ -224,22 +224,24 @@ def find_total_label_cell(worksheet: Worksheet, start_row: int, end_row: int, ma
     return best_match if best_match else None
 
 @loop_profiler.watch("content_extractor.find_pallet_count_column")
-def find_pallet_count_column(worksheet: Worksheet, footer_row: int, columns: List['ColumnInfo'], find_col_id_func, logger_instance: logging.Logger, sheet_name: str = "Unknown") -> Optional[str]:
+def find_pallet_count_column(worksheet: Worksheet, footer_start_row: int, columns: List['ColumnInfo'], find_col_id_func, logger_instance: logging.Logger, sheet_name: str = "Unknown", footer_end_row: Optional[int] = None) -> Optional[str]:
     """
-    Scan the footer row for a pallet count pattern.
+    Scan the footer row range for a pallet count pattern.
     """
-    for col in range(1, min(worksheet.max_column + 1, BlueprintSchema.MAX_SCAN_COLUMN)):
-        tick("content_extractor.find_pallet_count_column", sub="cols_scanned")
-        cell = worksheet.cell(row=footer_row, column=col)
-        val = _get_cell_value_safe(worksheet, cell)
-        
-        if not val:
-            continue
-        
-        if PALLET_PATTERN.search(val) or (val.startswith("=") and PALLET_FORMULA_PATTERN.search(val)):
-            pallet_col_id = find_col_id_func(col, columns)
-            logger_instance.info(f"    [{sheet_name}] Pallet count detected at col {col} -> {pallet_col_id}")
-            return pallet_col_id
+    end_row = footer_end_row if footer_end_row is not None else footer_start_row
+    for row in range(footer_start_row, end_row + 1):
+        for col in range(1, min(worksheet.max_column + 1, BlueprintSchema.MAX_SCAN_COLUMN)):
+            tick("content_extractor.find_pallet_count_column", sub="cols_scanned")
+            cell = worksheet.cell(row=row, column=col)
+            val = _get_cell_value_safe(worksheet, cell)
+            
+            if not val:
+                continue
+            
+            if PALLET_PATTERN.search(val) or (val.startswith("=") and PALLET_FORMULA_PATTERN.search(val)):
+                pallet_col_id = find_col_id_func(col, columns)
+                logger_instance.info(f"    [{sheet_name}] Pallet count detected at row {row}, col {col} -> {pallet_col_id}")
+                return pallet_col_id
     
-    logger_instance.warning(f"    ⚠ [{sheet_name}] No pallet count pattern found on footer row {footer_row}")
+    logger_instance.warning(f"    ⚠ [{sheet_name}] No pallet count pattern found on footer rows {footer_start_row}-{end_row}")
     return None

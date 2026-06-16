@@ -6,7 +6,6 @@ from openpyxl import Workbook
 
 from ...styling.style_registry import StyleRegistry
 from ...models.layout import SheetLayoutState
-from ...data.table_calculator import TableCalculator
 from .grid import Grid
 
 logger = logging.getLogger(__name__)
@@ -71,7 +70,7 @@ class TableBuilder:
         logger.info(f"[TableBuilder] Building table at row {start_row} for sheet '{self.sheet_name}'")
         
         # 1. Resolve columns (DAF/custom filters & index mappings)
-        bundled_columns, column_mapping = self._resolve_columns()
+        bundled_columns, column_mapping, column_colspan = self._resolve_columns()
         
         # 2. Setup StyleRegistry
         styling_dict = self.styling_config.model_dump() if hasattr(self.styling_config, 'model_dump') else self.styling_config
@@ -87,8 +86,9 @@ class TableBuilder:
         )
 
         # 4. Initialize the Master Grid
-        grid = Grid(column_mapping=column_mapping, style_registry=style_registry)
+        grid = Grid(column_mapping=column_mapping, style_registry=style_registry, column_colspan=column_colspan)
         grid.set_start_row(start_row)
+        self.grid = grid
 
         # 5. Build Table Header
         if not self.skip_header_builder and bundled_columns:
@@ -98,34 +98,41 @@ class TableBuilder:
                     start_row=start_row,
                     bundled_columns=bundled_columns
                 )
-                self.header_info = header_builder.build()
+                header_builder.build()
             except Exception as e:
                 logger.error(f"[TableBuilder] HeaderBuilder crashed: {e}", exc_info=True)
                 return False
         else:
-            self.header_info = self.layout_config.get('header_info', {})
-            if not self.header_info:
-                self.header_info = {
-                    'column_map': {},
-                    'first_row_index': 0,
-                    'second_row_index': 1,
-                    'column_id_map': column_mapping
-                }
             grid.advance_row(2)
 
         # 6. Build Data Table
-        resolved_data = self.layout_config.get('resolved_data')
+        resolved_data = self.layout_config.get('resolved_data') or {}
         data_physical_start_row = start_row + grid._cursor_row
         
         if not self.skip_data_table_builder and resolved_data:
             try:
-                # Calculate metrics (TableCalculator)
-                table_calculator = TableCalculator(self.header_info)
-                self.footer_data = table_calculator.calculate(resolved_data)
-                
-                if not self.footer_data:
-                    logger.error("[TableBuilder] TableCalculator failed")
-                    return False
+                # Directly construct FooterData from pre-calculated parser results
+                from ...models.footer import FooterData
+                pallet_count = resolved_data.get('pallet_summary_total', 0)
+                if pallet_count is None:
+                    pallet_count = 0
+                    
+                ws = resolved_data.get('weight_summary')
+                if not ws or (ws.get('net', 0) == 0 and ws.get('gross', 0) == 0):
+                    if self.total_net_weight is not None or self.total_gross_weight is not None:
+                        ws = {
+                            'net': self.total_net_weight or 0.0,
+                            'gross': self.total_gross_weight or 0.0
+                        }
+
+                self.footer_data = FooterData(
+                    footer_row_start_idx=data_physical_start_row + len(resolved_data.get('data_rows', [])),
+                    data_start_row=data_physical_start_row,
+                    data_end_row=data_physical_start_row + len(resolved_data.get('data_rows', [])) - 1,
+                    total_pallets=int(pallet_count),
+                    leather_summary=resolved_data.get('leather_summary'),
+                    weight_summary=ws
+                )
                 
                 # Calculate absolute boundaries for layout state recording
                 actual_rows_to_process = len(resolved_data.get('data_rows', []))
@@ -145,7 +152,6 @@ class TableBuilder:
 
                 data_builder = DataTableBuilder(
                     grid=grid,
-                    header_info=self.header_info,
                     resolved_data=resolved_data,
                     vertical_merge_columns=merge_cols,
                     is_global_unique_desc=is_global_unique_desc
@@ -172,7 +178,6 @@ class TableBuilder:
                 data_range_to_sum = [(data_physical_start_row, data_physical_end_row)]
 
             footer_builder_context_config = {
-                'header_info': self.header_info,
                 'pallet_count': pallet_count,
                 'sheet_name': self.sheet_name,
                 'total_net_weight': self.total_net_weight,
@@ -211,7 +216,7 @@ class TableBuilder:
         self.next_row_after_footer = start_row + grid._cursor_row
         return True
 
-    def _resolve_columns(self) -> Tuple[List[Dict[str, Any]], Dict[str, int]]:
+    def _resolve_columns(self) -> Tuple[List[Dict[str, Any]], Dict[str, int], Dict[str, int]]:
         """
         Resolves filtered columns and builds the logical ID to physical column index mapping.
         """
@@ -256,18 +261,24 @@ class TableBuilder:
 
         # Convert logical ID to physical column mapping using filtered column layout
         resolved_col_id_map = {}
+        column_colspan = {}
         if bundled_columns:
             col_index = 1
             for col in bundled_columns:
                 col_id = col.get('id', '')
                 if 'children' in col:
+                    # Parent columns should not be horizontally merged in data rows
+                    column_colspan[col_id] = 1
+                    resolved_col_id_map[col_id] = col_index
                     for child in col['children']:
                         child_id = child.get('id', '')
                         resolved_col_id_map[child_id] = col_index
+                        column_colspan[child_id] = 1
                         col_index += 1
                 else:
                     colspan = int(col.get('colspan', 1))
                     resolved_col_id_map[col_id] = col_index
+                    column_colspan[col_id] = colspan
                     col_index += colspan
 
-        return bundled_columns, resolved_col_id_map
+        return bundled_columns, resolved_col_id_map, column_colspan

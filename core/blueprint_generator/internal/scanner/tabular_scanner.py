@@ -202,6 +202,21 @@ class _ColumnScanner:
         col = cell.column
         colspan, rowspan = self._get_cell_span(col, merged_ranges)
         
+        # If it is a true parent header, force its ID to 'col_qty_header' only if any child is a quantity column
+        if rowspan == 1 and colspan > 1:
+            if self._is_true_parent(cell, colspan):
+                is_qty_parent = False
+                for col_offset in range(colspan):
+                    child_cell = cell.offset(row=1, column=col_offset)
+                    val = get_cell_value(child_cell)
+                    if val:
+                        mapped_id = self.determine_column_id(val, child_cell.column)
+                        if mapped_id and mapped_id.startswith("col_qty_"):
+                            is_qty_parent = True
+                            break
+                if is_qty_parent:
+                    col_id = "col_qty_header"
+        
         width = get_actual_column_width(self.worksheet, col, colspan)
         format_str = self._get_column_format(col, col_id)
         
@@ -338,8 +353,9 @@ class TabularScanner:
         footer_row = boundaries.footer_row
         sheet_name = worksheet.title
 
-        # --- Step 1: Find the TOTAL label cell on the footer row ---
-        result = find_total_label_cell(worksheet, footer_row, footer_row, mapping_config, logger, sheet_name)
+        # --- Step 1: Find the TOTAL label cell on the footer row range ---
+        footer_end = boundaries.footer_end_row if boundaries.footer_end_row is not None else footer_row
+        result = find_total_label_cell(worksheet, footer_row, footer_end, mapping_config, logger, sheet_name)
         if not result:
             found_cell = None
             for col in range(1, boundaries.max_col + 1):
@@ -362,8 +378,8 @@ class TabularScanner:
         if not total_col_id:
             logger.warning(f"    ⚠ [{sheet_name}] TOTAL label at column {found_cell.column} could not be mapped to a column ID.")
 
-        # --- Step 4: Find pallet count column on the same row ---
-        pallet_col_id = find_pallet_count_column(worksheet, footer_row, columns, find_column_id_by_index, logger, sheet_name)
+        # --- Step 4: Find pallet count column across the footer block ---
+        pallet_col_id = find_pallet_count_column(worksheet, footer_row, columns, find_column_id_by_index, logger, sheet_name, footer_end_row=boundaries.footer_end_row)
 
         # --- Step 5: Find HS Code around the footer row ---
         hs_code_text, hs_code_colspan, hs_code_col_idx = None, 1, None

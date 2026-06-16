@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple, Union
 from decimal import Decimal
 
-from ..styling.models import FooterData
+from ..models.footer import FooterData
 from ..utils.math_utils import safe_float_convert, safe_int_convert
 
 logger = logging.getLogger(__name__)

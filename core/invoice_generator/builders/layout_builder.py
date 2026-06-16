@@ -3,8 +3,8 @@ from typing import Any, Dict, Optional
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl import Workbook
 
-from ..styling.models import StylingConfigModel, FooterData
-from ..data.table_calculator import TableCalculator
+from ..styling.models import StylingConfigModel
+from ..models.footer import FooterData
 from .json_template_builder import JsonTemplateStateBuilder
 from openpyxl.drawing.image import Image
 from ...system_config import sys_config, ConfigurationError
@@ -235,7 +235,7 @@ class LayoutBuilder:
             return False
             
         # Copy properties for downstream components and compatibility
-        self.header_info = table_builder.header_info
+        self.grid = table_builder.grid
         self.footer_data = table_builder.footer_data
         self.data_start_row = table_builder.data_start_row
         self.data_end_row = table_builder.data_end_row
@@ -248,9 +248,9 @@ class LayoutBuilder:
         if not self.skip_template_header_restoration:
             logger.info(f"Restoring template header AFTER table build (correct column alignment)")
             try:
-                # Get actual column count from header_info (this reflects filtered columns)
-                actual_num_cols = self.header_info.get('num_columns', None)
-                table_header_row_num = self.header_info.get('second_row_index', 0)
+                # Get actual column count from grid (this reflects filtered columns)
+                actual_num_cols = self.grid.num_columns
+                _, table_header_row_num = self.grid.get_section_range("header")
                 logger.debug(f"Template header will use actual column count: {actual_num_cols}")
                 if self.template_state_builder:
                     logger.debug(f"Template header ends at row {self.template_state_builder.header_end_row}")
@@ -285,7 +285,7 @@ class LayoutBuilder:
         logger.info("Applying static config widths (auto-fit disabled)")
         try:
             # Map column IDs to their physical column indices
-            col_id_to_idx = self.header_info.get('column_id_map', {})
+            col_id_to_idx = self.grid.column_mapping
             
             # Apply static widths from the styling registry
             if hasattr(self, 'styling_config') and self.styling_config:
@@ -300,7 +300,7 @@ class LayoutBuilder:
                         logger.debug(f"Applied static width {width} to {col_id} ({col_letter})")
         except Exception as e:
             logger.error(f"Failed to apply static column widths: {e}", exc_info=True)
-
+ 
         # 7. Template Footer Restoration
         # This restores the static content (signatures, etc.) from the JSON template
         # that appears AFTER the dynamic table footer.
@@ -309,7 +309,7 @@ class LayoutBuilder:
         if self.template_state_builder and not skip_template_footer:
             try:
                 # Get actual column count if not already set
-                actual_num_cols = self.header_info.get('num_columns', None)
+                actual_num_cols = self.grid.num_columns
                 
                 # CRITICAL FIX: Only restore template footer if this is the LAST table on the sheet.
                 # Otherwise, the static footer content (signatures, etc.) will be printed in the middle

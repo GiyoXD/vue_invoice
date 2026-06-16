@@ -416,7 +416,7 @@ class BuilderConfigResolver:
         Returns:
             FooterData object
         """
-        from ..styling.models import FooterData
+        from ..models.footer import FooterData
         
         # Use provided pallet count or default to context
         final_pallets = pallet_count if pallet_count is not None else self.pallets
@@ -519,8 +519,8 @@ class BuilderConfigResolver:
                 column_map[header] = current_idx
                 column_id_map[col_id] = current_idx
                 
-                # Parent column spans across all children
-                column_colspan[col_id] = len(children)
+                # Parent column itself should not be horizontally merged in data rows
+                column_colspan[col_id] = 1
                 
                 # Process each child column
                 for child_def in children:

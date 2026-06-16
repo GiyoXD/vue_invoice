@@ -20,28 +20,24 @@ class DataTableBuilderStyler(TableSectionBuilder):
     def __init__(
         self,
         grid: Grid,
-        header_info: Dict[str, Any],
         resolved_data: Dict[str, Any],
         vertical_merge_columns: Optional[List[str]] = None,
         is_global_unique_desc: bool = False
     ):
         TableSectionBuilder.__init__(self, grid)
-        self.header_info = header_info
         self.resolved_data = resolved_data
         self.vertical_merge_columns = vertical_merge_columns or []
         self.is_global_unique_desc = is_global_unique_desc
  
         self.data_rows = resolved_data.get('data_rows', [])
-        self.col_id_map = header_info.get('column_id_map', {})
+        self.col_id_map = grid.column_mapping
         self.idx_to_id_map = {v: k for k, v in self.col_id_map.items()}
-        self.column_colspan = header_info.get('column_colspan', {})
+        self.column_colspan = grid.column_colspan
         
         logger.debug(f"DataTableBuilder initialized with {len(self.data_rows)} total rows")
 
     def build(self) -> None:
-        if not self.header_info or 'second_row_index' not in self.header_info:
-            logger.error("Invalid header_info provided to DataTableBuilderStyler")
-            return
+        self.grid.mark_section_start("data")
 
         actual_rows_to_process = len(self.data_rows)
         num_data_rows = self.resolved_data.get('num_data_rows', actual_rows_to_process)
@@ -124,7 +120,7 @@ class DataTableBuilderStyler(TableSectionBuilder):
                     if col_id == "col_desc":
                         buffer_value = None
                         for r in range(relative_start_row, relative_end_row + 1):
-                            cell = self.grid._get_or_create_cell(r, col_idx)
+                            cell = self.grid.get_cell(r, col_idx)
                             if cell.value is not None and cell.value != "":
                                 buffer_value = cell.value
                                 break
@@ -133,7 +129,7 @@ class DataTableBuilderStyler(TableSectionBuilder):
                             baseline = str(buffer_value).strip().lower()
                             abort_merge = False
                             for r in range(relative_start_row, relative_end_row + 1):
-                                cell = self.grid._get_or_create_cell(r, col_idx)
+                                cell = self.grid.get_cell(r, col_idx)
                                 if cell.value is not None and cell.value != "":
                                     current = str(cell.value).strip().lower()
                                     if current != baseline:
@@ -144,12 +140,12 @@ class DataTableBuilderStyler(TableSectionBuilder):
                                 continue
 
                     group_start = relative_start_row
-                    start_cell = self.grid._get_or_create_cell(relative_start_row, col_idx)
+                    start_cell = self.grid.get_cell(relative_start_row, col_idx)
                     group_value = start_cell.value if start_cell else None
                     
                     for r in range(relative_start_row + 1, relative_end_row + 2):
                         if r <= relative_end_row:
-                            cell = self.grid._get_or_create_cell(r, col_idx)
+                            cell = self.grid.get_cell(r, col_idx)
                             current_value = cell.value
                         else:
                             current_value = None  # Sentinel to flush
@@ -174,8 +170,9 @@ class DataTableBuilderStyler(TableSectionBuilder):
 
         except Exception as fill_data_err:
             logger.error(f"Error during data filling loop: {fill_data_err}\n{traceback.format_exc()}")
-            return
+            raise
 
         # Advance grid row pointer
         self.grid.advance_row(actual_rows_to_process)
+        self.grid.mark_section_end("data")
         logger.info(f"DataTableBuilder completed: {actual_rows_to_process} data rows generated")
