@@ -600,6 +600,29 @@ class TestBoundaryDetectorFooter(unittest.TestCase):
         self.assertIsNotNone(boundaries)
         self.assertEqual(boundaries.footer_row, 9)
 
+    def test_detects_contiguous_footer_end_row(self):
+        # Row 7 has TOTAL (detected as footer_row)
+        # Row 8 has "COW LEATHER" and a numeric value (contiguous addon row)
+        # Row 9 has "BUFFALO LEATHER" and a numeric value (contiguous addon row)
+        # Row 10 is empty
+        # Row 11 has a signature keyword (marks end)
+        cells = self.base_cells.copy()
+        cells.update({
+            (4, 1): "A", (4, 2): 10, (4, 3): 5, (4, 4): 50,
+            (7, 1): "TOTAL:", (7, 2): 10,
+            (8, 1): "COW LEATHER", (8, 2): 5,
+            (9, 1): "BUFFALO LEATHER", (9, 2): 5,
+            (11, 1): "AUTHORIZED SIGNATURE",
+        })
+        ws = make_mock_worksheet(cells, max_row=12, max_column=5)
+        
+        self.detector.find_header_row = MagicMock(return_value=3)
+        
+        boundaries = self.detector.detect_boundaries(ws, mapping_config=self.mapping_config)
+        self.assertIsNotNone(boundaries)
+        self.assertEqual(boundaries.footer_row, 7)
+        self.assertEqual(boundaries.footer_end_row, 9)
+
 
 if __name__ == '__main__':
     unittest.main()

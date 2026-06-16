@@ -2,7 +2,7 @@ import pytest
 from core.invoice_generator.builders.table.grid import Grid
 from core.invoice_generator.builders.table.footer import TableFooterBuilder
 from core.invoice_generator.styling.style_registry import StyleRegistry
-from core.invoice_generator.styling.models import FooterData
+from core.invoice_generator.models.footer import FooterData
 
 def test_footer_orchestration_basic():
     column_mapping = {"col_po": 1}
