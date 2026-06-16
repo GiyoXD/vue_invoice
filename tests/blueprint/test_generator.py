@@ -218,3 +218,44 @@ def test_generator_generate_to_disk(tmp_path):
     with open(config_file, 'r', encoding='utf-8') as f:
         config_data = json.load(f)
         assert config_data["_meta"]["customer"] == "CUSTOMCUST"
+
+
+def test_tabular_scanner_parent_header_override():
+    from openpyxl import Workbook
+    from core.blueprint_generator.internal.scanner.tabular_scanner import scan_columns
+    
+    wb = Workbook()
+    ws = wb.active
+    # Row 1 is header row
+    ws.cell(row=1, column=1, value="Mark & No")
+    # Row 1, column 2 has "Quantity(SF)" spanning cols 2 & 3
+    ws.cell(row=1, column=2, value="Quantity(SF)")
+    ws.merge_cells(start_row=1, start_column=2, end_row=1, end_column=3)
+    
+    # Children in Row 2
+    ws.cell(row=2, column=2, value="PCS")
+    ws.cell(row=2, column=3, value="SF")
+    
+    # Header row is 1, data row starts at 3
+    # Use mapping config mapping Quantity(SF) to col_qty_sf to check override
+    mapping_config = {
+        "header_text_mappings": {
+            "mappings": {
+                "Quantity(SF)": "col_qty_sf"
+            }
+        }
+    }
+    
+    cols = scan_columns(ws, header_row=1, data_start_row=3, mapping_config=mapping_config)
+    
+    # Find mapped columns
+    static_col = next(c for c in cols if c.col_index == 1)
+    parent_col = next(c for c in cols if c.col_index == 2)
+    
+    assert static_col.id == "col_static"
+    # Parent column ID must be overridden to col_qty_header instead of col_qty_sf
+    assert parent_col.id == "col_qty_header"
+    assert len(parent_col.children) == 2
+    assert parent_col.children[0].id == "col_qty_pcs"
+    assert parent_col.children[1].id == "col_qty_sf"
+
