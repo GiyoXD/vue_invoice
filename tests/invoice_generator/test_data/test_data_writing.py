@@ -1,5 +1,5 @@
 import pytest
-from core.invoice_generator.builders.table.grid import Grid
+from core.invoice_generator.builders.table.table_grid import Grid
 from core.invoice_generator.builders.table.data import DataTableBuilderStyler
 from core.invoice_generator.styling.style_registry import StyleRegistry
 
