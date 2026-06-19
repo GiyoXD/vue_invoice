@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional, Union
 from core.invoice_generator.models.footer import FooterData, WeightDetail, LeatherDetail
 from ..bundle_accessor import BundleAccessor
 from .base import TableSectionBuilder
-from .grid import Grid
+from .table_grid import Grid
 
 logger = logging.getLogger(__name__)
 

@@ -39,6 +39,7 @@ class SheetLayoutState:
     column_mapping: Dict[str, int] = field(default_factory=dict)       # logical_id -> physical_index (1-based)
     _rows_with_height_applied: Set[int] = field(default_factory=set)
     style_registry: Any = None
+    dimension_registry: Any = None
     ws: Any = None
     
     # Track the data range of the current table for formula generation
@@ -72,11 +73,12 @@ class SheetLayoutState:
 
     # --- Binding & Coordination Methods ---
 
-    def bind(self, worksheet: Any, column_mapping: Dict[str, int], style_registry: Any):
+    def bind(self, worksheet: Any, column_mapping: Dict[str, int], style_registry: Any, dimension_registry: Any = None):
         """Bind layout session context to the state."""
         self.ws = worksheet
         self.column_mapping = column_mapping
         self.style_registry = style_registry
+        self.dimension_registry = dimension_registry
         logger.info(f"SheetLayoutState bound to sheet '{worksheet.title if worksheet else 'None'}' with {len(column_mapping)} column mappings")
 
     def resolve_column(self, col_id_or_idx: Union[str, int]) -> Optional[int]:
@@ -131,8 +133,8 @@ class SheetLayoutState:
             self.ws.cell(row=row, column=col_idx, value=value)
 
         # Set row height once per row context
-        if row not in self._rows_with_height_applied and self.style_registry:
-            height = self.style_registry.get_row_height(context)
+        if row not in self._rows_with_height_applied and self.dimension_registry:
+            height = self.dimension_registry.get_row_height(context)
             if height:
                 self.ws.row_dimensions[row].height = height
             self._rows_with_height_applied.add(row)

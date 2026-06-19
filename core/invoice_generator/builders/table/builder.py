@@ -5,8 +5,9 @@ from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl import Workbook
 
 from ...styling.style_registry import StyleRegistry
+from ...styling.dimension_registry import DimensionRegistry
 from ...models.layout import SheetLayoutState
-from .grid import Grid
+from .table_grid import Grid
 
 logger = logging.getLogger(__name__)
 
@@ -72,21 +73,26 @@ class TableBuilder:
         # 1. Resolve columns (DAF/custom filters & index mappings)
         bundled_columns, column_mapping, column_colspan = self._resolve_columns()
         
-        # 2. Setup StyleRegistry
+        # 2. Setup StyleRegistry and DimensionRegistry
         styling_dict = self.styling_config.model_dump() if hasattr(self.styling_config, 'model_dump') else self.styling_config
         style_registry = None
+        dimension_registry = None
         if isinstance(styling_dict, dict) and 'columns' in styling_dict and 'row_contexts' in styling_dict:
             style_registry = StyleRegistry(styling_dict)
+        
+        if isinstance(self.sheet_config, dict) and 'structure' in self.sheet_config:
+            dimension_registry = DimensionRegistry(self.sheet_config)
 
         # 3. Bind Layout State
         self.layout_state.bind(
             worksheet=self.worksheet,
             column_mapping=column_mapping,
-            style_registry=style_registry
+            style_registry=style_registry,
+            dimension_registry=dimension_registry
         )
 
         # 4. Initialize the Master Grid
-        grid = Grid(column_mapping=column_mapping, style_registry=style_registry, column_colspan=column_colspan)
+        grid = Grid(column_mapping=column_mapping, style_registry=style_registry, column_colspan=column_colspan, dimension_registry=dimension_registry)
         grid.set_start_row(start_row)
         self.grid = grid
 

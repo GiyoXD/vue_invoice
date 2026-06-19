@@ -124,8 +124,7 @@ class ConfigBuilder:
         for col in sheet.columns:
             col_style = {
                 "format": col.format,
-                "alignment": col.alignment,
-                "width": round(col.width, 2)
+                "alignment": col.alignment
             }
             if col.wrap_text:
                 col_style["wrap_text"] = True
@@ -136,8 +135,7 @@ class ConfigBuilder:
             for child in col.children:
                 child_style = {
                     "format": child.format,
-                    "alignment": child.alignment,
-                    "width": round(child.width, 2)
+                    "alignment": child.alignment
                 }
                 sheet_styling["columns"][child.id] = child_style
         
@@ -156,22 +154,19 @@ class ConfigBuilder:
                 "bold": True,
                 "font_size": h_size,
                 "font_name": h_name,
-                "border_style": "thin",
-                "row_height": sheet.row_heights.get("header", 35)
+                "border_style": "thin"
             },
             "data": {
                 "bold": False,
                 "font_size": d_size,
                 "font_name": d_name,
-                "border_style": "thin",
-                "row_height": sheet.row_heights.get("data", 27)
+                "border_style": "thin"
             },
             "footer": {
                 "bold": True,
                 "font_size": h_size, # Usually matches header
                 "font_name": h_name,
-                "border_style": "thin",
-                "row_height": sheet.row_heights.get("footer", 35)
+                "border_style": "thin"
             }
         }
         
@@ -250,7 +245,8 @@ class ConfigBuilder:
         for col in sheet.columns:
             col_def = {
                 "id": col.id,
-                "header": col.header
+                "header": col.header,
+                "width": round(col.width, 2)
             }
             
             if col.format != "@":
@@ -268,7 +264,8 @@ class ConfigBuilder:
                 for child in col.children:
                     child_def = {
                         "id": child.id,
-                        "header": child.header
+                        "header": child.header,
+                        "width": round(child.width, 2)
                     }
                     if child.format != "@":
                         child_def["format"] = child.format
@@ -276,8 +273,15 @@ class ConfigBuilder:
             
             columns.append(col_def)
         
+        row_heights = {
+            "header": sheet.row_heights.get("header", 35),
+            "data": sheet.row_heights.get("data", 27),
+            "footer": sheet.row_heights.get("footer", 35)
+        }
+        
         return {
             "header_row": sheet.header_row,
+            "row_heights": row_heights,
             "columns": columns
         }
     

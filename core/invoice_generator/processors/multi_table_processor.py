@@ -199,22 +199,28 @@ class MultiTableProcessor(SheetProcessor):
                     styling_model = None
         
         from ..styling.style_registry import StyleRegistry
+        from ..styling.dimension_registry import DimensionRegistry
         style_registry = None
+        dimension_registry = None
         if styling_model:
             styling_dict = styling_model.model_dump() if hasattr(styling_model, 'model_dump') else styling_model
             if isinstance(styling_dict, dict) and 'columns' in styling_dict and 'row_contexts' in styling_dict:
                 style_registry = StyleRegistry(styling_dict)
 
-        from ..builders.table.grid import Grid
+        sheet_config = gt_layout_config.get('sheet_config', {})
+        if isinstance(sheet_config, dict) and 'structure' in sheet_config:
+            dimension_registry = DimensionRegistry(sheet_config)
+
+        from ..builders.table.table_grid import Grid
         gt_grid = Grid(
             column_mapping=last_grid.column_mapping,
             style_registry=style_registry,
-            column_colspan=last_grid.column_colspan
+            column_colspan=last_grid.column_colspan,
+            dimension_registry=dimension_registry
         )
         gt_grid.set_start_row(current_row)
 
         # Prepare footer config
-        sheet_config = gt_layout_config.get('sheet_config', {})
         footer_config = sheet_config.get('footer', {}).copy()
         footer_config["type"] = "grand_total"
         

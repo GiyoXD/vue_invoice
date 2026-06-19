@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, List, Optional
 import traceback
 
-from .grid import Grid
+from .table_grid import Grid
 from .base import TableSectionBuilder
 
 logger = logging.getLogger(__name__)

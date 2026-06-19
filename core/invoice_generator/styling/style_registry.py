@@ -21,13 +21,13 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class ColumnStyle:
-    """Base style definition for a column (data format and alignment)."""
+    """Base style definition for a column (data format, alignment, and border overrides)."""
     col_id: str
     format: Optional[str] = None  # Number format: "@", "0.00", "#,##0", etc.
     alignment: Optional[str] = None  # "left", "center", "right"
     vertical_alignment: Optional[str] = None  # "top", "center", "bottom"
-    width: Optional[int] = None  # Column width
     wrap_text: bool = False
+    border_style: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for merging."""
@@ -35,8 +35,8 @@ class ColumnStyle:
             'format': self.format,
             'alignment': self.alignment,
             'vertical_alignment': self.vertical_alignment,
-            'width': self.width,
-            'wrap_text': self.wrap_text
+            'wrap_text': self.wrap_text,
+            'border_style': self.border_style
         }
 
 
@@ -50,7 +50,6 @@ class RowContextStyle:
     font_name: Optional[str] = None
     fill_color: Optional[str] = None  # Hex color: "CCCCCC"
     border_style: Optional[str] = None  # "thin", "medium", "thick"
-    row_height: Optional[int] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for merging."""
@@ -60,8 +59,7 @@ class RowContextStyle:
             'font_size': self.font_size,
             'font_name': self.font_name,
             'fill_color': self.fill_color,
-            'border_style': self.border_style,
-            'row_height': self.row_height
+            'border_style': self.border_style
         }
 
 
@@ -109,10 +107,10 @@ class StyleRegistry:
                 format=col_def.get('format'),
                 alignment=col_def.get('alignment'),
                 vertical_alignment=col_def.get('vertical_alignment'),
-                width=col_def.get('width'),
-                wrap_text=col_def.get('wrap_text', False)
+                wrap_text=col_def.get('wrap_text', False),
+                border_style=col_def.get('border_style')
             )
-            logger.debug(f"Loaded column '{col_id}': alignment={col_def.get('alignment')}, vertical_alignment={col_def.get('vertical_alignment')}")
+            logger.debug(f"Loaded column '{col_id}': alignment={col_def.get('alignment')}, vertical_alignment={col_def.get('vertical_alignment')}, border_style={col_def.get('border_style')}")
         
         logger.debug(f"Loaded {len(self.columns)} column styles: {list(self.columns.keys())}")
     
@@ -128,8 +126,7 @@ class StyleRegistry:
                 font_size=context_def.get('font_size'),
                 font_name=context_def.get('font_name'),
                 fill_color=context_def.get('fill_color'),
-                border_style=context_def.get('border_style'),
-                row_height=context_def.get('row_height')
+                border_style=context_def.get('border_style')
             )
         
         logger.debug(f"Loaded {len(self.row_contexts)} row contexts: {list(self.row_contexts.keys())}")
@@ -167,7 +164,7 @@ class StyleRegistry:
         merged_style = {}
         
         # Define column-owned properties (NEVER override these from context)
-        COLUMN_OWNED = {'format', 'alignment', 'vertical_alignment', 'width', 'wrap_text'}
+        COLUMN_OWNED = {'format', 'alignment', 'vertical_alignment', 'width', 'wrap_text', 'border_style'}
         
         # 1. Get column base style (WHAT: format, alignment)
         if col_id in self.columns:
@@ -181,12 +178,15 @@ class StyleRegistry:
             logger.warning(f"   Please add column definition to config with: format, alignment, width")
         
         # 2. Merge row context style (HOW: emphasis, decoration)
-        # CRITICAL: Only merge properties that are NOT column-owned
+        # CRITICAL: Only merge properties that are NOT column-owned (with the exception of
+        # border_style, which can be overridden by columns), and never overwrite a column-defined style.
         if context in self.row_contexts:
             context_style = self.row_contexts[context].to_dict()
             for key, value in context_style.items():
-                if value is not None and key not in COLUMN_OWNED:
-                    merged_style[key] = value
+                if value is not None:
+                    is_context_prop = (key not in COLUMN_OWNED) or (key == 'border_style')
+                    if is_context_prop and key not in merged_style:
+                        merged_style[key] = value
         else:
             logger.warning(f"❌ Row context '{context}' not found in StyleRegistry!")
             logger.warning(f"   Available contexts: {list(self.row_contexts.keys())}")
@@ -218,17 +218,7 @@ class StyleRegistry:
         
         return merged_style
     
-    def get_column_width(self, col_id: str) -> Optional[int]:
-        """Get column width for a specific column ID."""
-        if col_id in self.columns:
-            return self.columns[col_id].width
-        return None
-    
-    def get_row_height(self, context: str) -> Optional[int]:
-        """Get row height for a specific context."""
-        if context in self.row_contexts:
-            return self.row_contexts[context].row_height
-        return None
+
     
     def has_column(self, col_id: str) -> bool:
         """Check if column ID exists in registry."""

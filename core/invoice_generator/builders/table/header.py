@@ -10,7 +10,7 @@ from ...styling.models import StylingConfigModel
 from ...styling.style_registry import StyleRegistry
 from ...utils.layout import calculate_header_dimensions
 
-from .grid import Grid
+from .table_grid import Grid
 from .base import TableSectionBuilder
 
 logger = logging.getLogger(__name__)

@@ -2,7 +2,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Any
 
-from .grid import Grid
+from .table_grid import Grid
 
 logger = logging.getLogger(__name__)
 

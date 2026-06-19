@@ -172,8 +172,23 @@ class BundledConfigLoader:
         if 'columns' in sheet_styling and 'row_contexts' in sheet_styling:
             # New format: return as-is, don't transform
             logger.debug(f"NEW FORMAT detected - returning columns + row_contexts as-is")
+            
+            # Create a copy of the columns dictionary to avoid mutating cached configuration in-place
+            columns_copy = {col_id: col_def.copy() for col_id, col_def in sheet_styling['columns'].items()}
+            
+            # Extract and merge border exceptions from global defaults
+            defaults = self._styling_bundle.get('defaults', {})
+            border_exceptions = defaults.get('borders', {}).get('exceptions', {})
+            if isinstance(border_exceptions, dict):
+                for col_id, border_style in border_exceptions.items():
+                    if col_id in columns_copy:
+                        # Normalize "side_only" from config to "sides_only" expected by cells
+                        normalized_style = "sides_only" if border_style == "side_only" else border_style
+                        columns_copy[col_id]['border_style'] = normalized_style
+                        logger.debug(f"Merged border exception: {col_id} -> {normalized_style}")
+            
             return {
-                'columns': sheet_styling['columns'],
+                'columns': columns_copy,
                 'row_contexts': sheet_styling['row_contexts']
             }
         

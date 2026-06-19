@@ -287,13 +287,25 @@ class LayoutBuilder:
             # Map column IDs to their physical column indices
             col_id_to_idx = self.grid.column_mapping
             
-            # Apply static widths from the styling registry
-            if hasattr(self, 'styling_config') and self.styling_config:
-                # New style registry format stores widths in the columns dict
-                columns_config = self.styling_config.get('columns', {}) if isinstance(self.styling_config, dict) else {}
+            # Apply static widths from the layout structure config
+            if hasattr(self, 'sheet_config') and self.sheet_config:
+                widths = {}
+                structure = self.sheet_config.get('structure', {})
+                columns = structure.get('columns', [])
+                
+                def extract_widths(cols):
+                    for col in cols:
+                        col_id = col.get('id')
+                        col_w = col.get('width')
+                        if col_id and col_w is not None:
+                            widths[col_id] = col_w
+                        if 'children' in col:
+                            extract_widths(col['children'])
+                            
+                extract_widths(columns)
+                
                 for col_id, col_idx in col_id_to_idx.items():
-                    col_cfg = columns_config.get(col_id, {})
-                    width = col_cfg.get('width')
+                    width = widths.get(col_id)
                     if width:
                         col_letter = get_column_letter(col_idx)
                         self.worksheet.column_dimensions[col_letter].width = float(width)

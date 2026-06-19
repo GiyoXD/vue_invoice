@@ -4,22 +4,25 @@ from typing import Any, Dict, List, Optional, Tuple
 from openpyxl.utils import get_column_letter
 
 from ...styling.style_registry import StyleRegistry
+from ...styling.dimension_registry import DimensionRegistry
 from ...utils.cell_converter import convert_registry_style_to_cell_style
 from core.models.cell import UnitRow, UnitCell, TemplateMerge
 
+from core.models.grid import Grid as CoreGrid
+
 logger = logging.getLogger(__name__)
 
-class Grid:
+class TableGrid(CoreGrid):
     """
     Virtual translation layer for painting table sections.
     Translates logical IDs to physical indices and applies styles based on context.
     """
-    def __init__(self, column_mapping: Dict[str, int], style_registry: StyleRegistry, column_colspan: Optional[Dict[str, int]] = None):
+    def __init__(self, column_mapping: Dict[str, int], style_registry: StyleRegistry, column_colspan: Optional[Dict[str, int]] = None, dimension_registry: Optional[DimensionRegistry] = None):
+        super().__init__()
         self.column_mapping = column_mapping
         self.style_registry = style_registry
+        self.dimension_registry = dimension_registry
         self.column_colspan = column_colspan or {}
-        self._grid: Dict[int, Dict[int, UnitCell]] = {}
-        self._row_heights: Dict[int, Optional[float]] = {}
         self.start_row_index = 0
         self._cursor_row = 0
         self._sections: Dict[str, Tuple[int, int]] = {}
@@ -85,13 +88,6 @@ class Grid:
             
         return self.column_mapping.get(col_id)
 
-    def _get_or_create_cell(self, row: int, col: int) -> UnitCell:
-        if row not in self._grid:
-            self._grid[row] = {}
-        if col not in self._grid[row]:
-            self._grid[row][col] = UnitCell(col_index=col, value=None)
-        return self._grid[row][col]
-
     def write(self, row: int, col_id: str, value: Any, context: str = 'data'):
         """
         Writes a value to the grid at the given relative row and logical column ID.
@@ -103,24 +99,21 @@ class Grid:
             return
 
         actual_row = row + self._cursor_row
-        cell = self._get_or_create_cell(actual_row, col_idx)
-        cell.value = value
-
+        
         # Set row height if not already set
         if actual_row not in self._row_heights:
-            self._row_heights[actual_row] = self.style_registry.get_row_height(context)
+            if self.dimension_registry:
+                self._row_heights[actual_row] = self.dimension_registry.get_row_height(context)
 
         # Apply style
+        cell_style = None
         if self.style_registry:
-            # We skip 'col_id' existence check strictly here to allow generic styling if provided
-            # But normally we look up by col_id. If col_id is an int, it might fail in registry,
-            # so we only apply if it's a valid ID string.
             if isinstance(col_id, str):
                 style_dict = self.style_registry.get_style(col_id, context=context)
                 if style_dict:
-                    # Special override rules (e.g. static col in footer) can be passed as kwargs in future if needed
-                    # but for now we trust the registry.
-                    cell.style = convert_registry_style_to_cell_style(style_dict)
+                    cell_style = convert_registry_style_to_cell_style(style_dict)
+
+        super().write(actual_row, col_idx, value, style=cell_style)
 
     def write_formula(self, row: int, col_id: str, template: str, inputs: List[str], context: str = 'data'):
         """
@@ -160,49 +153,59 @@ class Grid:
             return
 
         actual_row = row + self._cursor_row
-        cell = self._get_or_create_cell(actual_row, col_idx)
-        # Note: TemplateMerge uses absolute coordinates for Excel. We store relative or absolute?
-        # The models usually expect physical column indices and physical row span.
-        cell.merge = TemplateMerge(
-            min_col=col_idx,
-            max_col=col_idx + colspan - 1,
-            row_span=rowspan,
-            value=str(cell.value) if cell.value is not None else ""
-        )
-        
-        # Clear out values in merged span
-        for r in range(actual_row, actual_row + rowspan):
-            for c in range(col_idx, col_idx + colspan):
-                if r == actual_row and c == col_idx:
-                    continue
-                clear_cell = self._get_or_create_cell(r, c)
-                clear_cell.value = None
+        super().merge(actual_row, col_idx, rowspan, colspan)
 
-
-
-    def get_cell(self, row: int, col_id: Any) -> UnitCell:
+    def get_cell(self, row: int, col_id: Any, resolve_merge: bool = False) -> UnitCell:
         """Gets or creates a cell at a relative row and column ID/index."""
         col_idx = self._resolve_column(col_id)
         actual_row = row + self._cursor_row
-        return self._get_or_create_cell(actual_row, col_idx)
+        return super().get_cell(actual_row, col_idx, resolve_merge=resolve_merge)
 
-    def get_row_models(self) -> List[UnitRow]:
+    def to_dict(self) -> Dict[str, Any]:
         """
-        Exports the internal grid matrix to a list of UnitRow objects.
+        Serializes the TableGrid subclass and base Grid components to a dictionary.
         """
-        models = []
-        if not self._grid:
-            return models
+        d = super().to_dict()
+        d.update({
+            "column_mapping": self.column_mapping,
+            "column_colspan": self.column_colspan,
+            "start_row_index": self.start_row_index,
+            "cursor_row": self._cursor_row,
+            "sections": self._sections
+        })
+        return d
 
-        max_row = max(self._grid.keys())
-        for r in range(max_row + 1):
-            cells = []
-            if r in self._grid:
-                cells = sorted(list(self._grid[r].values()), key=lambda c: c.col_index)
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any], style_registry: Any = None, dimension_registry: Any = None) -> 'TableGrid':
+        """
+        Deserializes a dictionary into a TableGrid instance with an optional style_registry context.
+        """
+        grid_obj = cls(
+            column_mapping=d.get("column_mapping", {}),
+            style_registry=style_registry,
+            column_colspan=d.get("column_colspan", {}),
+            dimension_registry=dimension_registry
+        )
+        grid_obj.start_row_index = d.get("start_row_index", 0)
+        grid_obj._cursor_row = d.get("cursor_row", 0)
+        grid_obj._sections = {k: tuple(v) for k, v in d.get("sections", {}).items()}
+        grid_obj._row_heights = {int(k): v for k, v in d.get("row_heights", {}).items()}
+        
+        # Re-populate physical merges
+        for k, v in d.get("merge_map", {}).items():
+            r, c = map(int, k.split(','))
+            grid_obj._merge_map[(r, c)] = (v[0], v[1])
             
-            models.append(UnitRow(
-                relative_index=r,
-                height=self._row_heights.get(r),
-                cells=cells
-            ))
-        return models
+        # Re-populate physical cells
+        grid_raw = d.get("grid", {})
+        for r_str, row_data in grid_raw.items():
+            r = int(r_str)
+            grid_obj._grid[r] = {}
+            for c_str, cell_data in row_data.items():
+                c = int(c_str)
+                grid_obj._grid[r][c] = UnitCell.from_dict(cell_data)
+                
+        return grid_obj
+
+# Alias for backward compatibility
+Grid = TableGrid

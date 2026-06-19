@@ -8,6 +8,7 @@ from .cell import (
     UnitCell,
     UnitRow,
 )
+from .grid import Grid
 
 __all__ = [
     "FontStyle",
@@ -18,4 +19,5 @@ __all__ = [
     "TemplateMerge",
     "UnitCell",
     "UnitRow",
+    "Grid",
 ]
