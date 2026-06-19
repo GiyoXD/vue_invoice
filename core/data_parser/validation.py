@@ -2,6 +2,9 @@ import logging
 import decimal
 from typing import List, Dict, Any, Optional
 from .util.converters import DataConverter
+from .config import HEADER_SEARCH_COL_RANGE, HEADERLESS_COLUMN_PATTERNS
+from openpyxl.utils import get_column_letter
+import re
 
 # Set precision for Decimal calculations (consistent with data_processor)
 decimal.getcontext().prec = 28
@@ -13,6 +16,118 @@ class DataValidationError(Exception):
     a clean, human-readable error message without traceback noise.
     """
     pass
+
+
+def _find_first_data_row(sheet, header_row: int, max_scan: int = 10) -> int:
+    """Finds the first row index below header_row that contains actual table data."""
+    for r in range(header_row + 1, min(header_row + 1 + max_scan, sheet.max_row + 1)):
+        has_data = False
+        for c in range(HEADER_SEARCH_COL_RANGE[0], HEADER_SEARCH_COL_RANGE[1] + 1):
+            val = sheet.cell(row=r, column=c).value
+            if val is not None and str(val).strip() != "":
+                has_data = True
+                break
+        if has_data:
+            return r
+    return header_row + 1
+
+
+def validate_no_duplicate_amount_columns(sheet, header_row: int, column_mapping: Optional[Dict[str, str]] = None):
+    """
+    Scans the header row and raises DataValidationError if multiple columns
+    are mapped to 'col_amount' (via header aliases or data pattern matching).
+    """
+    from .sheet_parser import _ALIAS_REVERSE_LOOKUP
+
+    # Find the first row below header that actually has data
+    data_row = _find_first_data_row(sheet, header_row)
+
+    # Collect columns that have already been mapped to other headers (not col_amount)
+    mapped_cols = set()
+    if column_mapping:
+        for canonical, col_letter in column_mapping.items():
+            if canonical != 'col_amount' and col_letter:
+                mapped_cols.add(col_letter.upper())
+
+    amount_cols = []
+    for col_num in range(HEADER_SEARCH_COL_RANGE[0], HEADER_SEARCH_COL_RANGE[1] + 1):
+        cell = sheet.cell(row=header_row, column=col_num)
+        val = str(cell.value or '').strip().upper()
+        
+        is_amount = False
+        
+        # 1. Check header text alias mapping
+        if val:
+            candidates = _ALIAS_REVERSE_LOOKUP.get(val, [])
+            if "col_amount" in candidates:
+                is_amount = True
+                
+        # 2. Check unrecognized/unmapped columns using pattern + left adjacent cell < 2 heuristic
+        if not is_amount:
+            col_letter = get_column_letter(col_num)
+            if col_letter.upper() not in mapped_cols:
+                amount_patterns = HEADERLESS_COLUMN_PATTERNS.get("col_amount", [])
+                if amount_patterns:
+                    data_cell = sheet.cell(row=data_row, column=col_num)
+                    data_val = data_cell.value
+                    
+                    matches_pattern = False
+                    if data_val is not None:
+                        # Robust handling of float stringification for pattern match
+                        val_strs = [str(data_val).strip()]
+                        try:
+                            # Only format as 2-decimal if int/float/Decimal or contains '.'
+                            if isinstance(data_val, (int, float, decimal.Decimal)) or '.' in str(data_val):
+                                clean_str = str(data_val).replace(',', '').strip()
+                                if re.match(r'^-?\d+(\.\d+)?$', clean_str):
+                                    num_val = float(clean_str)
+                                    val_strs.append(f"{num_val:.2f}")
+                        except (ValueError, TypeError):
+                            pass
+
+                        for pattern in amount_patterns:
+                            for val_str in val_strs:
+                                try:
+                                    if re.match(pattern, val_str):
+                                        matches_pattern = True
+                                        break
+                                except re.error:
+                                    continue
+                            if matches_pattern:
+                                break
+                                
+                    # Left adjacent cell heuristic check (value < 2)
+                    has_left_unit_price = False
+                    if col_num > 1:
+                        left_cell = sheet.cell(row=data_row, column=col_num - 1)
+                        left_val = left_cell.value
+                        left_num = None
+                        if left_val is not None:
+                            try:
+                                left_num = float(str(left_val).replace(',', '').strip())
+                            except ValueError:
+                                pass
+                        
+                        if left_num is not None and 0 < left_num < 2:
+                            # Ensure current cell also has a valid numeric value
+                            if data_val is not None:
+                                try:
+                                    float(str(data_val).replace(',', '').strip())
+                                    has_left_unit_price = True
+                                except ValueError:
+                                    pass
+                                    
+                    if matches_pattern and has_left_unit_price:
+                        is_amount = True
+                            
+        if is_amount:
+            amount_cols.append(f"{get_column_letter(col_num)} ('{cell.value or '<empty>'}')")
+                
+    if len(amount_cols) > 1:
+        raise DataValidationError(
+            f"Data Validation Error: Duplicate 'col_amount' columns detected on header row {header_row}: {', '.join(amount_cols)}. "
+            f"Please ensure only one column is mapped to 'Amount'."
+        )
 
 
 def validate_table_data_presence(

@@ -348,6 +348,157 @@ class TestDataParserRefactor(unittest.TestCase):
         except Exception as e:
             self.fail(f"verify_pallet_integrity failed with empty rows: {e}")
 
+    def test_validate_no_duplicate_amount_columns(self):
+        from openpyxl import Workbook
+        from core.data_parser.validation import validate_no_duplicate_amount_columns, DataValidationError
+        
+        wb = Workbook()
+        ws = wb.active
+        
+        # Scenario 1: No duplicates (only one Amount column)
+        ws.cell(row=1, column=1, value="P.O. No.")
+        ws.cell(row=1, column=2, value="Amount")
+        ws.cell(row=1, column=3, value="Quantity")
+        
+        try:
+            validate_no_duplicate_amount_columns(ws, 1)
+        except DataValidationError as e:
+            self.fail(f"validate_no_duplicate_amount_columns raised error unexpectedly: {e}")
+            
+        # Scenario 2: Duplicate col_amount columns ("Amount" and "Total value(USD)")
+        ws.cell(row=1, column=4, value="Total value(USD)")
+        
+        with self.assertRaises(DataValidationError) as context:
+            validate_no_duplicate_amount_columns(ws, 1)
+            
+        self.assertIn("Duplicate 'col_amount' columns detected", str(context.exception))
+
+    def test_sheet_parser_detects_duplicate_col_amount(self):
+        from openpyxl import Workbook
+        from core.data_parser import sheet_parser
+        from core.data_parser.validation import DataValidationError
+        
+        wb = Workbook()
+        ws = wb.active
+        
+        # Row 1 has headers matching col_po, col_qty_pcs, col_amount, and another col_amount
+        ws.cell(row=1, column=1, value="P.O. No.")
+        ws.cell(row=1, column=2, value="Quantity")
+        ws.cell(row=1, column=3, value="Amount")
+        ws.cell(row=1, column=4, value="Total value(USD)")
+        
+        # Add some mock numeric values so the scorer qualifies the row (len(potential_mapping) >= 3, score > 0, etc.)
+        ws.cell(row=2, column=1, value="PO-100")
+        ws.cell(row=2, column=2, value=10)
+        ws.cell(row=2, column=3, value=100.0)
+        ws.cell(row=2, column=4, value=100.0)
+        
+        with self.assertRaises(DataValidationError) as context:
+            sheet_parser.find_and_map_smart_headers(ws)
+            
+        self.assertIn("Duplicate 'col_amount' columns detected", str(context.exception))
+
+    def test_validate_no_duplicate_amount_columns_pattern_matching(self):
+        from openpyxl import Workbook
+        from core.data_parser.validation import validate_no_duplicate_amount_columns, DataValidationError
+        
+        wb = Workbook()
+        ws = wb.active
+        
+        # Column 1 has "Amount" header
+        ws.cell(row=1, column=1, value="Amount")
+        ws.cell(row=2, column=1, value=123.45)
+        
+        # Column 2 has "Price" header, value is 1.5 (< 2)
+        ws.cell(row=1, column=2, value="Price")
+        ws.cell(row=2, column=2, value=1.5)
+
+        # Column 3 has empty header but data looks like amount and left neighbor is < 2
+        ws.cell(row=1, column=3, value="")
+        ws.cell(row=2, column=3, value=456.78)
+        
+        with self.assertRaises(DataValidationError) as context:
+            validate_no_duplicate_amount_columns(ws, 1)
+            
+        self.assertIn("Duplicate 'col_amount' columns detected", str(context.exception))
+
+    def test_validate_no_duplicate_amount_columns_adjacent_heuristic(self):
+        from openpyxl import Workbook
+        from core.data_parser.validation import validate_no_duplicate_amount_columns, DataValidationError
+        
+        wb = Workbook()
+        ws = wb.active
+        
+        # Column 1 has "Amount" header (maps directly)
+        ws.cell(row=1, column=1, value="Amount")
+        ws.cell(row=2, column=1, value=100.00)
+        
+        # Column 2 has "Unit Price" header, value is 1.5 (< 2)
+        ws.cell(row=1, column=2, value="Price")
+        ws.cell(row=2, column=2, value=1.5)
+        
+        # Column 3 has unrecognized header (like "Duplicate Value") but value is 150.00
+        # and left adjacent column value is 1.5 (< 2), so it is identified as col_amount
+        ws.cell(row=1, column=3, value="Duplicate Value")
+        ws.cell(row=2, column=3, value=150.00)
+        
+        with self.assertRaises(DataValidationError) as context:
+            validate_no_duplicate_amount_columns(ws, 1)
+            
+        self.assertIn("Duplicate 'col_amount' columns detected", str(context.exception))
+
+    def test_validate_no_duplicate_amount_columns_unrecognized_header_with_round_floats(self):
+        from openpyxl import Workbook
+        from core.data_parser.validation import validate_no_duplicate_amount_columns, DataValidationError
+        
+        wb = Workbook()
+        ws = wb.active
+        
+        # Column 1 has "Amount" header (maps directly)
+        ws.cell(row=1, column=1, value="Amount")
+        ws.cell(row=2, column=1, value=123.00)
+        
+        # Column 2 has "Price" header, value is 1.5 (< 2)
+        ws.cell(row=1, column=2, value="Price")
+        ws.cell(row=2, column=2, value=1.5)
+
+        # Column 3 has "StrangeName" header (unrecognized header)
+        # Value is 456.00 (round float, normally stringifies to "456.0" or "456")
+        ws.cell(row=1, column=3, value="StrangeName")
+        ws.cell(row=2, column=3, value=456.00)
+        
+        with self.assertRaises(DataValidationError) as context:
+            validate_no_duplicate_amount_columns(ws, 1)
+            
+        self.assertIn("Duplicate 'col_amount' columns detected", str(context.exception))
+
+    def test_validate_no_duplicate_amount_columns_ignores_mapped_columns(self):
+        from openpyxl import Workbook
+        from core.data_parser.validation import validate_no_duplicate_amount_columns, DataValidationError
+        
+        wb = Workbook()
+        ws = wb.active
+        
+        # Column 1 has "Amount" header (maps directly)
+        ws.cell(row=1, column=1, value="Amount")
+        ws.cell(row=2, column=1, value=100.00)
+        
+        # Column 2 has "Net Weight" header, value is 10.50 (which matches the amount pattern if formatted)
+        ws.cell(row=1, column=2, value="Net Weight")
+        ws.cell(row=2, column=2, value=10.50)
+        
+        # Define a column mapping where Column 2 is mapped to 'col_net'
+        mapping = {
+            'col_amount': 'A',
+            'col_net': 'B'
+        }
+        
+        # This should NOT raise any error because Column 2 is already mapped to 'col_net'
+        try:
+            validate_no_duplicate_amount_columns(ws, 1, column_mapping=mapping)
+        except DataValidationError as e:
+            self.fail(f"validate_no_duplicate_amount_columns raised error unexpectedly: {e}")
+
+
 if __name__ == '__main__':
     unittest.main()
-

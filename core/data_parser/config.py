@@ -103,6 +103,9 @@ HEADERLESS_COLUMN_PATTERNS = {
     'col_pallet_id': [
         r'^\d{2}[A-Z]\d{8}$',
     ],
+    'col_amount': [
+        r'^\d{2,}(,\d{3})*\.\d{2}$',
+    ],
 }
 
 

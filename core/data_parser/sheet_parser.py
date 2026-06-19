@@ -68,9 +68,22 @@ def _matches_any_pattern(value: Any, patterns: Union[str, List[str]]) -> bool:
     """
     Helper to check if a value's string representation matches ANY of the regex patterns in a list.
     """
-    # Convert value to a stripped string for reliable matching. Handles numbers, None, etc.
-    value_str = str(value or '').strip()
-    if not value_str:
+    if value is None:
+        return False
+
+    value_strs = [str(value).strip()]
+    try:
+        # Only format as 2-decimal string if it is an int/float/Decimal or contains '.'
+        # to avoid treating strings that are not numeric as floats matching amount format.
+        if isinstance(value, (int, float, Decimal)) or '.' in str(value):
+            clean_str = str(value).replace(',', '').strip()
+            if re.match(r'^-?\d+(\.\d+)?$', clean_str):
+                num_val = float(clean_str)
+                value_strs.append(f"{num_val:.2f}")
+    except (ValueError, TypeError):
+        pass
+
+    if not any(value_strs):
         return False
 
     # Ensure patterns is always a list for iteration
@@ -81,14 +94,15 @@ def _matches_any_pattern(value: Any, patterns: Union[str, List[str]]) -> bool:
 
     # Check against each pattern in the list
     for pattern in patterns_list:
-        try:
-            if re.match(pattern, value_str):
-                # If any pattern matches, we return True immediately
-                return True
-        except re.error as e:
-            logging.error(f"[Pattern Check] Invalid regex pattern provided in config '{pattern}': {e}")
-            continue # Try the next pattern
-            
+        for val_str in value_strs:
+            try:
+                if re.match(pattern, val_str):
+                    # If any pattern matches, we return True immediately
+                    return True
+            except re.error as e:
+                logging.error(f"[Pattern Check] Invalid regex pattern provided in config '{pattern}': {e}")
+                continue # Try the next pattern
+                
     # If no patterns matched after checking all of them
     return False
 
@@ -184,7 +198,10 @@ def _process_row(sheet: Worksheet, row_num: int) -> Tuple[Dict[str, str], int, i
 
         # ALWAYS check strong data patterns (formerly just headerless), even if there's a header.
         # This prevents generic headers (like "PO" -> col_po) from stealing TTX PO data (25xxxxxx).
+        # We skip col_amount from smart header matching based on data patterns alone to avoid false positives.
         for canonical_name, patterns in HEADERLESS_COLUMN_PATTERNS.items():
+            if canonical_name == 'col_amount':
+                continue
             if _matches_any_pattern(data_value, patterns):
                 existing = next((c for c in col_scores if c['name'] == canonical_name), None)
                 if existing:
@@ -267,6 +284,11 @@ def find_and_map_smart_headers(sheet: Worksheet) -> Optional[Tuple[int, Dict[str
 
     if best_result:
         logging.info(f"{prefix} SUCCESS: Header row confirmed at {best_result[0]} with score {highest_row_score}.")
+        
+        # --- VALIDATE DUPLICATE COL_AMOUNT ---
+        from .validation import validate_no_duplicate_amount_columns
+        validate_no_duplicate_amount_columns(sheet, best_result[0], best_result[1])
+        
         return best_result
 
     logging.error(f"{prefix} FAILED: No row passed smart validation.")
@@ -390,6 +412,9 @@ def find_all_header_rows(sheet, search_pattern, row_range, col_range, start_afte
             #   This prevents data rows (with pallet IDs, CBM patterns, etc.) from being
             #   falsely detected as header rows.
             if len(potential_mapping) >= 3 and score >= 15 and header_text_matches >= 2:
+                # Validate duplicate col_amount columns
+                from .validation import validate_no_duplicate_amount_columns
+                validate_no_duplicate_amount_columns(sheet, r_idx, potential_mapping)
                 found_rows.add(r_idx)
         
         if not found_rows:
