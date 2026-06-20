@@ -1,7 +1,8 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 import traceback
 
+from core.invoice_generator.models.table_adapter import ResolvedTableData
 from .table_grid import Grid
 from .base import TableSectionBuilder
 
@@ -20,7 +21,7 @@ class DataTableBuilderStyler(TableSectionBuilder):
     def __init__(
         self,
         grid: Grid,
-        resolved_data: Dict[str, Any],
+        resolved_data: Union[Dict[str, Any], ResolvedTableData],
         vertical_merge_columns: Optional[List[str]] = None,
         is_global_unique_desc: bool = False
     ):

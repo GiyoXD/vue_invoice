@@ -3,6 +3,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 from decimal import Decimal
 
 from ..models.footer import FooterData
+from core.invoice_generator.models.table_adapter import ResolvedTableData
 from ..utils.math_utils import safe_float_convert, safe_int_convert
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ class TableCalculator:
         }
         self.total_pallets = 0
 
-    def calculate(self, resolved_data: Dict[str, Any]) -> FooterData:
+    def calculate(self, resolved_data: Union[Dict[str, Any], ResolvedTableData]) -> FooterData:
         """
         Perform all calculations on the provided data.
         
