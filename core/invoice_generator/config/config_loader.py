@@ -11,7 +11,6 @@ Bundled Config Structure:
     - styling_bundle: per-sheet styling configs
     - layout_bundle: per-sheet layout configs (headers, blanks, static content)
     - data_bundle: per-sheet data configs (mappings, header_info)
-    - data_bundle: per-sheet data configs (mappings, header_info)
 """
 
 import json
@@ -177,8 +176,9 @@ class BundledConfigLoader:
             columns_copy = {col_id: col_def.copy() for col_id, col_def in sheet_styling['columns'].items()}
             
             # Extract and merge border exceptions from global defaults
-            defaults = self._styling_bundle.get('defaults', {})
-            border_exceptions = defaults.get('borders', {}).get('exceptions', {})
+            defaults = self._styling_bundle.get('defaults') or {}
+            borders = defaults.get('borders') or {}
+            border_exceptions = borders.get('exceptions') or {}
             if isinstance(border_exceptions, dict):
                 for col_id, border_style in border_exceptions.items():
                     if col_id in columns_copy:
