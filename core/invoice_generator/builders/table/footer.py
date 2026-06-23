@@ -1,16 +1,17 @@
 import logging
 import traceback
-from decimal import Decimal, InvalidOperation
-from typing import Any, Dict, Optional, Union
-from core.invoice_generator.models.footer import FooterData, WeightDetail, LeatherDetail
-from ..bundle_accessor import BundleAccessor
+from decimal import Decimal
+from typing import Any, Dict, Optional, List
+
+from core.invoice_generator.models.config.layout import FooterConfigModel
+from core.invoice_generator.models.footer import FooterData
 from .base import TableSectionBuilder
 from .table_grid import Grid
 
 logger = logging.getLogger(__name__)
 
 
-class TableFooterBuilder(BundleAccessor, TableSectionBuilder):
+class TableFooterBuilder(TableSectionBuilder):
     """
     Builds and styles footer sections using pure bundle architecture via Grid.
     """
@@ -18,58 +19,85 @@ class TableFooterBuilder(BundleAccessor, TableSectionBuilder):
     def __init__(
         self,
         grid: Grid,
-        footer_data: FooterData,
-        style_config: Dict[str, Any],
-        context_config: Dict[str, Any],
-        data_config: Dict[str, Any]
+        footer_data: Optional[FooterData] = None,
+        footer_config: Optional[FooterConfigModel] = None,
+        pallet_count: int = 0,
+        show_grand_total_addons: bool = False,
+        is_daf: bool = False,
+        sheet_name: str = "",
+        sum_ranges: Optional[List[tuple]] = None,
+        **kwargs
     ):
-        BundleAccessor.__init__(
-            self,
-            worksheet=None,  # Dropped raw worksheet
-            style_config=style_config,
-            context_config=context_config,
-            data_config=data_config
-        )
         TableSectionBuilder.__init__(self, grid)
-        
         self.footer_data = footer_data
+        
+        # Extract from legacy test dictionary parameters if provided
+        data_config = kwargs.get('data_config', {}) or {}
+        context_config = kwargs.get('context_config', {}) or {}
+        
+        if footer_config is None:
+            raw_footer = data_config.get('footer_config', {})
+            if isinstance(raw_footer, dict):
+                footer_config = FooterConfigModel.model_validate(raw_footer)
+            elif isinstance(raw_footer, FooterConfigModel):
+                footer_config = raw_footer
+            else:
+                footer_config = FooterConfigModel()
+                
+        if not pallet_count and 'pallet_count' in context_config:
+            pallet_count = context_config['pallet_count']
+            
+        if not sheet_name and 'sheet_name' in context_config:
+            sheet_name = context_config['sheet_name']
+            
+        if not is_daf:
+            if 'is_daf' in context_config:
+                is_daf = context_config['is_daf']
+            elif 'DAF_mode' in data_config:
+                is_daf = data_config['DAF_mode']
+                
+        if sum_ranges is None and 'sum_ranges' in data_config:
+            sum_ranges = data_config['sum_ranges']
+
+        self.footer_config = footer_config
+        self.pallet_count = pallet_count
+        self.show_grand_total_addons = show_grand_total_addons
+        self.is_daf = is_daf
+        self.sheet_name = sheet_name
         self.initial_row = 0  # Grid is relative, start at 0 internally
+        self._custom_sum_ranges = sum_ranges
 
     @property
     def sum_ranges(self) -> list:
+        if self._custom_sum_ranges is not None:
+            return self._custom_sum_ranges
         # Dynamically query data section from grid
         if hasattr(self.grid, "_sections") and "data" in self.grid._sections:
             start, end = self.grid.get_section_range("data")
             if start > 0 and end >= start:
                 return [(start, end)]
-        return self.data_config.get('sum_ranges', [])
+        return []
     
-    @property
-    def footer_config(self) -> Dict[str, Any]:
-        return self.data_config.get('footer_config', {})
-    
-    @property
-    def pallet_count(self) -> int:
-        return self.context_config.get('pallet_count', 0)
-    
-    @property
-    def show_grand_total_addons(self) -> bool:
-        return self.context_config.get('show_grand_total_addons', False)
-
     def build(self) -> None:
         logger.info(f"[FooterBuilder] build() called")
-        if not self.footer_config:
+        if self.footer_config is None or (
+            self.footer_config.total_text_column_id is None and
+            not self.footer_config.sum_cols and
+            not self.footer_config.sum_column_ids and
+            not self.footer_config.footer_cells and
+            not self.footer_config.merge_rules
+        ):
             raise ValueError("[FooterBuilder] CANNOT BUILD FOOTER - Invalid config")
 
         try:
             current_footer_row = 0
             
-            add_blank_before = self.footer_config.get("add_blank_before", False)
+            add_blank_before = self.footer_config.add_blank_before
             if add_blank_before:
                 current_footer_row += 1
             
-            footer_type = self.footer_config.get("type", "regular")
-            add_ons = self.footer_config.get("add_ons", {})
+            footer_type = self.footer_config.type or "regular"
+            add_ons = self.footer_config.add_ons or {}
             
             before_footer_addon = add_ons.get("before_footer", {})
             if before_footer_addon.get("enabled", False) and footer_type == "regular":
@@ -106,13 +134,11 @@ class TableFooterBuilder(BundleAccessor, TableSectionBuilder):
         self._pad_row_styles(row, exclude_cols=[column_id])
 
     def _build_main_footer(self, row: int, footer_type: str):
-        # We handle grand_total by applying 'footer_no_border' context or we assume grid handles context well.
-        context = 'footer' if footer_type != 'grand_total' else 'footer'
-        
+        context = 'footer'
         written_cols = []
 
         # Write default cells
-        footer_cells = self.footer_config.get("footer_cells", [])
+        footer_cells = self.footer_config.footer_cells or []
         for cell_config in footer_cells:
             if not isinstance(cell_config, list) or len(cell_config) < 2:
                 continue
@@ -130,14 +156,9 @@ class TableFooterBuilder(BundleAccessor, TableSectionBuilder):
             written_cols.append(col_id)
 
         # Write sum formulas
-        sum_column_ids = self.footer_config.get("sum_cols", [])
+        sum_column_ids = self.footer_config.sum_cols or []
         if self.sum_ranges:
             for col_id in sum_column_ids:
-                # We need to construct the formula inputs correctly for the grid.
-                # Grid.write_formula expects template="=SUM({col_ref_0})" and inputs=["col_id"]
-                # But sum_ranges are absolute rows like [(10, 15)].
-                # Actually, our grid doesn't yet support absolute ranges in write_formula elegantly.
-                # Let's just build the string. Wait, we don't know the column letter!
                 try:
                     col_letter = self.grid.get_column_letter(col_id)
                     sum_parts = [f"{col_letter}{start}:{col_letter}{end}" for start, end in self.sum_ranges]
@@ -149,10 +170,10 @@ class TableFooterBuilder(BundleAccessor, TableSectionBuilder):
 
         self._pad_row_styles(row, exclude_cols=written_cols)
 
-        merge_rules = self.footer_config.get("merge_rules", [])
+        merge_rules = self.footer_config.merge_rules or []
         for rule in merge_rules:
-            start_column_id = rule.get("start_column_id")
-            colspan = rule.get("colspan")
+            start_column_id = rule.start_column_id
+            colspan = rule.colspan
             if start_column_id and colspan:
                 self.grid.merge(row, start_column_id, rowspan=1, colspan=colspan)
 
@@ -211,7 +232,7 @@ class TableFooterBuilder(BundleAccessor, TableSectionBuilder):
             return row
 
         current_row = row
-        sum_column_ids = self.footer_config.get("sum_cols", [])
+        sum_column_ids = self.footer_config.sum_cols or []
 
         # Get configurable column IDs with backward-compatible defaults
         label_col_id = config.get("label_col_id", "col_desc")
@@ -264,5 +285,4 @@ class TableFooterBuilder(BundleAccessor, TableSectionBuilder):
         exclude_cols = exclude_cols or []
         for col_id in self.grid.column_mapping.keys():
             if col_id not in exclude_cols:
-                # Get or create ensures the cell exists in the grid for export
                 self.grid.write(row, col_id, None, context='footer')

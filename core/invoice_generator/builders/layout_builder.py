@@ -1,231 +1,147 @@
 import logging
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
+
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl import Workbook
+from openpyxl.drawing.image import Image
+from openpyxl.utils import get_column_letter
 
-from ..styling.models import StylingConfigModel
 from ..models.footer import FooterData
 from .json_template_builder import JsonTemplateStateBuilder
-from openpyxl.drawing.image import Image
-from ...system_config import sys_config, ConfigurationError
 from ..models.layout import SheetLayoutState
-from ..styling.style_registry import StyleRegistry
-from openpyxl.utils import get_column_letter
+from ..models.config.styling import SheetStylingModel
+from ..models.config.layout import SheetLayoutModel
+from ..models.table_adapter import ResolvedTableData
 
 # Initialize logger for this module
 logger = logging.getLogger(__name__)
+
 
 class LayoutBuilder:
     """
     The Director in the Builder pattern.
     Coordinates all builders to construct the complete document layout.
-    
-    RECOMMENDED USAGE (Modern Bundled Config Approach):
-        Use BuilderConfigResolver to prepare configuration bundles, then pass them
-        via style_config, context_config, and layout_config parameters. This approach
-        centralizes config resolution logic and eliminates duplication.
-        
-        Example:
-            from invoice_generator.config.builder_config_resolver import BuilderConfigResolver
-            
-            resolver = BuilderConfigResolver(
-                config_loader=config_loader,
-                sheet_name='Invoice',
-                worksheet=worksheet,
-                args=args,
-                invoice_data=invoice_data,
-                pallets=31
-            )
-            
-            # Get bundles - resolver handles all data extraction
-            style_config, context_config, layout_config, data_config = resolver.get_datatable_bundles()
-            
-            layout_builder = LayoutBuilder(
-                workbook=workbook,
-                worksheet=worksheet,
-                template_worksheet=template,
-                style_config=style_config,
-                context_config=context_config,
-        """
+    """
     def __init__(
         self,
         workbook: Workbook,
         worksheet: Worksheet,
         template_worksheet: Worksheet,
-        style_config: Dict[str, Any],
-        context_config: Dict[str, Any],
-        layout_config: Dict[str, Any],
+        sheet_styling: SheetStylingModel,
+        sheet_layout: SheetLayoutModel,
+        resolved_data: ResolvedTableData,
+        sheet_name: str,
+        all_sheet_configs: Dict[str, Any],
+        args: Any = None,
+        final_grand_total_pallets: int = 0,
+        total_net_weight: Optional[float] = None,
+        total_gross_weight: Optional[float] = None,
+        is_last_table: bool = False,
+        show_grand_total_addons: bool = False,
+        skip_template_header_restoration: bool = False,
+        skip_header_builder: bool = False,
+        skip_data_table_builder: bool = False,
+        skip_footer_builder: bool = False,
+        skip_template_footer_restoration: bool = False,
         template_state_builder: Optional[JsonTemplateStateBuilder] = None,
         template_json_config: Optional[Dict[str, Any]] = None,
-        layout_state: Optional[SheetLayoutState] = None
+        layout_state: Optional[SheetLayoutState] = None,
+        pre_loaded_images: Optional[List[Image]] = None
     ):
         """
-        Initialize LayoutBuilder with strict bundle architecture.
-        
-        Args:
-            workbook: Output workbook (writable)
-            worksheet: Output worksheet (writable)
-            template_worksheet: Template worksheet (read-only)
-            style_config: Bundle containing styling configuration
-            context_config: Bundle containing context (sheet_name, invoice_data, args, etc.)
-            layout_config: Bundle containing layout rules, structure, and resolved data
-            template_state_builder: Optional pre-captured template state (optimization)
-            template_json_config: Optional template JSON config
-            layout_state: Optional layout state tracking occupied rows
+        Initialize LayoutBuilder with strict model architecture.
         """
         self.workbook = workbook
         self.worksheet = worksheet
         self.template_worksheet = template_worksheet
-        if not layout_state:
-            layout_state = SheetLayoutState()
-        self.layout_state = layout_state
+        self.sheet_styling = sheet_styling
+        self.sheet_layout = sheet_layout
+        self.resolved_data = resolved_data
+        self.sheet_name = sheet_name
+        self.all_sheet_configs = all_sheet_configs
+        self.args = args
+        self.final_grand_total_pallets = final_grand_total_pallets
+        self.total_net_weight = total_net_weight
+        self.total_gross_weight = total_gross_weight
+        self.is_last_table = is_last_table
+        self.show_grand_total_addons = show_grand_total_addons
         
-        # Unpack Style Bundle
-        self.styling_config = style_config.get('styling_config')
+        self.skip_template_header_restoration = skip_template_header_restoration
+        self.skip_header_builder = skip_header_builder
+        self.skip_data_table_builder = skip_data_table_builder
+        self.skip_footer_builder = skip_footer_builder
+        self.skip_template_footer_restoration = skip_template_footer_restoration
         
-        # Unpack Context Bundle
-        self.sheet_name = context_config.get('sheet_name')
-        self.invoice_data = context_config.get('invoice_data')
-        self.all_sheet_configs = context_config.get('all_sheet_configs')
-        self.args = context_config.get('args')
-        self.final_grand_total_pallets = context_config.get('final_grand_total_pallets', 0)
-        self.total_net_weight = context_config.get('total_net_weight')
-        self.total_gross_weight = context_config.get('total_gross_weight')
-        self.is_last_table = context_config.get('is_last_table', False)
-        self.show_grand_total_addons = context_config.get('show_grand_total_addons', False)
-        
-        # Unpack Layout Bundle
-        self.sheet_config = layout_config.get('sheet_config', {})
-        
-        # Skip flags
-        self.skip_template_header_restoration = layout_config.get('skip_template_header_restoration', False)
-        self.skip_header_builder = layout_config.get('skip_header_builder', False)
-        self.skip_data_table_builder = layout_config.get('skip_data_table_builder', False)
-        self.style_config = style_config or {}
-        self.context_config = context_config or {}
-        self.layout_config = layout_config or {}
         self.template_state_builder = template_state_builder
-        self.skip_footer_builder = self.layout_config.get('skip_footer_builder', False)
-        
-        # We need this to apply padding/dimensions after build
-        self.header_info = self.layout_config.get('header_info', {})
-        self.skip_template_footer_restoration = layout_config.get('skip_template_footer_restoration', False)
-        
-        # Data Source (Must be provided via resolved_data in layout_config)
-        self.provided_resolved_data = layout_config.get('resolved_data')
-        self.provided_header_info = layout_config.get('header_info')
-        self.provided_mapping_rules = layout_config.get('mapping_rules')
-        
-        # Pre-captured template state
-        self.pre_captured_template_state = template_state_builder
         self.template_json_config = template_json_config
-        
-        logger.debug(f"LayoutBuilder initialized for '{self.sheet_name}' with pure bundle config")
-        
+        self.layout_state = layout_state or SheetLayoutState()
+        self.pre_loaded_images = pre_loaded_images or []
+
         # Store results after build
-        self.header_info = None
         self.next_row_after_footer = -1
         self.data_start_row = -1
         self.data_end_row = -1
-        self.template_state_builder: Optional[JsonTemplateStateBuilder] = None
         self.footer_data: Optional[FooterData] = None
         self.leather_summary: Optional[Dict[str, Any]] = None
+        
+        logger.debug(f"LayoutBuilder initialized for '{self.sheet_name}' with models")
 
     def build(self) -> bool:
         """
         Orchestrates all builders in the correct sequence.
-        Reads template state from template_worksheet, writes to self.worksheet (output).
-        This completely avoids merge conflicts since template and output are separate.
         """
         logger.info(f"Building layout for sheet '{self.sheet_name}'")
         logger.debug(f"Reading from template, writing to output worksheet")
         
-        # 1. Text Replacement (if enabled) - Pre-processing
-        # Removed per user request
-        
-        # 2. Calculate header boundaries for template state capture
-        structure = self.sheet_config.get('structure', {})
-        header_row = structure.get('header_row') # Correct placement for header offset
-
-        # IMPORTANT: Clarify terminology - there are TWO types of headers:
-        # 1. TEMPLATE HEADER: Decorative header section (company name, logo, etc.) - rows 1 to (table_header_row - 1)
-        # 2. TABLE HEADER: Column headers for data table (e.g., "Item", "Quantity", "Price") - at table_header_row
-        
-        # Get table_header_row from config (where the data table column headers are)
-        # For multi-table sheets, multi_table_processor dynamically injects the correct
-        # expected header_row into self.sheet_config ['structure']['header_row'].
-        # We MUST respect this injected value over the static global sheet_layout original value.
-        sheet_layout = self.all_sheet_configs.get(self.sheet_name, {}) if self.all_sheet_configs else {}
+        # Calculate header boundaries for template state capture
+        header_row = self.sheet_layout.structure.header_row
         
         if self.layout_state:
             # Use top-level layout state allocator if available
             table_header_row = self.layout_state.next_free_row
             logger.info(f"Using layout_state.next_free_row for table_header_row: {table_header_row}")
-        # Priority 1: Injected structure.header_row from multi_table_processor
-        elif self.sheet_config and 'structure' in self.sheet_config and 'header_row' in self.sheet_config['structure']:
-            table_header_row = self.sheet_config['structure']['header_row']
-        # Priority 2: Original static template header_row
         else:
-            table_header_row = sheet_layout.get('structure', {}).get('header_row', header_row)
-            
-        if table_header_row is None:
-            raise ConfigurationError(f"CRITICAL: No 'header_row' found for sheet '{self.sheet_name}'. Check configuration structure.")
+            table_header_row = header_row
 
-        header_row_for_builder = table_header_row
         logger.debug(f"[LayoutBuilder DEBUG] sheet_name={self.sheet_name}, header_row={header_row}, table_header_row={table_header_row}")
-
-        logger.debug(f"[LayoutBuilder DEBUG] all_sheet_configs keys: {list(self.all_sheet_configs.keys()) if self.all_sheet_configs else 'None'}")
         
-        # Template decorative header spans from row 1 to the row BEFORE the table header
-        template_header_start_row = 1
-        template_header_end_row = table_header_row - 1  # Decorative header ends BEFORE table header
-        
-        # Calculate footer_start_row from template (estimate: table_header_row + 2-row table header + minimal data rows)
-        # Table header is at table_header_row, second header row at table_header_row + 1
-        # Data starts at table_header_row + 2, footer would be around data_start + 2 rows
-        # Calculate footer_start_row dynamically from template
         # 3. Template State Capture
-        if self.pre_captured_template_state:
+        if self.template_state_builder:
             logger.info(f"Using pre-captured template state (multi-table optimization)")
-            self.template_state_builder = self.pre_captured_template_state
-            logger.debug(f"Reusing template state")
         elif self.template_json_config and self.sheet_name in self.template_json_config:
-            # === NEW JSON-BASED PATH ===
             logger.info(f"Using JSON-based template state for sheet '{self.sheet_name}'")
             try:
                 sheet_layout_json = self.template_json_config[self.sheet_name]
                 self.template_state_builder = JsonTemplateStateBuilder(
                     sheet_layout_data=sheet_layout_json
                 )
-                
-                # Setup critical boundaries from the loaded builder
-                template_header_end_row = self.template_state_builder.header_end_row
-                template_footer_start_row = self.template_state_builder.template_footer_start_row
-                
-                logger.info(f"JSON Template loaded: Header ends {template_header_end_row}, Footer starts {template_footer_start_row}")
+                logger.info(f"JSON Template loaded: Header ends {self.template_state_builder.header_end_row}, Footer starts {self.template_state_builder.template_footer_start_row}")
                 
             except Exception as e:
                 logger.critical(f"CRITICAL: JsonTemplateStateBuilder failed for '{self.sheet_name}': {e}", exc_info=True)
                 return False
         else:
-            # JSON template required - XLSX scanning has been removed
-            logger.critical(f"CRITICAL: No JSON template found for sheet '{self.sheet_name}'. XLSX scanning has been removed.")
+            logger.critical(f"CRITICAL: No JSON template found for sheet '{self.sheet_name}'.")
             return False
             
-        # Common: Text replacements removed per user request
-        
-        # 3b. Template header restoration DEFERRED - will be done AFTER table building
-        # This ensures template content aligns with actual column count after filtering
-        logger.debug(f"Deferring template header restoration until after table building")
-        
         # 4. Table Builder delegation
         from .table import TableBuilder
         table_builder = TableBuilder(
             workbook=self.workbook,
             worksheet=self.worksheet,
-            style_config=self.style_config,
-            context_config=self.context_config,
-            layout_config=self.layout_config,
+            sheet_styling=self.sheet_styling,
+            sheet_layout=self.sheet_layout,
+            resolved_data=self.resolved_data,
+            sheet_name=self.sheet_name,
+            args=self.args,
+            final_grand_total_pallets=self.final_grand_total_pallets,
+            total_net_weight=self.total_net_weight,
+            total_gross_weight=self.total_gross_weight,
+            is_last_table=self.is_last_table,
+            show_grand_total_addons=self.show_grand_total_addons,
+            skip_header_builder=self.skip_header_builder,
+            skip_data_table_builder=self.skip_data_table_builder,
+            skip_footer_builder=self.skip_footer_builder,
             layout_state=self.layout_state
         )
         
@@ -240,27 +156,14 @@ class LayoutBuilder:
         self.data_start_row = table_builder.data_start_row
         self.data_end_row = table_builder.data_end_row
         self.next_row_after_footer = table_builder.next_row_after_footer
+        self.column_index_mapping = getattr(table_builder, 'column_index_mapping', {})
         
         # 5b. NOW restore template header - AFTER table is built
-        # This ensures template content aligns with actual number of columns used
-        # CRITICAL: This should only restore decorative header (rows 1 to table_header_row-1)
-        # It must NOT overwrite the table header row that HeaderBuilder styled
         if not self.skip_template_header_restoration:
             logger.info(f"Restoring template header AFTER table build (correct column alignment)")
             try:
-                # Get actual column count from grid (this reflects filtered columns)
                 actual_num_cols = self.grid.num_columns
-                _, table_header_row_num = self.grid.get_section_range("header")
-                logger.debug(f"Template header will use actual column count: {actual_num_cols}")
-                if self.template_state_builder:
-                    logger.debug(f"Template header ends at row {self.template_state_builder.header_end_row}")
-                logger.debug(f"Table header row is at: {table_header_row_num}")
-                logger.debug(f"These should NOT overlap! (template_end < table_header)")
-                # DO NOT apply column mapping to the template header!
-                # The user specifically requested that we do not skip anything
-                # when capturing/restoring the template wrapper.
                 
-                # Resolve generation mode for mode-dependent header values
                 gen_mode = "standard"
                 if self.args:
                     if getattr(self.args, 'DAF', False): gen_mode = "daf"
@@ -271,66 +174,51 @@ class LayoutBuilder:
                         target_worksheet=self.worksheet,
                         actual_num_cols=actual_num_cols,
                         mode=gen_mode,
-                        layout_state=self.layout_state
+                        layout_state=self.layout_state,
+                        column_index_mapping=self.column_index_mapping
                     )
-                    logger.info(f"Template header restored successfully with {actual_num_cols} columns (rows 1-{self.template_state_builder.header_end_row})")
+                    logger.info(f"Template header restored successfully with {actual_num_cols} columns")
             except Exception as e:
-                logger.error(f"Failed to restore template header after table build")
-                logger.error(f"Error: {e}", exc_info=True)
+                logger.error(f"Failed to restore template header after table build: {e}", exc_info=True)
                 return False
         else:
-            logger.debug(f"Skipping template header restoration (skip_template_header_restoration=True)")
+            logger.debug(f"Skipping template header restoration")
         
-        # 6b. Apply static column widths (auto_fit completely removed)
+        # 6b. Apply static column widths
         logger.info("Applying static config widths (auto-fit disabled)")
         try:
-            # Map column IDs to their physical column indices
             col_id_to_idx = self.grid.column_mapping
+            widths = {}
+            columns = self.sheet_layout.structure.columns
             
-            # Apply static widths from the layout structure config
-            if hasattr(self, 'sheet_config') and self.sheet_config:
-                widths = {}
-                structure = self.sheet_config.get('structure', {})
-                columns = structure.get('columns', [])
-                
-                def extract_widths(cols):
-                    for col in cols:
-                        col_id = col.get('id')
-                        col_w = col.get('width')
-                        if col_id and col_w is not None:
-                            widths[col_id] = col_w
-                        if 'children' in col:
-                            extract_widths(col['children'])
-                            
-                extract_widths(columns)
-                
-                for col_id, col_idx in col_id_to_idx.items():
-                    width = widths.get(col_id)
-                    if width:
-                        col_letter = get_column_letter(col_idx)
-                        self.worksheet.column_dimensions[col_letter].width = float(width)
-                        logger.debug(f"Applied static width {width} to {col_id} ({col_letter})")
+            def extract_widths(cols):
+                for col in cols:
+                    col_id = col.id
+                    col_w = col.width
+                    if col_id and col_w is not None:
+                        widths[col_id] = col_w
+                    if col.children:
+                        extract_widths(col.children)
+                        
+            extract_widths(columns)
+            
+            for col_id, col_idx in col_id_to_idx.items():
+                width = widths.get(col_id)
+                if width:
+                    col_letter = get_column_letter(col_idx)
+                    self.worksheet.column_dimensions[col_letter].width = float(width)
+                    logger.debug(f"Applied static width {width} to {col_id} ({col_letter})")
         except Exception as e:
             logger.error(f"Failed to apply static column widths: {e}", exc_info=True)
  
         # 7. Template Footer Restoration
-        # This restores the static content (signatures, etc.) from the JSON template
-        # that appears AFTER the dynamic table footer.
-        skip_template_footer = self.layout_config.get('skip_template_footer_restoration', False)
-        
-        if self.template_state_builder and not skip_template_footer:
+        if self.template_state_builder and not self.skip_template_footer_restoration:
             try:
-                # Get actual column count if not already set
                 actual_num_cols = self.grid.num_columns
                 
-                # CRITICAL FIX: Only restore template footer if this is the LAST table on the sheet.
-                # Otherwise, the static footer content (signatures, etc.) will be printed in the middle
-                # of the sheet, distorting subsequent tables.
                 if self.is_last_table:
                     logger.info(f"--- RESTORING TEMPLATE FOOTER (Last Table) ---")
-                    logger.info(f"next_row_after_footer: {self.next_row_after_footer}")
                     
-                    # Resolve generation mode for mode-dependent footer values
                     gen_mode = "standard"
                     if self.args:
                         if getattr(self.args, 'DAF', False): gen_mode = "daf"
@@ -341,7 +229,8 @@ class LayoutBuilder:
                         footer_start_row=self.next_row_after_footer,
                         actual_num_cols=actual_num_cols,
                         mode=gen_mode,
-                        layout_state=self.layout_state
+                        layout_state=self.layout_state,
+                        column_index_mapping=self.column_index_mapping
                     )
                 else:
                     logger.info(f"Skipping template footer restoration (Not last table)")
@@ -349,55 +238,27 @@ class LayoutBuilder:
             except Exception as e:
                 logger.error(f"Failed to restore template footer: {e}", exc_info=True)
         else:
-            logger.debug("Skipping template footer restoration (no template_state_builder)")
+            logger.debug("Skipping template footer restoration")
 
-        # 8. Inject Template Images (New Feature)
+        # 8. Inject Template Images
         self._inject_images()
         
         logger.info(f"Layout built successfully for sheet '{self.sheet_name}'")
-        
         return True
 
     def _inject_images(self):
         """
-        Injects images from the configured directory into the worksheet.
+        Injects pre-loaded images into the worksheet.
         """
-        try:
-            img_dir = sys_config.template_image_dir
-            if not img_dir.exists():
-                logger.debug(f"Template image directory not found: {img_dir}")
-                return
-
-            images = list(img_dir.glob("*"))
-            if not images:
-                logger.debug(f"No images found in {img_dir}")
-                return
-
-            logger.info(f"Injecting {len(images)} images from {img_dir}")
+        if not self.pre_loaded_images:
+            logger.debug("No pre-loaded images to inject")
+            return
             
-            for i, img_path in enumerate(images):
-                if img_path.suffix.lower() not in ['.png', '.jpg', '.jpeg', '.bmp', '.gif']:
-                    continue
-                    
-                try:
-                    img = Image(str(img_path))
-                    
-                    # Resize to 70px height (maintaining aspect ratio)
-                    # This only affects display size; original image data is preserved
-                    target_height = 140
-                    if img.height > 0:
-                        aspect_ratio = img.width / img.height
-                        new_width = target_height * aspect_ratio
-                        
-                        img.height = target_height
-                        img.width = new_width
-                        
-                    # Default placement at N1 (as requested)
-                    self.worksheet.add_image(img, 'N1')
-                    logger.debug(f"Injected image: {img_path.name} (resized to 70px height) at N1")
-                except Exception as e:
-                    logger.warning(f"Failed to inject image {img_path.name}: {e}")
-        except Exception as e:
-            logger.error(f"Image injection failed: {e}", exc_info=True)
-    
-
+        logger.info(f"Injecting {len(self.pre_loaded_images)} pre-loaded images")
+        for img in self.pre_loaded_images:
+            try:
+                # Default placement at N1 (as requested)
+                self.worksheet.add_image(img, 'N1')
+                logger.debug(f"Injected image at N1")
+            except Exception as e:
+                logger.warning(f"Failed to inject pre-loaded image: {e}")

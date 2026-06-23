@@ -8,7 +8,7 @@ class MetaModel(BaseModel):
     description: Optional[str] = None
 
 class DataPrepHintModel(BaseModel):
-    priority: List[str] = Field(default_factory=list, alias="prority")
+    priority: List[str] = Field(default_factory=list)
     numbers_per_group_by_po: Optional[int] = None
 
 class FeaturesModel(BaseModel):

@@ -41,9 +41,8 @@ def extract_table_data(data_source: Any, data_source_type: str) -> Any:
 
 
 def merge_static_content(
-    data_rows: List[Dict[int, Any]],
+    data_rows: List[Dict[str, Any]],
     static_content: Dict[str, Any],
-    column_id_map: Dict[str, int],
     dynamic_mapping_rules: Dict[str, Any],
     DAF_mode: bool,
     custom_mode: bool
@@ -56,9 +55,9 @@ def merge_static_content(
         return
 
     static_values = static_content['col_static']
-    static_col_idx = column_id_map.get('col_static')
+    static_col_id = 'col_static'
     
-    if static_values and static_col_idx and len(data_rows) > 0:
+    if static_values and len(data_rows) > 0:
         # Resolve {col_desc_fallback} placeholder for dynamic static content
         desc_fallback_str = ""
         for rule_key, rule in dynamic_mapping_rules.items():
@@ -79,14 +78,13 @@ def merge_static_content(
         
         # Extend data_rows if we have more static values than data rows
         while len(data_rows) < num_static_values:
-            empty_row = {col_idx: "" for col_idx in column_id_map.values()}
-            data_rows.append(empty_row)
+            data_rows.append({})
 
         for i, static_value in enumerate(static_values):
             if isinstance(static_value, str) and "{col_desc_fallback}" in static_value:
                 static_value = static_value.replace("{col_desc_fallback}", str(desc_fallback_str))
                 
-            data_rows[i][static_col_idx] = static_value
+            data_rows[i][static_col_id] = static_value
         
         logger.info(f"Merged {num_static_values} static values into {len(data_rows)} data rows")
 
@@ -148,9 +146,9 @@ def extract_summaries(
 
 
 def format_pallet_counts(
-    data_rows: List[Dict[int, Any]],
+    data_rows: List[Dict[str, Any]],
     num_data_rows: int,
-    pallet_col_idx: Optional[int],
+    pallet_col_id: Optional[str],
     footer_data: Dict[str, Any],
     table_key: Optional[Any]
 ) -> None:
@@ -159,7 +157,7 @@ def format_pallet_counts(
     and carries values forward for proper vertical cell merging.
     Modifies data_rows in-place.
     """
-    if num_data_rows <= 0 or not pallet_col_idx:
+    if num_data_rows <= 0 or not pallet_col_id:
         return
         
     global_total_pallets = 0
@@ -186,12 +184,12 @@ def format_pallet_counts(
     carry_value = 0
     
     for row in data_rows[:num_data_rows]:
-        val = _to_numeric(row.get(pallet_col_idx, 0))
+        val = _to_numeric(row.get(pallet_col_id, 0))
         
         if val == 1:
             pallet_order += 1
             formatted_val = f"{pallet_order}-{total_pallets_to_display}"
-            row[pallet_col_idx] = formatted_val
+            row[pallet_col_id] = formatted_val
             carry_value = formatted_val
         else:
-            row[pallet_col_idx] = carry_value if carry_value != 0 else 0
+            row[pallet_col_id] = carry_value if carry_value != 0 else 0

@@ -35,30 +35,10 @@ class TemplateScanner:
         layout = TemplateLayout()
         safe_max_column = boundaries.max_col
         
-        self._capture_global_layout(worksheet, safe_max_column, layout)
         layout.header_rows = self._capture_header_rows(worksheet, boundaries, safe_max_column)
         layout.footer_rows = self._capture_footer_rows(worksheet, boundaries, safe_max_column, sheet_name)
         
         return layout
-
-    def _capture_global_layout(self, ws: Worksheet, safe_max_column: int, layout: TemplateLayout):
-        # Cache grouped dimension ranges (openpyxl stores <col min="1" max="5" width="20"/>
-        # under a single dict key). We must iterate them to find the matching range for each column.
-        dim_ranges = list(ws.column_dimensions.values())
-
-        for c in range(1, safe_max_column + 1):
-            letter = get_column_letter(c)
-
-            # Find the dimension object whose range covers this column index
-            matching_dim = None
-            for dim in dim_ranges:
-                if dim.min <= c <= dim.max:
-                    matching_dim = dim
-                    break
-
-            # Only record widths that are EXPLICITLY set in the worksheet.
-            if matching_dim and matching_dim.width is not None:
-                layout.col_widths[letter] = matching_dim.width
 
     def _capture_header_rows(self, ws: Worksheet, boundaries: ZoneBoundaries, safe_max_column: int) -> List[UnitRow]:
         header_rows = []

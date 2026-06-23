@@ -6,7 +6,7 @@
     "description": "Strict Mode (Zero-Config) - Auto-mapped Packing List"
   },
   "data_preparation_module_hint": {
-    "prority": [
+    "priority": [
       "po"
     ],
     "numbers_per_group_by_po": 7
@@ -119,6 +119,11 @@
             }
           }
         }
+      },
+      "row_heights": {
+        "header": 35,
+        "data": 35,
+        "footer": 35
       }
     },
     "Contract": {
@@ -164,6 +169,11 @@
           "font_name": "Times New Roman",
           "border_style": "thin"
         }
+      },
+      "row_heights": {
+        "header": 36,
+        "data": 30,
+        "footer": 36
       }
     },
     "Packing list": {
@@ -235,6 +245,11 @@
           "border_style": "thin"
         }
       },
+      "row_heights": {
+        "header": 27,
+        "data": 27,
+        "footer": 27
+      },
       "_legacy_column_specific": {
         "col_static": {
           "alignment": {
@@ -256,11 +271,6 @@
       ],
       "structure": {
         "header_row": 21,
-        "row_heights": {
-          "header": 35,
-          "data": 35,
-          "footer": 35
-        },
         "columns": [
           {
             "id": "col_static",
@@ -380,11 +390,6 @@
       ],
       "structure": {
         "header_row": 15,
-        "row_heights": {
-          "header": 36,
-          "data": 30,
-          "footer": 36
-        },
         "columns": [
           {
             "id": "col_no",
@@ -480,11 +485,6 @@
       ],
       "structure": {
         "header_row": 21,
-        "row_heights": {
-          "header": 27,
-          "data": 27,
-          "footer": 27
-        },
         "columns": [
           {
             "id": "col_static",
@@ -623,11 +623,8 @@
   },
   "defaults": {
     "footer": {
-      "show_total": true,
-      "show_pallet_count": true,
       "total_text": "TOTAL:",
-      "merge_total_cells": true,
-      "sum_columns": [
+      "sum_column_ids": [
         "col_qty_pcs",
         "col_qty_sf",
         "col_net",

@@ -14,7 +14,7 @@ from core.invoice_generator.config.table_value_adapter.helpers import (
 def test_resolved_table_data_model_dict_compat():
     """Verify that ResolvedTableData supports dictionary-like access for backward compatibility."""
     model = ResolvedTableData(
-        data_rows=[{1: "row1"}],
+        data_rows=[{"col_desc": "row1"}],
         pallet_counts=[2],
         num_data_rows=1,
         static_info=StaticInfoModel(col1_index=0, num_static_labels=1),
@@ -26,7 +26,7 @@ def test_resolved_table_data_model_dict_compat():
     )
 
     # __getitem__ compatibility
-    assert model["data_rows"] == [{1: "row1"}]
+    assert model["data_rows"] == [{"col_desc": "row1"}]
     assert model["pallet_counts"] == [2]
     assert model["num_data_rows"] == 1
     assert model["pallet_summary_total"] == 5
@@ -34,7 +34,7 @@ def test_resolved_table_data_model_dict_compat():
         _ = model["non_existent_key"]
 
     # get compatibility
-    assert model.get("data_rows") == [{1: "row1"}]
+    assert model.get("data_rows") == [{"col_desc": "row1"}]
     assert model.get("pallet_summary_total", 0) == 5
     assert model.get("non_existent_key", "default_val") == "default_val"
     assert model.get("non_existent_key") is None
@@ -67,9 +67,8 @@ def test_helpers_extract_table_data():
 
 def test_helpers_merge_static_content():
     """Verify merge_static_content merges static values and resolves fallback descriptions."""
-    data_rows = [{1: "dynamic1"}, {1: "dynamic2"}]
+    data_rows = [{"col_item": "dynamic1"}, {"col_item": "dynamic2"}]
     static_content = {"col_static": ["Static1", "{col_desc_fallback}"]}
-    column_id_map = {"col_static": 2}
     dynamic_mapping_rules = {
         "col_desc": {
             "fallback": {
@@ -81,30 +80,28 @@ def test_helpers_merge_static_content():
     merge_static_content(
         data_rows=data_rows,
         static_content=static_content,
-        column_id_map=column_id_map,
         dynamic_mapping_rules=dynamic_mapping_rules,
         DAF_mode=False,
         custom_mode=False
     )
 
-    # Values should be merged into col_static (index 2)
-    assert data_rows[0][2] == "Static1"
-    assert data_rows[1][2] == "Standard Desc"
+    # Values should be merged into col_static
+    assert data_rows[0]["col_static"] == "Static1"
+    assert data_rows[1]["col_static"] == "Standard Desc"
 
     # Test extending rows if we have more static values than data rows
-    data_rows_short = [{1: "dynamic1"}]
+    data_rows_short = [{"col_item": "dynamic1"}]
     static_content_long = {"col_static": ["Static1", "Static2"]}
     merge_static_content(
         data_rows=data_rows_short,
         static_content=static_content_long,
-        column_id_map=column_id_map,
         dynamic_mapping_rules={},
         DAF_mode=False,
         custom_mode=False
     )
     assert len(data_rows_short) == 2
-    assert data_rows_short[0][2] == "Static1"
-    assert data_rows_short[1][2] == "Static2"
+    assert data_rows_short[0]["col_static"] == "Static1"
+    assert data_rows_short[1]["col_static"] == "Static2"
 
 
 def test_helpers_extract_summaries():
@@ -145,9 +142,9 @@ def test_helpers_extract_summaries():
 def test_helpers_format_pallet_counts():
     """Verify that format_pallet_counts formats counts and carries values forward correctly."""
     data_rows = [
-        {1: "Item 1", 2: 1},  # pallet count col index 2
-        {1: "Item 2", 2: 0},
-        {1: "Item 3", 2: 1}
+        {"col_item": "Item 1", "col_pallet_count": 1},
+        {"col_item": "Item 2", "col_pallet_count": 0},
+        {"col_item": "Item 3", "col_pallet_count": 1}
     ]
     footer_data = {
         "grand_total": {
@@ -157,12 +154,12 @@ def test_helpers_format_pallet_counts():
     format_pallet_counts(
         data_rows=data_rows,
         num_data_rows=3,
-        pallet_col_idx=2,
+        pallet_col_id="col_pallet_count",
         footer_data=footer_data,
         table_key=None
     )
 
     # 1-5, then carry 1-5 forward, then next is 2-5
-    assert data_rows[0][2] == "1-5"
-    assert data_rows[1][2] == "1-5"
-    assert data_rows[2][2] == "2-5"
+    assert data_rows[0]["col_pallet_count"] == "1-5"
+    assert data_rows[1]["col_pallet_count"] == "1-5"
+    assert data_rows[2]["col_pallet_count"] == "2-5"

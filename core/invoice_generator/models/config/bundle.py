@@ -3,10 +3,10 @@ from typing import Dict, Optional, Union, Any
 from .meta import MetaModel, DataPrepHintModel, FeaturesModel
 from .processing import ProcessingModel
 from .styling import StylingDefaultsModel, SheetStylingModel
-from .layout import SheetLayoutModel
+from .layout import SheetLayoutModel, FooterConfigModel
 
 class GlobalDefaultsModel(BaseModel):
-    footer: Optional[Dict[str, Any]] = None
+    footer: Optional[FooterConfigModel] = None
 
 class ClientConfigBundle(BaseModel):
     model_config = ConfigDict(populate_by_name=True)

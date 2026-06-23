@@ -6,7 +6,7 @@ from openpyxl.styles import Font, PatternFill, Border, Side, Alignment, Color
 from openpyxl.utils import get_column_letter
 from openpyxl.utils.cell import coordinate_from_string, column_index_from_string
 from core.blueprint_generator.internal.scanner.models import TemplateLayout, ZoneBoundaries
-from core.models.cell import UnitRow
+from core.models.cell import UnitRow, UnitCell, TemplateMerge
 
 # Utils
 
@@ -105,12 +105,7 @@ class JsonTemplateStateBuilder:
                     if cell.merge:
                         self.max_col = max(self.max_col, cell.merge.max_col)
         
-        # 3. Update max dimensions
-        if self.layout_obj.col_widths:
-            self.max_col = max(
-                self.max_col,
-                max(column_index_from_string(col) for col in self.layout_obj.col_widths.keys())
-            )
+
         
         if template_footer_end_row > 0:
             self.max_row = template_footer_end_row
@@ -321,7 +316,7 @@ class JsonTemplateStateBuilder:
 
     # --- Public API (thin wrappers) ---
     
-    def restore_header_only(self, target_worksheet: Worksheet, actual_num_cols: int = None, mode: str = "standard", layout_state: Optional[Any] = None):
+    def restore_header_only(self, target_worksheet: Worksheet, actual_num_cols: int = None, mode: str = "standard", layout_state: Optional[Any] = None, column_index_mapping: Optional[Dict[int, Optional[int]]] = None):
         """
         Restores ONLY the header to a worksheet.
         
@@ -330,16 +325,19 @@ class JsonTemplateStateBuilder:
             actual_num_cols: Optional column count (kept for API compatibility, not used).
             mode: Generation mode ('standard', 'daf', 'custom').
             layout_state: Optional layout state tracking occupied/merged cells.
+            column_index_mapping: Optional template to physical column mapping index.
         """
         logger.info(f"[JsonTemplateStateBuilder] Restoring Header to '{target_worksheet.title}' (mode={mode})")
         
-        self.restore_rows(target_worksheet, self.layout_obj.header_rows, start_row=1, mode=mode, layout_state=layout_state)
+        rows = self.layout_obj.header_rows
+        if column_index_mapping:
+            rows = translate_template_rows(rows, column_index_mapping)
+            
+        self.restore_rows(target_worksheet, rows, start_row=1, mode=mode, layout_state=layout_state)
         
-        # Column widths are a header-only concern
-        for col_letter, w in self.layout_obj.col_widths.items():
-            target_worksheet.column_dimensions[col_letter].width = w
 
-    def restore_template_footer(self, target_worksheet: Worksheet, footer_start_row: int, actual_num_cols: int = None, mode: str = "standard", layout_state: Optional[Any] = None):
+
+    def restore_template_footer(self, target_worksheet: Worksheet, footer_start_row: int, actual_num_cols: int = None, mode: str = "standard", layout_state: Optional[Any] = None, column_index_mapping: Optional[Dict[int, Optional[int]]] = None):
         """
         Restores the template footer content at a specific starting row.
         
@@ -349,14 +347,19 @@ class JsonTemplateStateBuilder:
             actual_num_cols: Optional column count (kept for API compatibility, not used).
             mode: Generation mode ('standard', 'daf', 'custom').
             layout_state: Optional layout state tracking occupied/merged cells.
+            column_index_mapping: Optional template to physical column mapping index.
         """
         logger.info(f"[JsonTemplateStateBuilder] Restoring Footer to '{target_worksheet.title}' at row {footer_start_row} (mode={mode})")
         
         if not self.layout_obj.footer_rows:
             logger.warning(f"[JsonTemplateStateBuilder] Template footer rows is empty for '{target_worksheet.title}'.")
             return
+            
+        rows = self.layout_obj.footer_rows
+        if column_index_mapping:
+            rows = translate_template_rows(rows, column_index_mapping)
         
-        self.restore_rows(target_worksheet, self.layout_obj.footer_rows, start_row=footer_start_row, mode=mode, layout_state=layout_state)
+        self.restore_rows(target_worksheet, rows, start_row=footer_start_row, mode=mode, layout_state=layout_state)
 
     # --- Value Resolution ---
 
@@ -399,3 +402,76 @@ class JsonTemplateStateBuilder:
             return raw_value.get('default', None)
             
         return raw_value
+
+
+def translate_template_rows(rows: List[UnitRow], column_mapping: Dict[int, Optional[int]]) -> List[UnitRow]:
+    """
+    Translates template UnitRow cells' col_index using the template-to-physical column mapping.
+    Filters out cells that map to None (hidden columns) and updates merge ranges.
+    """
+    if not column_mapping:
+        return rows
+        
+    translated_rows = []
+    for row in rows:
+        translated_cells = []
+        covered_template_cols = set()
+        
+        for cell in row.cells:
+            if cell.col_index in covered_template_cols:
+                continue
+                
+            if cell.merge:
+                # Mark all subsequent columns in the template merge range as covered
+                for col in range(cell.merge.min_col + 1, cell.merge.max_col + 1):
+                    covered_template_cols.add(col)
+            
+            # Resolve target physical column
+            target_col = column_mapping.get(cell.col_index, cell.col_index)
+            
+            # If the cell has a merge, check if we need to shift the cell to the first visible column
+            translated_merge = None
+            if cell.merge:
+                # Find first and last visible columns in the merge range
+                first_visible_col = None
+                for col in range(cell.merge.min_col, cell.merge.max_col + 1):
+                    resolved = column_mapping.get(col, col)
+                    if resolved is not None:
+                        first_visible_col = resolved
+                        break
+                
+                last_visible_col = None
+                for col in range(cell.merge.max_col, cell.merge.min_col - 1, -1):
+                    resolved = column_mapping.get(col, col)
+                    if resolved is not None:
+                        last_visible_col = resolved
+                        break
+                
+                if first_visible_col is not None and last_visible_col is not None and last_visible_col >= first_visible_col:
+                    target_col = first_visible_col
+                    if last_visible_col > first_visible_col or cell.merge.row_span > 1:
+                        translated_merge = TemplateMerge(
+                            min_col=first_visible_col,
+                            max_col=last_visible_col,
+                            row_span=cell.merge.row_span,
+                            value=cell.merge.value
+                        )
+            
+            if target_col is None:
+                # Column is hidden in this mode and does not merge into any visible column
+                continue
+            
+            translated_cell = UnitCell(
+                col_index=target_col,
+                value=cell.value,
+                style=cell.style,
+                merge=translated_merge
+            )
+            translated_cells.append(translated_cell)
+            
+        translated_rows.append(UnitRow(
+            relative_index=row.relative_index,
+            height=row.height,
+            cells=translated_cells
+        ))
+    return translated_rows

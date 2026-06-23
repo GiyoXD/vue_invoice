@@ -277,15 +277,7 @@ def _process_sheets(ctx: GeneratorContext, session: GenerationSession):
     if not sheets_to_process:
         raise ValueError("No valid sheets found to process.")
 
-    # Mock args for processors (removing argparse dependency logic)
-    # Processors expect an object with .DAF and .custom flags
-    class ProcessorFlags:
-        def __init__(self, daf, custom, enable_auto_fit):
-            self.DAF = daf
-            self.custom = custom
-            self.enable_auto_fit = enable_auto_fit
-    
-    proc_args = ProcessorFlags(ctx.daf_mode, ctx.custom_mode, ctx.enable_auto_fit)
+    proc_args = ctx.options
 
     for sheet_name in sheets_to_process:
         logger.info(f"Processing sheet '{sheet_name}'")
