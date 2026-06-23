@@ -7,6 +7,9 @@ from openpyxl import Workbook
 from ...styling.style_registry import StyleRegistry
 from ...styling.dimension_registry import DimensionRegistry
 from ...models.layout import SheetLayoutState
+from ...models.config.styling import SheetStylingModel
+from ...models.config.layout import SheetLayoutModel, ColumnDef, FooterConfigModel
+from ...models.table_adapter import ResolvedTableData
 from .table_grid import Grid
 
 logger = logging.getLogger(__name__)
@@ -21,35 +24,39 @@ class TableBuilder:
         self,
         workbook: Workbook,
         worksheet: Worksheet,
-        style_config: Dict[str, Any],
-        context_config: Dict[str, Any],
-        layout_config: Dict[str, Any],
+        sheet_styling: SheetStylingModel,
+        sheet_layout: SheetLayoutModel,
+        resolved_data: ResolvedTableData,
+        sheet_name: str,
+        args: Any = None,
+        final_grand_total_pallets: int = 0,
+        total_net_weight: Optional[float] = None,
+        total_gross_weight: Optional[float] = None,
+        is_last_table: bool = False,
+        show_grand_total_addons: bool = False,
+        skip_header_builder: bool = False,
+        skip_data_table_builder: bool = False,
+        skip_footer_builder: bool = False,
         layout_state: Optional[SheetLayoutState] = None
     ):
         self.workbook = workbook
         self.worksheet = worksheet
-        self.style_config = style_config or {}
-        self.context_config = context_config or {}
-        self.layout_config = layout_config or {}
+        self.sheet_styling = sheet_styling
+        self.sheet_layout = sheet_layout
+        self.resolved_data = resolved_data
+        self.sheet_name = sheet_name
+        self.args = args
+        self.final_grand_total_pallets = final_grand_total_pallets
+        self.total_net_weight = total_net_weight
+        self.total_gross_weight = total_gross_weight
+        self.is_last_table = is_last_table
+        self.show_grand_total_addons = show_grand_total_addons
+        
+        self.skip_header_builder = skip_header_builder
+        self.skip_data_table_builder = skip_data_table_builder
+        self.skip_footer_builder = skip_footer_builder
+        
         self.layout_state = layout_state or SheetLayoutState()
-
-        # Unpack styling and configuration
-        self.styling_config = self.style_config.get('styling_config')
-        self.sheet_config = self.layout_config.get('sheet_config', {})
-        self.args = self.context_config.get('args')
-        self.sheet_name = self.context_config.get('sheet_name', '')
-        
-        # Flags
-        self.skip_header_builder = self.layout_config.get('skip_header_builder', False)
-        self.skip_data_table_builder = self.layout_config.get('skip_data_table_builder', False)
-        self.skip_footer_builder = self.layout_config.get('skip_footer_builder', False)
-        
-        # Extracted totals
-        self.final_grand_total_pallets = self.context_config.get('final_grand_total_pallets', 0)
-        self.total_net_weight = self.context_config.get('total_net_weight')
-        self.total_gross_weight = self.context_config.get('total_gross_weight')
-        self.is_last_table = self.context_config.get('is_last_table', False)
-        self.show_grand_total_addons = self.context_config.get('show_grand_total_addons', False)
 
         # Output properties filled after building
         self.header_info = {}
@@ -74,14 +81,8 @@ class TableBuilder:
         bundled_columns, column_mapping, column_colspan = self._resolve_columns()
         
         # 2. Setup StyleRegistry and DimensionRegistry
-        styling_dict = self.styling_config.model_dump() if hasattr(self.styling_config, 'model_dump') else self.styling_config
-        style_registry = None
-        dimension_registry = None
-        if isinstance(styling_dict, dict) and 'columns' in styling_dict and 'row_contexts' in styling_dict:
-            style_registry = StyleRegistry(styling_dict)
-        
-        if isinstance(self.sheet_config, dict) and 'structure' in self.sheet_config:
-            dimension_registry = DimensionRegistry(self.sheet_config)
+        style_registry = StyleRegistry(self.sheet_styling)
+        dimension_registry = DimensionRegistry(self.sheet_styling.row_heights)
 
         # 3. Bind Layout State
         self.layout_state.bind(
@@ -112,18 +113,17 @@ class TableBuilder:
             grid.advance_row(2)
 
         # 6. Build Data Table
-        resolved_data = self.layout_config.get('resolved_data') or {}
         data_physical_start_row = start_row + grid._cursor_row
         
-        if not self.skip_data_table_builder and resolved_data:
+        if not self.skip_data_table_builder and self.resolved_data:
             try:
                 # Directly construct FooterData from pre-calculated parser results
                 from ...models.footer import FooterData
-                pallet_count = resolved_data.get('pallet_summary_total', 0)
+                pallet_count = self.resolved_data.pallet_summary_total if hasattr(self.resolved_data, 'pallet_summary_total') else 0
                 if pallet_count is None:
                     pallet_count = 0
                     
-                ws = resolved_data.get('weight_summary')
+                ws = self.resolved_data.weight_summary
                 if not ws or (ws.get('net', 0) == 0 and ws.get('gross', 0) == 0):
                     if self.total_net_weight is not None or self.total_gross_weight is not None:
                         ws = {
@@ -132,16 +132,16 @@ class TableBuilder:
                         }
 
                 self.footer_data = FooterData(
-                    footer_row_start_idx=data_physical_start_row + len(resolved_data.get('data_rows', [])),
+                    footer_row_start_idx=data_physical_start_row + len(self.resolved_data.data_rows),
                     data_start_row=data_physical_start_row,
-                    data_end_row=data_physical_start_row + len(resolved_data.get('data_rows', [])) - 1,
+                    data_end_row=data_physical_start_row + len(self.resolved_data.data_rows) - 1,
                     total_pallets=int(pallet_count),
-                    leather_summary=resolved_data.get('leather_summary'),
+                    leather_summary=self.resolved_data.leather_summary,
                     weight_summary=ws
                 )
                 
                 # Calculate absolute boundaries for layout state recording
-                actual_rows_to_process = len(resolved_data.get('data_rows', []))
+                actual_rows_to_process = len(self.resolved_data.data_rows)
                 self.data_start_row = data_physical_start_row
                 self.data_end_row = data_physical_start_row + actual_rows_to_process - 1
                 
@@ -149,8 +149,8 @@ class TableBuilder:
                     self.layout_state.record_data_range(self.data_start_row, self.data_end_row)
 
                 # Uniqueness and vertical merge columns
-                is_global_unique_desc = self.layout_config.get('is_global_unique_desc', False)
-                allow_col_desc_merge = self.layout_config.get('allow_col_desc_merge', True)
+                is_global_unique_desc = getattr(self.args, 'is_global_unique_desc', False) if self.args else False
+                allow_col_desc_merge = getattr(self.args, 'allow_col_desc_merge', True) if self.args else True
                 
                 merge_cols = ['col_pallet_count']
                 if allow_col_desc_merge:
@@ -158,7 +158,7 @@ class TableBuilder:
 
                 data_builder = DataTableBuilder(
                     grid=grid,
-                    resolved_data=resolved_data,
+                    resolved_data=self.resolved_data,
                     vertical_merge_columns=merge_cols,
                     is_global_unique_desc=is_global_unique_desc
                 )
@@ -174,40 +174,16 @@ class TableBuilder:
         # 7. Build Footer
         if not self.skip_footer_builder:
             pallet_count = self.footer_data.total_pallets if self.footer_data else self.final_grand_total_pallets
-            footer_config = self.sheet_config.get('footer', {})
-            data_flow = self.sheet_config.get('data_flow', {})
-            mapping_rules = data_flow.get('mappings', self.sheet_config.get('mappings', {}))
-            
-            data_range_to_sum = []
-            data_physical_end_row = start_row + grid._cursor_row - 1
-            if data_physical_start_row > 0 and data_physical_end_row >= data_physical_start_row:
-                data_range_to_sum = [(data_physical_start_row, data_physical_end_row)]
-
-            footer_builder_context_config = {
-                'pallet_count': pallet_count,
-                'sheet_name': self.sheet_name,
-                'total_net_weight': self.total_net_weight,
-                'total_gross_weight': self.total_gross_weight,
-                'is_last_table': self.is_last_table,
-                'show_grand_total_addons': self.show_grand_total_addons,
-            }
-            
-            footer_builder_data_config = {
-                'sum_ranges': data_range_to_sum,
-                'footer_config': footer_config,
-                'mapping_rules': mapping_rules,
-                'DAF_mode': bool(getattr(self.args, 'DAF', False)) if self.args else False,
-                'override_total_text': None,
-                'leather_summary': self.footer_data.leather_summary if self.footer_data else None
-            }
 
             try:
                 footer_builder = TableFooterBuilder(
                     grid=grid,
                     footer_data=self.footer_data,
-                    style_config={'styling_config': self.styling_config},
-                    context_config=footer_builder_context_config,
-                    data_config=footer_builder_data_config
+                    footer_config=self.sheet_layout.footer or FooterConfigModel(),
+                    pallet_count=pallet_count,
+                    show_grand_total_addons=self.show_grand_total_addons,
+                    is_daf=bool(getattr(self.args, 'DAF', False)) if self.args else False,
+                    sheet_name=self.sheet_name
                 )
                 footer_builder.build()
             except Exception as e:
@@ -222,12 +198,11 @@ class TableBuilder:
         self.next_row_after_footer = start_row + grid._cursor_row
         return True
 
-    def _resolve_columns(self) -> Tuple[List[Dict[str, Any]], Dict[str, int], Dict[str, int]]:
+    def _resolve_columns(self) -> Tuple[List[ColumnDef], Dict[str, int], Dict[str, int]]:
         """
         Resolves filtered columns and builds the logical ID to physical column index mapping.
         """
-        structure = self.sheet_config.get('structure', {})
-        original_columns = structure.get('columns', [])
+        original_columns = self.sheet_layout.structure.columns
         
         column_mapping = {}
         bundled_columns = original_columns
@@ -240,10 +215,10 @@ class TableBuilder:
             output_col = 1
             
             for col_def in original_columns:
-                skip_daf = bool(col_def.get('skip_in_daf', False))
-                skip_custom = bool(col_def.get('skip_in_custom', False))
-                colspan_val = int(col_def.get('colspan', 1))
-                children_list = col_def.get('children', [])
+                skip_daf = col_def.skip_in_daf
+                skip_custom = col_def.skip_in_custom
+                colspan_val = col_def.colspan
+                children_list = col_def.children
                 
                 num_columns = len(children_list) if children_list else colspan_val
                 should_skip = (DAF_mode and skip_daf) or (custom_mode and skip_custom)
@@ -261,8 +236,8 @@ class TableBuilder:
             # Filter columns list
             bundled_columns = [
                 col for col in original_columns
-                if not (DAF_mode and col.get('skip_in_daf', False))
-                and not (custom_mode and col.get('skip_in_custom', False))
+                if not (DAF_mode and col.skip_in_daf)
+                and not (custom_mode and col.skip_in_custom)
             ]
 
         # Convert logical ID to physical column mapping using filtered column layout
@@ -271,18 +246,18 @@ class TableBuilder:
         if bundled_columns:
             col_index = 1
             for col in bundled_columns:
-                col_id = col.get('id', '')
-                if 'children' in col:
+                col_id = col.id
+                if col.children:
                     # Parent columns should not be horizontally merged in data rows
                     column_colspan[col_id] = 1
                     resolved_col_id_map[col_id] = col_index
-                    for child in col['children']:
-                        child_id = child.get('id', '')
+                    for child in col.children:
+                        child_id = child.id
                         resolved_col_id_map[child_id] = col_index
                         column_colspan[child_id] = 1
                         col_index += 1
                 else:
-                    colspan = int(col.get('colspan', 1))
+                    colspan = col.colspan
                     resolved_col_id_map[col_id] = col_index
                     column_colspan[col_id] = colspan
                     col_index += colspan

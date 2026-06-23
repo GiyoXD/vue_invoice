@@ -9,7 +9,7 @@ class StaticInfoModel(BaseModel):
     apply_special_border_rule: bool = False
 
 class ResolvedTableData(BaseModel):
-    data_rows: List[Dict[int, Any]] = Field(default_factory=list)
+    data_rows: List[Dict[str, Any]] = Field(default_factory=list)
     pallet_counts: List[int] = Field(default_factory=list)
     num_data_rows: int = 0
     static_info: StaticInfoModel = Field(default_factory=StaticInfoModel)

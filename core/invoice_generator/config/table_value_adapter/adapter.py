@@ -106,7 +106,6 @@ class TableDataAdapter:
         merge_static_content(
             data_rows=data_rows,
             static_content=self.static_content,
-            column_id_map=self.column_id_map,
             dynamic_mapping_rules=parsed['dynamic_mapping_rules'],
             DAF_mode=self.DAF_mode,
             custom_mode=self.custom_mode
@@ -120,11 +119,10 @@ class TableDataAdapter:
         )
         
         # Format pallet counts into "x-y" display values for merging
-        pallet_col_idx = self.column_id_map.get('col_pallet_count')
         format_pallet_counts(
             data_rows=data_rows,
             num_data_rows=num_data_rows,
-            pallet_col_idx=pallet_col_idx,
+            pallet_col_id='col_pallet_count',
             footer_data=self.footer_data,
             table_key=self.table_key
         )

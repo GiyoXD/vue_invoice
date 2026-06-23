@@ -247,19 +247,43 @@ class SheetProcessor(ABC):
         import logging
         logger = logging.getLogger(__name__)
         from core.invoice_generator.builders.layout_builder import LayoutBuilder
+        from core.invoice_generator.models.config.styling import SheetStylingModel
+        from core.invoice_generator.models.config.layout import SheetLayoutModel
 
         layout_config['skip_template_header_restoration'] = (not is_first_table)
         layout_config['skip_template_footer_restoration'] = skip_template_footer
         layout_config['allow_col_desc_merge'] = getattr(self, 'allow_col_desc_merge', True)
         layout_config['is_global_unique_desc'] = getattr(self, 'is_global_unique_desc', False)
+
+        # Set allow_col_desc_merge and is_global_unique_desc on self.args so they are propagated downstream
+        if self.args:
+            self.args.allow_col_desc_merge = layout_config['allow_col_desc_merge']
+            self.args.is_global_unique_desc = layout_config['is_global_unique_desc']
+        
+        sheet_styling = SheetStylingModel.model_validate(style_config.get('styling_config', {}))
+        sheet_layout = SheetLayoutModel.model_validate(layout_config.get('sheet_config', {}))
+        resolved_data = layout_config.get('resolved_data')
         
         layout_builder = LayoutBuilder(
-            self.output_workbook,
-            self.output_worksheet,
-            self.template_worksheet,
-            style_config=style_config,
-            context_config=context_config,
-            layout_config=layout_config,
+            workbook=self.output_workbook,
+            worksheet=self.output_worksheet,
+            template_worksheet=self.template_worksheet,
+            sheet_styling=sheet_styling,
+            sheet_layout=sheet_layout,
+            resolved_data=resolved_data,
+            sheet_name=self.sheet_name,
+            all_sheet_configs=context_config.get('all_sheet_configs', {}),
+            args=self.args,
+            final_grand_total_pallets=context_config.get('pallets', 0),
+            total_net_weight=context_config.get('total_net_weight'),
+            total_gross_weight=context_config.get('total_gross_weight'),
+            is_last_table=context_config.get('is_last_table', False),
+            show_grand_total_addons=context_config.get('show_grand_total_addons', False),
+            skip_template_header_restoration=layout_config.get('skip_template_header_restoration', False),
+            skip_header_builder=layout_config.get('skip_header_builder', False),
+            skip_data_table_builder=layout_config.get('skip_data_table_builder', False),
+            skip_footer_builder=layout_config.get('skip_footer_builder', False),
+            skip_template_footer_restoration=layout_config.get('skip_template_footer_restoration', False),
             template_state_builder=template_state_builder,
             template_json_config=self.config_loader.get_template_json_config(),
             layout_state=layout_state

@@ -87,6 +87,11 @@
           "font_name": "Times New Roman",
           "border_style": "thin"
         }
+      },
+      "row_heights": {
+        "header": 35,
+        "data": 35,
+        "footer": 35
       }
     },
     "Contract": {
@@ -132,6 +137,11 @@
           "font_name": "Times New Roman",
           "border_style": "thin"
         }
+      },
+      "row_heights": {
+        "header": 36,
+        "data": 30,
+        "footer": 36
       }
     },
     "Packing list": {
@@ -202,6 +212,11 @@
           "font_name": "Times New Roman",
           "border_style": "thin"
         }
+      },
+      "row_heights": {
+        "header": 27,
+        "data": 27,
+        "footer": 27
       }
     }
   },
@@ -214,34 +229,45 @@
           "col_unit_sf": {
             "fallback": {
               "default": "SF"
-            }
+            },
+            "column": "col_unit_sf"
           },
-          "col_po": {},
-          "col_item": {},
+          "col_po": {
+            "column": "col_po"
+          },
+          "col_item": {
+            "column": "col_item"
+          },
           "col_desc": {
             "fallback": {
               "standard": "",
               "daf": ""
-            }
+            },
+            "column": "col_desc"
           },
-          "col_qty_sf": {},
+          "col_qty_sf": {
+            "column": "col_qty_sf"
+          },
           "col_unit_price": {
             "formula": {
               "daf": "{col_amount} / {col_qty_sf}",
               "custom": "{col_amount} / {col_qty_sf}"
-            }
+            },
+            "column": "col_unit_price"
           },
           "col_amount": {
             "formula": {
               "standard": "{col_qty_sf} * {col_unit_price}"
-            }
+            },
+            "column": "col_amount"
           },
           "col_sqm": {
             "formula": {
               "standard": "{col_qty_sf} * 0.092903",
               "daf": "{col_qty_sf} * 0.092903",
               "custom": "{col_qty_sf} * 0.092903"
-            }
+            },
+            "column": "col_sqm"
           }
         }
       },
@@ -266,25 +292,20 @@
       ],
       "structure": {
         "header_row": 21,
-        "row_heights": {
-          "header": 35,
-          "data": 35,
-          "footer": 35
-        },
         "columns": [
           {
             "id": "col_static",
-            "header": "Mark & Nº",
+            "header": "Mark & N\u00ba",
             "width": 24.71
           },
           {
             "id": "col_po",
-            "header": "P.O. Nº",
+            "header": "P.O. N\u00ba",
             "width": 28
           },
           {
             "id": "col_item",
-            "header": "ITEM Nº",
+            "header": "ITEM N\u00ba",
             "width": 22.14
           },
           {
@@ -375,11 +396,6 @@
       ],
       "structure": {
         "header_row": 15,
-        "row_heights": {
-          "header": 36,
-          "data": 30,
-          "footer": 36
-        },
         "columns": [
           {
             "id": "col_no",
@@ -388,7 +404,7 @@
           },
           {
             "id": "col_item",
-            "header": "ITEM Nº",
+            "header": "ITEM N\u00ba",
             "width": 27
           },
           {
@@ -457,28 +473,23 @@
       ],
       "structure": {
         "header_row": 21,
-        "row_heights": {
-          "header": 27,
-          "data": 27,
-          "footer": 27
-        },
         "columns": [
           {
             "id": "col_static",
-            "header": "Mark & Nº",
+            "header": "Mark & N\u00ba",
             "rowspan": 2,
             "colspan": 1,
             "width": 24.71
           },
           {
             "id": "col_po",
-            "header": "P.O Nº",
+            "header": "P.O N\u00ba",
             "rowspan": 2,
             "width": 17
           },
           {
             "id": "col_item",
-            "header": "ITEM Nº",
+            "header": "ITEM N\u00ba",
             "rowspan": 2,
             "width": 22.14
           },

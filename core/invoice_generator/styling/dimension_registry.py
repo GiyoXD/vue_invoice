@@ -28,20 +28,17 @@ class DimensionRegistry:
         height = registry.get_row_height('data')
     """
 
-    def __init__(self, layout_config: Dict[str, Any]):
+    def __init__(self, row_heights: Dict[str, float]):
         """
-        Initialize from layout configuration.
+        Initialize from row heights dictionary.
 
         Args:
-            layout_config: Layout configuration containing:
-                - structure: {row_heights: {context: float, ...}}
+            row_heights: Row heights mapping dictionary.
         """
         self._row_heights: Dict[str, Optional[float]] = {}
-
-        structure_config = layout_config.get('structure', {}) if isinstance(layout_config, dict) else {}
-        row_heights = structure_config.get('row_heights', {}) if isinstance(structure_config, dict) else {}
-        for context, height in row_heights.items():
-            self._row_heights[context] = height
+        if isinstance(row_heights, dict):
+            for context, height in row_heights.items():
+                self._row_heights[context] = height
 
         logger.debug(
             f"DimensionRegistry loaded {len(self._row_heights)} contexts: "

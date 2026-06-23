@@ -14,6 +14,14 @@ class GenerationOptions:
     explicit_template_json_data: Optional[Dict[str, Any]] = None
     explicit_template_xlsx_bytes: Optional[bytes] = None
 
+    @property
+    def DAF(self) -> bool:
+        return self.daf_mode
+
+    @property
+    def custom(self) -> bool:
+        return self.custom_mode
+
 @dataclass
 class InvoicePathConfig:
     """Configures primary input/output files and search directories."""

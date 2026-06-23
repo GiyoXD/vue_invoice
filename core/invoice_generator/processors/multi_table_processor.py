@@ -186,30 +186,16 @@ class MultiTableProcessor(SheetProcessor):
         gt_style_config = grand_total_resolver.get_style_bundle()
         gt_layout_config = grand_total_resolver.get_layout_bundle()
         
-        # Prepare styling model
-        styling_model = gt_style_config.get('styling_config')
-        if styling_model and not isinstance(styling_model, StylingConfigModel):
-            if isinstance(styling_model, dict) and 'columns' in styling_model and 'row_contexts' in styling_model:
-                pass
-            else:
-                try:
-                    styling_model = StylingConfigModel(**styling_model)
-                except Exception as e:
-                    logger.warning(f"Could not create StylingConfigModel: {e}")
-                    styling_model = None
-        
+        from core.invoice_generator.models.config.styling import SheetStylingModel
+        from core.invoice_generator.models.config.layout import SheetLayoutModel, FooterConfigModel
         from ..styling.style_registry import StyleRegistry
         from ..styling.dimension_registry import DimensionRegistry
-        style_registry = None
-        dimension_registry = None
-        if styling_model:
-            styling_dict = styling_model.model_dump() if hasattr(styling_model, 'model_dump') else styling_model
-            if isinstance(styling_dict, dict) and 'columns' in styling_dict and 'row_contexts' in styling_dict:
-                style_registry = StyleRegistry(styling_dict)
+        
+        sheet_styling = SheetStylingModel.model_validate(gt_style_config.get('styling_config', {}))
+        sheet_layout = SheetLayoutModel.model_validate(gt_layout_config.get('sheet_config', {}))
 
-        sheet_config = gt_layout_config.get('sheet_config', {})
-        if isinstance(sheet_config, dict) and 'structure' in sheet_config:
-            dimension_registry = DimensionRegistry(sheet_config)
+        style_registry = StyleRegistry(sheet_styling)
+        dimension_registry = DimensionRegistry(sheet_styling.row_heights)
 
         from ..builders.table.table_grid import Grid
         gt_grid = Grid(
@@ -221,8 +207,8 @@ class MultiTableProcessor(SheetProcessor):
         gt_grid.set_start_row(current_row)
 
         # Prepare footer config
-        footer_config = sheet_config.get('footer', {}).copy()
-        footer_config["type"] = "grand_total"
+        footer_config = sheet_layout.footer.model_copy() if sheet_layout.footer else FooterConfigModel()
+        footer_config.type = "grand_total"
         
         # Calculate overall data range
         if all_data_ranges:
@@ -245,22 +231,12 @@ class MultiTableProcessor(SheetProcessor):
         footer_builder = TableFooterBuilder(
             grid=gt_grid,
             footer_data=footer_data,
-            style_config={'styling_config': style_registry},
-            context_config={
-                'pallet_count': grand_total_pallets,
-                'sheet_name': self.sheet_name,
-                'is_last_table': True
-            },
-            data_config={
-                'sum_ranges': all_data_ranges,
-                'footer_config': footer_config,
-                'all_tables_data': all_tables_data,
-                'table_keys': table_keys,
-                'mapping_rules': gt_layout_config.get('sheet_config', {}).get('data_flow', {}).get('mappings', {}),
-                'DAF_mode': self.args.DAF,
-                'override_total_text': None,
-                'leather_summary': global_leather_summary
-            }
+            footer_config=footer_config,
+            pallet_count=grand_total_pallets,
+            show_grand_total_addons=True,
+            is_daf=bool(getattr(self.args, 'DAF', False)) if self.args else False,
+            sheet_name=self.sheet_name,
+            sum_ranges=all_data_ranges
         )
         
         try:

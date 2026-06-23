@@ -105,12 +105,7 @@ class JsonTemplateStateBuilder:
                     if cell.merge:
                         self.max_col = max(self.max_col, cell.merge.max_col)
         
-        # 3. Update max dimensions
-        if self.layout_obj.col_widths:
-            self.max_col = max(
-                self.max_col,
-                max(column_index_from_string(col) for col in self.layout_obj.col_widths.keys())
-            )
+
         
         if template_footer_end_row > 0:
             self.max_row = template_footer_end_row
@@ -335,9 +330,7 @@ class JsonTemplateStateBuilder:
         
         self.restore_rows(target_worksheet, self.layout_obj.header_rows, start_row=1, mode=mode, layout_state=layout_state)
         
-        # Column widths are a header-only concern
-        for col_letter, w in self.layout_obj.col_widths.items():
-            target_worksheet.column_dimensions[col_letter].width = w
+
 
     def restore_template_footer(self, target_worksheet: Worksheet, footer_start_row: int, actual_num_cols: int = None, mode: str = "standard", layout_state: Optional[Any] = None):
         """
