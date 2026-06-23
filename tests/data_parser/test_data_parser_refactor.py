@@ -499,6 +499,31 @@ class TestDataParserRefactor(unittest.TestCase):
         except DataValidationError as e:
             self.fail(f"validate_no_duplicate_amount_columns raised error unexpectedly: {e}")
 
+    def test_greedy_selection_mapping_precedence(self):
+        from openpyxl import Workbook
+        from core.data_parser import sheet_parser
+        
+        wb = Workbook()
+        ws = wb.active
+        
+        # Column 1 has "PO" header (maps to col_po)
+        ws.cell(row=1, column=1, value="P.O. No.")
+        ws.cell(row=2, column=1, value="PO-100")
+        
+        # Column 2 has "Net Weight" header, but data is string "ABC" (weak match, score 1)
+        ws.cell(row=1, column=2, value="Net Weight")
+        ws.cell(row=2, column=2, value="ABC")
+        
+        # Column 3 has "Net Weight" header, and data is numeric 10.5 (strong match, score 5)
+        ws.cell(row=1, column=3, value="Net Weight")
+        ws.cell(row=2, column=3, value=10.5)
+        
+        # Run process_row for row 1
+        mapping, score, header_text_matches = sheet_parser._process_row(ws, 1)
+        
+        # Column 3 (C) must be mapped to col_net because its score (5) is higher than Column 2's score (1)
+        self.assertEqual(mapping.get("col_net"), "C")
+
 
 if __name__ == '__main__':
     unittest.main()

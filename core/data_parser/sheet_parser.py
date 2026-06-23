@@ -234,17 +234,31 @@ def _process_row(sheet: Worksheet, row_num: int) -> Tuple[Dict[str, str], int, i
 
     # Greedy selection for remaining columns
     header_text_match_count = 0
-    for col_num, candidates in sorted(all_column_candidates.items()):
-        valid_candidates = [c for c in candidates if c['name'] not in processed_canonicals]
-        if not valid_candidates:
-            continue
-
-        best_candidate = sorted(valid_candidates, key=lambda x: x['score'], reverse=True)[0]
-        potential_mapping[best_candidate['name']] = get_column_letter(col_num)
-        processed_canonicals.add(best_candidate['name'])
-        current_row_score += best_candidate['score']
-        if col_num in header_text_columns:
-            header_text_match_count += 1
+    flat_candidates = []
+    for col_num, candidates in all_column_candidates.items():
+        for c in candidates:
+            flat_candidates.append({
+                'score': c['score'],
+                'col_num': col_num,
+                'name': c['name']
+            })
+            
+    # Sort globally by score descending to prioritize high-confidence matches
+    flat_candidates.sort(key=lambda x: x['score'], reverse=True)
+    
+    mapped_physical_cols = set()
+    for item in flat_candidates:
+        col_num = item['col_num']
+        canonical_name = item['name']
+        score = item['score']
+        
+        if col_num not in mapped_physical_cols and canonical_name not in processed_canonicals:
+            potential_mapping[canonical_name] = get_column_letter(col_num)
+            processed_canonicals.add(canonical_name)
+            mapped_physical_cols.add(col_num)
+            current_row_score += score
+            if col_num in header_text_columns:
+                header_text_match_count += 1
 
     return potential_mapping, current_row_score, header_text_match_count
 
