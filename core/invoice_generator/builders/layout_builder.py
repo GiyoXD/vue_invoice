@@ -156,6 +156,7 @@ class LayoutBuilder:
         self.data_start_row = table_builder.data_start_row
         self.data_end_row = table_builder.data_end_row
         self.next_row_after_footer = table_builder.next_row_after_footer
+        self.column_index_mapping = getattr(table_builder, 'column_index_mapping', {})
         
         # 5b. NOW restore template header - AFTER table is built
         if not self.skip_template_header_restoration:
@@ -173,7 +174,8 @@ class LayoutBuilder:
                         target_worksheet=self.worksheet,
                         actual_num_cols=actual_num_cols,
                         mode=gen_mode,
-                        layout_state=self.layout_state
+                        layout_state=self.layout_state,
+                        column_index_mapping=self.column_index_mapping
                     )
                     logger.info(f"Template header restored successfully with {actual_num_cols} columns")
             except Exception as e:
@@ -227,7 +229,8 @@ class LayoutBuilder:
                         footer_start_row=self.next_row_after_footer,
                         actual_num_cols=actual_num_cols,
                         mode=gen_mode,
-                        layout_state=self.layout_state
+                        layout_state=self.layout_state,
+                        column_index_mapping=self.column_index_mapping
                     )
                 else:
                     logger.info(f"Skipping template footer restoration (Not last table)")

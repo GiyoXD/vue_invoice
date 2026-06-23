@@ -1,6 +1,9 @@
 import pytest
 from openpyxl import Workbook
 from core.invoice_generator.builders.table.builder import TableBuilder
+from core.invoice_generator.models.config.layout import SheetLayoutModel
+from core.invoice_generator.models.config.styling import SheetStylingModel
+from core.invoice_generator.models.table_adapter import ResolvedTableData
 
 def test_resolve_columns_packing_list():
     wb = Workbook()
@@ -65,12 +68,18 @@ def test_resolve_columns_packing_list():
         }
     }
     
+    sheet_layout = SheetLayoutModel.model_validate({"structure": {"columns": sheet_config["structure"]["columns"]}})
+    sheet_styling = SheetStylingModel()
+    resolved_data = ResolvedTableData()
+    
     builder = TableBuilder(
         workbook=wb,
         worksheet=ws,
-        style_config={},
-        context_config={"sheet_name": "Packing list"},
-        layout_config={"sheet_config": sheet_config}
+        sheet_styling=sheet_styling,
+        sheet_layout=sheet_layout,
+        resolved_data=resolved_data,
+        sheet_name="Packing list",
+        args=None
     )
     
     bundled_columns, column_mapping, column_colspan = builder._resolve_columns()
@@ -110,20 +119,26 @@ def test_resolve_columns_daf_mode_filtering():
         }
     }
     
+    sheet_layout = SheetLayoutModel.model_validate({"structure": {"columns": sheet_config["structure"]["columns"]}})
+    sheet_styling = SheetStylingModel()
+    resolved_data = ResolvedTableData()
+    
     builder = TableBuilder(
         workbook=wb,
         worksheet=ws,
-        style_config={},
-        context_config={"sheet_name": "Test Sheet", "args": ArgsMock()},
-        layout_config={"sheet_config": sheet_config}
+        sheet_styling=sheet_styling,
+        sheet_layout=sheet_layout,
+        resolved_data=resolved_data,
+        sheet_name="Test Sheet",
+        args=ArgsMock()
     )
     
     bundled_columns, column_mapping, column_colspan = builder._resolve_columns()
     
     # Assert columns to skip are excluded from bundled_columns
     assert len(bundled_columns) == 2
-    assert bundled_columns[0]["id"] == "col_a"
-    assert bundled_columns[1]["id"] == "col_c"
+    assert bundled_columns[0].id == "col_a"
+    assert bundled_columns[1].id == "col_c"
     
     # Assert physical mapping offsets (col_c maps to physical column index 2)
     assert column_mapping["col_a"] == 1

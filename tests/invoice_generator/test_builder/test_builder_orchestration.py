@@ -2,6 +2,9 @@ import pytest
 from openpyxl import Workbook
 from core.invoice_generator.builders.table.builder import TableBuilder
 from core.invoice_generator.models.layout import SheetLayoutState
+from core.invoice_generator.models.config.layout import SheetLayoutModel
+from core.invoice_generator.models.config.styling import SheetStylingModel
+from core.invoice_generator.models.table_adapter import ResolvedTableData
 
 def test_builder_skip_all_builders():
     wb = Workbook()
@@ -16,18 +19,20 @@ def test_builder_skip_all_builders():
     }
     
     layout_state = SheetLayoutState()
+    sheet_layout = SheetLayoutModel.model_validate({"structure": {"columns": sheet_config["structure"]["columns"]}})
+    sheet_styling = SheetStylingModel()
+    resolved_data = ResolvedTableData()
     
     builder = TableBuilder(
         workbook=wb,
         worksheet=ws,
-        style_config={},
-        context_config={"sheet_name": "Test Sheet"},
-        layout_config={
-            "sheet_config": sheet_config,
-            "skip_header_builder": True,
-            "skip_data_table_builder": True,
-            "skip_footer_builder": True
-        },
+        sheet_styling=sheet_styling,
+        sheet_layout=sheet_layout,
+        resolved_data=resolved_data,
+        sheet_name="Test Sheet",
+        skip_header_builder=True,
+        skip_data_table_builder=True,
+        skip_footer_builder=True,
         layout_state=layout_state
     )
     

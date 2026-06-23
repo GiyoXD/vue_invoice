@@ -94,6 +94,7 @@ class TableBuilder:
 
         # 4. Initialize the Master Grid
         grid = Grid(column_mapping=column_mapping, style_registry=style_registry, column_colspan=column_colspan, dimension_registry=dimension_registry)
+        grid.column_index_mapping = getattr(self, 'column_index_mapping', {})
         grid.set_start_row(start_row)
         self.grid = grid
 
@@ -202,64 +203,12 @@ class TableBuilder:
         """
         Resolves filtered columns and builds the logical ID to physical column index mapping.
         """
-        original_columns = self.sheet_layout.structure.columns
+        DAF_mode = self.args.DAF if self.args and hasattr(self.args, 'DAF') else False
+        custom_mode = self.args.custom if self.args and hasattr(self.args, 'custom') else False
         
-        column_mapping = {}
-        bundled_columns = original_columns
+        bundled_columns, column_index_mapping, resolved_col_id_map, column_colspan = (
+            self.sheet_layout.structure.resolve_mappings(DAF_mode=DAF_mode, custom_mode=custom_mode)
+        )
         
-        if original_columns:
-            DAF_mode = self.args.DAF if self.args and hasattr(self.args, 'DAF') else False
-            custom_mode = self.args.custom if self.args and hasattr(self.args, 'custom') else False
-            
-            template_col = 1
-            output_col = 1
-            
-            for col_def in original_columns:
-                skip_daf = col_def.skip_in_daf
-                skip_custom = col_def.skip_in_custom
-                colspan_val = col_def.colspan
-                children_list = col_def.children
-                
-                num_columns = len(children_list) if children_list else colspan_val
-                should_skip = (DAF_mode and skip_daf) or (custom_mode and skip_custom)
-                
-                if should_skip:
-                    for i in range(num_columns):
-                        column_mapping[template_col + i] = None
-                else:
-                    for i in range(num_columns):
-                        column_mapping[template_col + i] = output_col + i
-                    output_col += num_columns
-                
-                template_col += num_columns
-
-            # Filter columns list
-            bundled_columns = [
-                col for col in original_columns
-                if not (DAF_mode and col.skip_in_daf)
-                and not (custom_mode and col.skip_in_custom)
-            ]
-
-        # Convert logical ID to physical column mapping using filtered column layout
-        resolved_col_id_map = {}
-        column_colspan = {}
-        if bundled_columns:
-            col_index = 1
-            for col in bundled_columns:
-                col_id = col.id
-                if col.children:
-                    # Parent columns should not be horizontally merged in data rows
-                    column_colspan[col_id] = 1
-                    resolved_col_id_map[col_id] = col_index
-                    for child in col.children:
-                        child_id = child.id
-                        resolved_col_id_map[child_id] = col_index
-                        column_colspan[child_id] = 1
-                        col_index += 1
-                else:
-                    colspan = col.colspan
-                    resolved_col_id_map[col_id] = col_index
-                    column_colspan[col_id] = colspan
-                    col_index += colspan
-
+        self.column_index_mapping = column_index_mapping
         return bundled_columns, resolved_col_id_map, column_colspan

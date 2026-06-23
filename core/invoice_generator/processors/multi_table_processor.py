@@ -262,6 +262,7 @@ class MultiTableProcessor(SheetProcessor):
             try:
                 # We need actual_num_cols which we can get from the last grid
                 actual_num_cols = last_grid.num_columns if last_grid else None
+                column_index_mapping = getattr(last_grid, 'column_index_mapping', None) if last_grid else None
                 
                 logger.info(f"--- RESTORING TEMPLATE FOOTER (Multi-Table End) ---")
                 logger.info(f"footer_start_row: {current_row}")
@@ -276,7 +277,8 @@ class MultiTableProcessor(SheetProcessor):
                     target_worksheet=self.output_worksheet,
                     footer_start_row=current_row,
                     actual_num_cols=actual_num_cols,
-                    mode=gen_mode
+                    mode=gen_mode,
+                    column_index_mapping=column_index_mapping
                 )
                 logger.info("Template footer restored successfully")
             except Exception as e:
