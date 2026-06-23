@@ -437,9 +437,9 @@ class TestDataParserRefactor(unittest.TestCase):
         ws.cell(row=1, column=2, value="Price")
         ws.cell(row=2, column=2, value=1.5)
         
-        # Column 3 has unrecognized header (like "Duplicate Value") but value is 150.00
+        # Column 3 has unrecognized header (like "") but value is 150.00
         # and left adjacent column value is 1.5 (< 2), so it is identified as col_amount
-        ws.cell(row=1, column=3, value="Duplicate Value")
+        ws.cell(row=1, column=3, value="")
         ws.cell(row=2, column=3, value=150.00)
         
         with self.assertRaises(DataValidationError) as context:
@@ -462,9 +462,9 @@ class TestDataParserRefactor(unittest.TestCase):
         ws.cell(row=1, column=2, value="Price")
         ws.cell(row=2, column=2, value=1.5)
 
-        # Column 3 has "StrangeName" header (unrecognized header)
+        # Column 3 has empty header (unrecognized header)
         # Value is 456.00 (round float, normally stringifies to "456.0" or "456")
-        ws.cell(row=1, column=3, value="StrangeName")
+        ws.cell(row=1, column=3, value="")
         ws.cell(row=2, column=3, value=456.00)
         
         with self.assertRaises(DataValidationError) as context:
@@ -523,6 +523,33 @@ class TestDataParserRefactor(unittest.TestCase):
         
         # Column 3 (C) must be mapped to col_net because its score (5) is higher than Column 2's score (1)
         self.assertEqual(mapping.get("col_net"), "C")
+
+    def test_validate_no_duplicate_amount_columns_ignores_unrecognized_named_column_when_alias_exists(self):
+        from openpyxl import Workbook
+        from core.data_parser.validation import validate_no_duplicate_amount_columns, DataValidationError
+        
+        wb = Workbook()
+        ws = wb.active
+        
+        # Column 1 has "金额" (canonical alias match for col_amount)
+        ws.cell(row=3, column=1, value="金额")
+        ws.cell(row=4, column=1, value=1234.56)
+        
+        # Column 2 has "Price" / rate (value < 2)
+        ws.cell(row=3, column=2, value="Price")
+        ws.cell(row=4, column=2, value=1.15)
+        
+        # Column 3 has unrecognized named header "报关金额" and value matching amount pattern
+        # Since it is a named column (not headerless) and an explicit alias "金额" is present,
+        # it should NOT be flagged as a duplicate.
+        ws.cell(row=3, column=3, value="报关金额")
+        ws.cell(row=4, column=3, value=7890.12)
+        
+        # This mapping should succeed without raising any DataValidationError
+        try:
+            validate_no_duplicate_amount_columns(ws, 3)
+        except DataValidationError as e:
+            self.fail(f"validate_no_duplicate_amount_columns raised error unexpectedly: {e}")
 
 
 if __name__ == '__main__':
