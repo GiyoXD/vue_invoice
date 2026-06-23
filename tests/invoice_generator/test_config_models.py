@@ -46,6 +46,15 @@ def test_load_and_validate_bundle_config():
     assert columns[1].id == "col_po"
     assert columns[1].header == "P.O. Nº"
 
+def test_load_and_validate_master_config():
+    config_path = Path(__file__).parent.parent.parent / "database" / "blueprints" / "mapper" / "master_config.json"
+    assert config_path.exists(), f"Config file not found at: {config_path}"
+    with open(config_path, "r", encoding="utf-8") as f:
+        config_data = json.load(f)
+    bundle = ClientConfigBundle.model_validate(config_data)
+    assert bundle.meta.customer == "JF"
+    assert bundle.meta.config_version == "2.2_strict_mode"
+
 def test_validation_failure():
     # Verify that invalid structure raises ValidationError
     invalid_data = {

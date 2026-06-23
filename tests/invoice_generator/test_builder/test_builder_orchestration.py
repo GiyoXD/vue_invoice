@@ -19,7 +19,7 @@ def test_builder_skip_all_builders():
     }
     
     layout_state = SheetLayoutState()
-    sheet_layout = SheetLayoutModel.model_validate({"structure": {"columns": sheet_config["structure"]["columns"]}})
+    sheet_layout = SheetLayoutModel.model_validate(sheet_config)
     sheet_styling = SheetStylingModel()
     resolved_data = ResolvedTableData()
     
