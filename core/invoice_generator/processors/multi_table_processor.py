@@ -195,7 +195,12 @@ class MultiTableProcessor(SheetProcessor):
         sheet_layout = SheetLayoutModel.model_validate(gt_layout_config.get('sheet_config', {}))
 
         style_registry = StyleRegistry(sheet_styling)
-        dimension_registry = DimensionRegistry(sheet_styling.row_heights)
+        row_heights = {
+            context: style.row_height
+            for context, style in sheet_styling.row_contexts.items()
+            if style.row_height is not None
+        }
+        dimension_registry = DimensionRegistry(row_heights)
 
         from ..builders.table.table_grid import Grid
         gt_grid = Grid(

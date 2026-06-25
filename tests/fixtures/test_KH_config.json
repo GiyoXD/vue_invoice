@@ -85,19 +85,22 @@
           "bold": true,
           "font_size": 14.0,
           "font_name": "Times New Roman",
-          "border_style": "thin"
+          "border_style": "thin",
+          "row_height": 46.5
         },
         "data": {
           "bold": false,
           "font_size": 12.0,
           "font_name": "Times New Roman",
-          "border_style": "thin"
+          "border_style": "thin",
+          "row_height": 30.0
         },
         "footer": {
           "bold": true,
           "font_size": 14.0,
           "font_name": "Times New Roman",
-          "border_style": "thin"
+          "border_style": "thin",
+          "row_height": 46.5
         }
       }
     },
@@ -145,19 +148,22 @@
           "bold": true,
           "font_size": 12.0,
           "font_name": "Times New Roman",
-          "border_style": "thin"
+          "border_style": "thin",
+          "row_height": 35.1
         },
         "data": {
           "bold": false,
           "font_size": 12.0,
           "font_name": "Times New Roman",
-          "border_style": "thin"
+          "border_style": "thin",
+          "row_height": 35.1
         },
         "footer": {
           "bold": true,
           "font_size": 12.0,
           "font_name": "Times New Roman",
-          "border_style": "thin"
+          "border_style": "thin",
+          "row_height": 35.1
         }
       }
     },
@@ -222,19 +228,22 @@
           "bold": true,
           "font_size": 12.0,
           "font_name": "Times New Roman",
-          "border_style": "thin"
+          "border_style": "thin",
+          "row_height": 27.0
         },
         "data": {
           "bold": false,
           "font_size": 12.0,
           "font_name": "Times New Roman",
-          "border_style": "thin"
+          "border_style": "thin",
+          "row_height": 24.0
         },
         "footer": {
           "bold": true,
           "font_size": 12.0,
           "font_name": "Times New Roman",
-          "border_style": "thin"
+          "border_style": "thin",
+          "row_height": 27.0
         }
       }
     }
@@ -311,11 +320,6 @@
       ],
       "structure": {
         "header_row": 15,
-        "row_heights": {
-          "header": 46.5,
-          "data": 30.0,
-          "footer": 46.5
-        },
         "columns": [
           {
             "id": "col_no",
@@ -421,11 +425,6 @@
       ],
       "structure": {
         "header_row": 20,
-        "row_heights": {
-          "header": 35.1,
-          "data": 35.1,
-          "footer": 35.1
-        },
         "columns": [
           {
             "id": "col_static",
@@ -536,11 +535,6 @@
       ],
       "structure": {
         "header_row": 20,
-        "row_heights": {
-          "header": 27.0,
-          "data": 24.0,
-          "footer": 27.0
-        },
         "columns": [
           {
             "id": "col_static",

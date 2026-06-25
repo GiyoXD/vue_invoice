@@ -24,6 +24,7 @@ class RowContextStyleModel(BaseModel):
     font_name: str = "Arial"
     fill_color: Optional[str] = None
     border_style: Optional[str] = "thin"
+    row_height: Optional[float] = None
     add_ons: Optional[Dict[str, Any]] = None
 
 class SheetStylingModel(BaseModel):

@@ -154,19 +154,22 @@ class ConfigBuilder:
                 "bold": True,
                 "font_size": h_size,
                 "font_name": h_name,
-                "border_style": "thin"
+                "border_style": "thin",
+                "row_height": float(sheet.row_heights.get("header", 1))
             },
             "data": {
                 "bold": False,
                 "font_size": d_size,
                 "font_name": d_name,
-                "border_style": "thin"
+                "border_style": "thin",
+                "row_height": float(sheet.row_heights.get("data", 1))
             },
             "footer": {
                 "bold": True,
                 "font_size": h_size, # Usually matches header
                 "font_name": h_name,
-                "border_style": "thin"
+                "border_style": "thin",
+                "row_height": float(sheet.row_heights.get("footer", 1))
             }
         }
         
@@ -273,15 +276,8 @@ class ConfigBuilder:
             
             columns.append(col_def)
         
-        row_heights = {
-            "header": sheet.row_heights.get("header", 35),
-            "data": sheet.row_heights.get("data", 27),
-            "footer": sheet.row_heights.get("footer", 35)
-        }
-        
         return {
             "header_row": sheet.header_row,
-            "row_heights": row_heights,
             "columns": columns
         }
     

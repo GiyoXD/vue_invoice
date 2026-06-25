@@ -82,7 +82,12 @@ class TableBuilder:
         
         # 2. Setup StyleRegistry and DimensionRegistry
         style_registry = StyleRegistry(self.sheet_styling)
-        dimension_registry = DimensionRegistry(self.sheet_styling.row_heights)
+        row_heights = {
+            context: style.row_height
+            for context, style in self.sheet_styling.row_contexts.items()
+            if style.row_height is not None
+        }
+        dimension_registry = DimensionRegistry(row_heights)
 
         # 3. Bind Layout State
         self.layout_state.bind(
