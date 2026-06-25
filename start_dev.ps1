@@ -1,4 +1,4 @@
-# start_dev.ps1
+﻿# start_dev.ps1
 # Starts the FastAPI development server with hot-reload
 # Usage: .\start_dev.ps1
 
@@ -21,6 +21,45 @@ if ($Port -eq 0) {
     # Fallback to 8080 if still not set
     if ($Port -eq 0) { $Port = 8080 }
 }
+
+# Kill any existing process using the target port to prevent "port already in use" errors
+Write-Host "  🔍 Checking if port $Port is in use..." -ForegroundColor DarkGray
+$oldPids = @()
+if (Get-Command Get-NetTCPConnection -ErrorAction SilentlyContinue) {
+    $connections = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+    if ($connections) {
+        $oldPids = $connections | Select-Object -ExpandProperty OwningProcess -Unique
+    }
+} else {
+    # Fallback to netstat -ano
+    $netstatOut = netstat -ano 2>&1
+    foreach ($line in $netstatOut) {
+        if ($line -match "TCP\s+\S+?:$Port\s+\S+\s+LISTENING\s+(\d+)") {
+            $oldPids += [int]$matches[1]
+        }
+    }
+    $oldPids = $oldPids | Select-Object -Unique
+}
+
+# Filter out current process PID just in case, and exclude invalid PIDs
+$oldPids = $oldPids | Where-Object { $_ -ne $PID -and $_ -ne 0 }
+
+if ($oldPids) {
+    Write-Host "  ⚠️ Port $Port is currently occupied by PID(s): ($($oldPids -join ', ')). Terminating old session..." -ForegroundColor Yellow
+    foreach ($procId in $oldPids) {
+        try {
+            Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue
+            Write-Host "  [OK] Terminated PID $procId" -ForegroundColor Green
+        } catch {
+            Write-Host "  [WARNING] Could not terminate PID $procId" -ForegroundColor Yellow
+        }
+    }
+    # Wait a moment for port to release
+    Start-Sleep -Seconds 1
+} else {
+    Write-Host "  [OK] Port $Port is free" -ForegroundColor Green
+}
+
 
 $Host.UI.RawUI.WindowTitle = "Invoice Generator - Dev Server"
 
@@ -84,3 +123,4 @@ catch {
 Write-Host ""
 Write-Host "  Server stopped." -ForegroundColor Yellow
 Read-Host "Press Enter to exit..."
+

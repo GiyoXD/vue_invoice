@@ -296,7 +296,7 @@ export default {
                 }
             });
 
-            return { maxRow: maxRow + 2, maxCol: maxCol + 2, headerMaxRow, footerBaseRow };
+            return { maxRow: maxRow, maxCol: maxCol, headerMaxRow, footerBaseRow };
         });
 
         const gridCells = computed(() => {
