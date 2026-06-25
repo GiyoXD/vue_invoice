@@ -38,6 +38,16 @@ class TemplateScanner:
         layout.header_rows = self._capture_header_rows(worksheet, boundaries, safe_max_column)
         layout.footer_rows = self._capture_footer_rows(worksheet, boundaries, safe_max_column, sheet_name)
         
+        # Capture column widths up to safe_max_column
+        col_widths = {}
+        for col_idx in range(1, safe_max_column + 1):
+            col_letter = get_column_letter(col_idx)
+            if col_letter in worksheet.column_dimensions:
+                w = worksheet.column_dimensions[col_letter].width
+                if w is not None:
+                    col_widths[col_letter] = w
+        layout.col_widths = col_widths
+        
         return layout
 
     def _capture_header_rows(self, ws: Worksheet, boundaries: ZoneBoundaries, safe_max_column: int) -> List[UnitRow]:

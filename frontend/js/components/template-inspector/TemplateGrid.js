@@ -27,6 +27,12 @@ export default {
                 <label class="flex items-center gap-1 text-sm select-none cursor-pointer text-slate-300">
                     <input type="checkbox" v-model="showFullText"> Wrap Text
                 </label>
+
+                <div class="w-px h-6 bg-slate-700 mx-2"></div>
+
+                <label class="flex items-center gap-1 text-sm select-none cursor-pointer text-slate-300">
+                    <input type="checkbox" v-model="showDummyData"> Show Dummy Rows
+                </label>
             </div>
             
             <!-- Excel Grid -->
@@ -36,7 +42,7 @@ export default {
                     <div v-for="cell in gridCells" :key="cell.id"
                          class="excel-cell"
                          :style="cell.style"
-                         :title="'[' + cell.address + '] ' + cell.content"
+                         :title="cell.title || ('[' + cell.address + '] ' + cell.content)"
                          @click="openCellEditor(cell)">
                          <span v-if="cell.hasOverride" class="absolute bg-blue-500 rounded-full" style="width: 6px; height: 6px; top: 2px; right: 2px;" title="Has mode override"></span>
                          <span v-if="cell.isFormula" class="text-blue-600 italic">{{ cell.content }}</span>
@@ -98,6 +104,7 @@ export default {
         const store = useTemplateInspectorStore();
         const zoomLevel = ref(0.6);
         const showFullText = ref(false);
+        const showDummyData = ref(false);
 
         // Cell override editor state
         const editingCell = ref(null);
@@ -274,7 +281,8 @@ export default {
                 }
             });
 
-            const footerBaseRow = headerMaxRow + 1;
+            const numDummyRows = showDummyData.value ? 3 : 0;
+            const footerBaseRow = headerMaxRow + 1 + numDummyRows;
             let maxRow = headerMaxRow;
 
             const footerRows = sheet.template_footer_rows || sheet.footer_rows || [];
@@ -380,8 +388,104 @@ export default {
                 });
             });
 
-            // --- 3. BUILD GRID CELLS ARRAY ---
+            // --- 3. CLASSIFY DUMMY COLUMNS ---
+            const dummyColData = {};
+            if (showDummyData.value) {
+                for (let c = 0; c <= maxCol; c++) {
+                    let valLower = "";
+                    for (const row of headerRows) {
+                        const cellDict = (row.cells || []).find(cell => (cell.col_index - 1) === c);
+                        if (cellDict) {
+                            const rawVal = cellDict.value;
+                            const cellVal = typeof rawVal === 'object' && rawVal !== null
+                                ? (rawVal.default !== undefined ? rawVal.default : '')
+                                : (rawVal || '');
+                            valLower = String(cellVal).trim().toLowerCase();
+                            if (valLower) break;
+                        }
+                    }
+                    if (valLower) {
+                        if (valLower.includes('desc') || valLower.includes('item') || valLower.includes('particular')) {
+                            dummyColData[c] = 'desc';
+                        } else if (valLower.includes('qty') || valLower.includes('pcs') || valLower.includes('quantity')) {
+                            dummyColData[c] = 'qty';
+                        } else if (valLower.includes('price') || valLower.includes('rate') || valLower.includes('unit')) {
+                            dummyColData[c] = 'price';
+                        } else if (valLower.includes('amount') || valLower.includes('total') || valLower.includes('value')) {
+                            dummyColData[c] = 'amount';
+                        } else if (valLower.includes('po ') || valLower.includes('po_') || valLower === 'po' || valLower.includes('order')) {
+                            dummyColData[c] = 'po';
+                        } else if (valLower.includes('cbm')) {
+                            dummyColData[c] = 'cbm';
+                        } else if (valLower.includes('ctn') || valLower.includes('box') || valLower.includes('carton') || valLower.includes('pkg')) {
+                            dummyColData[c] = 'ctn';
+                        } else if (valLower.includes('net')) {
+                            dummyColData[c] = 'net';
+                        } else if (valLower.includes('gross')) {
+                            dummyColData[c] = 'gross';
+                        } else if (valLower === 'no' || valLower === 'no.' || valLower === 'seq' || valLower === 'index') {
+                            dummyColData[c] = 'no';
+                        }
+                    }
+                }
+            }
+
+            // --- 4. BUILD GRID CELLS ARRAY ---
             for (let r = 0; r <= maxRow; r++) {
+                if (showDummyData.value && r > headerMaxRow && r < footerBaseRow) {
+                    const dummyRowIdx = r - headerMaxRow;
+                    for (let c = 0; c <= maxCol; c++) {
+                        const address = `${colToLetter(c)}${r + 1}`;
+                        const dummyType = dummyColData[c];
+                        let dummyContent = "";
+                        if (dummyType === 'desc') dummyContent = `Dummy Item ${String.fromCharCode(64 + dummyRowIdx)}`;
+                        else if (dummyType === 'qty') dummyContent = String(10 * dummyRowIdx);
+                        else if (dummyType === 'price') dummyContent = "15.00";
+                        else if (dummyType === 'amount') dummyContent = (10 * dummyRowIdx * 15).toFixed(2);
+                        else if (dummyType === 'po') dummyContent = "PO-998877";
+                        else if (dummyType === 'cbm') dummyContent = "0.25";
+                        else if (dummyType === 'ctn') dummyContent = "5";
+                        else if (dummyType === 'net') dummyContent = "100.0";
+                        else if (dummyType === 'gross') dummyContent = "110.0";
+                        else if (dummyType === 'no') dummyContent = String(dummyRowIdx);
+
+                        cells.push({
+                            id: address,
+                            address: address,
+                            content: dummyContent,
+                            rawContent: dummyContent,
+                            hasOverride: false,
+                            currentOverrides: null,
+                            title: `[Mock Data]`,
+                            style: {
+                                gridColumnStart: c + 1,
+                                gridColumnEnd: c + 2,
+                                gridRowStart: r + 1,
+                                gridRowEnd: r + 2,
+                                display: 'flex',
+                                justifyContent: (dummyType === 'qty' || dummyType === 'price' || dummyType === 'amount' || dummyType === 'no') ? 'flex-end' : 'flex-start',
+                                alignItems: 'center',
+                                borderTop: '1px solid #cbd5e1',
+                                borderRight: '1px solid #cbd5e1',
+                                borderBottom: '1px solid #cbd5e1',
+                                borderLeft: '1px solid #cbd5e1',
+                                padding: '1px 2px',
+                                fontSize: '11pt',
+                                fontFamily: 'Arial, sans-serif',
+                                backgroundColor: '#f8fafc',
+                                color: '#64748b',
+                                fontStyle: 'italic',
+                                lineHeight: '1.2',
+                                position: 'relative',
+                                cursor: 'default'
+                            },
+                            isFormula: false,
+                            isDummy: true
+                        });
+                    }
+                    continue;
+                }
+
                 for (let c = 0; c <= maxCol; c++) {
                     if (occupied.has(`${r},${c}`)) continue;
 
@@ -471,6 +575,7 @@ export default {
         // --- Cell override editor triggers ---
 
         const openCellEditor = (cell) => {
+            if (cell.isDummy) return;
             editingCell.value = cell;
             editStandardValue.value = (cell.currentOverrides && cell.currentOverrides.standard) || "";
             editDafValue.value = (cell.currentOverrides && cell.currentOverrides.daf) || "";
@@ -515,6 +620,7 @@ export default {
             zoomOut,
             resetZoom,
             showFullText,
+            showDummyData,
             gridStyle,
             gridCells,
             editingCell,

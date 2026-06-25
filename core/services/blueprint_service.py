@@ -292,6 +292,30 @@ class BlueprintService:
                 data["table_info"] = {}
             data["table_info"].update(info)
 
+        # Inject column mappings so the frontend knows exactly which column is mapped to which system ID
+        from core.blueprint_generator.schema import BlueprintSchema
+        layout_bundle = config_data.get("layout_bundle", {})
+        column_mappings = {}
+        for sheet_name, sheet_conf in layout_bundle.items():
+            if not isinstance(sheet_conf, dict):
+                continue
+            cols = sheet_conf.get("structure", {}).get("columns", [])
+            sheet_cols = []
+            for c in cols:
+                if not isinstance(c, dict):
+                    continue
+                col_id = c.get("id")
+                schema_col = BlueprintSchema.COLUMNS.get(col_id)
+                width = c.get("width") or (schema_col.width if schema_col else 15.0)
+                sheet_cols.append({
+                    "id": col_id,
+                    "header": c.get("header"),
+                    "width": width,
+                    "format": c.get("format", "@")
+                })
+            column_mappings[sheet_name] = sheet_cols
+        data["column_mappings"] = column_mappings
+
         # Inject parsed client profile so the Template Inspector can display it
         from core.invoice_generator.extractors.template_client_profile_parser import TemplateClientProfileParser
         from core.blueprint_generator.internal.scanner.models import TemplateLayout
