@@ -47,7 +47,7 @@ class TemplateScanner:
 
         # Capture merges in header
         merges_map = {}
-        for merged_range in ws.merged_cells:
+        for merged_range in ws.merged_cells.ranges:
             if merged_range.max_row < boundaries.header_row:
                  top_left_cell = ws.cell(row=merged_range.min_row, column=merged_range.min_col)
                  val = str(top_left_cell.value) if top_left_cell.value is not None else ""
@@ -75,7 +75,7 @@ class TemplateScanner:
                 style_obj = self._capture_cell_style(cell, is_empty=is_empty)
                 merge_obj = merges_map.get((r, c))
                 
-                if is_empty and not style_obj and not merge_obj and not self._should_record_empty_cell(ws, r, c):
+                if is_empty and not style_obj and not merge_obj:
                     continue
                     
                 has_content_or_style = True
@@ -112,7 +112,7 @@ class TemplateScanner:
         self.logger.info(f"    Capturing footer data (Rows {end_delete + 1} to EOF)")
         
         footer_merges_map = {}
-        for merged_range in list(ws.merged_cells):
+        for merged_range in list(ws.merged_cells.ranges):
             m_min_row, m_min_col, m_max_row, m_max_col = merged_range.min_row, merged_range.min_col, merged_range.max_row, merged_range.max_col
             
             if m_min_row > start_delete:
@@ -146,7 +146,7 @@ class TemplateScanner:
                 style_obj = self._capture_cell_style(cell, is_empty=is_empty)
                 merge_obj = footer_merges_map.get((r, c))
                 
-                if is_empty and not style_obj and not merge_obj and not self._should_record_empty_cell(ws, r, c):
+                if is_empty and not style_obj and not merge_obj:
                     continue
                     
                 cell_obj = UnitCell(col_index=c, style=style_obj, merge=merge_obj)
@@ -169,17 +169,7 @@ class TemplateScanner:
                 
         return template_footer_rows
 
-    def _should_record_empty_cell(self, ws: Worksheet, row: int, col: int) -> bool:
-        if row in ws.row_dimensions:
-            height = ws.row_dimensions[row].height
-            if height is not None and height != self.DEFAULT_ROW_HEIGHT:
-                return True
-        for dim in ws.column_dimensions.values():
-            if dim.min <= col <= dim.max:
-                if dim.width is not None and dim.width != self.DEFAULT_COL_WIDTH:
-                    return True
-                break
-        return False
+
 
     def _safe_str(self, val) -> Optional[str]:
         return val if isinstance(val, str) else None
@@ -221,7 +211,8 @@ class TemplateScanner:
                 if cell.font.color and hasattr(cell.font.color, "rgb"):
                      color_val = self._serialize_color(cell.font.color)
                      if color_val and color_val not in ("00000000", "FF000000"):
-                         font_data["color"] = color_val
+                          if not is_empty or (color_val != "FFFFFFFF" and not color_val.startswith("theme-")):
+                              font_data["color"] = color_val
 
                 if font_data:
                     font_style = FontStyle(
@@ -231,7 +222,8 @@ class TemplateScanner:
                         italic=font_data.get("italic", False),
                         color=font_data.get("color")
                     )
-                    has_significant_style = True
+                    if not is_empty:
+                        has_significant_style = True
             
         # 2. Alignment
         if cell.alignment:
@@ -254,7 +246,8 @@ class TemplateScanner:
                         vertical=align_data.get("vertical"),
                         wrap_text=align_data.get("wrap_text", False)
                     )
-                    has_significant_style = True
+                    if not is_empty:
+                        has_significant_style = True
             
         # 3. Fill
         if cell.fill:
@@ -298,7 +291,8 @@ class TemplateScanner:
         number_fmt = self._safe_str(cell.number_format)
         if number_fmt and number_fmt != "General":
             number_format = number_fmt
-            has_significant_style = True
+            if not is_empty:
+                has_significant_style = True
         
         if has_significant_style:
             return CellStyle(
