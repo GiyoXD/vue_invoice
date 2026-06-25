@@ -101,3 +101,44 @@ def client(db):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(scope="session")
+def test_kh_config() -> dict:
+    """Provides the test_KH configuration JSON data from the database or the test_KH_config.json file."""
+    config_path = Path(__file__).parent / "fixtures" / "test_KH_config.json"
+    if config_path.exists():
+        import json
+        with open(config_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+            
+    import sqlite3
+    import json
+    conn = sqlite3.connect("database/invoice_registry.db")
+    cursor = conn.cursor()
+    row = cursor.execute("SELECT config_json FROM blueprints WHERE customer_code = 'test' AND locale = 'KH'").fetchone()
+    conn.close()
+    if row:
+        return json.loads(row[0])
+    return {}
+
+
+@pytest.fixture(scope="session")
+def test_kh_template() -> dict:
+    """Provides the test_KH template JSON data from the database or the test_KH_template.json file."""
+    template_path = Path(__file__).parent / "fixtures" / "test_KH_template.json"
+    if template_path.exists():
+        import json
+        with open(template_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+            
+    import sqlite3
+    import json
+    conn = sqlite3.connect("database/invoice_registry.db")
+    cursor = conn.cursor()
+    row = cursor.execute("SELECT template_json FROM blueprints WHERE customer_code = 'test' AND locale = 'KH'").fetchone()
+    conn.close()
+    if row:
+        return json.loads(row[0])
+    return {}
+
