@@ -2,10 +2,10 @@
   "_meta": {
     "config_version": "2.2_strict_mode",
     "customer": "test",
-    "created_at": "2026-06-25",
+    "created_at": "2026-06-26",
     "compatibility": "strict",
-    "description": "Auto-generated Master Config for CT&INV&PL MT2-26019E FCA REVISE ",
-    "source_template": "C:\\Users\\JPZ031127\\Desktop\\project\\vue_invoice_project\\database\\temp_uploads\\CT&INV&PL MT2-26019E FCA revise .xlsx",
+    "description": "Auto-generated Master Config for CT&INV&PL JF26023 FCA(1)",
+    "source_template": "C:\\Users\\JPZ031127\\Desktop\\project\\vue_invoice_project\\database\\temp_uploads\\CT&INV&PL JF26023 FCA(1).xlsx",
     "generator": "blueprint_generator",
     "pricing_mode": "standard"
   },
@@ -17,17 +17,9 @@
     "numbers_per_group_by_po": 7
   },
   "processing": {
-    "sheets": [
-      "Contract",
-      "Invoice",
-      "Packing list"
-    ],
-    "data_sources": {
-      "Contract": "aggregation",
-      "Invoice": "aggregation",
-      "Packing list": "processed_tables_multi"
-    },
-    "source_file": "C:\\Users\\JPZ031127\\Desktop\\project\\vue_invoice_project\\database\\temp_uploads\\CT&INV&PL MT2-26019E FCA revise .xlsx"
+    "Contract": "aggregation",
+    "Invoice": "aggregation",
+    "Packing list": "processed_tables_multi"
   },
   "styling_bundle": {
     "_comment": "Centralized styling - explicit per sheet",
@@ -49,33 +41,23 @@
           "alignment": "center",
           "wrap_text": true
         },
-        "col_po": {
-          "format": "@",
-          "alignment": "center",
-          "wrap_text": true
-        },
         "col_item": {
           "format": "@",
           "alignment": "center",
           "wrap_text": true
         },
-        "col_desc": {
-          "format": "@",
-          "alignment": "center",
-          "wrap_text": true
-        },
         "col_qty_sf": {
-          "format": "#,##0.0000",
+          "format": "#,##0.00",
           "alignment": "center",
           "wrap_text": true
         },
         "col_unit_price": {
-          "format": "#,##0.0000",
+          "format": "#,##0.00",
           "alignment": "center",
           "wrap_text": true
         },
         "col_amount": {
-          "format": "#,##0.0000",
+          "format": "#,##0.00",
           "alignment": "center",
           "wrap_text": true
         }
@@ -83,24 +65,24 @@
       "row_contexts": {
         "header": {
           "bold": true,
-          "font_size": 14.0,
+          "font_size": 16.0,
           "font_name": "Times New Roman",
           "border_style": "thin",
-          "row_height": 46.5
+          "row_height": 41.25
         },
         "data": {
           "bold": false,
-          "font_size": 12.0,
+          "font_size": 14.0,
           "font_name": "Times New Roman",
           "border_style": "thin",
           "row_height": 30.0
         },
         "footer": {
           "bold": true,
-          "font_size": 14.0,
+          "font_size": 16.0,
           "font_name": "Times New Roman",
           "border_style": "thin",
-          "row_height": 46.5
+          "row_height": 41.25
         }
       }
     },
@@ -128,17 +110,17 @@
           "wrap_text": true
         },
         "col_qty_sf": {
-          "format": "#,##0.0000",
+          "format": "#,##0.00",
           "alignment": "center",
           "wrap_text": true
         },
         "col_unit_price": {
-          "format": "#,##0.0000",
+          "format": "#,##0.00",
           "alignment": "center",
           "wrap_text": true
         },
         "col_amount": {
-          "format": "#,##0.0000",
+          "format": "#,##0.00",
           "alignment": "center",
           "wrap_text": true
         }
@@ -171,11 +153,6 @@
       "_comment": "ID-driven styling with columns + row_contexts",
       "columns": {
         "col_static": {
-          "format": "@",
-          "alignment": "center",
-          "wrap_text": true
-        },
-        "col_pallet_id": {
           "format": "@",
           "alignment": "center",
           "wrap_text": true
@@ -236,7 +213,7 @@
           "font_size": 12.0,
           "font_name": "Times New Roman",
           "border_style": "thin",
-          "row_height": 24.0
+          "row_height": 21.95
         },
         "footer": {
           "bold": true,
@@ -324,53 +301,36 @@
           {
             "id": "col_no",
             "header": "No.",
-            "width": 16.29
-          },
-          {
-            "id": "col_po",
-            "header": "P.O. Nº",
-            "width": 24.0
+            "width": 17.57
           },
           {
             "id": "col_item",
-            "header": "Name of\nCormodity",
-            "width": 24.0
-          },
-          {
-            "id": "col_desc",
-            "header": "Description",
-            "width": 18.0
+            "header": "ITEM Nº",
+            "width": 35.71
           },
           {
             "id": "col_qty_sf",
             "header": "Quantity\n(SF)",
-            "width": 19.57,
-            "format": "#,##0.0000"
+            "width": 35.71,
+            "format": "#,##0.00"
           },
           {
             "id": "col_unit_price",
             "header": "Unit Price\n(USD)",
-            "width": 17.0,
-            "format": "#,##0.0000"
+            "width": 35.71,
+            "format": "#,##0.00"
           },
           {
             "id": "col_amount",
             "header": "Total value\n(USD)",
-            "width": 33.57,
-            "format": "#,##0.0000"
+            "width": 35.71,
+            "format": "#,##0.00"
           }
         ]
       },
       "data_flow": {
         "_comment": "Inherits from defaults. Only overrides go here.",
-        "mappings": {
-          "col_desc": {
-            "fallback": {
-              "standard": "COW LEATHER",
-              "daf": "COW LEATHER"
-            }
-          }
-        }
+        "mappings": {}
       },
       "content": {
         "static": {}
@@ -388,7 +348,7 @@
           "before_footer": {
             "enabled": false,
             "column_id": "col_po",
-            "text": "COW LEATHER(HS.CODE: 4107.12.00)",
+            "text": "COW LEATHER (HS.CODE: 4107.12.00)",
             "merge": 2
           },
           "weight_summary": {
@@ -424,7 +384,7 @@
         "footer"
       ],
       "structure": {
-        "header_row": 20,
+        "header_row": 21,
         "columns": [
           {
             "id": "col_static",
@@ -434,35 +394,35 @@
           {
             "id": "col_po",
             "header": "P.O. Nº",
-            "width": 24.0
+            "width": 23.0
           },
           {
             "id": "col_item",
             "header": "ITEM Nº",
-            "width": 24.0
+            "width": 30.0
           },
           {
             "id": "col_desc",
             "header": "Description",
-            "width": 18.0
+            "width": 21.29
           },
           {
             "id": "col_qty_sf",
             "header": "Quantity\n(SF)",
             "width": 16.0,
-            "format": "#,##0.0000"
+            "format": "#,##0.00"
           },
           {
             "id": "col_unit_price",
-            "header": "Unit Price\n(USD)",
-            "width": 17.0,
-            "format": "#,##0.0000"
+            "header": "Unit price\n(USD)",
+            "width": 17.14,
+            "format": "#,##0.00"
           },
           {
             "id": "col_amount",
             "header": "Amount\n(USD)",
-            "width": 34.86,
-            "format": "#,##0.0000"
+            "width": 28.71,
+            "format": "#,##0.00"
           }
         ]
       },
@@ -494,7 +454,7 @@
           "before_footer": {
             "enabled": true,
             "column_id": "col_po",
-            "text": "COW LEATHER(HS.CODE: 4107.12.00)",
+            "text": "COW LEATHER (HS.CODE: 4107.12.00)",
             "merge": 2
           },
           "weight_summary": {
@@ -516,7 +476,7 @@
         },
         "footer_cells": [
           [
-            "TOTAL OF:",
+            "TOTAL:",
             "col_po"
           ],
           [
@@ -534,7 +494,7 @@
         "footer"
       ],
       "structure": {
-        "header_row": 20,
+        "header_row": 21,
         "columns": [
           {
             "id": "col_static",
@@ -543,32 +503,26 @@
             "rowspan": 2
           },
           {
-            "id": "col_pallet_id",
-            "header": "PALLET\nNO.",
-            "width": 13.0,
-            "rowspan": 2
-          },
-          {
             "id": "col_po",
             "header": "P.O Nº",
-            "width": 24.0,
+            "width": 23.0,
             "rowspan": 2
           },
           {
             "id": "col_item",
             "header": "ITEM Nº",
-            "width": 24.0,
+            "width": 30.0,
             "rowspan": 2
           },
           {
             "id": "col_desc",
             "header": "Description",
-            "width": 20.43,
+            "width": 18.0,
             "rowspan": 2
           },
           {
             "id": "col_qty_header",
-            "header": "Quantity",
+            "header": "Quantity(SF)",
             "width": 29.0,
             "colspan": 2,
             "children": [
@@ -596,14 +550,14 @@
           {
             "id": "col_gross",
             "header": "G.W\n(kgs)",
-            "width": 18.71,
+            "width": 15.0,
             "format": "#,##0.00",
             "rowspan": 2
           },
           {
             "id": "col_cbm",
             "header": "CBM",
-            "width": 22.14,
+            "width": 23.0,
             "format": "#,##0.00",
             "rowspan": 2
           }
@@ -612,7 +566,6 @@
       "data_flow": {
         "_comment": "Inherits from defaults. Only overrides go here.",
         "mappings": {
-          "col_pallet_id": {},
           "col_desc": {
             "fallback": {
               "standard": "COW LEATHER",
@@ -641,9 +594,9 @@
         "add_ons": {
           "before_footer": {
             "enabled": true,
-            "column_id": "col_pallet_id",
-            "text": "COW LEATHER(HS.CODE: 4107.12.00)",
-            "merge": 3
+            "column_id": "col_po",
+            "text": "COW LEATHER (HS.CODE: 4107.12.00)",
+            "merge": 2
           },
           "weight_summary": {
             "enabled": false,
@@ -665,11 +618,11 @@
         "footer_cells": [
           [
             "TOTAL:",
-            "col_pallet_id"
+            "col_po"
           ],
           [
             "{pallet_count} PALLET{multiple}",
-            "col_po"
+            "col_item"
           ]
         ]
       }
@@ -680,6 +633,6 @@
       "standard": "COW LEATHER",
       "daf": "COW LEATHER"
     },
-    "hs_code": "COW LEATHER(HS.CODE: 4107.12.00)"
+    "hs_code": "COW LEATHER (HS.CODE: 4107.12.00)"
   }
 }

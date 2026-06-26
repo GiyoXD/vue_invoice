@@ -1,14 +1,14 @@
 {
   "fingerprint": {
-    "source_file": "CT&INV&PL MT2-26019E FCA revise .xlsx",
-    "created_at": "2026-06-25T13:14:40.341955+07:00"
+    "source_file": "CT&INV&PL JF26023 FCA(1).xlsx",
+    "created_at": "2026-06-26T11:01:45.266776+07:00"
   },
   "template_layout": {
     "Contract": {
       "header_rows": [
         {
           "relative_index": 0,
-          "height": 46.15,
+          "height": 45.95,
           "cells": [
             {
               "col_index": 1,
@@ -26,7 +26,7 @@
               },
               "merge": {
                 "min_col": 1,
-                "max_col": 7,
+                "max_col": 5,
                 "row_span": 1,
                 "value": "SALES CONTRACT"
               }
@@ -43,12 +43,12 @@
           "height": 27.0,
           "cells": [
             {
-              "col_index": 6,
+              "col_index": 4,
               "value": "DATE:",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 16.0
+                  "size": 17.0
                 },
                 "alignment": {
                   "horizontal": "right",
@@ -58,59 +58,53 @@
               }
             },
             {
-              "col_index": 7,
-              "value": "='Packing list'!J9",
+              "col_index": 5,
+              "value": "=Invoice!G9",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 16.0
+                  "size": 17.0,
+                  "bold": true
                 },
                 "alignment": {
                   "horizontal": "left",
-                  "vertical": "center",
-                  "wrap_text": true
+                  "vertical": "center"
                 },
-                "number_format": "[$-409]d\\-mmm\\-yyyy;@"
+                "number_format": "dd\\-mmm\\-yyyy"
               }
             }
           ]
         },
         {
           "relative_index": 3,
-          "height": 39.0,
+          "height": 45.0,
           "cells": [
             {
-              "col_index": 5,
+              "col_index": 4,
               "value": "CONTRACT NO.:",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 16.0
+                  "size": 17.0
                 },
                 "alignment": {
                   "horizontal": "right",
                   "vertical": "center",
                   "wrap_text": true
                 }
-              },
-              "merge": {
-                "min_col": 5,
-                "max_col": 6,
-                "row_span": 1,
-                "value": "CONTRACT NO.:"
               }
             },
             {
-              "col_index": 7,
-              "value": "='Packing list'!J8",
+              "col_index": 5,
+              "value": "='Packing list'!I8",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 16.0
+                  "size": 17.0,
+                  "bold": true
                 },
                 "alignment": {
-                  "vertical": "center",
-                  "wrap_text": true
+                  "vertical": "center"
                 }
               }
             }
@@ -118,15 +112,15 @@
         },
         {
           "relative_index": 4,
-          "height": 31.9,
+          "height": 32.1,
           "cells": [
             {
               "col_index": 1,
-              "value": "The Seller:",
+              "value": "The Seller:  ",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 15.0
                 },
                 "alignment": {
                   "horizontal": "right",
@@ -140,7 +134,7 @@
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 15.0
                 },
                 "alignment": {
                   "vertical": "center"
@@ -151,7 +145,7 @@
         },
         {
           "relative_index": 5,
-          "height": 31.9,
+          "height": 32.1,
           "cells": [
             {
               "col_index": 2,
@@ -159,7 +153,7 @@
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 15.0
                 },
                 "alignment": {
                   "vertical": "center"
@@ -170,7 +164,7 @@
         },
         {
           "relative_index": 6,
-          "height": 31.9,
+          "height": 32.1,
           "cells": [
             {
               "col_index": 2,
@@ -178,7 +172,7 @@
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 15.0
                 },
                 "alignment": {
                   "vertical": "center"
@@ -189,7 +183,7 @@
         },
         {
           "relative_index": 7,
-          "height": 31.9,
+          "height": 32.1,
           "cells": [
             {
               "col_index": 1,
@@ -197,41 +191,7 @@
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
-                },
-                "alignment": {
-                  "horizontal": "right",
-                  "vertical": "top"
-                }
-              }
-            },
-            {
-              "col_index": 2,
-              "value": "+855  975910636",
-              "style": {
-                "font": {
-                  "name": "Times New Roman",
-                  "size": 14.0
-                },
-                "alignment": {
-                  "horizontal": "left",
-                  "vertical": "top"
-                }
-              }
-            }
-          ]
-        },
-        {
-          "relative_index": 8,
-          "height": 31.9,
-          "cells": [
-            {
-              "col_index": 1,
-              "value": "The Buyer:  ",
-              "style": {
-                "font": {
-                  "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 15.0
                 },
                 "alignment": {
                   "horizontal": "right",
@@ -241,11 +201,45 @@
             },
             {
               "col_index": 2,
-              "value": "MOTO INNOVATION VIETNAM LIMITED COMPANY",
+              "value": "+855   975910636",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 15.0
+                },
+                "alignment": {
+                  "vertical": "center",
+                  "wrap_text": true
+                }
+              }
+            }
+          ]
+        },
+        {
+          "relative_index": 8,
+          "height": 32.1,
+          "cells": [
+            {
+              "col_index": 1,
+              "value": "The Buyer:  ",
+              "style": {
+                "font": {
+                  "name": "Times New Roman",
+                  "size": 15.0
+                },
+                "alignment": {
+                  "horizontal": "right",
+                  "vertical": "center"
+                }
+              }
+            },
+            {
+              "col_index": 2,
+              "value": "JASON FURNITURE VIET NAM COMPANY LIMITED",
+              "style": {
+                "font": {
+                  "name": "Times New Roman",
+                  "size": 15.0
                 },
                 "alignment": {
                   "vertical": "center"
@@ -260,11 +254,109 @@
           "cells": [
             {
               "col_index": 2,
-              "value": "Factory C-1B-B1-B, C-1B-B2,C-1B-B8-B and C-1B-D2. lot C-1B-CN，DE4 Street, My Phuoc 3 Industrial Park, Thoi Hoa Ward. Ho Chi Minh City, Vietnam",
+              "value": "LOT 37, 38, 39, 40, 41, 44, 50, 51, 54，55, 56，B2 CLUSTER, DONG XOAI III INDUSTRIAL PARK,  ",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 15.0
+                },
+                "alignment": {
+                  "horizontal": "left",
+                  "vertical": "center",
+                  "wrap_text": true
+                },
+                "number_format": "@"
+              },
+              "merge": {
+                "min_col": 2,
+                "max_col": 5,
+                "row_span": 1,
+                "value": "LOT 37, 38, 39, 40, 41, 44, 50, 51, 54，55, 56，B2 CLUSTER, DONG XOAI III INDUSTRIAL PARK,"
+              }
+            }
+          ]
+        },
+        {
+          "relative_index": 10,
+          "height": 32.1,
+          "cells": [
+            {
+              "col_index": 2,
+              "value": "=Invoice!B15",
+              "style": {
+                "font": {
+                  "name": "Times New Roman",
+                  "size": 15.0
+                },
+                "alignment": {
+                  "horizontal": "left",
+                  "vertical": "center",
+                  "wrap_text": true
+                },
+                "number_format": "@"
+              },
+              "merge": {
+                "min_col": 2,
+                "max_col": 5,
+                "row_span": 1,
+                "value": "=Invoice!B15"
+              }
+            }
+          ]
+        },
+        {
+          "relative_index": 11,
+          "height": 30.0,
+          "cells": [
+            {
+              "col_index": 1,
+              "value": "",
+              "style": {
+                "font": {
+                  "name": "Times New Roman",
+                  "size": 15.0
+                },
+                "alignment": {
+                  "horizontal": "left",
+                  "vertical": "center"
+                }
+              }
+            },
+            {
+              "col_index": 2,
+              "value": "Contact Person : Mr. Thuy   Tel: 0379367084",
+              "style": {
+                "font": {
+                  "name": "Times New Roman",
+                  "size": 15.0
+                },
+                "alignment": {
+                  "horizontal": "left",
+                  "vertical": "center",
+                  "wrap_text": true
+                },
+                "number_format": "@"
+              },
+              "merge": {
+                "min_col": 2,
+                "max_col": 5,
+                "row_span": 1,
+                "value": "Contact Person : Mr. Thuy   Tel: 0379367084"
+              }
+            }
+          ]
+        },
+        {
+          "relative_index": 12,
+          "height": 60.95,
+          "cells": [
+            {
+              "col_index": 1,
+              "value": "EMAll:jyangbin4720@dingtalk.com jialy@kukahome.com dailin@kukahome.com huanggf@kukahome.com zhangzp@kukahome.com",
+              "style": {
+                "font": {
+                  "name": "Times New Roman",
+                  "size": 15.0
                 },
                 "alignment": {
                   "horizontal": "left",
@@ -273,94 +365,37 @@
                 }
               },
               "merge": {
-                "min_col": 2,
-                "max_col": 7,
+                "min_col": 1,
+                "max_col": 5,
                 "row_span": 1,
-                "value": "Factory C-1B-B1-B, C-1B-B2,C-1B-B8-B and C-1B-D2. lot C-1B-CN，DE4 Street, My Phuoc 3 Industrial Park, Thoi Hoa Ward. Ho Chi Minh City, Vietnam"
-              }
-            }
-          ]
-        },
-        {
-          "relative_index": 10,
-          "height": 30.0,
-          "cells": [
-            {
-              "col_index": 2,
-              "value": "Contact Person : XU MEIJUN  Tel:  0274 3803833",
-              "style": {
-                "font": {
-                  "name": "Times New Roman",
-                  "size": 14.0
-                },
-                "alignment": {
-                  "horizontal": "left",
-                  "vertical": "center"
-                }
-              }
-            }
-          ]
-        },
-        {
-          "relative_index": 11,
-          "height": 24.0,
-          "cells": [
-            {
-              "col_index": 1,
-              "value": "After discussion, the both parties agree to sell and purchase the commodities on the following terms and conditions:",
-              "style": {
-                "font": {
-                  "name": "Times New Roman",
-                  "size": 14.0
-                },
-                "alignment": {
-                  "horizontal": "left",
-                  "vertical": "center"
-                },
-                "number_format": "[$-409]dd/mmm/yy;@"
-              }
-            }
-          ]
-        },
-        {
-          "relative_index": 12,
-          "height": 26.1,
-          "cells": [
-            {
-              "col_index": 1,
-              "value": "1.NAME OF COMMODITY AND SPECIFICATION:",
-              "style": {
-                "font": {
-                  "name": "Times New Roman",
-                  "size": 14.0,
-                  "bold": true
-                },
-                "alignment": {
-                  "horizontal": "left",
-                  "vertical": "center"
-                },
-                "number_format": "[$-409]dd/mmm/yy;@"
+                "value": "EMAll:jyangbin4720@dingtalk.com jialy@kukahome.com dailin@kukahome.com huanggf@kukahome.com zhangzp@kukahome.com"
               }
             }
           ]
         },
         {
           "relative_index": 13,
-          "height": 24.95,
+          "height": 54.95,
           "cells": [
             {
               "col_index": 1,
-              "value": "The seller guaranteed the correct color delivery, Commodity, Dimension and quantity as follow:",
+              "value": "The undersigned Sellers 、Buyers and Beneficiary have agreed to close the  following transactions according to the terms and conditions Stipulated below:",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 15.0
                 },
                 "alignment": {
                   "horizontal": "left",
-                  "vertical": "center"
-                },
-                "number_format": "[$-409]dd/mmm/yy;@"
+                  "vertical": "top",
+                  "wrap_text": true
+                }
+              },
+              "merge": {
+                "min_col": 1,
+                "max_col": 5,
+                "row_span": 1,
+                "value": "The undersigned Sellers 、Buyers and Beneficiary have agreed to close the  following transactions according to the terms and conditions Stipulated below:"
               }
             }
           ]
@@ -369,16 +404,11 @@
       "footer_rows": [
         {
           "relative_index": 0,
-          "height": 12.95,
-          "cells": []
-        },
-        {
-          "relative_index": 1,
           "height": 29.1,
           "cells": [
             {
               "col_index": 1,
-              "value": "='Packing list'!I10",
+              "value": "='Packing list'!H10",
               "style": {
                 "font": {
                   "name": "Times New Roman",
@@ -394,7 +424,7 @@
             },
             {
               "col_index": 2,
-              "value": "='Packing list'!J10",
+              "value": "='Packing list'!I10",
               "style": {
                 "font": {
                   "name": "Times New Roman",
@@ -410,57 +440,8 @@
           ]
         },
         {
-          "relative_index": 2,
-          "height": 29.1,
-          "cells": [
-            {
-              "col_index": 1,
-              "value": "Ship to:  MOTO INNOVATION VIETNAM LIMITED COMPANY",
-              "style": {
-                "font": {
-                  "name": "Times New Roman",
-                  "size": 12.0,
-                  "bold": true
-                },
-                "alignment": {
-                  "horizontal": "left",
-                  "vertical": "center"
-                },
-                "number_format": "#,##0.00"
-              }
-            }
-          ]
-        },
-        {
-          "relative_index": 3,
-          "height": 36.0,
-          "cells": [
-            {
-              "col_index": 1,
-              "value": "(Factory C-1B-B1-B, C-1B-B2,C-1B-B8-B and C-1B-D2. lot C-1B-CN，\nDE4 Street, My Phuoc 3 Industrial Park, Thoi Hoa Ward. Ho Chi Minh City, Vietnam)",
-              "style": {
-                "font": {
-                  "name": "Times New Roman",
-                  "size": 12.0
-                },
-                "alignment": {
-                  "horizontal": "left",
-                  "vertical": "top",
-                  "wrap_text": true
-                }
-              },
-              "merge": {
-                "min_col": 1,
-                "max_col": 4,
-                "row_span": 1,
-                "value": "(Factory C-1B-B1-B, C-1B-B2,C-1B-B8-B and C-1B-D2. lot C-1B-CN，\nDE4 Street, My Phuoc 3 Industrial Park, Thoi Hoa Ward. Ho Chi Minh City, Vietnam)"
-              }
-            }
-          ]
-        },
-        {
-          "relative_index": 4,
-          "height": 23.1,
+          "relative_index": 1,
+          "height": 30.0,
           "cells": [
             {
               "col_index": 1,
@@ -479,12 +460,12 @@
           ]
         },
         {
-          "relative_index": 5,
-          "height": 21.95,
+          "relative_index": 2,
+          "height": 31.5,
           "cells": [
             {
               "col_index": 1,
-              "value": "=\"Transaction method: \"&LEFT('Packing list'!I10,3)&\"(USD)\"",
+              "value": "=\"Transaction method: \"&LEFT('Packing list'!H10,3)&\"(USD)\"",
               "style": {
                 "font": {
                   "name": "Times New Roman",
@@ -499,8 +480,8 @@
           ]
         },
         {
-          "relative_index": 6,
-          "height": 29.1,
+          "relative_index": 3,
+          "height": 41.1,
           "cells": [
             {
               "col_index": 1,
@@ -517,7 +498,7 @@
               }
             },
             {
-              "col_index": 5,
+              "col_index": 3,
               "value": "CALIFOR UPHOLSTERY MATERIALS CO.,LTD.",
               "style": {
                 "font": {
@@ -533,8 +514,8 @@
           ]
         },
         {
-          "relative_index": 7,
-          "height": 60.0,
+          "relative_index": 4,
+          "height": 45.95,
           "cells": [
             {
               "col_index": 1,
@@ -551,8 +532,8 @@
               }
             },
             {
-              "col_index": 5,
-              "value": "BANK OF CHINA(HONG KONG)LIMITED PHNOM PENH BRANCH /BANK OF CHINA PHNOM PENH BRANCH",
+              "col_index": 3,
+              "value": "BANK OF CHINA(HONG KONG)LIMITED PHNOM PENH BRANCH\n /BANK OF CHINA PHNOM PENH BRANCH",
               "style": {
                 "font": {
                   "name": "Times New Roman",
@@ -565,17 +546,17 @@
                 }
               },
               "merge": {
-                "min_col": 5,
-                "max_col": 7,
+                "min_col": 3,
+                "max_col": 5,
                 "row_span": 1,
-                "value": "BANK OF CHINA(HONG KONG)LIMITED PHNOM PENH BRANCH /BANK OF CHINA PHNOM PENH BRANCH"
+                "value": "BANK OF CHINA(HONG KONG)LIMITED PHNOM PENH BRANCH\n /BANK OF CHINA PHNOM PENH BRANCH"
               }
             }
           ]
         },
         {
-          "relative_index": 8,
-          "height": 45.95,
+          "relative_index": 5,
+          "height": 41.1,
           "cells": [
             {
               "col_index": 1,
@@ -592,8 +573,8 @@
               }
             },
             {
-              "col_index": 5,
-              "value": "1st AND 2nd FLOOR,CANADIA TOWER,No.315 ANDDUONG ST.,PHNOM PEMH,CAMBODIA.",
+              "col_index": 3,
+              "value": "1st AND 2nd FLOOR,CANADIA TOWER,No.315 ANDDUONG ST.\nPHNOM PEMH,CAMBODIA.",
               "style": {
                 "font": {
                   "name": "Times New Roman",
@@ -606,17 +587,17 @@
                 }
               },
               "merge": {
-                "min_col": 5,
-                "max_col": 7,
+                "min_col": 3,
+                "max_col": 5,
                 "row_span": 1,
-                "value": "1st AND 2nd FLOOR,CANADIA TOWER,No.315 ANDDUONG ST.,PHNOM PEMH,CAMBODIA."
+                "value": "1st AND 2nd FLOOR,CANADIA TOWER,No.315 ANDDUONG ST.\nPHNOM PEMH,CAMBODIA."
               }
             }
           ]
         },
         {
-          "relative_index": 9,
-          "height": 27.0,
+          "relative_index": 6,
+          "height": 29.1,
           "cells": [
             {
               "col_index": 1,
@@ -633,7 +614,7 @@
               }
             },
             {
-              "col_index": 5,
+              "col_index": 3,
               "value": "100001100764430",
               "style": {
                 "font": {
@@ -647,8 +628,8 @@
                 "number_format": "@"
               },
               "merge": {
-                "min_col": 5,
-                "max_col": 7,
+                "min_col": 3,
+                "max_col": 5,
                 "row_span": 1,
                 "value": "100001100764430"
               }
@@ -656,8 +637,8 @@
           ]
         },
         {
-          "relative_index": 10,
-          "height": 24.0,
+          "relative_index": 7,
+          "height": 21.0,
           "cells": [
             {
               "col_index": 1,
@@ -674,7 +655,7 @@
               }
             },
             {
-              "col_index": 5,
+              "col_index": 3,
               "value": "BKCHKHPPXXX",
               "style": {
                 "font": {
@@ -690,25 +671,16 @@
           ]
         },
         {
-          "relative_index": 11,
-          "height": 42.0,
+          "relative_index": 8,
+          "height": 21.0,
+          "cells": []
+        },
+        {
+          "relative_index": 9,
+          "height": 20.25,
           "cells": [
             {
-              "col_index": 2,
-              "value": "The Seller:",
-              "style": {
-                "font": {
-                  "name": "Times New Roman",
-                  "size": 16.0
-                },
-                "alignment": {
-                  "horizontal": "center",
-                  "vertical": "center"
-                }
-              }
-            },
-            {
-              "col_index": 6,
+              "col_index": 1,
               "value": "The Buyer:",
               "style": {
                 "font": {
@@ -716,19 +688,45 @@
                   "size": 16.0
                 },
                 "alignment": {
-                  "horizontal": "center",
                   "vertical": "center"
+                }
+              }
+            },
+            {
+              "col_index": 4,
+              "value": "The Seller:",
+              "style": {
+                "font": {
+                  "name": "Times New Roman",
+                  "size": 16.0
+                },
+                "alignment": {
+                  "horizontal": "left",
+                  "vertical": "top"
                 }
               }
             }
           ]
         },
         {
-          "relative_index": 12,
-          "height": 39.0,
+          "relative_index": 10,
+          "height": 20.25,
           "cells": [
             {
               "col_index": 1,
+              "value": "JASON FURNITURE VIET NAM COMPANY LIMITED",
+              "style": {
+                "font": {
+                  "name": "Times New Roman",
+                  "size": 14.0
+                },
+                "alignment": {
+                  "vertical": "top"
+                }
+              }
+            },
+            {
+              "col_index": 4,
               "value": "CALIFOR UPHOLSTERY MATERIALS CO.,LTD.",
               "style": {
                 "font": {
@@ -736,221 +734,60 @@
                   "size": 14.0
                 },
                 "alignment": {
-                  "horizontal": "center",
-                  "vertical": "top",
-                  "wrap_text": true
+                  "vertical": "top"
                 }
-              },
-              "merge": {
-                "min_col": 1,
-                "max_col": 3,
-                "row_span": 1,
-                "value": "CALIFOR UPHOLSTERY MATERIALS CO.,LTD."
-              }
-            },
-            {
-              "col_index": 5,
-              "value": "MOTO INNOVATION VIETNAM LIMITED COMPANY",
-              "style": {
-                "font": {
-                  "name": "Times New Roman",
-                  "size": 14.0
-                },
-                "alignment": {
-                  "horizontal": "center",
-                  "vertical": "top",
-                  "wrap_text": true
-                }
-              },
-              "merge": {
-                "min_col": 5,
-                "max_col": 7,
-                "row_span": 1,
-                "value": "MOTO INNOVATION VIETNAM LIMITED COMPANY"
               }
             }
           ]
         },
         {
-          "relative_index": 13,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 14,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 15,
-          "height": 39.0,
+          "relative_index": 11,
+          "height": null,
           "cells": [
             {
-              "col_index": 2,
+              "col_index": 4,
+              "value": "Sign & Stamp",
+              "style": {
+                "font": {
+                  "name": "Times New Roman",
+                  "size": 11.0
+                },
+                "alignment": {
+                  "horizontal": "right",
+                  "vertical": "center"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "relative_index": 17,
+          "height": null,
+          "cells": [
+            {
+              "col_index": 4,
               "value": "ZENG XUELI",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0,
-                  "bold": true
+                  "size": 11.0
                 },
                 "alignment": {
+                  "horizontal": "right",
                   "vertical": "center"
                 }
               }
-            },
-            {
-              "col_index": 5,
-              "value": "XU MEIJUN",
-              "style": {
-                "font": {
-                  "name": "Times New Roman",
-                  "size": 14.0,
-                  "bold": true
-                },
-                "alignment": {
-                  "horizontal": "center",
-                  "vertical": "top",
-                  "wrap_text": true
-                }
-              },
-              "merge": {
-                "min_col": 5,
-                "max_col": 7,
-                "row_span": 1,
-                "value": "XU MEIJUN"
-              }
             }
           ]
-        },
-        {
-          "relative_index": 16,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 17,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 18,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 19,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 20,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 21,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 22,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 23,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 24,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 25,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 26,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 27,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 28,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 29,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 30,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 31,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 32,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 33,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 34,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 35,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 36,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 41,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 42,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 43,
-          "height": 39.0,
-          "cells": []
-        },
-        {
-          "relative_index": 49,
-          "height": 31.5,
-          "cells": []
         }
       ],
       "header_images": [],
-      "footer_images": []
+      "footer_images": [],
+      "col_widths": {
+        "A": 17.5714285714286,
+        "B": 35.7142857142857,
+        "F": 28.7142857142857
+      }
     },
     "Invoice": {
       "header_rows": [
@@ -1047,7 +884,7 @@
                 },
                 "alignment": {
                   "horizontal": "center",
-                  "vertical": "top"
+                  "vertical": "center"
                 }
               },
               "merge": {
@@ -1138,7 +975,7 @@
         },
         {
           "relative_index": 5,
-          "height": 38.1,
+          "height": 83.25,
           "cells": [
             {
               "col_index": 1,
@@ -1216,7 +1053,7 @@
         },
         {
           "relative_index": 6,
-          "height": 22.5,
+          "height": 23.25,
           "cells": [
             {
               "col_index": 6,
@@ -1224,24 +1061,23 @@
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 12.0
                 },
                 "alignment": {
-                  "horizontal": "center",
-                  "vertical": "center"
+                  "horizontal": "center"
                 }
               }
             },
             {
               "col_index": 7,
-              "value": "='Packing list'!J7",
+              "value": "='Packing list'!I7",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 12.0
                 },
                 "alignment": {
-                  "horizontal": "center",
+                  "horizontal": "left",
                   "vertical": "center"
                 }
               }
@@ -1258,7 +1094,7 @@
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 12.0,
+                  "size": 11.0,
                   "bold": true
                 },
                 "alignment": {
@@ -1283,7 +1119,7 @@
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0,
+                  "size": 12.0,
                   "bold": true
                 },
                 "alignment": {
@@ -1294,14 +1130,15 @@
             },
             {
               "col_index": 7,
-              "value": "='Packing list'!J8",
+              "value": "='Packing list'!I8",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 12.0,
+                  "bold": true
                 },
                 "alignment": {
-                  "horizontal": "center",
+                  "horizontal": "left",
                   "vertical": "center"
                 }
               }
@@ -1314,11 +1151,11 @@
           "cells": [
             {
               "col_index": 2,
-              "value": "XIN BAVET SEZ, Road No. 316A, Trapeang Bon and Prey Kokir Villages,",
+              "value": "XIN BAVET SEZ, Road No. 316A, Trapeang Bon and Prey Kokir Villages, ",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 12.0
+                  "size": 11.0
                 }
               }
             },
@@ -1328,7 +1165,7 @@
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0,
+                  "size": 12.0,
                   "bold": true
                 },
                 "alignment": {
@@ -1339,17 +1176,18 @@
             },
             {
               "col_index": 7,
-              "value": "='Packing list'!J9",
+              "value": "='Packing list'!I9",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 12.0,
+                  "bold": true
                 },
                 "alignment": {
-                  "horizontal": "center",
+                  "horizontal": "left",
                   "vertical": "center"
                 },
-                "number_format": "[$-409]d\\-mmm\\-yyyy;@"
+                "number_format": "dd\\-mmm\\-yyyy"
               }
             }
           ]
@@ -1360,21 +1198,21 @@
           "cells": [
             {
               "col_index": 2,
-              "value": "Prey Kokir Commune, Chantrea District,Svay Rieng Province, Kingdom of Cambodia",
+              "value": "Prey Kokir Commune, Chantrea District,Svay Rieng Province, Kingdom of Cambodia ",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 12.0
+                  "size": 11.0
                 }
               }
             },
             {
               "col_index": 6,
-              "value": "='Packing list'!I10",
+              "value": "='Packing list'!H10",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 12.0
                 },
                 "alignment": {
                   "horizontal": "center",
@@ -1384,16 +1222,17 @@
             },
             {
               "col_index": 7,
-              "value": "='Packing list'!J10",
+              "value": "='Packing list'!I10",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 12.0
                 },
                 "alignment": {
-                  "horizontal": "center",
+                  "horizontal": "left",
                   "vertical": "center"
-                }
+                },
+                "number_format": "#,##0.00"
               }
             }
           ]
@@ -1408,7 +1247,7 @@
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 12.0
+                  "size": 11.0
                 }
               }
             }
@@ -1429,22 +1268,21 @@
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0,
+                  "size": 12.0,
                   "bold": true
                 },
                 "alignment": {
-                  "horizontal": "right",
-                  "vertical": "center"
+                  "horizontal": "right"
                 }
               }
             },
             {
               "col_index": 2,
-              "value": "MOTO INNOVATION VIETNAM LIMITED COMPANY",
+              "value": "JASON FURNITURE VIET NAM COMPANY LIMITED",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0,
+                  "size": 11.0,
                   "bold": true
                 }
               }
@@ -1457,22 +1295,17 @@
           "cells": [
             {
               "col_index": 2,
-              "value": "Factory C-1B-B1-B, C-1B-B2,C-1B-B8-B and C-1B-D2. lot C-1B-CN，",
+              "value": "LOT 37, 38, 39, 40, 41, 44, 50, 51, 54，55, 56，B2 CLUSTER, DONG XOAI III INDUSTRIAL PARK,  ",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 11.0,
+                  "bold": true
                 },
                 "alignment": {
-                  "horizontal": "left",
                   "vertical": "center"
-                }
-              },
-              "merge": {
-                "min_col": 2,
-                "max_col": 5,
-                "row_span": 1,
-                "value": "Factory C-1B-B1-B, C-1B-B2,C-1B-B8-B and C-1B-D2. lot C-1B-CN，"
+                },
+                "number_format": "@"
               }
             }
           ]
@@ -1483,30 +1316,31 @@
           "cells": [
             {
               "col_index": 2,
-              "value": " DE4 Street, My Phuoc 3 Industrial Park, Thoi Hoa Ward. Ho Chi Minh City, Vietnam",
+              "value": "BINH PHUOC WARD,DONG NAI CITY, VIETNAM",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 11.0
                 },
                 "alignment": {
                   "vertical": "center"
-                }
+                },
+                "number_format": "@"
               }
             }
           ]
         },
         {
           "relative_index": 15,
-          "height": 24.0,
+          "height": 25.5,
           "cells": [
             {
               "col_index": 2,
-              "value": "TEL: 0274 3803833​​​TAX: 3703265936",
+              "value": "Contact Person : Mr. Thuy   TEl: 0379367084",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 11.0
                 },
                 "alignment": {
                   "vertical": "center"
@@ -1517,15 +1351,15 @@
         },
         {
           "relative_index": 16,
-          "height": 26.1,
+          "height": 25.5,
           "cells": [
             {
               "col_index": 2,
-              "value": "Contact Person: XU MEIJUN",
+              "value": "EMAlL:jyangbin4720@dingtalk.com jialy@kukahome.com ",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 11.0
                 },
                 "alignment": {
                   "vertical": "center"
@@ -1536,6 +1370,25 @@
         },
         {
           "relative_index": 17,
+          "height": 25.5,
+          "cells": [
+            {
+              "col_index": 2,
+              "value": "dailin@kukahome.com huanggf@kukahome.com zhangzp@kukahome.com",
+              "style": {
+                "font": {
+                  "name": "Times New Roman",
+                  "size": 11.0
+                },
+                "alignment": {
+                  "vertical": "center"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "relative_index": 18,
           "height": 27.75,
           "cells": [
             {
@@ -1543,7 +1396,6 @@
               "value": "SHIP: ",
               "style": {
                 "font": {
-                  "size": 14.0,
                   "bold": true
                 },
                 "alignment": {
@@ -1553,18 +1405,18 @@
             },
             {
               "col_index": 2,
-              "value": "BY TRUCK FROM BAVET, SVAY RIENG, CAMBODIA TO HO CHI MINH CITY, VIETNAM.",
+              "value": "BY TRUCK FROM BAVET, SVAY RIENG, CAMBODIA TO DONG NAI CITY, VIETNAM.",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 11.0
                 }
               }
             }
           ]
         },
         {
-          "relative_index": 18,
+          "relative_index": 19,
           "height": 27.75,
           "cells": []
         }
@@ -1572,11 +1424,16 @@
       "footer_rows": [
         {
           "relative_index": 0,
-          "height": 61.5,
+          "height": 27.0,
+          "cells": []
+        },
+        {
+          "relative_index": 1,
+          "height": 42.0,
           "cells": [
             {
               "col_index": 1,
-              "value": "Country of Original Cambodia ",
+              "value": "Country of Original Cambodia",
               "style": {
                 "font": {
                   "name": "Times New Roman",
@@ -1598,8 +1455,8 @@
           ]
         },
         {
-          "relative_index": 1,
-          "height": 72.75,
+          "relative_index": 2,
+          "height": 61.5,
           "cells": [
             {
               "col_index": 1,
@@ -1621,7 +1478,7 @@
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 11.0
+                  "size": 10.0
                 },
                 "alignment": {
                   "horizontal": "left",
@@ -1639,12 +1496,12 @@
           ]
         },
         {
-          "relative_index": 2,
-          "height": 42.75,
+          "relative_index": 3,
+          "height": 42.0,
           "cells": [
             {
               "col_index": 1,
-              "value": "BENEFICIARY BANK：BANK OF CHINA(HONG KONG)LIMITED PHNOM PENH BRANCH\n                                          /BANK OF CHINA PHNOM PENH BRANCH",
+              "value": "BENEFICIARY BANK：BANK OF CHINA(HONG KONG)LIMITED PHNOM PENH BRANCH\n                                                  /BANK OF CHINA PHNOM PENH BRANCH",
               "style": {
                 "font": {
                   "name": "Times New Roman",
@@ -1659,14 +1516,14 @@
                 "min_col": 1,
                 "max_col": 3,
                 "row_span": 1,
-                "value": "BENEFICIARY BANK：BANK OF CHINA(HONG KONG)LIMITED PHNOM PENH BRANCH\n                                          /BANK OF CHINA PHNOM PENH BRANCH"
+                "value": "BENEFICIARY BANK：BANK OF CHINA(HONG KONG)LIMITED PHNOM PENH BRANCH\n                                                  /BANK OF CHINA PHNOM PENH BRANCH"
               }
             }
           ]
         },
         {
-          "relative_index": 3,
-          "height": 27.0,
+          "relative_index": 4,
+          "height": 24.75,
           "cells": [
             {
               "col_index": 1,
@@ -1682,7 +1539,7 @@
               },
               "merge": {
                 "min_col": 1,
-                "max_col": 11,
+                "max_col": 7,
                 "row_span": 1,
                 "value": "A/C NO:100001100764430"
               }
@@ -1690,8 +1547,8 @@
           ]
         },
         {
-          "relative_index": 4,
-          "height": 21.0,
+          "relative_index": 5,
+          "height": 27.0,
           "cells": [
             {
               "col_index": 1,
@@ -1707,7 +1564,7 @@
               },
               "merge": {
                 "min_col": 1,
-                "max_col": 11,
+                "max_col": 7,
                 "row_span": 1,
                 "value": "SWIFT CODE  ：BKCHKHPPXXX"
               }
@@ -1715,16 +1572,35 @@
           ]
         },
         {
-          "relative_index": 5,
+          "relative_index": 6,
           "height": 21.0,
           "cells": [
             {
-              "col_index": 6,
+              "col_index": 5,
               "value": "CALIFOR UPHOLSTERY MATERIALS CO., LTD.",
               "style": {
                 "font": {
                   "name": "Times New Roman",
                   "size": 12.0
+                },
+                "alignment": {
+                  "vertical": "center"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "relative_index": 7,
+          "height": 21.0,
+          "cells": [
+            {
+              "col_index": 6,
+              "value": "Sign & Stamp",
+              "style": {
+                "font": {
+                  "name": "Times New Roman",
+                  "size": 11.0
                 },
                 "alignment": {
                   "horizontal": "center",
@@ -1735,23 +1611,18 @@
           ]
         },
         {
-          "relative_index": 6,
-          "height": 21.0,
-          "cells": []
-        },
-        {
-          "relative_index": 7,
-          "height": 21.0,
-          "cells": []
-        },
-        {
           "relative_index": 8,
           "height": 21.0,
           "cells": []
         },
         {
-          "relative_index": 11,
-          "height": null,
+          "relative_index": 9,
+          "height": 21.0,
+          "cells": []
+        },
+        {
+          "relative_index": 10,
+          "height": 21.0,
           "cells": [
             {
               "col_index": 6,
@@ -1767,10 +1638,25 @@
               }
             }
           ]
+        },
+        {
+          "relative_index": 11,
+          "height": 17.25,
+          "cells": []
         }
       ],
       "header_images": [],
-      "footer_images": []
+      "footer_images": [],
+      "col_widths": {
+        "A": 31.1428571428571,
+        "B": 23.0,
+        "C": 30.0,
+        "D": 21.2857142857143,
+        "E": 16.0,
+        "F": 17.1428571428571,
+        "G": 28.7142857142857,
+        "H": 25.1428571428571
+      }
     },
     "Packing list": {
       "header_rows": [
@@ -1794,7 +1680,7 @@
               },
               "merge": {
                 "min_col": 1,
-                "max_col": 10,
+                "max_col": 9,
                 "row_span": 1,
                 "value": "CALIFOR UPHOLSTERY MATERIALS CO., LTD."
               }
@@ -1820,7 +1706,7 @@
               },
               "merge": {
                 "min_col": 1,
-                "max_col": 10,
+                "max_col": 9,
                 "row_span": 1,
                 "value": "XIN BAVET SEZ, Road No. 316A, Trapeang Bon and  Prey Kokir  Villages, Prey Kokir  Commune, Chantrea District,"
               }
@@ -1846,7 +1732,7 @@
               },
               "merge": {
                 "min_col": 1,
-                "max_col": 10,
+                "max_col": 9,
                 "row_span": 1,
                 "value": "Svay Rieng Province, Kingdom of Cambodia."
               }
@@ -1872,7 +1758,7 @@
               },
               "merge": {
                 "min_col": 1,
-                "max_col": 10,
+                "max_col": 9,
                 "row_span": 1,
                 "value": "VAT:L001-901903209"
               }
@@ -1881,7 +1767,7 @@
         },
         {
           "relative_index": 4,
-          "height": 21.95,
+          "height": 25.5,
           "cells": [
             {
               "col_index": 1,
@@ -1901,7 +1787,7 @@
               },
               "merge": {
                 "min_col": 1,
-                "max_col": 10,
+                "max_col": 9,
                 "row_span": 1,
                 "value": "Tel: +855   975910636"
               }
@@ -1969,20 +1855,12 @@
                   "bottom": "medium"
                 }
               }
-            },
-            {
-              "col_index": 10,
-              "style": {
-                "border": {
-                  "bottom": "medium"
-                }
-              }
             }
           ]
         },
         {
           "relative_index": 5,
-          "height": 44.1,
+          "height": 54.0,
           "cells": [
             {
               "col_index": 1,
@@ -2003,7 +1881,7 @@
               },
               "merge": {
                 "min_col": 1,
-                "max_col": 10,
+                "max_col": 9,
                 "row_span": 1,
                 "value": "PACKING LIST"
               }
@@ -2071,28 +1949,20 @@
                   "top": "medium"
                 }
               }
-            },
-            {
-              "col_index": 10,
-              "style": {
-                "border": {
-                  "top": "medium"
-                }
-              }
             }
           ]
         },
         {
           "relative_index": 6,
-          "height": 18.95,
+          "height": 18.0,
           "cells": [
             {
-              "col_index": 9,
+              "col_index": 8,
               "value": "Ref No.:",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 12.0
                 },
                 "alignment": {
                   "horizontal": "center"
@@ -2100,12 +1970,12 @@
               }
             },
             {
-              "col_index": 10,
-              "value": "CLF2026-198",
+              "col_index": 9,
+              "value": "CLF2026-195",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 12.0
                 }
               }
             }
@@ -2113,7 +1983,7 @@
         },
         {
           "relative_index": 7,
-          "height": 30.0,
+          "height": 18.0,
           "cells": [
             {
               "col_index": 1,
@@ -2121,7 +1991,7 @@
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0,
+                  "size": 11.0,
                   "bold": true
                 },
                 "alignment": {
@@ -2135,19 +2005,19 @@
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0,
+                  "size": 12.0,
                   "bold": true
                 },
                 "number_format": "@"
               }
             },
             {
-              "col_index": 9,
+              "col_index": 8,
               "value": "INVOICE NO :",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0,
+                  "size": 12.0,
                   "bold": true
                 },
                 "alignment": {
@@ -2157,15 +2027,13 @@
               }
             },
             {
-              "col_index": 10,
-              "value": "MT2-26019E",
+              "col_index": 9,
+              "value": "JF26023",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
-                },
-                "alignment": {
-                  "vertical": "center"
+                  "size": 12.0,
+                  "bold": true
                 }
               }
             }
@@ -2177,22 +2045,22 @@
           "cells": [
             {
               "col_index": 2,
-              "value": "XIN BAVET SEZ, Road No. 316A, Trapeang Bon and Prey Kokir Villages, ",
+              "value": "XIN BAVET SEZ, Road No. 316A, Trapeang Bon and Prey Kokir Villages,",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 11.0
                 },
                 "number_format": "@"
               }
             },
             {
-              "col_index": 9,
+              "col_index": 8,
               "value": "Date:",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0,
+                  "size": 12.0,
                   "bold": true
                 },
                 "alignment": {
@@ -2202,18 +2070,19 @@
               }
             },
             {
-              "col_index": 10,
-              "value": "2026-06-06 00:00:00",
+              "col_index": 9,
+              "value": "2026-06-04 00:00:00",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 12.0,
+                  "bold": true
                 },
                 "alignment": {
                   "horizontal": "left",
                   "vertical": "center"
                 },
-                "number_format": "[$-409]d\\-mmm\\-yyyy;@"
+                "number_format": "dd\\-mmm\\-yyyy"
               }
             }
           ]
@@ -2224,22 +2093,22 @@
           "cells": [
             {
               "col_index": 2,
-              "value": "Prey Kokir Commune, Chantrea District,Svay Rieng Province, Kingdom of Cambodia ",
+              "value": "Prey Kokir Commune, Chantrea District,Svay Rieng Province, Kingdom of Cambodia",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 11.0
                 },
                 "number_format": "@"
               }
             },
             {
-              "col_index": 9,
-              "value": "FCA:",
+              "col_index": 8,
+              "value": "FCA :",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 12.0
                 },
                 "alignment": {
                   "horizontal": "center",
@@ -2248,17 +2117,18 @@
               }
             },
             {
-              "col_index": 10,
-              "value": "SVAY RIENG",
+              "col_index": 9,
+              "value": "BAVET, SVAY RIENG",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 12.0
+                  "size": 11.0
                 },
                 "alignment": {
                   "horizontal": "left",
                   "vertical": "center"
-                }
+                },
+                "number_format": "#,##0.00"
               }
             }
           ]
@@ -2273,7 +2143,7 @@
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 11.0
                 },
                 "number_format": "@"
               }
@@ -2295,34 +2165,24 @@
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0,
+                  "size": 12.0,
                   "bold": true
                 },
                 "alignment": {
-                  "horizontal": "right",
-                  "vertical": "center"
+                  "horizontal": "right"
                 }
               }
             },
             {
               "col_index": 2,
-              "value": "MOTO INNOVATION VIETNAM LIMITED COMPANY",
+              "value": "JASON FURNITURE VIET NAM COMPANY LIMITED",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0,
+                  "size": 11.0,
                   "bold": true
                 },
                 "number_format": "@"
-              }
-            },
-            {
-              "col_index": 7,
-              "merge": {
-                "min_col": 7,
-                "max_col": 10,
-                "row_span": 1,
-                "value": ""
               }
             }
           ]
@@ -2333,37 +2193,32 @@
           "cells": [
             {
               "col_index": 2,
-              "value": "Factory C-1B-B1-B, C-1B-B2,C-1B-B8-B and C-1B-D2. lot C-1B-CN，",
+              "value": "LOT 37, 38, 39, 40, 41, 44, 50, 51, 54，55, 56，B2 CLUSTER, DONG XOAI III INDUSTRIAL PARK,  ",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 11.0,
+                  "bold": true
                 },
                 "alignment": {
-                  "horizontal": "left",
                   "vertical": "center"
-                }
-              },
-              "merge": {
-                "min_col": 2,
-                "max_col": 6,
-                "row_span": 1,
-                "value": "Factory C-1B-B1-B, C-1B-B2,C-1B-B8-B and C-1B-D2. lot C-1B-CN，"
+                },
+                "number_format": "@"
               }
             }
           ]
         },
         {
           "relative_index": 14,
-          "height": 25.5,
+          "height": 21.0,
           "cells": [
             {
               "col_index": 2,
-              "value": " DE4 Street, My Phuoc 3 Industrial Park, Thoi Hoa Ward. Ho Chi Minh City, Vietnam",
+              "value": "=Invoice!B15",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 11.0
                 },
                 "alignment": {
                   "vertical": "center"
@@ -2379,11 +2234,11 @@
           "cells": [
             {
               "col_index": 2,
-              "value": "TEL: 0274 3803833​​​TAX: 3703265936",
+              "value": "Contact Person : Mr. Thuy   TEl: 0379367084",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 11.0
                 },
                 "alignment": {
                   "vertical": "center"
@@ -2399,11 +2254,11 @@
           "cells": [
             {
               "col_index": 2,
-              "value": "Contact Person: XU MEIJUN",
+              "value": "EMAlL:jyangbin4720@dingtalk.com jialy@kukahome.com",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
+                  "size": 11.0
                 },
                 "alignment": {
                   "vertical": "center"
@@ -2415,6 +2270,26 @@
         },
         {
           "relative_index": 17,
+          "height": 21.0,
+          "cells": [
+            {
+              "col_index": 2,
+              "value": "dailin@kukahome.com huanggf@kukahome.com zhangzp@kukahome.com",
+              "style": {
+                "font": {
+                  "name": "Times New Roman",
+                  "size": 11.0
+                },
+                "alignment": {
+                  "vertical": "center"
+                },
+                "number_format": "@"
+              }
+            }
+          ]
+        },
+        {
+          "relative_index": 18,
           "height": 27.75,
           "cells": [
             {
@@ -2422,7 +2297,6 @@
               "value": "SHIP: ",
               "style": {
                 "font": {
-                  "size": 14.0,
                   "bold": true
                 },
                 "alignment": {
@@ -2432,26 +2306,35 @@
             },
             {
               "col_index": 2,
-              "value": "BY TRUCK FROM BAVET, SVAY RIENG, CAMBODIA TO HO CHI MINH CITY, VIETNAM.",
+              "value": "=Invoice!B19",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 14.0
-                },
-                "number_format": "@"
+                  "size": 11.0
+                }
               }
             }
           ]
+        },
+        {
+          "relative_index": 19,
+          "height": 27.75,
+          "cells": []
         }
       ],
       "footer_rows": [
         {
           "relative_index": 0,
-          "height": 21.0,
+          "height": 15.6,
+          "cells": []
+        },
+        {
+          "relative_index": 1,
+          "height": 15.6,
           "cells": [
             {
               "col_index": 1,
-              "value": "Country of Original Cambodia ",
+              "value": "Country of Original Cambodia",
               "style": {
                 "font": {
                   "name": "Times New Roman",
@@ -2459,22 +2342,15 @@
                   "bold": true
                 },
                 "alignment": {
-                  "horizontal": "left",
                   "vertical": "center"
                 }
-              },
-              "merge": {
-                "min_col": 1,
-                "max_col": 3,
-                "row_span": 1,
-                "value": "Country of Original Cambodia"
               }
             }
           ]
         },
         {
-          "relative_index": 1,
-          "height": 64.5,
+          "relative_index": 2,
+          "height": 56.25,
           "cells": [
             {
               "col_index": 1,
@@ -2496,7 +2372,7 @@
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 11.0
+                  "size": 10.0
                 },
                 "alignment": {
                   "horizontal": "left",
@@ -2506,7 +2382,7 @@
               },
               "merge": {
                 "min_col": 2,
-                "max_col": 4,
+                "max_col": 3,
                 "row_span": 1,
                 "value": "CALIFOR UPHOLSTERY MATERIALS CO., LTD.\nXIN BAVET SEZ, Road No. 316A, Trapeang Bon and Prey Kokir Villages, Prey Kokir Commune, Chantrea District,Svay Rieng Province, Kingdom of Cambodia, Tel: +855   975910636"
               }
@@ -2514,34 +2390,35 @@
           ]
         },
         {
-          "relative_index": 2,
-          "height": 42.0,
+          "relative_index": 3,
+          "height": 31.5,
           "cells": [
             {
               "col_index": 1,
-              "value": "BENEFICIARY BANK：BANK OF CHINA(HONG KONG)LIMITED PHNOM PENH BRANCH\n                                          /BANK OF CHINA PHNOM PENH BRANCH",
+              "value": "BENEFICIARY BANK：BANK OF CHINA(HONG KONG)LIMITED  PHNOM PENH BRANCH\n                                          /BANK OF CHINA PHNOM PENH BRANCH",
               "style": {
                 "font": {
                   "name": "Times New Roman",
                   "size": 11.0
                 },
                 "alignment": {
+                  "horizontal": "left",
                   "vertical": "top",
                   "wrap_text": true
                 }
               },
               "merge": {
                 "min_col": 1,
-                "max_col": 3,
+                "max_col": 4,
                 "row_span": 1,
-                "value": "BENEFICIARY BANK：BANK OF CHINA(HONG KONG)LIMITED PHNOM PENH BRANCH\n                                          /BANK OF CHINA PHNOM PENH BRANCH"
+                "value": "BENEFICIARY BANK：BANK OF CHINA(HONG KONG)LIMITED  PHNOM PENH BRANCH\n                                          /BANK OF CHINA PHNOM PENH BRANCH"
               }
             }
           ]
         },
         {
-          "relative_index": 3,
-          "height": 30.0,
+          "relative_index": 4,
+          "height": 15.6,
           "cells": [
             {
               "col_index": 1,
@@ -2554,19 +2431,13 @@
                 "alignment": {
                   "vertical": "top"
                 }
-              },
-              "merge": {
-                "min_col": 1,
-                "max_col": 11,
-                "row_span": 1,
-                "value": "A/C NO:100001100764430"
               }
             }
           ]
         },
         {
-          "relative_index": 4,
-          "height": null,
+          "relative_index": 5,
+          "height": 16.9,
           "cells": [
             {
               "col_index": 1,
@@ -2579,27 +2450,40 @@
                 "alignment": {
                   "vertical": "top"
                 }
-              },
-              "merge": {
-                "min_col": 1,
-                "max_col": 11,
-                "row_span": 1,
-                "value": "SWIFT CODE  ：BKCHKHPPXXX"
               }
             }
           ]
         },
         {
-          "relative_index": 5,
-          "height": 15.75,
+          "relative_index": 6,
+          "height": null,
           "cells": [
             {
-              "col_index": 9,
+              "col_index": 8,
               "value": "CALIFOR UPHOLSTERY MATERIALS CO., LTD.",
               "style": {
                 "font": {
                   "name": "Times New Roman",
-                  "size": 12.0
+                  "size": 11.0
+                },
+                "alignment": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "relative_index": 7,
+          "height": null,
+          "cells": [
+            {
+              "col_index": 8,
+              "value": "Sign & Stamp",
+              "style": {
+                "font": {
+                  "color": "theme-1"
                 },
                 "alignment": {
                   "horizontal": "center",
@@ -2614,15 +2498,15 @@
           "height": null,
           "cells": [
             {
-              "col_index": 9,
+              "col_index": 8,
               "value": "ZENG XUELI",
               "style": {
                 "font": {
-                  "name": "Times New Roman",
-                  "size": 11.0
+                  "color": "theme-1"
                 },
                 "alignment": {
-                  "horizontal": "center"
+                  "horizontal": "center",
+                  "vertical": "center"
                 }
               }
             }
@@ -2630,7 +2514,18 @@
         }
       ],
       "header_images": [],
-      "footer_images": []
+      "footer_images": [],
+      "col_widths": {
+        "A": 31.1428571428571,
+        "B": 23.0,
+        "C": 30.0,
+        "D": 18.0,
+        "E": 13.0,
+        "F": 16.0,
+        "G": 15.0,
+        "I": 23.0,
+        "J": 12.4285714285714
+      }
     }
   }
 }

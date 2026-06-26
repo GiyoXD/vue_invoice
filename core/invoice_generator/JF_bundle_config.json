@@ -33,16 +33,9 @@
     "custom": {}
   },
   "processing": {
-    "sheets": [
-      "Invoice",
-      "Contract",
-      "Packing list"
-    ],
-    "data_sources": {
-      "Invoice": "aggregation",
-      "Contract": "aggregation",
-      "Packing list": "processed_tables_multi"
-    }
+    "Invoice": "aggregation",
+    "Contract": "aggregation",
+    "Packing list": "processed_tables_multi"
   },
   "styling_bundle": {
     "_comment": "Centralized styling - all styles explicit per sheet (no inheritance due to inconsistent styling across invoices)",

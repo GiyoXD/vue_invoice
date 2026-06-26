@@ -121,8 +121,7 @@ class BundledConfigLoader:
     
     def get_sheets_to_process(self) -> List[str]:
         """Get list of sheets to process."""
-        # Support alias 'processing_order' for clarity
-        return self._processing.get('sheets', self._processing.get('processing_order', []))
+        return list(self._processing.keys())
     
     def get_data_source_type(self, sheet_name: str) -> Optional[str]:
         """
@@ -131,9 +130,7 @@ class BundledConfigLoader:
         Returns:
             'aggregation', 'DAF_aggregation', 'processed_tables_multi', etc.
         """
-        # Support alias 'sheet_processing_types' for clarity
-        data_sources = self._processing.get('data_sources', self._processing.get('sheet_processing_types', {}))
-        return data_sources.get(sheet_name)
+        return self._processing.get(sheet_name)
     
     def get_sheet_config(self, sheet_name: str) -> Dict[str, Any]:
         """

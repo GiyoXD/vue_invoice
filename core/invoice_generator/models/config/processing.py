@@ -1,6 +1,11 @@
-from pydantic import BaseModel
+from pydantic import RootModel
 from typing import Dict, List
 
-class ProcessingModel(BaseModel):
-    sheets: List[str]
-    data_sources: Dict[str, str]
+class ProcessingModel(RootModel[Dict[str, str]]):
+    @property
+    def sheets(self) -> List[str]:
+        return list(self.root.keys())
+
+    @property
+    def data_sources(self) -> Dict[str, str]:
+        return self.root
