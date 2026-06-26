@@ -37,7 +37,6 @@ class SheetProcessor(ABC):
         
         self.invoice_data = ctx.data.invoice_data
         self.args = ctx.data.cli_args
-        self.final_grand_total_pallets = ctx.data.final_grand_total_pallets
         self.processing_successful = True
         self._use_bundled = self.config_loader is not None
         self.data_mapping_config = None  # Deprecated
@@ -165,8 +164,7 @@ class SheetProcessor(ABC):
         if total_gross_weight is not None:
             context_overrides["total_gross_weight"] = total_gross_weight
         
-        # Add final_grand_total_pallets context override
-        context_overrides["final_grand_total_pallets"] = self.final_grand_total_pallets
+        # Add context override
         context_overrides["is_last_table"] = is_last_table
 
         return BuilderConfigResolver(
@@ -175,7 +173,7 @@ class SheetProcessor(ABC):
             worksheet=self.output_worksheet,
             args=self.args,
             invoice_data=self.invoice_data,
-            pallets=self.final_grand_total_pallets if is_last_table else 0,
+            pallets=0,
             **context_overrides
         )
 
@@ -274,7 +272,6 @@ class SheetProcessor(ABC):
             sheet_name=self.sheet_name,
             all_sheet_configs=context_config.get('all_sheet_configs', {}),
             args=self.args,
-            final_grand_total_pallets=context_config.get('pallets', 0),
             total_net_weight=context_config.get('total_net_weight'),
             total_gross_weight=context_config.get('total_gross_weight'),
             is_last_table=context_config.get('is_last_table', False),

@@ -165,7 +165,7 @@ def count_layout_columns(config_loader, sheet_name: str) -> Optional[int]:
     children col_qty_pcs + col_qty_sf = 2 actual columns, not 3).
 
     Args:
-        config_loader: The BundledConfigLoader instance.
+        config_loader: The ConfigStore instance.
         sheet_name: Name of the sheet to count columns for.
 
     Returns:

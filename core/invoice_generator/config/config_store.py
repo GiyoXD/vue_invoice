@@ -1,124 +1,43 @@
-# invoice_generator/config/config_loader.py
-"""
-Config Loader for Bundled Config Format (v2.1)
-
-This module provides a clean interface to load and parse bundled configuration files.
-It understands the v2.1 bundled format structure and provides easy access to sheet configs.
-
-Bundled Config Structure:
-    - _meta: metadata (version, customer, etc.)
-    - processing: sheets list, data_sources
-    - styling_bundle: per-sheet styling configs
-    - layout_bundle: per-sheet layout configs (headers, blanks, static content)
-    - data_bundle: per-sheet data configs (mappings, header_info)
-"""
-
-import json
-from pathlib import Path
-from typing import Any, Dict, Optional, List
+import copy
 import logging
-import re
-from openpyxl.utils.cell import column_index_from_string
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
 
-class BundledConfigLoader:
+class ConfigStore:
     """
-    Loads and parses bundled config files (v2.1+).
-    
-    Provides clean access to per-sheet configurations without polluting the main script.
+    Manages the state and provides query interfaces for loaded bundled configuration and template data.
+    Does not perform any File I/O.
     """
     
-    def __init__(self, config_path: Path):
+    def __init__(self, config_data: Dict[str, Any], template_data: Optional[Dict[str, Any]] = None):
         """
-        Initialize the config loader.
+        Initialize the ConfigStore with configuration and template dictionaries.
         
         Args:
-            config_path: Path to the bundled config JSON file
+            config_data: Parsed configuration dictionary.
+            template_data: Parsed template layout dictionary (optional).
         """
-        self.config_path = config_path
-        self.raw_config: Dict[str, Any] = {}
-        self.version: str = "unknown"
-        self.customer: str = "unknown"
+        self.raw_config = config_data
+        
+        # Extract metadata
+        meta = config_data.get('_meta', {})
+        self.version = meta.get('config_version', 'unknown')
+        self.customer = meta.get('customer', 'unknown')
         
         # Parsed sections
-        self._processing: Dict[str, Any] = {}
-        self._styling_bundle: Dict[str, Any] = {}
-        self._layout_bundle: Dict[str, Any] = {}
-        self._data_bundle: Dict[str, Any] = {}
+        self._processing = config_data.get('processing', {})
+        self._styling_bundle = config_data.get('styling_bundle', {})
+        self._layout_bundle = config_data.get('layout_bundle', {})
+        self._data_bundle = config_data.get('data_bundle', {})
+        if template_data and "template_layout" in template_data:
+            self.template_json_config = template_data["template_layout"]
+        else:
+            self.template_json_config = template_data
         
-        self._load()
-    
-    @classmethod
-    def from_dict(cls, config_data: dict, template_json_data: dict = None):
-        """Create a config loader directly from parsed data (no file I/O)."""
-        instance = cls.__new__(cls)
-        instance.config_path = Path("<db>")
-        instance.raw_config = config_data
-        instance.version = config_data.get('_meta', {}).get('config_version', 'unknown')
-        instance.customer = config_data.get('_meta', {}).get('customer', 'unknown')
-        instance._processing = config_data.get('processing', {})
-        instance._styling_bundle = config_data.get('styling_bundle', {})
-        instance._layout_bundle = config_data.get('layout_bundle', {})
-        instance._data_bundle = config_data.get('data_bundle', {})
-        instance.template_json_config = template_json_data.get('template_layout', {}) if template_json_data else None
-        logger.info(f"Configuration loaded from in-memory data. Version: {instance.version}")
-        return instance
-    
-    def _load(self) -> None:
-        """Load and parse the config file."""
-        logger.debug(f"Loading configuration from: {self.config_path}")
-        try:
-            with open(self.config_path, 'r', encoding='utf-8') as f:
-                self.raw_config = json.load(f)
-            
-            # Extract metadata
-            meta = self.raw_config.get('_meta', {})
-            self.version = meta.get('config_version', 'unknown')
-            self.customer = meta.get('customer', 'unknown')
-            logger.info(f"Configuration loaded successfully.")
-            logger.info(f"Detected bundled config version: {self.version}")
-            
-            # Parse main sections
-            self._processing = self.raw_config.get('processing', {})
-            self._styling_bundle = self.raw_config.get('styling_bundle', {})
-            self._layout_bundle = self.raw_config.get('layout_bundle', {})
-            self._data_bundle = self.raw_config.get('data_bundle', {})
-            
-            # Load sibling template config for JSON-based reconstruction
-            self.template_json_config: Dict[str, Any] = None
-            try:
-                # Deduce template json path: same dir, "{config_name}_template.json"
-                # Convention: {CLIENT}_config.json -> {CLIENT}_template.json
-                # OR just side by side replacement: _config.json -> _template.json
-                stem = self.config_path.stem
-                parent = self.config_path.parent
-                
-                # Try simple replacement if suffix exists
-                if stem.endswith('_config'):
-                    template_name = stem.replace('_config', '_template') + ".json"
-                else:
-                    template_name = f"{stem}_template.json"
-                    
-                template_path = parent / template_name
-                if template_path.exists():
-                    with open(template_path, 'r', encoding='utf-8') as f:
-                        raw_tmpl = json.load(f)
-                        # The file usually has root {"template_layout": {...}}
-                        self.template_json_config = raw_tmpl.get("template_layout", {})
-                        logger.info(f"Loaded sibling template config from: {template_path}")
-                else:
-                    logger.debug(f"No sibling template JSON found at {template_path}")
-            except Exception as e:
-                logger.warning(f"Failed to load sibling template JSON: {e}")
-
-        except Exception as e:
-            logger.error(f"Error loading configuration file {self.config_path}: {e}")
-            raise
-    
-    # --- Public Interface ---
-    
+        logger.info(f"ConfigStore initialized successfully. Version: {self.version}")
+        
     def get_sheets_to_process(self) -> List[str]:
         """Get list of sheets to process."""
         return list(self._processing.keys())
@@ -262,7 +181,6 @@ class BundledConfigLoader:
         Returns:
             The sheet's layout config with defaults merged in.
         """
-        import copy
         sheet_config = copy.deepcopy(self._layout_bundle.get(sheet_name, {}))
 
         defaults = self._layout_bundle.get('defaults', {})
@@ -315,12 +233,10 @@ class BundledConfigLoader:
     def get_data_config(self, sheet_name: str) -> Dict[str, Any]:
         """Get data configuration for a sheet (mappings, header_info, etc.)."""
         return self._data_bundle.get(sheet_name, {})
-    
-
         
     def get_template_json_config(self) -> Optional[Dict[str, Any]]:
         """Get the loaded sibling template JSON config if available."""
-        return getattr(self, 'template_json_config', None)
+        return self.template_json_config
     
     def has_static_sheets(self) -> bool:
         """Check if the config explicitly indicates presence of static sheets."""
@@ -366,8 +282,6 @@ class BundledConfigLoader:
 
         logger.debug(f"[PrintArea] Layout column count for '{sheet_name}': {count}")
         return count
-
-    # --- Raw Access (for advanced use cases) ---
     
     def get_raw_config(self) -> Dict[str, Any]:
         """Get the raw config dictionary (avoid using this if possible)."""

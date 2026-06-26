@@ -29,7 +29,6 @@ class TableBuilder:
         resolved_data: ResolvedTableData,
         sheet_name: str,
         args: Any = None,
-        final_grand_total_pallets: int = 0,
         total_net_weight: Optional[float] = None,
         total_gross_weight: Optional[float] = None,
         is_last_table: bool = False,
@@ -46,7 +45,6 @@ class TableBuilder:
         self.resolved_data = resolved_data
         self.sheet_name = sheet_name
         self.args = args
-        self.final_grand_total_pallets = final_grand_total_pallets
         self.total_net_weight = total_net_weight
         self.total_gross_weight = total_gross_weight
         self.is_last_table = is_last_table
@@ -179,7 +177,7 @@ class TableBuilder:
 
         # 7. Build Footer
         if not self.skip_footer_builder:
-            pallet_count = self.footer_data.total_pallets if self.footer_data else self.final_grand_total_pallets
+            pallet_count = self.footer_data.total_pallets if self.footer_data else 0
 
             try:
                 footer_builder = TableFooterBuilder(

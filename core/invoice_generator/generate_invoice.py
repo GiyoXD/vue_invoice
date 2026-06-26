@@ -9,7 +9,8 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 import openpyxl
 
-from core.invoice_generator.config.config_loader import BundledConfigLoader
+from core.invoice_generator.config.config_reader import ConfigFileReader
+from core.invoice_generator.config.config_store import ConfigStore
 from core.invoice_generator.builders.deep_sheet_builder import DeepSheetBuilder
 from core.invoice_generator.processors.single_table_processor import SingleTableProcessor
 from core.invoice_generator.processors.multi_table_processor import MultiTableProcessor
@@ -133,12 +134,11 @@ class GeneratorContext:
         self.paths: Dict[str, Path] = {}
         
         # Config & Resources
-        self.config_loader: Optional[BundledConfigLoader] = None
+        self.config_loader: Optional[ConfigStore] = None
         self.template_workbook: Optional[openpyxl.Workbook] = None
         self.output_workbook: Optional[openpyxl.Workbook] = None
         
         # Derived
-        self.final_grand_total_pallets = 0
         self.template_xlsx_bytes: Optional[bytes] = None
 
     # --- Convenience accessors for backward compatibility ---
@@ -176,7 +176,7 @@ def _load_resources(ctx: GeneratorContext):
     """Stage 1: Resolve assets and load configuration."""
     # Check if direct data was provided via generation options
     if ctx.options.explicit_config_data is not None:
-        ctx.config_loader = BundledConfigLoader.from_dict(
+        ctx.config_loader = ConfigStore(
             ctx.options.explicit_config_data,
             ctx.options.explicit_template_json_data
         )
@@ -206,32 +206,16 @@ def _load_resources(ctx: GeneratorContext):
     # B. Load Config
     try:
         if has_direct_data:
-            ctx.config_loader = BundledConfigLoader.from_dict(assets.config_data, assets.template_json_data)
+            ctx.config_loader = ConfigStore(assets.config_data, assets.template_json_data)
         else:
-            ctx.config_loader = BundledConfigLoader(ctx.paths['config'])
+            config_data, template_data = ConfigFileReader.load(ctx.paths['config'])
+            ctx.config_loader = ConfigStore(config_data, template_data)
     except Exception as e:
         raise RuntimeError(f"Failed to load configuration: {e}") from e
 
     # Store xlsx bytes for downstream use (unknown sheet injection)
     if has_direct_data and assets.template_xlsx_bytes:
         ctx.template_xlsx_bytes = assets.template_xlsx_bytes
-
-    # C. Calculate Grand Total Pallets
-    # Read the pre-calculated total from footer_data.grand_total (set by data_parser)
-    footer_data = ctx.invoice_data.get('footer_data', {}) or {}
-    grand_total = footer_data.get('grand_total')
-    
-    if not grand_total or 'col_pallet_count' not in grand_total:
-        raise ValueError("CRITICAL: Missing grand total pallet count in parsed data. Cannot generate invoice.")
-        
-    gt_pallets = grand_total.get('col_pallet_count', 0)
-    
-    if gt_pallets:
-        ctx.final_grand_total_pallets = int(gt_pallets)
-        logger.info(f"Grand total pallets from footer_data: {ctx.final_grand_total_pallets}")
-    else:
-        ctx.final_grand_total_pallets = 0
-        logger.warning("⚠ No pallet count found in footer_data.grand_total.col_pallet_count")
 
 
 def _prepare_workbooks(ctx: GeneratorContext):
@@ -304,8 +288,7 @@ def _process_sheets(ctx: GeneratorContext, session: GenerationSession):
             )
             data_ctx = RuntimeDataContext(
                 invoice_data=ctx.invoice_data,
-                cli_args=proc_args,
-                final_grand_total_pallets=ctx.final_grand_total_pallets
+                cli_args=proc_args
             )
             proc_ctx = ProcessorContext(io=io_ctx, config=config_ctx, data=data_ctx)
 

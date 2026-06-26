@@ -40,11 +40,13 @@ class ConfigValidator:
 
         # 3. Processing
         processing = config.get("processing", {})
-        if "sheets" not in processing:
+        sheets = [k for k in processing.keys() if not k.startswith("_")] if isinstance(processing, dict) else []
+
+        if not sheets:
              errors.append({
-                 "issue": "Missing Field: 'processing.sheets'",
-                 "detail": "List of sheets to process (e.g. Invoice, Packing list).",
-                 "fix": "Add 'sheets' list to 'processing'."
+                 "issue": "Missing Field: 'processing'",
+                 "detail": "Dictionary of sheets and data sources to process (e.g. Invoice: aggregation).",
+                 "fix": "Add sheet names and data source mapping to 'processing'."
              })
         
         # 4. Styling Bundle (Deep Check)
@@ -58,20 +60,20 @@ class ConfigValidator:
                 })
             
             # Check for per-sheet styling
-            for sheet in processing.get("sheets", []):
+            for sheet in sheets:
                 if sheet not in sb:
                      errors.append({
                          "issue": f"Missing Styling for Sheet: '{sheet}'",
                          "detail": f"Every sheet listed in 'processing' needs a matching entry in 'styling_bundle'.",
                          "fix": f"Add '{sheet}' to 'styling_bundle' with its column/row styles."
                      })
-
+ 
         # 5. Layout Bundle (Deep Check)
         if "layout_bundle" in config:
             lb = config.get("layout_bundle", {})
             
             # Check for per-sheet layout
-            for sheet in processing.get("sheets", []):
+            for sheet in sheets:
                 if sheet not in lb:
                      errors.append({
                          "issue": f"Missing Layout for Sheet: '{sheet}'",

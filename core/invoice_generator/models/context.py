@@ -24,7 +24,6 @@ class RuntimeDataContext:
     """Holds the raw input data and runtime arguments."""
     invoice_data: Dict[str, Any]
     cli_args: Any
-    final_grand_total_pallets: int
 
 @dataclass
 class ProcessorContext:

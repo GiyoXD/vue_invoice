@@ -33,7 +33,6 @@ class LayoutBuilder:
         sheet_name: str,
         all_sheet_configs: Dict[str, Any],
         args: Any = None,
-        final_grand_total_pallets: int = 0,
         total_net_weight: Optional[float] = None,
         total_gross_weight: Optional[float] = None,
         is_last_table: bool = False,
@@ -60,7 +59,6 @@ class LayoutBuilder:
         self.sheet_name = sheet_name
         self.all_sheet_configs = all_sheet_configs
         self.args = args
-        self.final_grand_total_pallets = final_grand_total_pallets
         self.total_net_weight = total_net_weight
         self.total_gross_weight = total_gross_weight
         self.is_last_table = is_last_table
@@ -134,7 +132,6 @@ class LayoutBuilder:
             resolved_data=self.resolved_data,
             sheet_name=self.sheet_name,
             args=self.args,
-            final_grand_total_pallets=self.final_grand_total_pallets,
             total_net_weight=self.total_net_weight,
             total_gross_weight=self.total_gross_weight,
             is_last_table=self.is_last_table,

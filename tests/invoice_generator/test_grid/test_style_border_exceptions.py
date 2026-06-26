@@ -1,14 +1,15 @@
 import pytest
 import json
 from pathlib import Path
-from core.invoice_generator.config.config_loader import BundledConfigLoader
+from core.invoice_generator.config.config_reader import ConfigFileReader
+from core.invoice_generator.config.config_store import ConfigStore
 from core.invoice_generator.styling.style_registry import StyleRegistry
 
 def test_border_exceptions_resolved_correctly(tmp_path):
     # Prepare dummy bundle config with defaults.borders.exceptions
     config_data = {
         "_meta": {"config_version": "2.2_strict_mode"},
-        "processing": {"sheets": ["Invoice"], "data_sources": {"Invoice": "aggregation"}},
+        "processing": {"Invoice": "aggregation"},
         "styling_bundle": {
             "defaults": {
                 "borders": {
@@ -43,7 +44,8 @@ def test_border_exceptions_resolved_correctly(tmp_path):
     with open(config_file, "w") as f:
         json.dump(config_data, f)
         
-    loader = BundledConfigLoader(config_file)
+    config_data, template_data = ConfigFileReader.load(config_file)
+    loader = ConfigStore(config_data, template_data)
     styling_config = loader.get_styling_config("Invoice")
     
     # Assert exception merged into columns
