@@ -3,13 +3,13 @@
     "config_version": "2.2_strict_mode",
     "customer": "JF",
     "created": "2025-12-20",
-    "description": "Strict Mode (Zero-Config) - Auto-mapped Packing List"
-  },
-  "data_preparation_module_hint": {
-    "priority": [
-      "po"
-    ],
-    "numbers_per_group_by_po": 7
+    "description": "Strict Mode (Zero-Config) - Auto-mapped Packing List",
+    "data_preparation_module_hint": {
+      "priority": [
+        "po"
+      ],
+      "numbers_per_group_by_po": 7
+    }
   },
   "template_store": {},
   "features": {

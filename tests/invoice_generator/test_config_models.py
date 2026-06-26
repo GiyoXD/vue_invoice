@@ -20,6 +20,7 @@ def test_load_and_validate_bundle_config():
     # 4. Verify Meta
     assert bundle.meta.customer == "JF"
     assert bundle.meta.config_version == "2.2_strict_mode"
+    assert bundle.meta.has_static_sheets is False
 
     # 5. Verify Processing
     assert bundle.processing.sheets == ["Invoice", "Contract", "Packing list"]
@@ -27,9 +28,9 @@ def test_load_and_validate_bundle_config():
     assert bundle.processing.data_sources["Packing list"] == "processed_tables_multi"
 
     # 6. Verify Data Preparation Hint (Typo alias check)
-    assert bundle.data_preparation_module_hint is not None
-    assert bundle.data_preparation_module_hint.priority == ["po"]
-    assert bundle.data_preparation_module_hint.numbers_per_group_by_po == 7
+    assert bundle.meta.data_preparation_module_hint is not None
+    assert bundle.meta.data_preparation_module_hint.priority == ["po"]
+    assert bundle.meta.data_preparation_module_hint.numbers_per_group_by_po == 7
 
     # 7. Verify Layout configurations
     invoice_layout = bundle.layout_bundle.get("Invoice")

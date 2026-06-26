@@ -240,7 +240,8 @@ class ConfigStore:
     
     def has_static_sheets(self) -> bool:
         """Check if the config explicitly indicates presence of static sheets."""
-        return self.raw_config.get('has_static_sheets', False)
+        meta = self.raw_config.get('_meta', {})
+        return meta.get('has_static_sheets', False)
 
     def is_bundled_config(self) -> bool:
         """Check if this is a bundled config (v2.1+)."""

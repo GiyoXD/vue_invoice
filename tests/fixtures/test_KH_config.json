@@ -7,14 +7,14 @@
     "description": "Auto-generated Master Config for CT&INV&PL JF26023 FCA(1)",
     "source_template": "C:\\Users\\JPZ031127\\Desktop\\project\\vue_invoice_project\\database\\temp_uploads\\CT&INV&PL JF26023 FCA(1).xlsx",
     "generator": "blueprint_generator",
-    "pricing_mode": "standard"
-  },
-  "has_static_sheets": true,
-  "data_preparation_module_hint": {
-    "priority": [
-      "po"
-    ],
-    "numbers_per_group_by_po": 7
+    "pricing_mode": "standard",
+    "has_static_sheets": true,
+    "data_preparation_module_hint": {
+      "priority": [
+        "po"
+      ],
+      "numbers_per_group_by_po": 7
+    }
   },
   "processing": {
     "Contract": "aggregation",

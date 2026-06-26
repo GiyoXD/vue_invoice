@@ -1,15 +1,17 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List
 
+class DataPrepHintModel(BaseModel):
+    priority: List[str] = Field(default_factory=list)
+    numbers_per_group_by_po: Optional[int] = None
+
 class MetaModel(BaseModel):
     config_version: str
     customer: str
     created: Optional[str] = None
     description: Optional[str] = None
-
-class DataPrepHintModel(BaseModel):
-    priority: List[str] = Field(default_factory=list)
-    numbers_per_group_by_po: Optional[int] = None
+    has_static_sheets: bool = False
+    data_preparation_module_hint: Optional[DataPrepHintModel] = None
 
 class FeaturesModel(BaseModel):
     enable_text_replacement: bool = False

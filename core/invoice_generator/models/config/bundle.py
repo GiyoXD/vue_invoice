@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import Dict, Optional, Union, Any
-from .meta import MetaModel, DataPrepHintModel, FeaturesModel
+from .meta import MetaModel, FeaturesModel
 from .processing import ProcessingModel
 from .styling import StylingDefaultsModel, SheetStylingModel
 from .layout import SheetLayoutModel, FooterConfigModel
@@ -12,7 +12,6 @@ class ClientConfigBundle(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
     meta: MetaModel = Field(..., alias="_meta")
-    data_preparation_module_hint: Optional[DataPrepHintModel] = None
     features: Optional[FeaturesModel] = None
     processing: ProcessingModel
     styling_bundle: Dict[str, Union[StylingDefaultsModel, SheetStylingModel]]

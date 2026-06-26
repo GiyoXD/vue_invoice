@@ -51,8 +51,6 @@ class ConfigBuilder:
         
         bundle = {
             "_meta": self._build_meta(analysis),
-            "has_static_sheets": analysis.has_static_sheets,
-            "data_preparation_module_hint": self._build_data_prep_hints(),
             "processing": self._build_processing(analysis),
             "styling_bundle": self._build_styling_bundle(analysis),
             "layout_bundle": self._build_layout_bundle(analysis)
@@ -69,7 +67,9 @@ class ConfigBuilder:
             "compatibility": "strict",
             "description": f"Auto-generated Master Config for {analysis.customer_code}",
             "source_template": analysis.file_path,
-            "generator": "blueprint_generator"
+            "generator": "blueprint_generator",
+            "has_static_sheets": analysis.has_static_sheets,
+            "data_preparation_module_hint": self._build_data_prep_hints()
         }
     
     def _build_data_prep_hints(self) -> Dict[str, Any]:
