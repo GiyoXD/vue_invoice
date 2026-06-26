@@ -82,14 +82,8 @@ class ConfigBuilder:
     
     def _build_processing(self, analysis: TemplateAnalysisResult) -> Dict[str, Any]:
         """Build processing section."""
-        sheets = [sheet.name for sheet in analysis.sheets]
-        data_sources = {sheet.name: sheet.data_source for sheet in analysis.sheets}
-        
-        return {
-            "sheets": sheets,
-            "data_sources": data_sources,
-            "source_file": analysis.file_path
-        }
+        # Map sheet names directly to their data source (processing mode)
+        return {sheet.name: sheet.data_source for sheet in analysis.sheets}
 
     def _build_styling_bundle(self, analysis: TemplateAnalysisResult) -> Dict[str, Any]:
         """Build styling_bundle section."""
