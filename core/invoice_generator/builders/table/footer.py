@@ -101,14 +101,21 @@ class TableFooterBuilder(TableSectionBuilder):
             
             before_footer_addon = add_ons.get("before_footer", {})
             if before_footer_addon.get("enabled", False) and footer_type == "regular":
+                start_row = current_footer_row
                 self._build_before_footer(current_footer_row, before_footer_addon)
                 current_footer_row += 1
+                self.grid.set_section_bounds("footer_addon_before", self.grid._cursor_row + start_row, self.grid._cursor_row + current_footer_row - 1)
             
+            start_row = current_footer_row
             self._build_main_footer(current_footer_row, footer_type)
             current_footer_row += 1
+            self.grid.set_section_bounds("footer", self.grid._cursor_row + start_row, self.grid._cursor_row + current_footer_row - 1)
 
             if add_ons:
+                start_row = current_footer_row
                 current_footer_row = self._process_footer_addons(current_footer_row, add_ons, footer_type)
+                if current_footer_row > start_row:
+                    self.grid.set_section_bounds("footer_addon", self.grid._cursor_row + start_row, self.grid._cursor_row + current_footer_row - 1)
 
             self.grid.advance_row(current_footer_row)
             logger.info(f"[FooterBuilder] COMPLETE - generated {current_footer_row} rows")

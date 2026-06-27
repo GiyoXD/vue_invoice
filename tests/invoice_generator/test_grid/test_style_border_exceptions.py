@@ -4,9 +4,13 @@ from pathlib import Path
 from core.invoice_generator.config.config_reader import ConfigFileReader
 from core.invoice_generator.config.config_store import ConfigStore
 from core.invoice_generator.styling.style_registry import StyleRegistry
+from core.invoice_generator.styling.border_resolver import BorderResolver
+from core.invoice_generator.builders.table.table_grid import TableGrid
+from core.models.cell import BorderStyle
 
 def test_border_exceptions_resolved_correctly(tmp_path):
-    # Prepare dummy bundle config with defaults.borders.exceptions
+    """Border exceptions from global defaults are merged into column configs
+    and correctly used by BorderResolver (not StyleRegistry)."""
     config_data = {
         "_meta": {"config_version": "2.2_strict_mode"},
         "processing": {"Invoice": "aggregation"},
@@ -26,12 +30,9 @@ def test_border_exceptions_resolved_correctly(tmp_path):
                     "col_qty": {"format": "#,##0", "alignment": "center"}
                 },
                 "row_contexts": {
-                    "data": {
-                        "bold": False,
-                        "font_size": 12,
-                        "font_name": "Arial",
-                        "border_style": "thin"
-                    }
+                    "header": {"bold": True, "font_size": 12, "font_name": "Arial"},
+                    "data": {"bold": False, "font_size": 12, "font_name": "Arial"},
+                    "footer": {"bold": True, "font_size": 12, "font_name": "Arial"}
                 }
             }
         },
@@ -39,7 +40,6 @@ def test_border_exceptions_resolved_correctly(tmp_path):
         "data_bundle": {}
     }
     
-    # Write config file
     config_file = tmp_path / "test_config.json"
     with open(config_file, "w") as f:
         json.dump(config_data, f)
@@ -48,14 +48,40 @@ def test_border_exceptions_resolved_correctly(tmp_path):
     loader = ConfigStore(config_data, template_data)
     styling_config = loader.get_styling_config("Invoice")
     
-    # Assert exception merged into columns
+    # 1. Config store still merges exceptions into column configs
     assert styling_config["columns"]["col_static"]["border_style"] == "sides_only"
     assert "border_style" not in styling_config["columns"]["col_qty"]
     
-    # Assert StyleRegistry uses border_style
+    # 2. StyleRegistry no longer returns border_style
     registry = StyleRegistry(styling_config)
     style = registry.get_style("col_static", context="data")
-    assert style["border_style"] == "sides_only"
+    assert "border_style" not in style
     
-    style_qty = registry.get_style("col_qty", context="data")
-    assert style_qty["border_style"] == "thin"
+    # 3. BorderResolver correctly applies the column override
+    grid = TableGrid(column_mapping={"col_static": 1, "col_qty": 2}, style_registry=registry)
+    grid.set_start_row(1)
+    grid.mark_section_start("data")
+    grid.write(0, "col_static", "static_val", context="data")
+    grid.write(0, "col_qty", 100, context="data")
+    grid.advance_row(1)
+    grid.mark_section_end("data")
+    
+    resolver = BorderResolver(
+        default_border="full_grid",
+        column_overrides={"col_static": "sides_only"}
+    )
+    resolver.apply(grid)
+    
+    # col_static should have sides_only (but with bottom on last row)
+    static_cell = grid._grid[0][1]
+    assert static_cell.style.border.left == "thin"
+    assert static_cell.style.border.right == "thin"
+    # Last row gets bottom added
+    assert static_cell.style.border.bottom == "thin"
+    
+    # col_qty should have full thin border (no override, full_grid default)
+    qty_cell = grid._grid[0][2]
+    assert qty_cell.style.border.left == "thin"
+    assert qty_cell.style.border.right == "thin"
+    assert qty_cell.style.border.top == "thin"
+    assert qty_cell.style.border.bottom == "thin"

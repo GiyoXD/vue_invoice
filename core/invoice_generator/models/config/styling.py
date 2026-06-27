@@ -23,7 +23,6 @@ class RowContextStyleModel(BaseModel):
     font_size: int = 12
     font_name: str = "Arial"
     fill_color: Optional[str] = None
-    border_style: Optional[str] = "thin"
     row_height: Optional[float] = None
     add_ons: Optional[Dict[str, Any]] = None
 
@@ -31,3 +30,5 @@ class SheetStylingModel(BaseModel):
     columns: Dict[str, CellStyleModel] = Field(default_factory=dict)
     row_contexts: Dict[str, RowContextStyleModel] = Field(default_factory=dict)
     row_heights: Dict[str, float] = Field(default_factory=dict)
+    default_border: Optional[str] = "full_grid"
+

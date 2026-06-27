@@ -63,27 +63,14 @@ def convert_registry_style_to_cell_style(style_dict: Dict[str, Any]) -> CellStyl
             color=fill_color
         )
         
-    # border
-    border_style = None
-    border_style_name = style_dict.get('border_style')
-    if border_style_name:
-        if border_style_name == 'no_bottom':
-            border_style = BorderStyle(left='thin', right='thin', top='thin', bottom=None)
-        elif border_style_name == 'sides_only':
-            border_style = BorderStyle(left='thin', right='thin', top=None, bottom=None)
-        else:
-            border_style = BorderStyle(
-                left=border_style_name,
-                right=border_style_name,
-                top=border_style_name,
-                bottom=border_style_name
-            )
+    # border: NOT handled here — BorderResolver stamps borders directly onto cells
+    # after all sections are built. See border_resolver.py.
             
     return CellStyle(
         font=font_style,
         alignment=alignment_style,
         fill=fill_style,
-        border=border_style,
+        border=None,
         number_format=style_dict.get('format', 'General')
     )
 

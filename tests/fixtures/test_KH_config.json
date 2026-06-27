@@ -22,17 +22,7 @@
     "Packing list": "processed_tables_multi"
   },
   "styling_bundle": {
-    "_comment": "Centralized styling - explicit per sheet",
-    "defaults": {
-      "borders": {
-        "_comment": "Border configuration",
-        "default_border": "full_grid",
-        "default_style": "thin",
-        "exceptions": {
-          "col_static": "side_only"
-        }
-      }
-    },
+    "defaults": {},
     "Contract": {
       "_comment": "ID-driven styling with columns + row_contexts",
       "columns": {
@@ -87,12 +77,12 @@
       }
     },
     "Invoice": {
-      "_comment": "ID-driven styling with columns + row_contexts",
       "columns": {
         "col_static": {
           "format": "@",
           "alignment": "center",
-          "wrap_text": true
+          "wrap_text": true,
+          "border_style": "side_only"
         },
         "col_po": {
           "format": "@",
@@ -150,12 +140,12 @@
       }
     },
     "Packing list": {
-      "_comment": "ID-driven styling with columns + row_contexts",
       "columns": {
         "col_static": {
           "format": "@",
           "alignment": "center",
-          "wrap_text": true
+          "wrap_text": true,
+          "border_style": "side_only"
         },
         "col_po": {
           "format": "@",

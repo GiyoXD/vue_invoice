@@ -64,6 +64,10 @@ class TableGrid(CoreGrid):
         end = self._cursor_row - 1
         self._sections[name] = (start, end)
 
+    def set_section_bounds(self, name: str, start: int, end: int):
+        """Explicitly sets the start and end rows (relative to grid) for a section."""
+        self._sections[name] = (start, end)
+
     def get_section_range(self, name: str) -> Tuple[int, int]:
         """Returns the physical start and end row indices for the named section."""
         if name not in self._sections:
@@ -91,7 +95,8 @@ class TableGrid(CoreGrid):
     def write(self, row: int, col_id: str, value: Any, context: str = 'data'):
         """
         Writes a value to the grid at the given relative row and logical column ID.
-        Applies styling automatically based on the given context.
+        Applies styling (font, format, alignment, fill) based on the given context.
+        Borders are applied separately by BorderResolver after all sections are built.
         """
         col_idx = self._resolve_column(col_id)
         if not col_idx:
@@ -105,7 +110,7 @@ class TableGrid(CoreGrid):
             if self.dimension_registry:
                 self._row_heights[actual_row] = self.dimension_registry.get_row_height(context)
 
-        # Apply style
+        # Apply style (font, format, alignment, fill — no borders)
         cell_style = None
         if self.style_registry:
             if isinstance(col_id, str):

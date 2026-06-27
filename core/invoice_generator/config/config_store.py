@@ -94,6 +94,7 @@ class ConfigStore:
             # Extract and merge border exceptions from global defaults
             defaults = self._styling_bundle.get('defaults') or {}
             borders = defaults.get('borders') or {}
+            default_border = borders.get('default_border', 'full_grid')
             border_exceptions = borders.get('exceptions') or {}
             if isinstance(border_exceptions, dict):
                 for col_id, border_style in border_exceptions.items():
@@ -105,7 +106,8 @@ class ConfigStore:
             
             return {
                 'columns': columns_copy,
-                'row_contexts': sheet_styling['row_contexts']
+                'row_contexts': sheet_styling['row_contexts'],
+                'default_border': default_border
             }
         
         # OLD FORMAT: Transform nested bundled format to flat StylingConfigModel format

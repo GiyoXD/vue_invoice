@@ -88,16 +88,8 @@ class ConfigBuilder:
     def _build_styling_bundle(self, analysis: TemplateAnalysisResult) -> Dict[str, Any]:
         """Build styling_bundle section."""
         styling = {
-            "_comment": "Centralized styling - explicit per sheet",
             "defaults": {
-                "borders": {
-                    "_comment": "Border configuration",
-                    "default_border": "full_grid",
-                    "default_style": "thin",
-                    "exceptions": {
-                        "col_static": "side_only"
-                    }
-                }
+                "default_border": "full_grid"
             }
         }
         
@@ -109,7 +101,6 @@ class ConfigBuilder:
     def _build_sheet_styling(self, sheet: SheetAnalysis) -> Dict[str, Any]:
         """Build styling for a single sheet."""
         sheet_styling = {
-            "_comment": "ID-driven styling with columns + row_contexts",
             "columns": {},
             "row_contexts": {}
         }
@@ -122,6 +113,8 @@ class ConfigBuilder:
             }
             if col.wrap_text:
                 col_style["wrap_text"] = True
+            if col.id == 'col_static':
+                col_style["border_style"] = "side_only"
             
             sheet_styling["columns"][col.id] = col_style
             
@@ -131,6 +124,8 @@ class ConfigBuilder:
                     "format": child.format,
                     "alignment": child.alignment
                 }
+                if child.id == 'col_static':
+                    child_style["border_style"] = "side_only"
                 sheet_styling["columns"][child.id] = child_style
         
         # Build row context styles
