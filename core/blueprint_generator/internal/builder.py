@@ -159,6 +159,13 @@ class ConfigBuilder:
                 "font_name": h_name,
                 "border_style": "thin",
                 "row_height": float(sheet.row_heights.get("footer", 1))
+            },
+            "footer_addon": {
+                "bold": True,
+                "font_size": h_size,
+                "font_name": h_name,
+                "border_style": "none",
+                "row_height": float(sheet.row_heights.get("footer", 1))
             }
         }
         
@@ -338,105 +345,104 @@ class ConfigBuilder:
     
     def _build_footer(self, sheet: SheetAnalysis) -> Dict[str, Any]:
         """
-        Build footer section for a sheet.
-        
-        Only emits sheet-specific footer data (merge_rules, add_ons).
-        sum_cols and footer_cells are inherited from layout_bundle.defaults.footer.
+        Build footer section for a sheet using the declarative rows layout schema.
         """
-        # --- Detect merge rules from scanner ---
-        merge_rules = []
-        
-        if sheet.footer_info:
-            self.logger.info(f"  [Smart] Using detected footer info for {sheet.name}")
-            total_col = sheet.footer_info.total_text_col_id
-            
-            # Create merge rule if colspan > 1
-            if sheet.footer_info.merge_curr_colspan > 1:
-                merge_rules.append({
-                    "start_column_id": total_col,
-                    "colspan": sheet.footer_info.merge_curr_colspan,
-                    "comment": "Auto-detected from template"
-                })
-                self.logger.info(f"    [Smart] Added merge rule: {total_col} spans {sheet.footer_info.merge_curr_colspan} columns")
-        else:
-            self.logger.warning(f"  ⚠ No footer 'TOTAL' text found for {sheet.name}. Check template footer row.")
-        
-        footer = {
-            "_comment": "Inherits sum_cols from defaults. footer_cells detected per-sheet.",
-            "merge_rules": merge_rules,
-            "add_ons": self._build_footer_addons(sheet)
-        }
-        
-        # Build per-sheet footer_cells from detected FooterInfo
-        if sheet.footer_info:
-            footer_cells = []
-            # Add TOTAL label cell (e.g. ["TOTAL OF:", "col_no"])
-            if sheet.footer_info.total_text_col_id:
-                footer_cells.append([
-                    sheet.footer_info.total_text,
-                    sheet.footer_info.total_text_col_id
-                ])
-                self.logger.info(f"    [Smart] footer_cells: TOTAL label '{sheet.footer_info.total_text}' -> {sheet.footer_info.total_text_col_id}")
-            # Add pallet count cell only if detected in this sheet's template
-            if sheet.footer_info.pallet_count_col_id:
-                footer_cells.append([
-                    "{pallet_count} PALLET{multiple}",
-                    sheet.footer_info.pallet_count_col_id
-                ])
-                self.logger.info(f"    [Smart] footer_cells: pallet count -> {sheet.footer_info.pallet_count_col_id}")
-            if footer_cells:
-                footer["footer_cells"] = footer_cells
-        
-        return footer
-    
-    def _build_footer_addons(self, sheet: SheetAnalysis) -> Dict[str, Any]:
-        """Build footer add-ons configuration."""
-        add_ons = {}
-        
-        # before_footer (HS.CODE line)
-        has_hs_code = False
-        hs_code_text = ""
-        hs_code_colspan = 1
-        hs_code_col_id = "col_po" # Default fallback
-
-        if sheet.footer_info:
-            has_hs_code = sheet.footer_info.has_hs_code
-            if sheet.footer_info.hs_code_text:
-                hs_code_text = sheet.footer_info.hs_code_text
-            hs_code_colspan = sheet.footer_info.hs_code_colspan
-            if sheet.footer_info.hs_code_col_id:
-                hs_code_col_id = sheet.footer_info.hs_code_col_id
-            
+        rows = []
         is_contract = "contract" in sheet.name.lower()
-            
-        add_ons["before_footer"] = {
-            "enabled": not is_contract,
-            "column_id": hs_code_col_id,
-            "text": hs_code_text
-        }
-        
-        if hs_code_colspan > 1:
-            add_ons["before_footer"]["merge"] = hs_code_colspan
-        
-        # weight_summary
-        # Usually placed at col_no for labels and col_item/col_desc for values
-        label_col = "col_no" if "col_no" in [c.id for c in sheet.columns] else "col_po"
-        value_col = "col_item" if "col_item" in [c.id for c in sheet.columns] else "col_desc"
+        sheet_col_ids = [c.id for c in sheet.columns]
 
-        add_ons["weight_summary"] = {
-            "enabled": sheet.data_source == "aggregation",
-            "label_col_id": label_col,
-            "value_col_id": value_col,
-            "mode": ["daf", "standard"]
+        # 1. HS.CODE Row (Before-Footer Addon)
+        if sheet.footer_info and sheet.footer_info.has_hs_code and not is_contract:
+            hs_code_col_id = sheet.footer_info.hs_code_col_id or "col_po"
+            hs_code_text = sheet.footer_info.hs_code_text or ""
+            hs_code_colspan = sheet.footer_info.hs_code_colspan
+            cell = {
+                "col_id": hs_code_col_id,
+                "value": hs_code_text,
+                "style_context": "footer"
+            }
+            if hs_code_colspan > 1:
+                cell["colspan"] = hs_code_colspan
+            rows.append([cell])
+
+        # 2. Main Footer Row
+        main_footer_row = []
+        if sheet.footer_info:
+            # TOTAL label
+            total_col = sheet.footer_info.total_text_col_id or "col_no"
+            total_text = sheet.footer_info.total_text or "TOTAL:"
+            total_cell = {
+                "col_id": total_col,
+                "value": total_text,
+                "style_context": "footer"
+            }
+            if sheet.footer_info.merge_curr_colspan > 1:
+                total_cell["colspan"] = sheet.footer_info.merge_curr_colspan
+            main_footer_row.append(total_cell)
+
+            # Pallet count
+            if sheet.footer_info.pallet_count_col_id:
+                main_footer_row.append({
+                    "col_id": sheet.footer_info.pallet_count_col_id,
+                    "value": "{pallet_count} PALLET{multiple}",
+                    "style_context": "footer"
+                })
+        else:
+            main_footer_row.append({
+                "col_id": "col_desc" if "col_desc" in sheet_col_ids else "col_po",
+                "value": "TOTAL:",
+                "style_context": "footer"
+            })
+
+        # Add SUM formulas for default numeric columns that exist in the sheet
+        default_sum_cols = ["col_qty_pcs", "col_qty_sf", "col_amount", "col_net", "col_gross", "col_cbm", "col_sqm"]
+        for col_id in default_sum_cols:
+            if col_id in sheet_col_ids:
+                main_footer_row.append({
+                    "col_id": col_id,
+                    "formula": "SUM",
+                    "target_section": "data",
+                    "style_context": "footer"
+                })
+
+        if main_footer_row:
+            rows.append(main_footer_row)
+
+        # 3. Post-Footer Addons
+        # weight_summary
+        if sheet.data_source == "aggregation":
+            label_col = "col_no" if "col_no" in sheet_col_ids else "col_po"
+            value_col = "col_item" if "col_item" in sheet_col_ids else "col_desc"
+            
+            # NW Row
+            rows.append([
+                {"col_id": label_col, "value": "NW(KGS)", "style_context": "footer_addon"},
+                {"col_id": value_col, "value": "{weight_net}", "style_context": "footer_addon"}
+            ])
+            # GW Row
+            rows.append([
+                {"col_id": label_col, "value": "GW(KGS):", "style_context": "footer_addon"},
+                {"col_id": value_col, "value": "{weight_gross}", "style_context": "footer_addon"}
+            ])
+
+        # leather_summary (specifically for "Packing list")
+        if sheet.data_source == "processed_tables_multi" and sheet.name == "Packing list":
+            # Buffalo Row
+            rows.append([
+                {"col_id": "col_desc", "value": "BUFFALO LEATHER", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "BUFFALO"},
+                {"col_id": "col_pallet_count", "value": "{buffalo_pallet_count}", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "BUFFALO", "is_pallet": True},
+                {"col_id": "col_qty_pcs", "value": "{buffalo_col_qty_pcs}", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "BUFFALO", "is_sum_col": True}
+            ])
+            # Cow Row
+            rows.append([
+                {"col_id": "col_desc", "value": "LEATHER", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "COW"},
+                {"col_id": "col_pallet_count", "value": "{cow_pallet_count}", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "COW", "is_pallet": True},
+                {"col_id": "col_qty_pcs", "value": "{cow_col_qty_pcs}", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "COW", "is_sum_col": True}
+            ])
+
+        return {
+            "rows": rows
         }
-        
-        # leather_summary (for packing list)
-        add_ons["leather_summary"] = {
-            "enabled": sheet.data_source == "processed_tables_multi",
-            "mode": ["daf", "standard"]
-        }
-        
-        return add_ons
 
 
 

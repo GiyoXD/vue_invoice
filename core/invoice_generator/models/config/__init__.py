@@ -1,7 +1,7 @@
 from .meta import MetaModel, DataPrepHintModel, FeaturesModel
 from .processing import ProcessingModel
 from .styling import BorderExceptionsModel, StylingDefaultsModel, CellStyleModel, RowContextStyleModel, SheetStylingModel
-from .layout import ColumnDef, StructureConfigModel, MappingRuleModel, DataFlowConfigModel, StaticContentConfigModel, FooterMergeRuleModel, FooterConfigModel, SheetLayoutModel
+from .layout import ColumnDef, StructureConfigModel, MappingRuleModel, DataFlowConfigModel, StaticContentConfigModel, FooterConfigModel, SheetLayoutModel
 from .bundle import GlobalDefaultsModel, ClientConfigBundle
 
 __all__ = [
@@ -19,7 +19,6 @@ __all__ = [
     "MappingRuleModel",
     "DataFlowConfigModel",
     "StaticContentConfigModel",
-    "FooterMergeRuleModel",
     "FooterConfigModel",
     "SheetLayoutModel",
     "GlobalDefaultsModel",

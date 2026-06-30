@@ -38,7 +38,7 @@ BORDER_PATTERNS: Dict[str, Optional[BorderStyle]] = {
 }
 
 # Contexts that always get full thin borders regardless of default_border mode
-FULL_BORDER_CONTEXTS = {"header", "footer", "footer_addon_before"}
+FULL_BORDER_CONTEXTS = {"header", "footer"}
 NO_BORDER_CONTEXTS = {"footer_addon", "grand_total"}
 
 
@@ -70,14 +70,19 @@ class BorderResolver:
 
         Priority:
             1. NO_BORDER_CONTEXTS (always None)
-            2. Column override (explicit per-column pattern)
-            3. Header/footer/grand_total → always full thin
-            4. Default border mode (side_grid → sides_only, full_grid → thin)
+            2. Header context -> always full thin (no overrides)
+            3. Column override (explicit per-column pattern in data/footer rows)
+            4. Footer/before-footer context -> always full thin
+            5. Default border mode (side_grid → sides_only, full_grid → thin)
         """
         if context in NO_BORDER_CONTEXTS:
             return copy(BORDER_PATTERNS["none"])
 
-        # Column-level override takes precedence over generic context rules
+        # Header context ALWAYS gets full thin borders, bypassing column overrides
+        if context == "header":
+            return copy(BORDER_PATTERNS["thin"])
+
+        # Column-level override takes precedence in other contexts (data, footer)
         if col_id in self.column_overrides:
             pattern_name = self.column_overrides[col_id]
             # Normalize legacy naming
@@ -86,11 +91,11 @@ class BorderResolver:
             pattern = BORDER_PATTERNS.get(pattern_name)
             return copy(pattern) if pattern else None
 
-        # Header/footer always get full borders (if no column override)
+        # Footer / before-footer always get full borders
         if context in FULL_BORDER_CONTEXTS:
             return copy(BORDER_PATTERNS["thin"])
 
-        # Default border mode
+        # Default border mode for data rows
         if self.default_border == "side_grid":
             return copy(BORDER_PATTERNS["sides_only"])
         else:

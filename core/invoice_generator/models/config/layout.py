@@ -84,22 +84,9 @@ class DataFlowConfigModel(BaseModel):
 class StaticContentConfigModel(BaseModel):
     static: Dict[str, List[str]] = Field(default_factory=dict)
 
-class FooterMergeRuleModel(BaseModel):
-    start_column_id: str
-    colspan: int
-    comment: Optional[str] = None
-
 class FooterConfigModel(BaseModel):
-    total_text_column_id: Optional[str] = None
-    total_text: str = "TOTAL:"
-    pallet_count_column_id: Optional[str] = None
-    sum_column_ids: List[str] = Field(default_factory=list)
-    sum_cols: List[str] = Field(default_factory=list)
-    footer_cells: List[List[Any]] = Field(default_factory=list)
-    add_blank_before: bool = False
     type: str = "regular"
-    merge_rules: List[FooterMergeRuleModel] = Field(default_factory=list)
-    add_ons: Optional[Dict[str, Any]] = None
+    rows: List[List[Dict[str, Any]]] = Field(default_factory=list)
 
 class SheetLayoutModel(BaseModel):
     structure: StructureConfigModel
