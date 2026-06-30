@@ -59,6 +59,7 @@ def resolve_header_info(layout_config: Dict[str, Any], args: Any = None) -> Dict
     column_id_map = {}
     column_formats = {}
     column_colspan = {}  # Track colspan for each column ID
+    parent_column_ids = []  # Track parent columns that have children
     
     current_idx = 1
     
@@ -71,6 +72,7 @@ def resolve_header_info(layout_config: Dict[str, Any], args: Any = None) -> Dict
         
         # If column has children, process each child
         if children:
+            parent_column_ids.append(col_id)
             # Parent column gets its own entry (for merged cell reference)
             column_map[header] = current_idx
             column_id_map[col_id] = current_idx
@@ -118,5 +120,6 @@ def resolve_header_info(layout_config: Dict[str, Any], args: Any = None) -> Dict
         'column_id_map': column_id_map,
         'num_columns': current_idx - 1,  # Total columns processed
         'column_formats': column_formats,
-        'column_colspan': column_colspan  # Colspan info for automatic merging
+        'column_colspan': column_colspan,  # Colspan info for automatic merging
+        'parent_column_ids': parent_column_ids
     }

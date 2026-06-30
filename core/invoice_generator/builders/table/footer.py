@@ -238,6 +238,13 @@ class TableFooterBuilder(TableSectionBuilder):
     def _pad_row_styles(self, row: int, exclude_cols=None, context: str = 'footer'):
         """Writes None to empty cells to trigger their background/border styles."""
         exclude_cols = exclude_cols or []
+        excluded_idxs = set()
+        for c_id in exclude_cols:
+            idx = self.grid._resolve_column(c_id)
+            if idx:
+                excluded_idxs.add(idx)
+
         for col_id in self.grid.column_mapping.keys():
-            if col_id not in exclude_cols:
+            col_idx = self.grid._resolve_column(col_id)
+            if col_idx not in excluded_idxs:
                 self.grid.write(row, col_id, None, context=context)

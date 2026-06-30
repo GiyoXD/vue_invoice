@@ -160,11 +160,14 @@ class TableBuilder:
                 if allow_col_desc_merge:
                     merge_cols.append('col_desc')
 
+                parent_column_ids = [col.id for col in bundled_columns if col.children]
+
                 data_builder = DataTableBuilder(
                     grid=grid,
                     resolved_data=self.resolved_data,
                     vertical_merge_columns=merge_cols,
-                    is_global_unique_desc=is_global_unique_desc
+                    is_global_unique_desc=is_global_unique_desc,
+                    parent_column_ids=parent_column_ids
                 )
                 data_builder.build()
                 

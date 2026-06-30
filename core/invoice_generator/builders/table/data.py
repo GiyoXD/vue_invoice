@@ -24,9 +24,11 @@ class DataTableBuilderStyler(TableSectionBuilder):
         grid: Grid,
         resolved_data: Union[ResolvedTableData, Dict[str, Any]],
         vertical_merge_columns: Optional[List[str]] = None,
-        is_global_unique_desc: bool = False
+        is_global_unique_desc: bool = False,
+        parent_column_ids: Optional[List[str]] = None
     ):
         TableSectionBuilder.__init__(self, grid)
+        self.parent_column_ids = parent_column_ids or []
         if isinstance(resolved_data, dict):
             # Pre-convert any integer keys in data_rows to strings to satisfy Pydantic key validation
             raw_rows = resolved_data.get('data_rows', [])
@@ -76,8 +78,8 @@ class DataTableBuilderStyler(TableSectionBuilder):
             for i in range(actual_rows_to_process):
                 row_data = self.data_rows[i]
                 
-                # Filter row_data to only include columns in the valid col_id_map
-                valid_col_ids = set(self.col_id_map.keys())
+                # Filter row_data to only include columns in the valid col_id_map, excluding parent columns
+                valid_col_ids = set(self.col_id_map.keys()) - set(self.parent_column_ids)
                 row_data = {col_id: value for col_id, value in row_data.items() if col_id in valid_col_ids}
                 
                 columns_with_data = set(row_data.keys())

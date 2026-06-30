@@ -98,3 +98,43 @@ def test_data_table_builder_vertical_merge_skip_int():
     # Numeric values should skip vertical merging
     cell = grid.get_cell(-2, "col_num")
     assert cell.merge is None
+
+
+def test_data_table_builder_parent_logical_keys_no_overwrite():
+    column_mapping = {
+        "col_static": 1,
+        "col_qty_header": 2,
+        "col_qty_pcs": 2,
+        "col_qty_sf": 3
+    }
+    column_colspan = {
+        "col_static": 1,
+        "col_qty_header": 1,
+        "col_qty_pcs": 1,
+        "col_qty_sf": 1
+    }
+    
+    style_registry = StyleRegistry({"columns": {}, "row_contexts": {}})
+    grid = Grid(column_mapping, style_registry, column_colspan=column_colspan)
+    
+    resolved_data = {
+        "data_rows": [
+            {
+                "col_static": "Item A",
+                "col_qty_pcs": 10,
+                "col_qty_sf": 100.5
+            }
+        ]
+    }
+    
+    builder = DataTableBuilderStyler(
+        grid=grid,
+        resolved_data=resolved_data,
+        parent_column_ids=["col_qty_header"]
+    )
+    builder.build()
+    
+    # Assert values in Grid
+    assert grid.get_cell(-1, "col_static").value == "Item A"
+    assert grid.get_cell(-1, "col_qty_pcs").value == 10
+    assert grid.get_cell(-1, "col_qty_sf").value == 100.5

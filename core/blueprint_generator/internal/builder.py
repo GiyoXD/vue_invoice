@@ -349,7 +349,11 @@ class ConfigBuilder:
         """
         rows = []
         is_contract = "contract" in sheet.name.lower()
-        sheet_col_ids = [c.id for c in sheet.columns]
+        
+        sheet_col_ids = []
+        for c in sheet.columns:
+            sheet_col_ids.append(c.id)
+            sheet_col_ids.extend(child.id for child in c.children)
 
         # 1. HS.CODE Row (Before-Footer Addon)
         if sheet.footer_info and sheet.footer_info.has_hs_code and not is_contract:
