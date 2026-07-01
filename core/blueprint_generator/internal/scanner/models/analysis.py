@@ -15,7 +15,7 @@ class SheetAnalysis:
     data_font: Dict[str, Any]
     row_heights: Dict[str, float]  # "header", "data", "footer" -> height
     has_multi_row_header: bool = False
-    static_content_hints: Dict[str, List[str]] = field(default_factory=dict)
+    static_content_hints: Dict[str, Any] = field(default_factory=dict)
     static_layout: Optional[TemplateLayout] = None
     footer_info: Optional[FooterInfo] = None
 

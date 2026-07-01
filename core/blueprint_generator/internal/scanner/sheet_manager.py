@@ -5,6 +5,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from core.blueprint_generator.schema import BlueprintSchema
 from core.utils.loop_profiler import loop_profiler
 from .models import SheetAnalysis, ColumnInfo
+from .models.addons import LeatherSummaryFact
 from .header_detector import BoundaryDetector
 from .tabular_scanner import TabularScanner
 from .template_scanner import TemplateScanner
@@ -53,7 +54,7 @@ class SheetManager:
             self.logger.info(f"    Found {len(table_layout.columns)} columns")
             
             # 3. Classify data source type
-            data_source = self._determine_data_source(sheet_name, table_layout.columns, mapping_config)
+            data_source = self._determine_data_source(sheet_name, mapping_config)
             self.logger.info(f"    Data source: {data_source}")
             
             # 4. Scan static zones (Zone 1 & 3)
@@ -68,12 +69,22 @@ class SheetManager:
             merged_hints = table_layout.static_content_hints
             
             # Detect leather summary rows directly from the openpyxl worksheet
-            leather_summaries = []
-            if boundaries.footer_row:
+            addon_facts = []
+            if boundaries.footer_row and data_source == "processed_tables_multi":
                 end_scan_row = boundaries.footer_end_row if boundaries.footer_end_row else boundaries.footer_row
                 end_scan_row = max(end_scan_row, boundaries.footer_row + 5)
                 end_scan_row = min(end_scan_row, worksheet.max_row)
                 
+                # Pre-compute column mappings
+                def find_col_id(col_idx):
+                    for col in table_layout.columns:
+                        if col.col_index == col_idx:
+                            return col.id
+                        for child in col.children:
+                            if child.col_index == col_idx:
+                                return child.id
+                    return None
+                    
                 for r in range(boundaries.footer_row + 1, end_scan_row + 1):
                     for c in range(1, min(worksheet.max_column + 1, 40)):
                         cell_val = str(worksheet.cell(row=r, column=c).value or "").strip()
@@ -88,13 +99,21 @@ class SheetManager:
                                 next_c += 1
                                 
                             if "leather" in next_val.lower():
-                                leather_summaries.append({
-                                    "total_of_col_idx": c,
-                                    "total_of_value": cell_val,
-                                    "label_col_idx": next_c,
-                                    "label_value": next_val
-                                })
-            merged_hints["leather_summaries"] = leather_summaries
+                                next_val_lower = next_val.lower()
+                                leather_key = "BUFFALO" if "buffalo" in next_val_lower else "COW"
+                                
+                                total_col_id = find_col_id(c) or "col_po"
+                                label_col_id = find_col_id(next_c) or "col_item"
+                                
+                                fact = LeatherSummaryFact(
+                                    leather_key=leather_key,
+                                    total_col_id=total_col_id,
+                                    label_col_id=label_col_id,
+                                    total_value=cell_val,
+                                    label_value=next_val
+                                )
+                                addon_facts.append(fact)
+            merged_hints["addon_facts"] = addon_facts
             
             sheet_analysis = SheetAnalysis(
                 name=sheet_name,
@@ -126,7 +145,7 @@ class SheetManager:
             self.logger.error(f"    Error analyzing {sheet_name}: {e}")
             return None
 
-    def _determine_data_source(self, sheet_name: str, columns: List[ColumnInfo], 
+    def _determine_data_source(self, sheet_name: str, 
                                mapping_config: Optional[Dict[str, Any]] = None) -> str:
         """
         Determine if this sheet is 'aggregation' (single table) 

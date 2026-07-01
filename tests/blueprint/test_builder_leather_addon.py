@@ -21,14 +21,17 @@ def test_config_builder_leather_summary_detection():
     sheet.columns = [col_po, col_pallet_id, col_desc, col_qty_pcs, col_net]
 
     # Setup static content hints containing the detected leather summaries
+    from core.blueprint_generator.internal.scanner.models.addons import LeatherSummaryFact
+    # Setup static content hints containing the pre-built addon facts
     sheet.static_content_hints = {
-        "leather_summaries": [
-            {
-                "total_of_col_idx": 1,
-                "total_of_value": "TOTAL OF:",
-                "label_col_idx": 2,
-                "label_value": "BUFFALO LEATHER"
-            }
+        "addon_facts": [
+            LeatherSummaryFact(
+                leather_key="BUFFALO",
+                total_col_id="col_po",
+                label_col_id="col_pallet_id",
+                total_value="TOTAL OF:",
+                label_value="BUFFALO LEATHER"
+            )
         ]
     }
     sheet.footer_info = FooterInfo(

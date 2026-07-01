@@ -5,6 +5,7 @@ from .template import (
 from .boundaries import ZoneBoundaries
 from .table import FooterInfo, ColumnInfo, TableLayout
 from .analysis import SheetAnalysis, TemplateAnalysisResult
+from .addons import BaseAddonFact, LeatherSummaryFact
 
 __all__ = [
     "TemplateLayout",
@@ -22,4 +23,6 @@ __all__ = [
     "TableLayout",
     "SheetAnalysis",
     "TemplateAnalysisResult",
+    "BaseAddonFact",
+    "LeatherSummaryFact",
 ]

@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from .scanner import TemplateAnalysisResult, SheetAnalysis, ColumnInfo
 from .validator import ConfigValidator, BlueprintLogicValidator
+from .addons import AddonRegistry
 from core.utils.snitch import snitch
 
 logger = logging.getLogger(__name__)
@@ -429,42 +430,15 @@ class ConfigBuilder:
                 {"col_id": value_col, "value": "{weight_gross}", "style_context": "footer_addon"}
             ])
 
-        # leather_summary (specifically for "Packing list")
-        if sheet.data_source == "processed_tables_multi" and sheet.name == "Packing list":
-            leather_summaries = sheet.static_content_hints.get("leather_summaries", [])
-            if leather_summaries:
-                # Helper to find col_id by index
-                def find_col_id(col_idx):
-                    for col in sheet.columns:
-                        if col.col_index == col_idx:
-                            return col.id
-                        for child in col.children:
-                            if child.col_index == col_idx:
-                                return child.id
-                    return None
-
-                for summary in leather_summaries:
-                    val = summary["total_of_value"]
-                    next_val = summary["label_value"]
-                    next_val_lower = next_val.lower()
-                    
-                    leather_key = "BUFFALO" if "buffalo" in next_val_lower else "COW"
-                    
-                    total_col_id = find_col_id(summary["total_of_col_idx"]) or "col_po"
-                    label_col_id = find_col_id(summary["label_col_idx"]) or "col_item"
-                    
-                    leather_row = [
-                        {"col_id": total_col_id, "value": val, "style_context": "footer_addon", "addon_type": "leather", "leather_key": leather_key},
-                        {"col_id": label_col_id, "value": next_val, "style_context": "footer_addon", "addon_type": "leather", "leather_key": leather_key},
-                        {"col_id": "col_desc", "value": "{pallet_count} PALLET{multiple}", "style_context": "footer_addon", "addon_type": "leather", "leather_key": leather_key}
-                    ]
-                    
-                    leather_cols = ["col_qty_pcs", "col_qty_sf", "col_net", "col_gross", "col_cbm", "col_sqm"]
-                    for col_id in leather_cols:
-                        if col_id in sheet_col_ids:
-                            leather_row.append({"col_id": col_id, "style_context": "footer_addon", "addon_type": "leather", "leather_key": leather_key})
-                    
-                    rows.append(leather_row)
+        # Add any generic addon rows prepared by the scanner and formatted by Addon builders
+        addon_facts = sheet.static_content_hints.get("addon_facts", [])
+        for fact in addon_facts:
+            try:
+                addon_builder = AddonRegistry.get_builder(fact)
+                addon_rows = addon_builder.build_rows(fact, sheet_col_ids)
+                rows.extend(addon_rows)
+            except Exception as e:
+                self.logger.warning(f"    Failed to build addon row for fact {getattr(fact, 'fact_type', 'unknown')}: {e}")
 
         return {
             "rows": rows
