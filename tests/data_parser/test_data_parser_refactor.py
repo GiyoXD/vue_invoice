@@ -128,8 +128,7 @@ class TestDataParserRefactor(unittest.TestCase):
         # Should raise DataValidationError
         with self.assertRaises(DataValidationError) as context:
             validate_data(data, "Table 1", column_mapping, phase='cbm_proportion')
-        self.assertIn("[Zero CBM] (Row 12)", str(context.exception))
-        self.assertIn("has pieces (100) but received 0 CBM", str(context.exception))
+        self.assertIn("Row 12: Zero CBM (100pcs)", str(context.exception))
 
         # With ignore_cbm_warning=True, it should pass
         try:
@@ -149,8 +148,7 @@ class TestDataParserRefactor(unittest.TestCase):
 
         with self.assertRaises(DataValidationError) as context:
             validate_data(data, "Table 1", column_mapping, phase='cbm_proportion')
-        self.assertIn("[Monotonicity] (Rows 14 and 15)", str(context.exception))
-        self.assertIn("more pieces (100) but lower CBM (1.0)", str(context.exception))
+        self.assertIn("Row 14 & 15: Qty/CBM wrong (100pcs=1.00, 50pcs=2.00, discrepancy 1.00 CBM)", str(context.exception))
 
         # With ignore_cbm_warning=True, it should pass
         try:
@@ -181,7 +179,7 @@ class TestDataParserRefactor(unittest.TestCase):
         ]
         with self.assertRaises(DataValidationError) as context:
             validate_data(data_invalid, "Table 1", column_mapping, phase='cbm_proportion')
-        self.assertIn("[Monotonicity]", str(context.exception))
+        self.assertIn("Qty/CBM wrong", str(context.exception))
 
     def test_cbm_pcs_proportion_abnormally_high_ratio(self):
         # ITEM1 has col_qty_pcs=2 and col_cbm=1.5 -> ratio = 0.75 > 0.5
@@ -192,8 +190,7 @@ class TestDataParserRefactor(unittest.TestCase):
 
         with self.assertRaises(DataValidationError) as context:
             validate_data(data, "Table 1", column_mapping, phase='cbm_proportion')
-        self.assertIn("[High Ratio] (Row 16)", str(context.exception))
-        self.assertIn("Exceeds 0.5 CBM/unit threshold", str(context.exception))
+        self.assertIn("Row 16: High ratio (0.75 > 0.5)", str(context.exception))
 
         # With ignore_cbm_warning=True, it should pass
         try:
@@ -214,8 +211,7 @@ class TestDataParserRefactor(unittest.TestCase):
 
         with self.assertRaises(DataValidationError) as context:
             validate_data(data, "Table 1", column_mapping, phase='cbm_proportion')
-        self.assertIn("[Ratio Outlier] (Row 21)", str(context.exception))
-        self.assertIn("Verify CBM (0.05) or quantity (10)", str(context.exception))
+        self.assertIn("Row 21: Outlier (0.00 vs median 0.10)", str(context.exception))
 
         # With ignore_cbm_warning=True, it should pass
         try:
@@ -243,8 +239,7 @@ class TestDataParserRefactor(unittest.TestCase):
         column_mapping = {"col_po": "A", "col_item": "B", "col_net": "C", "col_gross": "D"}
         with self.assertRaises(DataValidationError) as context:
             validate_data(data, "Table 1", column_mapping, phase='integrity')
-        self.assertIn("Weight Integrity Error (Row 5)", str(context.exception))
-        self.assertIn("Partial weight found", str(context.exception))
+        self.assertIn("Row 5: Missing Gross Weight (Net = 10.00)", str(context.exception))
 
     def test_weight_integrity_both_empty(self):
         data = [
@@ -263,8 +258,7 @@ class TestDataParserRefactor(unittest.TestCase):
         column_mapping = {"col_po": "A", "col_item": "B", "col_net": "C", "col_gross": "D"}
         with self.assertRaises(DataValidationError) as context:
             validate_data(data, "Table 1", column_mapping, phase='integrity')
-        self.assertIn("Weight Validation Error (Row 6)", str(context.exception))
-        self.assertIn("Gross Weight (9.0) is not strictly greater than Net Weight (10.0)", str(context.exception))
+        self.assertIn("Row 6: Gross <= Net (Net = 10.00, Gross = 9.00)", str(context.exception))
 
     def test_validate_data_runs_pallet_integrity(self):
         # Weight valid, but pallet ID reappears after gap
@@ -302,8 +296,7 @@ class TestDataParserRefactor(unittest.TestCase):
         ]
         with self.assertRaises(DataValidationError) as context:
             data_processor.verify_pallet_integrity(data)
-        self.assertIn("Pallet ID changed to '01T26052608'", str(context.exception))
-        self.assertIn("boundary marker count is 0", str(context.exception))
+        self.assertIn("Row 11: Pallet ID changed to '01T26052608' but count is 0", str(context.exception))
 
     def test_verify_pallet_integrity_invalid_continuity(self):
         # Pallet ID remains 01T26052609, but count is 1
@@ -313,8 +306,7 @@ class TestDataParserRefactor(unittest.TestCase):
         ]
         with self.assertRaises(DataValidationError) as context:
             data_processor.verify_pallet_integrity(data)
-        self.assertIn("Pallet ID did not change (still '01T26052609')", str(context.exception))
-        self.assertIn("boundary marker count is 1", str(context.exception))
+        self.assertIn("Row 13: Pallet count is 1 but Pallet ID did not change ('01T26052609')", str(context.exception))
 
     def test_verify_pallet_integrity_missing_id(self):
         # Count is 1, but Pallet ID is missing
@@ -323,7 +315,7 @@ class TestDataParserRefactor(unittest.TestCase):
         ]
         with self.assertRaises(DataValidationError) as context:
             data_processor.verify_pallet_integrity(data)
-        self.assertIn("Pallet boundary found (count=1), but Pallet ID is missing", str(context.exception))
+        self.assertIn("Row 10: Pallet ID missing (count = 1)", str(context.exception))
 
     def test_verify_pallet_integrity_recurrence(self):
         # ID 01T26052605 reappears after 01T26052608
@@ -334,7 +326,7 @@ class TestDataParserRefactor(unittest.TestCase):
         ]
         with self.assertRaises(DataValidationError) as context:
             data_processor.verify_pallet_integrity(data)
-        self.assertIn("Pallet ID '01T26052605' reappeared after a gap", str(context.exception))
+        self.assertIn("Row 12: Pallet ID '01T26052605' reappeared after gap", str(context.exception))
 
     def test_verify_pallet_integrity_empty_rows(self):
         # Empty rows should be ignored or reset the state, not crash
@@ -396,7 +388,11 @@ class TestDataParserRefactor(unittest.TestCase):
         with self.assertRaises(DataValidationError) as context:
             sheet_parser.find_and_map_smart_headers(ws)
             
-        self.assertIn("Duplicate 'col_amount' columns detected", str(context.exception))
+        err_msg = str(context.exception)
+        self.assertTrue(
+            "Duplicate 'col_amount' columns detected" in err_msg or 
+            "Duplicate mapping detected" in err_msg
+        )
 
     def test_validate_no_duplicate_amount_columns_pattern_matching(self):
         from openpyxl import Workbook

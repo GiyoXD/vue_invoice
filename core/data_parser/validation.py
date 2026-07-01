@@ -57,10 +57,12 @@ def validate_no_duplicate_amount_columns(sheet, header_row: int, column_mapping:
         cell = sheet.cell(row=header_row, column=col_num)
         val = str(cell.value or '').strip().upper()
         if val:
-            candidates = _ALIAS_REVERSE_LOOKUP.get(val, [])
-            if "col_amount" in candidates:
-                alias_matched_cols.append(col_num)
-                amount_cols.append(f"{get_column_letter(col_num)} ('{cell.value or '<empty>'}')")
+            col_letter = get_column_letter(col_num)
+            if col_letter.upper() not in mapped_cols:
+                candidates = _ALIAS_REVERSE_LOOKUP.get(val, [])
+                if "col_amount" in candidates:
+                    alias_matched_cols.append(col_num)
+                    amount_cols.append(f"{get_column_letter(col_num)} ('{cell.value or '<empty>'}')")
 
     # 2. Second pass: check unrecognized/unmapped columns using pattern + left adjacent cell < 2 heuristic
     has_explicit_amount = len(alias_matched_cols) > 0
@@ -197,13 +199,8 @@ def validate_table_data_presence(
             missing_data_cols.append(col_name)
 
     if missing_data_cols:
-        row_num = first_row.get('_row_num')
-        row_num_str = f" (Row {row_num})" if row_num else ""
-        err_msg = (
-            f"Data Validation Error{row_num_str}: {table_id_str} is missing mandatory data in the first row for: "
-            f"[{', '.join(missing_data_cols)}]. "
-            "Please ensure the first row of every table in your Excel is fully populated."
-        )
+        row_num = first_row.get('_row_num', '?')
+        err_msg = f"Row {row_num}: Missing columns: {', '.join(missing_data_cols)}"
         if monitor:
             monitor.log_process_item(f"{table_id_str} First-Row Validation", status="error", error=err_msg)
         raise DataValidationError(err_msg)
@@ -254,18 +251,11 @@ def validate_weight_integrity(
             # --- NEW STRICT VALIDATION: Unpaired weights are forbidden ---
             # If one exists but the other doesn't, it's a data entry error
             if net_val is None or gross_val is None:
-                po_val = row.get(po_key, "Unknown PO")
-                item_val = row.get(item_key, "Unknown Item")
-                missing_col = "Gross Weight" if gross_val is None else "Net Weight"
-                present_col = "Net Weight" if net_val is not None else "Gross Weight"
-                
-                row_num = row.get('_row_num')
-                row_num_str = f" (Row {row_num})" if row_num else ""
-                error_msg = (
-                    f"Weight Integrity Error{row_num_str}{table_context}: Partial weight found at row for PO [{po_val}] / Item [{item_val}]. "
-                    f"{present_col} has a value, but {missing_col} is missing. "
-                    "Weights must always be provided as a Net/Gross pair."
-                )
+                row_num = row.get('_row_num', '?')
+                if gross_val is None:
+                    error_msg = f"Row {row_num}: Missing Gross Weight (Net = {net_val:.2f})"
+                else:
+                    error_msg = f"Row {row_num}: Missing Net Weight (Gross = {gross_val:.2f})"
                 logging.error(f"{prefix} {error_msg}")
                 raise DataValidationError(error_msg)
 
@@ -275,18 +265,8 @@ def validate_weight_integrity(
 
             # Validation 1: Strict Positivity Constraint (Gross > Net)
             if gross_val <= net_val:
-                po_val = row.get(po_key, "Unknown PO")
-                item_val = row.get(item_key, "Unknown Item")
-                row_num = row.get('_row_num')
-                row_num_str = f" (Row {row_num})" if row_num else ""
-                
-                error_msg = (
-                    f"Weight Validation Error{row_num_str}{table_context}: At row for PO [{po_val}] / Item [{item_val}], "
-                    f"Gross Weight ({gross_val}) is not strictly greater than Net Weight ({net_val}). "
-                    "In shipping, Gross Weight MUST always be bigger than Net Weight. "
-                    "Please fix your source Excel and try again."
-                )
-                
+                row_num = row.get('_row_num', '?')
+                error_msg = f"Row {row_num}: Gross <= Net (Net = {net_val:.2f}, Gross = {gross_val:.2f})"
                 logging.error(f"{prefix} {error_msg}")
                 raise DataValidationError(error_msg)
 
@@ -304,15 +284,8 @@ def validate_weight_integrity(
             else:
                 if current_tare != reference_tare:
                     expected_gross = net_val + reference_tare
-                    row_num = row.get('_row_num')
-                    row_num_str = f" (Row {row_num})" if row_num else ""
-                    error_msg = (
-                        f"Weight Integrity Error{row_num_str}{table_context}: `Net + Pallet Weight` does not equal `Gross Weight` at {row_id_str}. "
-                        f"Based on the first row ({ref_row_info}), the Pallet Weight (Tare) is **{reference_tare}**. "
-                        f"Expected Gross Weight for this row is {net_val} + {reference_tare} = **{expected_gross}**, "
-                        f"but found **{gross_val}**. "
-                        "Please ensure all pallets in your table have identical tare weights."
-                    )
+                    row_num = row.get('_row_num', '?')
+                    error_msg = f"Row {row_num}: Tare mismatch (expected Gross = {expected_gross:.2f}, but found {gross_val:.2f})"
                     if not ignore_tare_warning:
                         raise DataValidationError(error_msg)
                     else:
@@ -401,22 +374,18 @@ def validate_cbm_pcs_proportion(
 
         # Check for Zero CBM
         if cbm_dec is None or cbm_dec == 0:
-            row_num = row.get('_row_num')
-            row_num_str = f" (Row {row_num})" if row_num else ""
+            row_num = row.get('_row_num', '?')
             violations.append(
-                f"[Zero CBM]{row_num_str}: PO [{po_val}] / Item [{item_val}] has pieces ({basis_dec}) but received 0 CBM. "
-                "Missing CBM or incorrect distribution anchor."
+                f"Row {row_num}: Zero CBM ({basis_dec:.0f}pcs)"
             )
             continue  # Skip ratio check if CBM is zero
 
         # Check for Abnormally High Ratio (> 0.5 CBM/unit)
         ratio = cbm_dec / basis_dec
         if ratio > decimal.Decimal('0.5'):
-            row_num = row.get('_row_num')
-            row_num_str = f" (Row {row_num})" if row_num else ""
+            row_num = row.get('_row_num', '?')
             violations.append(
-                f"[High Ratio]{row_num_str}: PO [{po_val}] / Item [{item_val}] has {ratio:.4f} CBM/unit "
-                f"({cbm_dec} CBM for {basis_dec} units). Exceeds 0.5 CBM/unit threshold."
+                f"Row {row_num}: High ratio ({ratio:.2f} > 0.5)"
             )
 
     # 3. Monotonicity Check within PO Group
@@ -461,24 +430,22 @@ def validate_cbm_pcs_proportion(
                     # We allow a tolerance of up to 3.2% of B's CBM.
                     allowed_cbm = row_B['cbm'] * (decimal.Decimal('1.0') - cbm_tol_pct)
                     if row_A['cbm'] < allowed_cbm - tolerance:
-                        row_A_num = row_A['row'].get('_row_num')
-                        row_B_num = row_B['row'].get('_row_num')
-                        rows_str = f" (Rows {row_A_num} and {row_B_num})" if (row_A_num and row_B_num) else f" (Row {row_A_num})" if row_A_num else f" (Row {row_B_num})" if row_B_num else ""
+                        row_A_num = row_A['row'].get('_row_num', '?')
+                        row_B_num = row_B['row'].get('_row_num', '?')
+                        discrepancy = row_B['cbm'] - row_A['cbm']
                         violations.append(
-                            f"[Monotonicity]{rows_str}: In PO [{po}], Item [{row_A['item']}] has more pieces ({row_A['basis']}) but lower CBM ({row_A['cbm']}) "
-                            f"than Item [{row_B['item']}] ({row_B['basis']} pcs, {row_B['cbm']} CBM). Verify pallet count or CBM."
+                            f"Row {row_A_num} & {row_B_num}: Qty/CBM wrong ({row_A['basis']:.0f}pcs={row_A['cbm']:.2f}, {row_B['basis']:.0f}pcs={row_B['cbm']:.2f}, discrepancy {discrepancy:.2f} CBM)"
                         )
                 elif row_B['basis'] > row_A['basis']:
                     # Row B has more pieces, so it should have more CBM.
                     # We allow a tolerance of up to 3.2% of A's CBM.
                     allowed_cbm = row_A['cbm'] * (decimal.Decimal('1.0') - cbm_tol_pct)
                     if row_B['cbm'] < allowed_cbm - tolerance:
-                        row_A_num = row_A['row'].get('_row_num')
-                        row_B_num = row_B['row'].get('_row_num')
-                        rows_str = f" (Rows {row_A_num} and {row_B_num})" if (row_A_num and row_B_num) else f" (Row {row_A_num})" if row_A_num else f" (Row {row_B_num})" if row_B_num else ""
+                        row_A_num = row_A['row'].get('_row_num', '?')
+                        row_B_num = row_B['row'].get('_row_num', '?')
+                        discrepancy = row_A['cbm'] - row_B['cbm']
                         violations.append(
-                            f"[Monotonicity]{rows_str}: In PO [{po}], Item [{row_B['item']}] has more pieces ({row_B['basis']}) but lower CBM ({row_B['cbm']}) "
-                            f"than Item [{row_A['item']}] ({row_A['basis']} pcs, {row_A['cbm']} CBM). Verify pallet count or CBM."
+                            f"Row {row_A_num} & {row_B_num}: Qty/CBM wrong ({row_B['basis']:.0f}pcs={row_B['cbm']:.2f}, {row_A['basis']:.0f}pcs={row_A['cbm']:.2f}, discrepancy {discrepancy:.2f} CBM)"
                         )
 
     # 4. Check for Ratio Outliers
@@ -516,24 +483,15 @@ def validate_cbm_pcs_proportion(
         lower_limit = median_ratio * decimal.Decimal('0.1')
         
         for rd in ratio_details:
-            if rd['ratio'] > upper_limit:
-                row_num = rd['row'].get('_row_num')
-                row_num_str = f" (Row {row_num})" if row_num else ""
+            row_num = rd['row'].get('_row_num', '?')
+            if rd['ratio'] > upper_limit or rd['ratio'] < lower_limit:
                 violations.append(
-                    f"[Ratio Outlier]{row_num_str}: PO [{rd['po']}] / Item [{rd['item']}] ratio {rd['ratio']:.6f} is > 10x median ({median_ratio:.6f}). "
-                    f"Verify CBM ({rd['cbm']}) or quantity ({rd['basis']})."
-                )
-            elif rd['ratio'] < lower_limit:
-                row_num = rd['row'].get('_row_num')
-                row_num_str = f" (Row {row_num})" if row_num else ""
-                violations.append(
-                    f"[Ratio Outlier]{row_num_str}: PO [{rd['po']}] / Item [{rd['item']}] ratio {rd['ratio']:.6f} is < 0.1x median ({median_ratio:.6f}). "
-                    f"Verify CBM ({rd['cbm']}) or quantity ({rd['basis']})."
+                    f"Row {row_num}: Outlier ({rd['ratio']:.2f} vs median {median_ratio:.2f})"
                 )
 
     # --- Report all violations at once ---
     if violations:
-        summary = f"CBM Validation found {len(violations)} issue(s) in {table_id_str}:\n" + "\n".join(f"  {i+1}. {v}" for i, v in enumerate(violations))
+        summary = f"CBM Errors:\n" + "\n".join(violations)
         
         if ignore_cbm_warning:
             logging.warning(f"[{table_id_str}] [CBM Validation Bypassed]: {summary}")
@@ -634,8 +592,7 @@ def verify_pallet_integrity(
         # Rule C (Presence): If count is 1, pallet_id must be present
         if count == 1 and not pallet_id:
             raise DataValidationError(
-                f"Pallet Validation Error (Row {row_num}){f' in {table_id_str}' if table_id_str else ''}: "
-                f"Pallet boundary found (count=1), but Pallet ID is missing."
+                f"Row {row_num}: Pallet ID missing (count = 1)"
             )
 
         # Rules A & B: Transitions
@@ -643,17 +600,13 @@ def verify_pallet_integrity(
             # Count MUST be 1 (Rule A)
             if count != 1:
                 raise DataValidationError(
-                    f"Pallet Validation Error (Row {row_num}){f' in {table_id_str}' if table_id_str else ''}: "
-                    f"Pallet ID changed to '{pallet_id}' (from '{last_pallet_id}') "
-                    f"but boundary marker count is {raw_count} (expected 1)."
+                    f"Row {row_num}: Pallet ID changed to '{pallet_id}' but count is {raw_count}"
                 )
             
             # Rule D: Contiguity (No recurrence after a gap)
             if pallet_id in seen_pallet_ids:
                 raise DataValidationError(
-                    f"Pallet Validation Error (Row {row_num}){f' in {table_id_str}' if table_id_str else ''}: "
-                    f"Pallet ID '{pallet_id}' reappeared after a gap. "
-                    f"All rows for a pallet must be contiguous."
+                    f"Row {row_num}: Pallet ID '{pallet_id}' reappeared after gap"
                 )
             seen_pallet_ids.add(pallet_id)
         else:
@@ -661,9 +614,7 @@ def verify_pallet_integrity(
             # Count MUST be 0 (Rule B)
             if count != 0:
                 raise DataValidationError(
-                    f"Pallet Validation Error (Row {row_num}){f' in {table_id_str}' if table_id_str else ''}: "
-                    f"Pallet boundary marker count is 1 on row {row_num}, "
-                    f"but Pallet ID did not change (still '{pallet_id}')."
+                    f"Row {row_num}: Pallet count is 1 but Pallet ID did not change ('{pallet_id}')"
                 )
 
         last_pallet_id = pallet_id

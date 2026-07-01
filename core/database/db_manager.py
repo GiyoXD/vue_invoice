@@ -21,7 +21,8 @@ from core.database.models import (
     GlobalMapFallbackStrategy,
     SystemSetting,
 )
-from core.database.migrations import init_db
+def init_db():
+    Base.metadata.create_all(bind=engine)
 from core.database.repositories import (
     BlueprintRepository,
     get_global_mapping_config,

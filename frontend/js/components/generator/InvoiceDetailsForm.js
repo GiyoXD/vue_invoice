@@ -196,7 +196,7 @@ export default {
                     <h3>Generation Failed</h3>
                 </div>
                 <span v-if="generationError.step" class="error-step">{{ generationError.step }}</span>
-                <div class="error-message">{{ generationError.message }}</div>
+                <div class="error-message" style="white-space: pre-wrap;">{{ generationError.message }}</div>
                 
                 <!-- DETAILED ERROR LIST -->
                 <div v-if="generationError.details && generationError.details.length" class="error-details-list mt-4 pt-4 border-t border-red-400-20">

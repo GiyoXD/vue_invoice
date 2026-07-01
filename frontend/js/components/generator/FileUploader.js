@@ -44,7 +44,7 @@ export default {
                     <h3>Upload Failed</h3>
                 </div>
                 <span v-if="uploadError.step" class="error-step">{{ uploadError.step }}</span>
-                <div class="error-message">{{ uploadError.message }}</div>
+                <div class="error-message" style="white-space: pre-wrap;">{{ uploadError.message }}</div>
                 
                 <div v-if="uploadError.traceback" 
                      class="traceback-toggle" 

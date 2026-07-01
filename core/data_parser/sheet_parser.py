@@ -217,20 +217,67 @@ def _process_row(sheet: Worksheet, row_num: int) -> Tuple[Dict[str, str], int, i
     current_row_score = 0
     processed_canonicals: set = set()
 
-    # Tie-breaking: unit_price vs amount (both numeric, same score)
-    unit_amt_tie_cols = [
-        col for col, candidates in all_column_candidates.items()
-        if {c['name'] for c in candidates} == {'col_unit_price', 'col_amount'}
-        and all(c['score'] == 5 for c in candidates)
-    ]
-    if len(unit_amt_tie_cols) == 2:
-        col1, col2 = sorted(unit_amt_tie_cols)
-        # Heuristic: Unit Price is usually to the left of Amount
-        potential_mapping['col_unit_price'] = get_column_letter(col1)
-        potential_mapping['col_amount'] = get_column_letter(col2)
+    # Tie-breaking: unit_price vs amount
+    unit_col = None
+    amt_col = None
+    
+    # We iterate through the columns and find a unit candidate next to/near an amount candidate
+    for col_num in range(HEADER_SEARCH_COL_RANGE[0], HEADER_SEARCH_COL_RANGE[1]):
+        for offset in [1, 2]:
+            c1 = col_num
+            c2 = col_num + offset
+            if c2 > HEADER_SEARCH_COL_RANGE[1]:
+                continue
+                
+            h1 = str(sheet.cell(row=row_num, column=c1).value or '').strip().upper()
+            h2 = str(sheet.cell(row=row_num, column=c2).value or '').strip().upper()
+            
+            d1 = sheet.cell(row=row_num + 1, column=c1).value
+            d2 = sheet.cell(row=row_num + 1, column=c2).value
+            
+            def is_num(val):
+                if val is None:
+                    return False
+                if isinstance(val, (int, float, Decimal)):
+                    return True
+                try:
+                    float(str(val).replace(',', '').strip())
+                    return True
+                except ValueError:
+                    return False
+            
+            if h1 and h2 and is_num(d1) and is_num(d2):
+                c1_is_unit = any(kw in h1 for kw in ["PRICE", "RATE", "单价"]) or "col_unit_price" in _ALIAS_REVERSE_LOOKUP.get(h1, []) or h1 == "USD"
+                c2_is_amt = any(kw in h2 for kw in ["AMOUNT", "VALUE", "TOTAL", "金额", "总价"]) or "col_amount" in _ALIAS_REVERSE_LOOKUP.get(h2, []) or h2 == "USD"
+                
+                # A valid pair requires one unit price candidate and one amount candidate
+                if c1_is_unit and c2_is_amt:
+                    # Also ensure they aren't both strictly amount-only or strictly unit-price-only
+                    c1_is_amt_only = any(kw in h1 for kw in ["AMOUNT", "VALUE", "TOTAL", "金额", "总价"]) and not any(kw in h1 for kw in ["PRICE", "RATE", "单价"])
+                    c2_is_unit_only = any(kw in h2 for kw in ["PRICE", "RATE", "单价"]) and not any(kw in h2 for kw in ["AMOUNT", "VALUE", "TOTAL", "金额", "总价"])
+                    if c1_is_amt_only or c2_is_unit_only:
+                        # Skip if order is reversed (amount on left, unit price on right)
+                        continue
+                        
+                    if unit_col is None and amt_col is None:
+                        unit_col = c1
+                        amt_col = c2
+                    elif unit_col != c1 or amt_col != c2:
+                        from core.data_parser.validation import DataValidationError
+                        raise DataValidationError(
+                            f"Data Validation Error: Multiple unit price and amount column pairs detected: "
+                            f"{get_column_letter(unit_col)}/{get_column_letter(amt_col)} and {get_column_letter(c1)}/{get_column_letter(c2)}."
+                        )
+
+    if unit_col is not None and amt_col is not None:
+        potential_mapping['col_unit_price'] = get_column_letter(unit_col)
+        potential_mapping['col_amount'] = get_column_letter(amt_col)
         processed_canonicals.update(['col_unit_price', 'col_amount'])
         current_row_score += 10  # Bonus for resolving tie
-        del all_column_candidates[col1], all_column_candidates[col2]
+        if unit_col in all_column_candidates:
+            del all_column_candidates[unit_col]
+        if amt_col in all_column_candidates:
+            del all_column_candidates[amt_col]
 
     # Greedy selection for remaining columns
     header_text_match_count = 0
@@ -251,6 +298,19 @@ def _process_row(sheet: Worksheet, row_num: int) -> Tuple[Dict[str, str], int, i
         col_num = item['col_num']
         canonical_name = item['name']
         score = item['score']
+        
+        # If we have already resolved the canonical name (e.g. col_unit_price/col_amount) via tie-breaker,
+        # but another column matches it, raise a duplicate validation error.
+        if canonical_name in processed_canonicals and canonical_name in ['col_unit_price', 'col_amount']:
+            current_mapped_col = potential_mapping.get(canonical_name)
+            if current_mapped_col and current_mapped_col != get_column_letter(col_num):
+                cell = sheet.cell(row=row_num, column=col_num)
+                if cell.value is not None and str(cell.value).strip():
+                    from core.data_parser.validation import DataValidationError
+                    raise DataValidationError(
+                        f"Data Validation Error: Duplicate mapping detected. Column {get_column_letter(col_num)} "
+                        f"('{cell.value}') matches '{canonical_name}', which was already mapped to Column {current_mapped_col}."
+                    )
         
         if col_num not in mapped_physical_cols and canonical_name not in processed_canonicals:
             potential_mapping[canonical_name] = get_column_letter(col_num)
