@@ -1,5 +1,6 @@
 import logging
 import traceback
+import copy
 from decimal import Decimal
 from typing import Any, Dict, Optional, List
 
@@ -152,6 +153,22 @@ class TableFooterBuilder(TableSectionBuilder):
                 if is_row_skipped:
                     continue
 
+                # Construct context-aware row payload
+                row_payload = copy.deepcopy(payload)
+                leather_cells = [c for c in row_schema if c.get("addon_type") == "leather"]
+                if leather_cells:
+                    l_key = leather_cells[0]["leather_key"].lower()
+                    l_pallet = payload.get(f"{l_key}_pallet_count", 0)
+                    row_payload["pallet_count"] = l_pallet
+                    row_payload["multiple"] = "S" if l_pallet != 1 else ""
+                    
+                    # Copy all summary properties matching the prefix to their base names
+                    prefix = f"{l_key}_"
+                    for k, v in payload.items():
+                        if k.startswith(prefix):
+                            base_name = k[len(prefix):]
+                            row_payload[base_name] = v
+
                 # Determine style context from first cell
                 row_context = row_schema[0].get("style_context", "footer") if row_schema else "footer"
 
@@ -181,6 +198,21 @@ class TableFooterBuilder(TableSectionBuilder):
                         self.grid.write_section_aggregate(current_footer_row, col_id, function=func, section=target, context=style_context)
                         written_cols.append(col_id)
                         
+                    # 1.5 Auto-lookup for leather addon without explicit value
+                    elif cell.get("addon_type") == "leather" and "value" not in cell:
+                        val = row_payload.get(col_id)
+                        if val is not None:
+                            if isinstance(val, str):
+                                try:
+                                    if '.' in val:
+                                        val = float(val)
+                                    else:
+                                        val = int(val)
+                                except ValueError:
+                                    pass
+                            self.grid.write(current_footer_row, col_id, val, context=style_context)
+                            written_cols.append(col_id)
+                        
                     # 2. Resolve normal text/numeric values
                     elif "value" in cell:
                         val = cell["value"]
@@ -188,7 +220,7 @@ class TableFooterBuilder(TableSectionBuilder):
                             val_str = str(val)
                             try:
                                 if "{" in val_str:
-                                    val_str = val_str.format(**payload)
+                                    val_str = val_str.format(**row_payload)
                             except Exception as format_err:
                                 logger.debug(f"Placeholder formatting failed for text '{val_str}': {format_err}")
                                 

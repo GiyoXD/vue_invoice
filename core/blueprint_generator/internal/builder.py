@@ -431,18 +431,40 @@ class ConfigBuilder:
 
         # leather_summary (specifically for "Packing list")
         if sheet.data_source == "processed_tables_multi" and sheet.name == "Packing list":
-            # Buffalo Row
-            rows.append([
-                {"col_id": "col_desc", "value": "BUFFALO LEATHER", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "BUFFALO"},
-                {"col_id": "col_pallet_count", "value": "{buffalo_pallet_count}", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "BUFFALO", "is_pallet": True},
-                {"col_id": "col_qty_pcs", "value": "{buffalo_col_qty_pcs}", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "BUFFALO", "is_sum_col": True}
-            ])
-            # Cow Row
-            rows.append([
-                {"col_id": "col_desc", "value": "LEATHER", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "COW"},
-                {"col_id": "col_pallet_count", "value": "{cow_pallet_count}", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "COW", "is_pallet": True},
-                {"col_id": "col_qty_pcs", "value": "{cow_col_qty_pcs}", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "COW", "is_sum_col": True}
-            ])
+            leather_summaries = sheet.static_content_hints.get("leather_summaries", [])
+            if leather_summaries:
+                # Helper to find col_id by index
+                def find_col_id(col_idx):
+                    for col in sheet.columns:
+                        if col.col_index == col_idx:
+                            return col.id
+                        for child in col.children:
+                            if child.col_index == col_idx:
+                                return child.id
+                    return None
+
+                for summary in leather_summaries:
+                    val = summary["total_of_value"]
+                    next_val = summary["label_value"]
+                    next_val_lower = next_val.lower()
+                    
+                    leather_key = "BUFFALO" if "buffalo" in next_val_lower else "COW"
+                    
+                    total_col_id = find_col_id(summary["total_of_col_idx"]) or "col_po"
+                    label_col_id = find_col_id(summary["label_col_idx"]) or "col_item"
+                    
+                    leather_row = [
+                        {"col_id": total_col_id, "value": val, "style_context": "footer_addon", "addon_type": "leather", "leather_key": leather_key},
+                        {"col_id": label_col_id, "value": next_val, "style_context": "footer_addon", "addon_type": "leather", "leather_key": leather_key},
+                        {"col_id": "col_desc", "value": "{pallet_count} PALLET{multiple}", "style_context": "footer_addon", "addon_type": "leather", "leather_key": leather_key}
+                    ]
+                    
+                    leather_cols = ["col_qty_pcs", "col_qty_sf", "col_net", "col_gross", "col_cbm", "col_sqm"]
+                    for col_id in leather_cols:
+                        if col_id in sheet_col_ids:
+                            leather_row.append({"col_id": col_id, "style_context": "footer_addon", "addon_type": "leather", "leather_key": leather_key})
+                    
+                    rows.append(leather_row)
 
         return {
             "rows": rows

@@ -67,6 +67,35 @@ class SheetManager:
             # The TemplateScanner only scans for layout right now, so static hints should be just what the table scanner found
             merged_hints = table_layout.static_content_hints
             
+            # Detect leather summary rows directly from the openpyxl worksheet
+            leather_summaries = []
+            if boundaries.footer_row:
+                end_scan_row = boundaries.footer_end_row if boundaries.footer_end_row else boundaries.footer_row
+                end_scan_row = max(end_scan_row, boundaries.footer_row + 5)
+                end_scan_row = min(end_scan_row, worksheet.max_row)
+                
+                for r in range(boundaries.footer_row + 1, end_scan_row + 1):
+                    for c in range(1, min(worksheet.max_column + 1, 40)):
+                        cell_val = str(worksheet.cell(row=r, column=c).value or "").strip()
+                        if "total of:" in cell_val.lower():
+                            next_c = c + 1
+                            next_val = ""
+                            while next_c <= min(worksheet.max_column, 40):
+                                temp_val = str(worksheet.cell(row=r, column=next_c).value or "").strip()
+                                if temp_val:
+                                    next_val = temp_val
+                                    break
+                                next_c += 1
+                                
+                            if "leather" in next_val.lower():
+                                leather_summaries.append({
+                                    "total_of_col_idx": c,
+                                    "total_of_value": cell_val,
+                                    "label_col_idx": next_c,
+                                    "label_value": next_val
+                                })
+            merged_hints["leather_summaries"] = leather_summaries
+            
             sheet_analysis = SheetAnalysis(
                 name=sheet_name,
                 header_row=boundaries.header_row,

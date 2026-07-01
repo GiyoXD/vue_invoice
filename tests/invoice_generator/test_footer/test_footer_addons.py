@@ -157,3 +157,51 @@ def test_declarative_rows_schema():
     assert grid._grid[0][2].value == "8 PALLETS"
     # Assert formula resolved: column 3 is C
     assert grid._grid[0][3].value == "=SUM(C5:C10)"
+
+
+def test_leather_summary_addon_auto_lookup():
+    column_mapping = {"col_desc": 1, "col_pallet_count": 2, "col_qty": 3}
+    style_registry = StyleRegistry({"columns": {}, "row_contexts": {}})
+    grid = Grid(column_mapping, style_registry)
+    
+    leather_data = {
+        "BUFFALO": {"pallet_count": 2, "col_qty": 100},
+        "COW": {"pallet_count": 3, "col_qty": 150}
+    }
+    footer_data = FooterData(
+        footer_row_start_idx=1, data_start_row=1, data_end_row=5, total_pallets=5,
+        weight_summary=None, leather_summary=leather_data
+    )
+    
+    # Declarative config for leather summary without value keys for pallet_count and qty
+    rows = [
+        [
+            {"col_id": "col_desc", "value": "BUFFALO LEATHER", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "BUFFALO"},
+            {"col_id": "col_pallet_count", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "BUFFALO"},
+            {"col_id": "col_qty", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "BUFFALO"}
+        ],
+        [
+            {"col_id": "col_desc", "value": "LEATHER", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "COW"},
+            {"col_id": "col_pallet_count", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "COW"},
+            {"col_id": "col_qty", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "COW"}
+        ]
+    ]
+    footer_config = FooterConfigModel(rows=rows)
+    
+    builder = TableFooterBuilder(
+        grid=grid, footer_data=footer_data,
+        footer_config=footer_config,
+        sheet_name="Packing list"
+    )
+    builder.build()
+    
+    # Assert Buffalo row (row 0) - should auto-lookup values
+    assert grid._grid[0][1].value == "BUFFALO LEATHER"
+    assert grid._grid[0][2].value == 2
+    assert grid._grid[0][3].value == 100
+    
+    # Assert Cow row (row 1) - should auto-lookup values
+    assert grid._grid[1][1].value == "LEATHER"
+    assert grid._grid[1][2].value == 3
+    assert grid._grid[1][3].value == 150
+
