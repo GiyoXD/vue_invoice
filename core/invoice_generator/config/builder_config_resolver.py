@@ -65,7 +65,6 @@ class BuilderConfigResolver:
             **layout_config,
             'data_source': data_config.get('data_source'),
             'data_source_type': data_config.get('data_source_type'),
-            'header_info': data_config.get('header_info'),
             'mapping_rules': data_config.get('mapping_rules'),
         }
         return style_config, context_config, merged_layout_config

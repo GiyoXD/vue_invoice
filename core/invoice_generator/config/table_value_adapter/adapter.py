@@ -8,6 +8,7 @@ from core.invoice_generator.data.data_preparer import (
 from core.invoice_generator.models.table_adapter import (
     ResolvedTableData
 )
+from core.invoice_generator.models.config.layout import SheetLayoutModel
 from .helpers import (
     extract_table_data,
     merge_static_content,
@@ -37,7 +38,7 @@ class TableDataAdapter:
         data_source_type: str,
         data_source: Union[Dict, List, None],
         mapping_rules: Dict[str, Any],
-        header_info: Dict[str, Any],
+        sheet_layout: Optional[SheetLayoutModel] = None,
         DAF_mode: bool = False,
         custom_mode: bool = False,
         table_key: Optional[str] = None,
@@ -48,7 +49,7 @@ class TableDataAdapter:
         self.data_source_type = data_source_type
         self.data_source = data_source
         self.mapping_rules = mapping_rules
-        self.header_info = header_info
+        self.sheet_layout = sheet_layout
         self.DAF_mode = DAF_mode
         self.custom_mode = custom_mode
         self.table_key = table_key
@@ -56,12 +57,18 @@ class TableDataAdapter:
         self.footer_data = footer_data or {}
         self.pricing_net_weight = pricing_net_weight
         
-        # Extract helper maps from header_info
-        self.column_id_map = header_info.get('column_id_map', {})
-        self.column_map = header_info.get('column_map', {})
-        self.parent_column_ids = header_info.get('parent_column_ids', [])
+        self.column_id_map = {}
+        self.column_map = {}
+        self.parent_column_ids = []
         
-        # Build reverse map (index → header)
+        if sheet_layout:
+            bundled_columns, column_map, column_id_map, _ = (
+                sheet_layout.structure.resolve_mappings(DAF_mode=DAF_mode, custom_mode=custom_mode)
+            )
+            self.column_id_map = column_id_map
+            self.column_map = column_map
+            self.parent_column_ids = [col.id for col in bundled_columns if col.children]
+            
         self.idx_to_header_map = {v: k for k, v in self.column_map.items()}
         
         # Cached parsed rules
@@ -178,11 +185,15 @@ class TableDataAdapter:
             
         pricing_net_weight = metadata.get('pricing_net_weight', False)
         
+        sheet_layout = None
+        if layout_config:
+            sheet_layout = SheetLayoutModel.model_validate(layout_config.get('sheet_config', {}) or layout_config)
+
         return TableDataAdapter(
             data_source_type=data_config.get('data_source_type', 'aggregation'),
             data_source=data_config.get('data_source'),
             mapping_rules=data_config.get('mapping_rules', {}),
-            header_info=data_config.get('header_info', {}),
+            sheet_layout=sheet_layout,
             DAF_mode=DAF_mode,
             custom_mode=custom_mode,
             table_key=data_config.get('table_key'),

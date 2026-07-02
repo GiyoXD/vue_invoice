@@ -213,7 +213,6 @@ class SheetProcessor(ABC):
         logger = logging.getLogger(__name__)
 
         data_bundle = resolver.get_data_bundle(table_key=table_key)
-        layout_config['header_info'] = data_bundle.get('header_info', {})
         layout_config['mapping_rules'] = data_bundle.get('mapping_rules', {})
         layout_config['data_source'] = data_bundle.get('data_source')
         layout_config['data_source_type'] = data_bundle.get('data_source_type')

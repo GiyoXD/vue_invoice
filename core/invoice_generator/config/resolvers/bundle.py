@@ -1,6 +1,5 @@
 import logging
 from typing import Dict, Any, Optional
-from .header import resolve_header_info
 from .data_router import get_data_source_for_type
 from core.system_config import ConfigurationError
 
@@ -52,8 +51,6 @@ class BundleResolver:
             if has_table_keys:
                 data_source = data_source.get(str(table_key), {})
         
-        header_info = resolve_header_info(layout_config, self.args)
-        
         data_flow = layout_config.get('data_flow')
         if not isinstance(data_flow, dict):
             raise ConfigurationError(
@@ -69,7 +66,6 @@ class BundleResolver:
         return {
             'data_source': data_source,
             'data_source_type': data_source_type,
-            'header_info': header_info,
             'mapping_rules': mapping_rules,
             'table_key': table_key,
             'footer_data': self.invoice_data.get('footer_data', {}) if self.invoice_data else {},
