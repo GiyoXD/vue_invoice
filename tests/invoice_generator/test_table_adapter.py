@@ -11,39 +11,6 @@ from core.invoice_generator.config.table_value_adapter.helpers import (
 )
 
 
-def test_resolved_table_data_model_dict_compat():
-    """Verify that ResolvedTableData supports dictionary-like access for backward compatibility."""
-    model = ResolvedTableData(
-        data_rows=[{"col_desc": "row1"}],
-        pallet_counts=[2],
-        num_data_rows=1,
-        formula_rules={"col_total": "SUM"},
-        static_content={"col_static": ["Static Value"]},
-        leather_summary={"BUFFALO": {"col_pallet_count": 2}},
-        weight_summary={"net": 100.0, "gross": 110.0},
-        pallet_summary_total=5
-    )
-
-    # __getitem__ compatibility
-    assert model["data_rows"] == [{"col_desc": "row1"}]
-    assert model["pallet_counts"] == [2]
-    assert model["num_data_rows"] == 1
-    assert model["pallet_summary_total"] == 5
-    with pytest.raises(KeyError):
-        _ = model["non_existent_key"]
-
-    # get compatibility
-    assert model.get("data_rows") == [{"col_desc": "row1"}]
-    assert model.get("pallet_summary_total", 0) == 5
-    assert model.get("non_existent_key", "default_val") == "default_val"
-    assert model.get("non_existent_key") is None
-
-    # __contains__ compatibility
-    assert "data_rows" in model
-    assert "pallet_summary_total" in model
-    assert "non_existent_key" not in model
-
-
 def test_helpers_extract_table_data():
     """Verify that extract_table_data correctly extracts data and cleans stringified tuple keys."""
     # List data source

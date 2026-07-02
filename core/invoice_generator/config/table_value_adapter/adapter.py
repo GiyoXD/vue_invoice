@@ -130,7 +130,6 @@ class TableDataAdapter:
             data_rows=data_rows,
             pallet_counts=pallet_counts,
             num_data_rows=num_data_rows,
-            formula_rules=parsed['formula_rules'],
             static_content=self.static_content,
             leather_summary=leather_summary,
             weight_summary=weight_summary,
