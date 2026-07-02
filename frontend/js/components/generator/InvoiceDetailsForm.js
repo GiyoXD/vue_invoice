@@ -61,32 +61,56 @@ export default {
 
             <div class="mt-8">
                 <label class="block text-slate-400 font-medium mb-3">Generation Options</label>
-                <div class="flex gap-6 mt-2 flex-wrap">
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" v-model="includeStandard" accent-color="#2563eb" /> 
-                        <span>Standard Invoice</span>
-                    </label>
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" v-model="includeCustom" accent-color="#2563eb" /> 
-                        <span>Custom Mode</span>
-                    </label>
-                    <label class="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" v-model="includeDAF" accent-color="#2563eb" /> 
-                        <span>DAF Mode</span>
-                    </label>
-                    <label class="flex items-center gap-2 cursor-pointer border-l border-slate-700 pl-4">
-                        <input type="checkbox" v-model="splitSheets" accent-color="#10b981" /> 
-                        <span class="text-emerald-400 font-medium">Split Sheets into Separate Files</span>
+                
+                <!-- Split sheets (always visible, clean top row) -->
+                <div class="mb-4">
+                    <label class="flex items-center gap-2 cursor-pointer bg-slate-900/40 border border-slate-700/50 rounded-lg px-4 py-2 hover:border-emerald-500/50 transition-colors w-fit select-none">
+                        <input type="checkbox" v-model="splitSheets" accent-color="#10b981" class="rounded bg-slate-950 border-slate-800 w-4 h-4 cursor-pointer" /> 
+                        <span class="text-emerald-400 font-bold text-xs uppercase tracking-wider">Split Sheets into Separate Files</span>
                     </label>
                 </div>
-                
-                <!-- KH/VN Variant Options -->
-                <div v-if="hasVariants" class="flex gap-6 mt-3 p-3 bg-yellow-5 border border-yellow-15 rounded-md flex-wrap">
-                    <span class="text-yellow-400 font-bold text-sm self-center">Variants:</span>
-                    <label v-for="v in assetStatus.variants" :key="v.suffix" class="flex items-center gap-2 cursor-pointer">
-                        <input type="checkbox" v-model="selectedVariants" :value="v.suffix" accent-color="#eab308" />
-                        <span>{{ v.suffix.replace('_', '') }} version</span>
-                    </label>
+
+                <!-- Explicit Target Selection Cards -->
+                <div v-if="hasVariants" class="flex flex-col gap-4">
+                    <div v-for="v in assetStatus.variants" :key="v.suffix" class="bg-slate-900/60 border border-slate-700/80 rounded-xl p-4">
+                        <h4 class="m-0 text-slate-300 font-bold text-xs uppercase tracking-wider mb-3 pb-2 border-b border-slate-800">
+                            {{ v.suffix === '_KH' ? 'Cambodia (KH)' : v.suffix === '_VN' ? 'Vietnam (VN)' : v.suffix.replace('_', '') }} Document Sets
+                        </h4>
+                        <div class="flex gap-6 mt-1 flex-wrap">
+                            <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-300 uppercase tracking-wide">
+                                <input type="checkbox" :value="v.suffix.replace('_', '') + '_Standard'" v-model="selectedTargets" accent-color="#3b82f6" class="rounded bg-slate-950 border-slate-800 w-4 h-4 cursor-pointer" />
+                                <span>Standard</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-300 uppercase tracking-wide">
+                                <input type="checkbox" :value="v.suffix.replace('_', '') + '_Custom'" v-model="selectedTargets" accent-color="#3b82f6" class="rounded bg-slate-950 border-slate-800 w-4 h-4 cursor-pointer" />
+                                <span>Custom</span>
+                            </label>
+                            <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-300 uppercase tracking-wide">
+                                <input type="checkbox" :value="v.suffix.replace('_', '') + '_DAF'" v-model="selectedTargets" accent-color="#3b82f6" class="rounded bg-slate-950 border-slate-800 w-4 h-4 cursor-pointer" />
+                                <span>DAF Mode</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-else class="bg-slate-900/60 border border-slate-700/80 rounded-xl p-4">
+                    <h4 class="m-0 text-slate-300 font-bold text-xs uppercase tracking-wider mb-3 pb-2 border-b border-slate-800">
+                        Default Blueprint Document Sets
+                    </h4>
+                    <div class="flex gap-6 mt-1 flex-wrap">
+                        <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-300 uppercase tracking-wide">
+                            <input type="checkbox" value="Default_Standard" v-model="selectedTargets" accent-color="#3b82f6" class="rounded bg-slate-950 border-slate-800 w-4 h-4 cursor-pointer" />
+                            <span>Standard</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-300 uppercase tracking-wide">
+                            <input type="checkbox" value="Default_Custom" v-model="selectedTargets" accent-color="#3b82f6" class="rounded bg-slate-950 border-slate-800 w-4 h-4 cursor-pointer" />
+                            <span>Custom</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-300 uppercase tracking-wide">
+                            <input type="checkbox" value="Default_DAF" v-model="selectedTargets" accent-color="#3b82f6" class="rounded bg-slate-950 border-slate-800 w-4 h-4 cursor-pointer" />
+                            <span>DAF Mode</span>
+                        </label>
+                    </div>
                 </div>
             </div>
 
@@ -242,6 +266,7 @@ export default {
             includeDAF,
             splitSheets,
             selectedVariants,
+            selectedTargets,
             isNetMode,
             globalUnitPrice,
             priceAdjustments,
@@ -275,6 +300,7 @@ export default {
             includeDAF,
             splitSheets,
             selectedVariants,
+            selectedTargets,
             isNetMode,
             globalUnitPrice,
             priceAdjustments,

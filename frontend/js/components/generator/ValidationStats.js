@@ -5,62 +5,67 @@ export default {
     name: 'ValidationStats',
     template: `
         <!-- VALIDATION CARD -->
-        <div class="bg-emerald-500/10 border border-emerald-500/30 shadow-2xl rounded-2xl p-8 mb-8 delay-100 fade-in" v-if="validationData && !isGenerating && !generationError">
-            <div class="flex justify-between items-end mb-6 border-b border-emerald-500/20 pb-4">
-                <h3 class="text-emerald-400 m-0 text-xl font-bold">✅ Invoice Generated Successfully</h3>
-                <span class="text-sm text-emerald-400/70">{{ validationData.timestamp }}</span>
+        <div class="bg-emerald-500/10 border border-emerald-500/30 shadow-2xl rounded-2xl p-6 mb-8 delay-100 fade-in" v-if="validationData && !isGenerating && !generationError">
+            <div class="flex justify-between items-end mb-4 border-b border-emerald-500/20 pb-3">
+                <h3 class="text-emerald-400 m-0 text-lg font-bold">✅ Invoice Generated Successfully</h3>
+                <span class="text-xs text-emerald-400/70">{{ validationData.timestamp }}</span>
             </div>
 
-            <div v-if="summaryStats" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <div class="flex flex-col gap-1 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
-                    <span class="text-emerald-400/80 text-sm font-bold uppercase tracking-wider">Total Items</span>
-                    <span class="text-emerald-300 text-2xl font-mono">{{ summaryStats.total_pcs?.toLocaleString() || 0 }}</span>
-                </div>
-                <div class="flex flex-col gap-1 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
-                    <span class="text-emerald-400/80 text-sm font-bold uppercase tracking-wider">Total SQFT</span>
-                    <span class="text-emerald-300 text-2xl font-mono">{{ summaryStats.total_sqft?.toLocaleString(undefined, {maximumFractionDigits: 2}) || 0 }}</span>
-                </div>
-                <div class="flex flex-col gap-1 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
-                    <span class="text-emerald-400/80 text-sm font-bold uppercase tracking-wider">Total Pallets</span>
-                    <span class="text-emerald-300 text-2xl font-mono">{{ summaryStats.total_pallets || 0 }}</span>
-                </div>
-            </div>
+            <!-- Redesigned Summary Panel (Concise and Spacious) -->
+            <div class="flex flex-wrap gap-4 items-center justify-between py-2.5 px-4 bg-slate-900/60 border border-slate-700/50 rounded-xl">
+                <div class="flex flex-wrap items-center gap-y-2">
+                    <!-- Amount -->
+                    <div class="flex flex-col pr-6 border-r border-slate-700/50 min-w-[95px]">
+                        <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Amount</span>
+                        <span class="text-sm font-bold text-purple-400 mt-0.5">$ {{ formatNumber(totalAmount) }}</span>
+                    </div>
 
-            <div v-if="weightStats" class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-                <div class="flex flex-col gap-1 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
-                    <span class="text-emerald-400/80 text-sm font-bold uppercase tracking-wider">Net Weight</span>
-                    <span class="text-emerald-300 text-2xl font-mono">{{ weightStats.net?.toLocaleString() }} kg</span>
-                </div>
-                <div class="flex flex-col gap-1 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
-                    <span class="text-emerald-400/80 text-sm font-bold uppercase tracking-wider">Gross Weight</span>
-                    <span class="text-emerald-300 text-2xl font-mono">{{ weightStats.gross?.toLocaleString() }} kg</span>
-                </div>
-                <div class="flex flex-col gap-1 p-4 bg-emerald-500/5 rounded-xl border border-emerald-500/10">
-                    <span class="text-emerald-400/80 text-sm font-bold uppercase tracking-wider">Total CBM</span>
-                    <span class="text-emerald-300 text-2xl font-mono">{{ weightStats.cbm?.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 3}) }} m³</span>
-                </div>
-            </div>
+                    <!-- SQFT (PCS) -->
+                    <div class="flex flex-col px-6 border-r border-slate-700/50 min-w-[135px]">
+                        <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">SQFT (PCS)</span>
+                        <div class="mt-0.5 font-bold text-sm">
+                            <span class="text-emerald-400">{{ formatNumber(summaryStats?.total_sqft) }}</span>
+                            <span class="text-slate-400 font-medium ml-1.5 text-xs">({{ formatNumber(summaryStats?.total_pcs) }} pcs)</span>
+                        </div>
+                    </div>
 
-            <!-- Recommended Shipping Vehicle Card -->
-            <div v-if="recommendedTruckInfo" class="mt-6 p-4 rounded-xl border flex items-center justify-between transition-all" :class="recommendedTruckInfo.color">
-                <div class="flex items-center gap-3">
-                    <span class="text-2xl">🚛</span>
-                    <div class="text-left flex flex-col gap-1">
-                        <div class="flex items-center gap-2">
-                            <h4 class="m-0 text-sm font-bold uppercase tracking-wider text-slate-400">Recommended Shipping Vehicle</h4>
-                            <label class="flex items-center gap-1 cursor-pointer text-[10px] font-bold text-slate-400 uppercase tracking-wider select-none bg-slate-900 border border-slate-700/50 rounded-lg px-2 py-0.5 hover:border-slate-500 transition-colors">
+                    <!-- Pallets -->
+                    <div class="flex flex-col px-6 border-r border-slate-700/50 min-w-[75px]">
+                        <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Pallets</span>
+                        <span class="text-sm font-bold text-yellow-400 mt-0.5">{{ formatNumber(summaryStats?.total_pallets) }}</span>
+                    </div>
+
+                    <!-- Weight Net/Gross -->
+                    <div class="flex flex-col px-6 border-r border-slate-700/50 min-w-[160px]">
+                        <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Weight (Net/Gross)</span>
+                        <div class="mt-0.5 font-bold text-sm">
+                            <span class="text-cyan-400">{{ formatNumber(weightStats?.net) }}</span>
+                            <span class="text-slate-500 mx-0.5">/</span>
+                            <span class="text-orange-400">{{ formatNumber(weightStats?.gross) }}</span>
+                            <span class="text-slate-400 font-medium ml-0.5 text-xs">kg</span>
+                        </div>
+                    </div>
+
+                    <!-- Volume -->
+                    <div class="flex flex-col px-6 border-r border-slate-700/50 min-w-[85px]">
+                        <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">CBM</span>
+                        <span class="text-sm font-bold text-teal-400 mt-0.5">{{ formatNumber(weightStats?.cbm) }} <span class="text-slate-400 font-medium text-xs">m³</span></span>
+                    </div>
+
+                    <!-- Recommended Truck -->
+                    <div class="flex flex-col pl-6 min-w-[220px]">
+                        <span class="text-xs font-medium text-slate-400 uppercase tracking-wider font-semibold">Recommended Truck</span>
+                        <div class="flex items-center gap-2 mt-0.5">
+                            <span v-if="recommendedTruckInfo" class="text-xs font-bold px-2.5 py-0.5 rounded-full border transition-all" :class="recommendedTruckInfo.color" :title="recommendedTruckInfo.description">
+                                {{ recommendedTruckInfo.displayName }}
+                            </span>
+                            <span v-else class="text-xs font-bold text-slate-500">—</span>
+                            <label class="flex items-center gap-1 cursor-pointer text-[10px] font-bold text-slate-400 uppercase tracking-wider select-none bg-slate-900 border border-slate-700/50 rounded px-1.5 py-0.5 hover:border-slate-500 transition-colors">
                                 <input type="checkbox" v-model="isWideCargo" accent-color="#10b981" class="rounded bg-slate-950 border-slate-800 w-3 h-3 cursor-pointer" />
-                                <span>Wide Pallets</span>
+                                <span class="px-1">Wide</span>
                             </label>
                         </div>
-                        <p class="m-0 text-lg font-extrabold text-slate-100 mt-0.5">{{ recommendedTruckInfo.displayName }}</p>
                     </div>
-                </div>
-                <div class="text-right">
-                    <span class="text-[10px] font-bold text-slate-400 block uppercase tracking-wider">Tonnage Limit</span>
-                    <span class="text-sm font-semibold text-slate-300 mt-0.5">
-                        Max {{ recommendedTruckInfo.maxWeight === Infinity ? 'Limit Exceeded' : recommendedTruckInfo.maxWeight.toLocaleString() + ' kg' }}
-                    </span>
                 </div>
             </div>
         </div>
@@ -74,8 +79,17 @@ export default {
             summaryStats,
             weightStats,
             recommendedTruckInfo,
-            isWideCargo
+            isWideCargo,
+            totalAmount
         } = storeToRefs(store);
+
+        const formatNumber = (val) => {
+            if (val === null || val === undefined || val === '') return '';
+            const num = Number(val);
+            if (isNaN(num)) return val;
+            if (Number.isInteger(num)) return num.toString();
+            return parseFloat(num.toFixed(4)).toString();
+        };
 
         return {
             validationData,
@@ -84,7 +98,9 @@ export default {
             summaryStats,
             weightStats,
             recommendedTruckInfo,
-            isWideCargo
+            isWideCargo,
+            totalAmount,
+            formatNumber
         };
     }
 };

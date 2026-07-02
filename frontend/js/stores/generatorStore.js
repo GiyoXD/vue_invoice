@@ -28,6 +28,7 @@ export const useGeneratorStore = defineStore('generator', () => {
     const includeDAF = ref(false);
     const selectedVariants = ref([]);
     const splitSheets = ref(false);
+    const selectedTargets = ref([]);
 
     const priceAdjustments = ref([]);
     const adjustmentError = ref('');
@@ -104,6 +105,17 @@ export const useGeneratorStore = defineStore('generator', () => {
         return recommendTruck(gross, cbm, pallets, isWideCargo.value);
     });
 
+    const totalAmount = computed(() => {
+        const gt = validationData.value?.footer_data?.grand_total;
+        if (gt) {
+            return Number(gt.col_amount || 0);
+        }
+        if (validationData.value?.database_export?.summary) {
+            return Number(validationData.value.database_export.summary.total_amount || 0);
+        }
+        return 0;
+    });
+
     // --- Watchers ---
     watch(validationData, (newData) => {
         if (newData) {
@@ -132,6 +144,7 @@ export const useGeneratorStore = defineStore('generator', () => {
         validationData.value = null;
         assetStatus.value = null;
         selectedVariants.value = [];
+        selectedTargets.value = [];
         priceAdjustments.value = [];
         refSourceStatus.value = null;
     };
@@ -176,6 +189,17 @@ export const useGeneratorStore = defineStore('generator', () => {
 
                 if (data.asset_status?.variants?.length > 0) {
                     selectedVariants.value = data.asset_status.variants.map(v => v.suffix);
+                    const suffixes = data.asset_status.variants.map(v => v.suffix);
+                    if (suffixes.includes('_KH')) {
+                        selectedTargets.value = ['KH_Standard'];
+                    } else if (suffixes.includes('_VN')) {
+                        selectedTargets.value = ['VN_Standard'];
+                    } else {
+                        const firstLoc = suffixes[0]?.replace('_', '') || 'Default';
+                        selectedTargets.value = [`${firstLoc}_Standard`];
+                    }
+                } else {
+                    selectedTargets.value = ['Default_Standard'];
                 }
 
                 if (data.warnings && data.warnings.length > 0) {
@@ -277,6 +301,7 @@ export const useGeneratorStore = defineStore('generator', () => {
                 invoice_no: invoiceNo.value,
                 invoice_date: invoiceDate.value,
                 invoice_ref: invoiceRef.value,
+                targets: selectedTargets.value,
                 generate_standard: includeStandard.value,
                 generate_custom: includeCustom.value,
                 generate_daf: includeDAF.value,
@@ -493,6 +518,7 @@ export const useGeneratorStore = defineStore('generator', () => {
         includeDAF,
         selectedVariants,
         splitSheets,
+        selectedTargets,
         priceAdjustments,
         adjustmentError,
         globalUnitPrice,
@@ -521,6 +547,7 @@ export const useGeneratorStore = defineStore('generator', () => {
         summaryStats,
         weightStats,
         recommendedTruckInfo,
+        totalAmount,
 
         // actions
         setRawFile,

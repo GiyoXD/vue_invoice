@@ -33,6 +33,7 @@ class GenerateRequest(BaseModel):
     generate_daf: bool = False
     generate_kh: bool = False
     generate_vn: bool = False
+    targets: Optional[List[str]] = None
     price_adjustment: Optional[List[List[Any]]] = None
     global_unit_price: Optional[float] = None  # For 'net' pricing mode (shipping lists)
     pricing_net_weight: bool = False
@@ -175,86 +176,124 @@ def generate_invoice(request: GenerateRequest):
         generated_files = []
         processed_any = False
 
-        # Define mode tasks — typed arguments instead of CLI flag strings
-        mode_tasks = []
-        if request.generate_standard:
-            mode_tasks.append({"suffix": "", "daf_mode": False, "custom_mode": False, "name": "Standard Invoice"})
-        if request.generate_custom:
-            mode_tasks.append({"suffix": "_Custom", "daf_mode": False, "custom_mode": True, "name": "Custom Invoice"})
-        if request.generate_daf:
-            mode_tasks.append({"suffix": "_DAF", "daf_mode": True, "custom_mode": False, "name": "DAF Invoice"})
+        loop_tasks = []
 
-        if not mode_tasks:
-             return JSONResponse(status_code=400, content={"error": "No invoice type selected."})
+        if request.targets:
+            # Resolve custom list of (variant, task)
+            from core.invoice_generator.resolvers import InvoiceAssetResolver
+            resolver = InvoiceAssetResolver(
+                base_config_dir=sys_config.registry_dir,
+                base_template_dir=sys_config.templates_dir
+            )
+            all_variants = resolver.resolve_all_variants(str(json_path_obj))
+            variant_map = {v["suffix"]: v for v in all_variants}
 
-        # Determine variant tasks — KH is the default variant
-        variant_tasks = []
-        from core.invoice_generator.resolvers import InvoiceAssetResolver
-        resolver = InvoiceAssetResolver(
-            base_config_dir=sys_config.registry_dir,
-            base_template_dir=sys_config.templates_dir
-        )
-        all_variants = resolver.resolve_all_variants(str(json_path_obj))
-        variant_map = {v["suffix"]: v for v in all_variants}
-        
-        if request.generate_kh and "_KH" in variant_map:
-            variant_tasks.append(variant_map["_KH"])
-        if request.generate_vn and "_VN" in variant_map:
-            variant_tasks.append(variant_map["_VN"])
-        
-        # Default to KH variant when no variant explicitly selected
-        if not variant_tasks:
-            if "_KH" in variant_map:
+            modes_map = {
+                "Standard": {"suffix": "", "daf_mode": False, "custom_mode": False, "name": "Standard Invoice"},
+                "Custom": {"suffix": "_Custom", "daf_mode": False, "custom_mode": True, "name": "Custom Invoice"},
+                "DAF": {"suffix": "_DAF", "daf_mode": True, "custom_mode": False, "name": "DAF Invoice"}
+            }
+
+            for t in request.targets:
+                parts = t.split("_")
+                if len(parts) != 2:
+                    continue
+                loc, mode = parts
+
+                variant_suffix = f"_{loc}" if loc != "Default" else ""
+                variant = variant_map.get(variant_suffix)
+                if not variant and loc == "Default":
+                    variant = {"suffix": "", "config_path": None, "template_path": None}
+                elif not variant:
+                    continue
+
+                task = modes_map.get(mode)
+                if not task:
+                    continue
+
+                loop_tasks.append((variant, task))
+        else:
+            # Fallback to cartesian product
+            mode_tasks = []
+            if request.generate_standard:
+                mode_tasks.append({"suffix": "", "daf_mode": False, "custom_mode": False, "name": "Standard Invoice"})
+            if request.generate_custom:
+                mode_tasks.append({"suffix": "_Custom", "daf_mode": False, "custom_mode": True, "name": "Custom Invoice"})
+            if request.generate_daf:
+                mode_tasks.append({"suffix": "_DAF", "daf_mode": True, "custom_mode": False, "name": "DAF Invoice"})
+
+            variant_tasks = []
+            from core.invoice_generator.resolvers import InvoiceAssetResolver
+            resolver = InvoiceAssetResolver(
+                base_config_dir=sys_config.registry_dir,
+                base_template_dir=sys_config.templates_dir
+            )
+            all_variants = resolver.resolve_all_variants(str(json_path_obj))
+            variant_map = {v["suffix"]: v for v in all_variants}
+
+            if request.generate_kh and "_KH" in variant_map:
                 variant_tasks.append(variant_map["_KH"])
-            else:
-                variant_tasks = [{"suffix": "", "config_path": None, "template_path": None}]
+            if request.generate_vn and "_VN" in variant_map:
+                variant_tasks.append(variant_map["_VN"])
+
+            if not variant_tasks:
+                if "_KH" in variant_map:
+                    variant_tasks.append(variant_map["_KH"])
+                else:
+                    variant_tasks = [{"suffix": "", "config_path": None, "template_path": None}]
+
+            for variant in variant_tasks:
+                for task in mode_tasks:
+                    loop_tasks.append((variant, task))
+
+        if not loop_tasks:
+             return JSONResponse(status_code=400, content={"error": "No invoice type selected."})
 
         # Final loop
         with tempfile.TemporaryDirectory(prefix="invoice_gen_tmp_") as tmpdir:
             base_output_dir = Path(tmpdir)
-            for variant in variant_tasks:
+            for variant, task in loop_tasks:
                 variant_suffix = variant["suffix"]
-                for task in mode_tasks:
-                    try:
-                        filename = f"{request.identifier}_Invoice{variant_suffix}{task['suffix']}.xlsx"
-                        output_path = base_output_dir / filename
+                try:
+                    filename = f"{request.identifier}_Invoice{variant_suffix}{task['suffix']}.xlsx"
+                    output_path = base_output_dir / filename
 
-                        from core.invoice_generator.generate_invoice import GenerationOptions
-                        gen_options = GenerationOptions(
-                            daf_mode=task["daf_mode"],
-                            custom_mode=task["custom_mode"],
-                            enable_auto_fit=request.auto_fit,
-                            split_sheets=request.split_sheets,
-                            return_bytes=True,
-                            explicit_config_data=variant.get("config_data"),
-                            explicit_template_json_data=variant.get("template_json_data"),
-                            explicit_template_xlsx_bytes=variant.get("template_xlsx_bytes")
-                        )
-    
-                        result = orchestrator.generate_invoice(
-                            json_path=json_path_obj,
-                            output_path=output_path,
-                            template_dir=template_dir,
-                            config_dir=config_dir,
-                            explicit_config_path=Path(variant["config_path"]) if variant.get("config_path") else None,
-                            explicit_template_path=Path(variant["template_path"]) if variant.get("template_path") else None,
-                            input_data_dict=full_data,
-                            options=gen_options
-                        )
-                        
-                        if result:
-                            if isinstance(result, list):
-                                for fname, fbytes in result:
-                                    results.append(fname)
-                                    generated_files.append((fname, fbytes))
-                            else:
-                                fname, fbytes = result
+                    from core.invoice_generator.generate_invoice import GenerationOptions
+                    gen_options = GenerationOptions(
+                        daf_mode=task["daf_mode"],
+                        custom_mode=task["custom_mode"],
+                        enable_auto_fit=request.auto_fit,
+                        split_sheets=request.split_sheets,
+                        return_bytes=True,
+                        explicit_config_data=variant.get("config_data"),
+                        explicit_template_json_data=variant.get("template_json_data"),
+                        explicit_template_xlsx_bytes=variant.get("template_xlsx_bytes")
+                    )
+
+                    result = orchestrator.generate_invoice(
+                        json_path=json_path_obj,
+                        output_path=output_path,
+                        template_dir=template_dir,
+                        config_dir=config_dir,
+                        explicit_config_path=Path(variant["config_path"]) if variant.get("config_path") else None,
+                        explicit_template_path=Path(variant["template_path"]) if variant.get("template_path") else None,
+                        input_data_dict=full_data,
+                        options=gen_options
+                    )
+                    
+                    if result:
+                        if isinstance(result, list):
+                            for fname, fbytes in result:
                                 results.append(fname)
                                 generated_files.append((fname, fbytes))
-                            processed_any = True
-                    except Exception as e:
-                        task_name = f"{variant_suffix.lstrip('_')} {task['name']}" if variant_suffix else task['name']
-                        errors.append(f"Failed to generate {task_name}: {str(e)}")
+                        else:
+                            fname, fbytes = result
+                            results.append(fname)
+                            generated_files.append((fname, fbytes))
+                        processed_any = True
+                except Exception as e:
+                    task_name = f"{variant_suffix.lstrip('_')} {task['name']}" if variant_suffix else task['name']
+                    errors.append(f"Failed to generate {task_name}: {str(e)}")
 
         if not processed_any and errors:
              status_code = 500
