@@ -128,9 +128,7 @@ class TableDataAdapter:
 
         return ResolvedTableData(
             data_rows=data_rows,
-            pallet_counts=pallet_counts,
             num_data_rows=num_data_rows,
-            static_content=self.static_content,
             leather_summary=leather_summary,
             weight_summary=weight_summary,
             pallet_summary_total=pallet_summary_total
