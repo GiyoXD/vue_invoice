@@ -45,18 +45,13 @@ class SheetManager:
                 self.logger.warning(f"    No header row found in {sheet_name}")
                 return None
             
-            self.logger.debug(f"    Header row: {boundaries.header_row}")
-            self.logger.debug(f"    Header type: {'Multi-row' if boundaries.data_start_row > boundaries.header_row + 1 else 'Single-row'}. Data starts at row: {boundaries.data_start_row}")
-
             # 2. Scan table zone (Zone 2)
             table_layout = self.tabular_scanner.scan_table(
                 worksheet, boundaries, mapping_config, skip_desc_scan, skip_hs_scan, sheet_name
             )
-            self.logger.debug(f"    Found {len(table_layout.columns)} columns")
             
             # 3. Classify data source type
             data_source = self._determine_data_source(sheet_name, mapping_config)
-            self.logger.debug(f"    Data source: {data_source}")
             
             # 4. Scan static zones (Zone 1 & 3)
             static_layout = self.template_scanner.scan_static_content(
