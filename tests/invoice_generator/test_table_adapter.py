@@ -2,7 +2,7 @@ import pytest
 from typing import Dict, Any
 
 from core.invoice_generator.config.table_value_adapter import TableDataAdapter
-from core.invoice_generator.models.table_adapter import ResolvedTableData, StaticInfoModel
+from core.invoice_generator.models.table_adapter import ResolvedTableData
 from core.invoice_generator.config.table_value_adapter.helpers import (
     extract_table_data,
     merge_static_content,
@@ -17,7 +17,6 @@ def test_resolved_table_data_model_dict_compat():
         data_rows=[{"col_desc": "row1"}],
         pallet_counts=[2],
         num_data_rows=1,
-        static_info=StaticInfoModel(col1_index=0, num_static_labels=1),
         formula_rules={"col_total": "SUM"},
         static_content={"col_static": ["Static Value"]},
         leather_summary={"BUFFALO": {"col_pallet_count": 2}},

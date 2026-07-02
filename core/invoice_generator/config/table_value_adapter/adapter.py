@@ -6,8 +6,7 @@ from core.invoice_generator.data.data_preparer import (
     parse_mapping_rules
 )
 from core.invoice_generator.models.table_adapter import (
-    ResolvedTableData,
-    StaticInfoModel
+    ResolvedTableData
 )
 from .helpers import (
     extract_table_data,
@@ -131,13 +130,6 @@ class TableDataAdapter:
             data_rows=data_rows,
             pallet_counts=pallet_counts,
             num_data_rows=num_data_rows,
-            static_info=StaticInfoModel(
-                col1_index=parsed['col1_index'],
-                num_static_labels=parsed['num_static_labels'],
-                initial_static_col1_values=parsed['initial_static_col1_values'],
-                static_column_header_name=parsed['static_column_header_name'],
-                apply_special_border_rule=parsed['apply_special_border_rule']
-            ),
             formula_rules=parsed['formula_rules'],
             static_content=self.static_content,
             leather_summary=leather_summary,
