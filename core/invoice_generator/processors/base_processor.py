@@ -217,11 +217,11 @@ class SheetProcessor(ABC):
         layout_config['data_source'] = data_bundle.get('data_source')
         layout_config['data_source_type'] = data_bundle.get('data_source_type')
         
-        # Resolve table data using TableDataAdapter
         try:
             table_resolver = resolver.get_table_data_resolver(table_key=table_key)
             resolved_data = table_resolver.resolve()
             layout_config['resolved_data'] = resolved_data
+            
             logger.info(f"Successfully resolved table data for table '{table_key or 'default'}' using TableDataAdapter")
             return True
         except Exception as e:

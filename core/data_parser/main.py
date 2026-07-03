@@ -533,9 +533,7 @@ def run_invoice_automation(
             
             all_tables_data = sheet_parser.extract_multiple_tables(sheet, all_header_rows, column_mapping)
 
-            # Freeze a deep copy BEFORE any processing loop mutates the row dicts in-place.
-            # This is what gets written to "raw_data" in the JSON — CBM is never distributed here.
-            raw_tables_snapshot = copy.deepcopy(all_tables_data)
+            # Removed raw_tables_snapshot to avoid deepcopy overhead. Raw values are now saved in-place.
             # --- 5. Process Each Table (Instrumented) ---
             logging.info(f"--- Starting Data Processing Loop for {len(all_tables_data)} Extracted Table(s) ---")
             
@@ -739,16 +737,13 @@ def run_invoice_automation(
                     row.get('col_pallet_count', 0) for row in table_data
                     if isinstance(row.get('col_pallet_count'), (int, float))
                 )
-                logging.info(f"Table {table_index + 1}: {pallet_sum} pallet boundaries (1/0 format)")
-
+        # Format pallet counts to "x-y" display format in-place for JSON output
+        data_processor.format_pallet_counts_to_xy(processed_tables, true_total_pallets)
+        data_processor.format_pallet_counts_to_xy([normal_aggregate_per_po], true_total_pallets)
         # Remove col_pallet_id from final output structures as it is strictly for validation
         for table in processed_tables:
             for row in table:
                 row.pop('col_pallet_id', None)
-        for table in raw_tables_snapshot:
-            for row in table:
-                row.pop('col_pallet_id', None)
-
         # --- 8. Generate JSON Output ---
         logging.info("--- Preparing Data for JSON Output ---")
         try:
@@ -772,8 +767,8 @@ def run_invoice_automation(
 
                  # Raw/unprocessed table data exactly as extracted from Excel.
                  # CBM and other values are NEVER distributed here.
-                 # Kept purely for shipping list record-keeping; never used by invoice generation.
-                 "raw_data": make_json_serializable(raw_tables_snapshot),
+                  # Kept purely for backward compatibility with old frontend/db queries.
+                  "raw_data": [],
                  
                  # Include Footer Data - both per-table and grand total
                  "footer_data": {

@@ -76,7 +76,7 @@ export default {
                             <td>{{ row.col_level || '' }}</td>
                             <td>{{ formatNumber(row.col_qty_pcs || row.pcs) }}</td>
                             <td>{{ formatNumber(row.col_qty_sf || row.sqft) }}</td>
-                            <td>{{ formatNumber(row.col_pallet_count || row.pallet_count) }}</td>
+                            <td>{{ row.col_pallet_no || '' }}</td>
 
                             <td>
                                 <span v-if="!row.is_adjustment">{{ formatNumber(row.col_net || row.net) }}</span>

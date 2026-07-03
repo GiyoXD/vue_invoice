@@ -63,6 +63,7 @@ class BlueprintSchema:
         "col_cbm": ColumnDefinition(id="col_cbm", keywords=[], excel_format="0.00"),
         "col_no": ColumnDefinition(id="col_no", keywords=[]),
         "col_pallet_count": ColumnDefinition(id="col_pallet_count", keywords=[]),
+        "col_pallet_no": ColumnDefinition(id="col_pallet_no", keywords=[]),
         "col_pallet_id": ColumnDefinition(id="col_pallet_id", keywords=[]),
         "col_dc": ColumnDefinition(id="col_dc", keywords=[], width=12.0),
         "col_container_no": ColumnDefinition(id="col_container_no", keywords=[], width=18.0),

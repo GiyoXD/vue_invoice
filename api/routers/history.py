@@ -171,6 +171,7 @@ async def accept_invoice(req: HistoryRequest, db: Session = Depends(get_db)):
                         col_qty_pcs=to_float(row.get("col_qty_pcs")),
                         col_qty_sf=sqft_val,
                         col_pallet_count=to_float(row.get("col_pallet_count")),
+                        col_pallet_no=str(row.get("col_pallet_no", "")),
                         col_net=to_float(row.get("col_net")),
                         col_gross=to_float(row.get("col_gross")),
                         col_cbm_raw=str(row.get("col_cbm_raw", row.get("col_cbm", ""))),

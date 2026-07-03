@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Optional, Union
 import traceback
 
 from core.invoice_generator.models.table_adapter import ResolvedTableData
-from core.invoice_generator.data.data_preparer import _to_numeric
+from core.invoice_generator.config.table_value_adapter.preparer import _to_numeric
 from .table_grid import Grid
 from .base import TableSectionBuilder
 

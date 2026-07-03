@@ -40,6 +40,7 @@ EXPECTED_HEADER_DATA_TYPES = {
     'col_reference_code': ['string'],
     'col_level': ['string'],
     'col_pallet_count': ['numeric', 'string'],
+    'col_pallet_no': ['string', 'numeric'],
     'col_pallet_id': ['string', 'numeric'],
     'col_manual_no': ['string'],
     'col_remarks': ['string'],

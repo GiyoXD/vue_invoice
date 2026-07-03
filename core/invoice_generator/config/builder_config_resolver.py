@@ -77,6 +77,13 @@ class BuilderConfigResolver:
             layout_config=self.get_layout_bundle()
         )
         
+    def get_table_footer_resolver(self, table_key: Optional[str] = None):
+        from .table_value_adapter import TableFooterAdapter
+        return TableFooterAdapter.create_from_bundles(
+            data_config=self.get_data_bundle(table_key=table_key),
+            context_config=self.get_context_bundle()
+        )
+        
     def get_footer_bundles(
         self,
         sum_ranges: Optional[list] = None,

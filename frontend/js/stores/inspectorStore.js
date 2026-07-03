@@ -64,7 +64,7 @@ export const useInspectorStore = defineStore('inspector', () => {
             });
         }
 
-        const mainItems = (data.raw_data || []).flat();
+        const mainItems = (data.multi_table || data.raw_data || []).flat();
         items = items.concat(mainItems);
 
         return items;

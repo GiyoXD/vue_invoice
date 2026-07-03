@@ -123,11 +123,12 @@ class TableBuilder:
             try:
                 # Directly construct FooterData from pre-calculated parser results
                 from ...models.footer import FooterData
-                pallet_count = self.resolved_data.pallet_summary_total if hasattr(self.resolved_data, 'pallet_summary_total') else 0
+                footer = self.resolved_data.footer
+                pallet_count = footer.pallet_summary_total if footer else 0
                 if pallet_count is None:
                     pallet_count = 0
                     
-                ws = self.resolved_data.weight_summary
+                ws = footer.weight_summary if footer else None
                 if not ws or (ws.get('net', 0) == 0 and ws.get('gross', 0) == 0):
                     if self.total_net_weight is not None or self.total_gross_weight is not None:
                         ws = {
@@ -140,7 +141,7 @@ class TableBuilder:
                     data_start_row=data_physical_start_row,
                     data_end_row=data_physical_start_row + len(self.resolved_data.data_rows) - 1,
                     total_pallets=int(pallet_count),
-                    leather_summary=self.resolved_data.leather_summary,
+                    leather_summary=footer.leather_summary if footer else None,
                     weight_summary=ws
                 )
                 
@@ -156,7 +157,7 @@ class TableBuilder:
                 is_global_unique_desc = getattr(self.args, 'is_global_unique_desc', False) if self.args else False
                 allow_col_desc_merge = getattr(self.args, 'allow_col_desc_merge', True) if self.args else True
                 
-                merge_cols = ['col_pallet_count']
+                merge_cols = ['col_pallet_no']
                 if allow_col_desc_merge:
                     merge_cols.append('col_desc')
 

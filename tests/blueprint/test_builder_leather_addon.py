@@ -14,11 +14,11 @@ def test_config_builder_leather_summary_detection():
     
     # Columns: col_po (col 1), col_pallet_id (col 2), col_desc (col 3), col_qty_pcs (col 4), col_net (col 5)
     col_po = ColumnInfo(id="col_po", header="PO", col_index=1, width=10.0)
-    col_pallet_id = ColumnInfo(id="col_pallet_id", header="Pallet ID", col_index=2, width=10.0)
+    col_pallet_no = ColumnInfo(id="col_pallet_no", header="Pallet ID", col_index=2, width=10.0)
     col_desc = ColumnInfo(id="col_desc", header="Description", col_index=3, width=10.0)
     col_qty_pcs = ColumnInfo(id="col_qty_pcs", header="Qty Pcs", col_index=4, width=10.0)
     col_net = ColumnInfo(id="col_net", header="Net Weight", col_index=5, width=10.0)
-    sheet.columns = [col_po, col_pallet_id, col_desc, col_qty_pcs, col_net]
+    sheet.columns = [col_po, col_pallet_no, col_desc, col_qty_pcs, col_net]
 
     # Setup static content hints containing the detected leather summaries
     from core.blueprint_generator.internal.scanner.models.addons import LeatherSummaryFact
@@ -28,7 +28,7 @@ def test_config_builder_leather_summary_detection():
             LeatherSummaryFact(
                 leather_key="BUFFALO",
                 total_col_id="col_po",
-                label_col_id="col_pallet_id",
+                label_col_id="col_pallet_no",
                 total_value="TOTAL OF:",
                 label_value="BUFFALO LEATHER"
             )
@@ -39,7 +39,7 @@ def test_config_builder_leather_summary_detection():
         total_text="TOTAL:",
         total_text_col_id="col_po",
         merge_curr_colspan=1,
-        pallet_count_col_id="col_pallet_id"
+        pallet_count_col_id="col_pallet_no"
     )
 
     builder = ConfigBuilder()
@@ -52,7 +52,7 @@ def test_config_builder_leather_summary_detection():
     # Verify Buffalo row structure
     buffalo_row = rows[1]
     assert any(c["col_id"] == "col_po" and c["value"] == "TOTAL OF:" for c in buffalo_row)
-    assert any(c["col_id"] == "col_pallet_id" and c["value"] == "BUFFALO LEATHER" for c in buffalo_row)
+    assert any(c["col_id"] == "col_pallet_no" and c["value"] == "BUFFALO LEATHER" for c in buffalo_row)
     assert any(c["col_id"] == "col_desc" and c["value"] == "{pallet_count} PALLET{multiple}" for c in buffalo_row)
     # col_qty_pcs and col_net should be dynamically appended because they exist in sheet_col_ids
     assert any(c["col_id"] == "col_qty_pcs" and "value" not in c for c in buffalo_row)

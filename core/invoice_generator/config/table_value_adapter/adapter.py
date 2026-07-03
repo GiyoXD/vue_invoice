@@ -1,12 +1,13 @@
 import logging
 from typing import Any, Dict, List, Tuple, Union, Optional
 
-from core.invoice_generator.data.data_preparer import (
+from .preparer import (
     prepare_data_rows,
     parse_mapping_rules
 )
 from core.invoice_generator.models.table_adapter import (
-    ResolvedTableData
+    ResolvedTableData,
+    ResolvedTableFooter
 )
 from core.invoice_generator.models.config.layout import SheetLayoutModel
 from .helpers import (
@@ -41,10 +42,10 @@ class TableDataAdapter:
         sheet_layout: Optional[SheetLayoutModel] = None,
         DAF_mode: bool = False,
         custom_mode: bool = False,
-        table_key: Optional[str] = None,
         static_content: Optional[Dict[str, Any]] = None,
+        pricing_net_weight: bool = False,
         footer_data: Optional[Dict[str, Any]] = None,
-        pricing_net_weight: bool = False
+        table_key: Optional[str] = None
     ):
         self.data_source_type = data_source_type
         self.data_source = data_source
@@ -52,10 +53,10 @@ class TableDataAdapter:
         self.sheet_layout = sheet_layout
         self.DAF_mode = DAF_mode
         self.custom_mode = custom_mode
-        self.table_key = table_key
         self.static_content = static_content or {}
-        self.footer_data = footer_data or {}
         self.pricing_net_weight = pricing_net_weight
+        self.footer_data = footer_data or {}
+        self.table_key = table_key
         
         self.column_id_map = {}
         self.column_map = {}
@@ -79,7 +80,7 @@ class TableDataAdapter:
         Main resolution method - transforms raw data into table-ready rows.
         
         Returns:
-            ResolvedTableData model instance containing prepared rows and metadata.
+            ResolvedTableData model instance containing prepared rows.
         """
         # Parse mapping rules first
         parsed = self._parse_mapping_rules()
@@ -88,7 +89,7 @@ class TableDataAdapter:
         table_data_source = extract_table_data(self.data_source, self.data_source_type)
         
         # Prepare data rows using the existing data_preparer logic
-        data_rows, pallet_counts, num_data_rows = prepare_data_rows(
+        data_rows, num_data_rows = prepare_data_rows(
             data_source_type=self.data_source_type,
             data_source=table_data_source,
             dynamic_mapping_rules=parsed['dynamic_mapping_rules'],
@@ -117,28 +118,19 @@ class TableDataAdapter:
             custom_mode=self.custom_mode
         )
         
-        # Extract summaries if available in data source or footer data
-        leather_summary, weight_summary, pallet_summary_total = extract_summaries(
+        # Resolve footer summaries internally
+        footer_adapter = TableFooterAdapter(
+            data_source_type=self.data_source_type,
             data_source=self.data_source,
             footer_data=self.footer_data,
             table_key=self.table_key
         )
+        resolved_footer = footer_adapter.resolve(data_rows, num_data_rows)
         
-        # Format pallet counts into "x-y" display values for merging
-        format_pallet_counts(
-            data_rows=data_rows,
-            num_data_rows=num_data_rows,
-            pallet_col_id='col_pallet_count',
-            footer_data=self.footer_data,
-            table_key=self.table_key
-        )
-
         return ResolvedTableData(
             data_rows=data_rows,
             num_data_rows=num_data_rows,
-            leather_summary=leather_summary,
-            weight_summary=weight_summary,
-            pallet_summary_total=pallet_summary_total
+            footer=resolved_footer
         )
     
     def _parse_mapping_rules(self) -> Dict[str, Any]:
@@ -196,8 +188,58 @@ class TableDataAdapter:
             sheet_layout=sheet_layout,
             DAF_mode=DAF_mode,
             custom_mode=custom_mode,
-            table_key=data_config.get('table_key'),
             static_content=static_content,
+            pricing_net_weight=pricing_net_weight,
             footer_data=data_config.get('footer_data', {}),
-            pricing_net_weight=pricing_net_weight
+            table_key=data_config.get('table_key')
+        )
+
+
+class TableFooterAdapter:
+    """
+    Adapter for resolving footer summaries and formatting display values.
+    """
+    
+    def __init__(
+        self,
+        data_source_type: str,
+        data_source: Union[Dict, List, None],
+        footer_data: Dict[str, Any],
+        table_key: Optional[str] = None
+    ):
+        self.data_source_type = data_source_type
+        self.data_source = data_source
+        self.footer_data = footer_data or {}
+        self.table_key = table_key
+
+    def resolve(self, data_rows: Optional[List[Dict[str, Any]]] = None, num_data_rows: int = 0) -> ResolvedTableFooter:
+        """
+        Resolves summary totals.
+        """
+        # Extract summaries if available in data source or footer data
+        leather_summary, weight_summary, pallet_summary_total = extract_summaries(
+            data_source=self.data_source,
+            footer_data=self.footer_data,
+            table_key=self.table_key
+        )
+
+        return ResolvedTableFooter(
+            leather_summary=leather_summary,
+            weight_summary=weight_summary,
+            pallet_summary_total=pallet_summary_total
+        )
+
+    @staticmethod
+    def create_from_bundles(
+        data_config: Dict[str, Any],
+        context_config: Dict[str, Any]
+    ) -> 'TableFooterAdapter':
+        """
+        Factory method to create TableFooterAdapter from bundle configs.
+        """
+        return TableFooterAdapter(
+            data_source_type=data_config.get('data_source_type', 'aggregation'),
+            data_source=data_config.get('data_source'),
+            footer_data=data_config.get('footer_data', {}),
+            table_key=data_config.get('table_key')
         )

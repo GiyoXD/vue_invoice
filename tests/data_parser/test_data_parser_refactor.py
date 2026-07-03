@@ -270,7 +270,7 @@ class TestDataParserRefactor(unittest.TestCase):
         column_mapping = {"col_po": "A", "col_item": "B", "col_net": "C", "col_gross": "D", "col_pallet_count": "E", "col_pallet_id": "F"}
         with self.assertRaises(DataValidationError) as context:
             validate_data(data, "Table 1", column_mapping, phase='integrity')
-        self.assertIn("Pallet ID '01T26052605' reappeared after a gap", str(context.exception))
+        self.assertIn("Pallet ID '01T26052605' reappeared after gap", str(context.exception))
 
     def test_verify_pallet_integrity_valid(self):
         data = [

@@ -671,6 +671,8 @@ def distribute_values(
         # Push calculated values back into row dicts
         for idx, row in enumerate(processed_data):
              if processed_col_values[idx] is not None:
+                  if col_name in row:
+                      row[f"{col_name}_raw"] = row[col_name]
                   row[col_name] = processed_col_values[idx]
 
     logging.info(f"{prefix} Value distribution processing COMPLETED for all requested columns.")
@@ -1274,3 +1276,43 @@ def format_aggregation_as_list(
         flattened_list.append(row_dict)
         
     return flattened_list
+
+
+def format_pallet_counts_to_xy(
+    processed_tables: List[List[Dict[str, Any]]],
+    total_pallets: int
+) -> None:
+    """
+    Formats col_pallet_count from 1/0 binary flags into "x-y" strings (e.g. "3-19")
+    in-place across all tables.
+    """
+    pallet_col_id = 'col_pallet_count'
+    starting_pallet_order = 0
+    
+    for table_data in processed_tables:
+        if not isinstance(table_data, list):
+            continue
+            
+        pallet_order = starting_pallet_order
+        carry_value = 0
+        table_pallet_count = 0
+        
+        for row in table_data:
+            if not isinstance(row, dict):
+                continue
+            val = row.get(pallet_col_id, 0)
+            try:
+                numeric_val = int(float(val)) if val is not None else 0
+            except (ValueError, TypeError):
+                numeric_val = 0
+                
+            if numeric_val == 1:
+                pallet_order += 1
+                table_pallet_count += 1
+                formatted_val = f"{pallet_order}-{total_pallets}"
+                row['col_pallet_no'] = formatted_val
+                carry_value = formatted_val
+            else:
+                row['col_pallet_no'] = carry_value if carry_value != 0 else ""
+                
+        starting_pallet_order += table_pallet_count

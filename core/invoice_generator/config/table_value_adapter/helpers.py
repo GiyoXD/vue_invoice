@@ -2,7 +2,7 @@ import ast
 import re
 import logging
 from typing import Any, Dict, List, Tuple, Union, Optional
-from core.invoice_generator.data.data_preparer import _to_numeric
+from .preparer import _to_numeric
 
 logger = logging.getLogger(__name__)
 
