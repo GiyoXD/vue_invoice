@@ -216,46 +216,29 @@ def distribute_values(
 
     processed_data = raw_data
 
-    candidate_basis = basis_column
-    if not candidate_basis.startswith('col_'):
-        if basis_column == 'pcs':
-             candidate_basis = 'col_qty_pcs'
-        elif basis_column == 'sqft':
-             candidate_basis = 'col_qty_sf'
-        else:
-             candidate_basis = f"col_{basis_column}"
-    
-    if not any(candidate_basis in row for row in processed_data):
-        logging.error(f"{prefix} Basis column '{basis_column}' (or '{candidate_basis}') not found in any row. Cannot distribute.")
+    if not basis_column.startswith('col_'):
+        raise ValueError(f"basis_column must be col_-prefixed, got '{basis_column}'. Fix the call site.")
+
+    if not any(basis_column in row for row in processed_data):
+        logging.error(f"{prefix} Basis column '{basis_column}' not found in any row. Cannot distribute.")
         raise ProcessingError(f"Basis column '{basis_column}' not found for distribution.")
-    
-    basis_column = candidate_basis
 
     valid_columns_to_distribute = []
     if columns_to_distribute:
         for col in columns_to_distribute:
-            target_col = col
-            if not target_col.startswith('col_'):
-                if target_col == 'net': target_col = 'col_net'
-                elif target_col == 'gross': target_col = 'col_gross'
-                elif target_col == 'cbm': target_col = 'col_cbm'
-                elif target_col == 'sqft': target_col = 'col_qty_sf'
-                elif target_col == 'pcs': target_col = 'col_qty_pcs'
-                elif target_col == 'amount': target_col = 'col_amount'
-                elif target_col == 'pallet_count': target_col = 'col_pallet_count'
-                else: target_col = f"col_{target_col}"
-
-            if any(target_col in row for row in processed_data):
-                valid_columns_to_distribute.append(target_col)
+            if not col.startswith('col_'):
+                raise ValueError(f"columns_to_distribute entry must be col_-prefixed, got '{col}'. Fix the call site.")
+            if any(col in row for row in processed_data):
+                valid_columns_to_distribute.append(col)
             else:
-                logging.warning(f"{prefix} Column '{col}' (mapped to '{target_col}') not found in any row. Skipping.")
+                logging.warning(f"{prefix} Column '{col}' not found in any row. Skipping.")
     else:
         logging.info(f"{prefix} No columns specified in 'columns_to_distribute' list. Skipping distribution.")
         return processed_data
 
     if not valid_columns_to_distribute:
-         logging.warning(f"{prefix} No valid columns found to perform distribution on. Requested: {columns_to_distribute}")
-         return processed_data
+        logging.warning(f"{prefix} No valid columns found to perform distribution on. Requested: {columns_to_distribute}")
+        return processed_data
 
     num_rows = len(processed_data)
     logging.info(f"{prefix} Starting value distribution for columns: {valid_columns_to_distribute} based on '{basis_column}' ({num_rows} rows).")
