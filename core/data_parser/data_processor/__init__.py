@@ -3,6 +3,7 @@ from ..validation import DataValidationError, verify_pallet_integrity
 from .distribution import ProcessingError, distribute_values, normalize_by_pallet_anchor, inject_net_weight_pricing
 from .cbm import process_cbm_column
 from .pallet import normalize_pallet_count, format_pallet_counts_to_xy
+from .normalization import normalize_table_types
 from .aggregation import (
     Aggregator,
     aggregate_standard_by_po_item_price,

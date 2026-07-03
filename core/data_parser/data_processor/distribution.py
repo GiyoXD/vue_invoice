@@ -153,40 +153,28 @@ def normalize_by_pallet_anchor(
                 moved_details = []
                 for col in resolved_cols:
                     val = member_row.get(col)
-                    if val is not None:
-                        try:
-                            val_dec = val if isinstance(val, decimal.Decimal) else decimal.Decimal(str(val))
-                            if val_dec != 0:
-                                existing = anchor_row.get(col)
-                                if existing is not None:
-                                    try:
-                                        existing_dec = existing if isinstance(existing, decimal.Decimal) else decimal.Decimal(str(existing))
-                                        anchor_row[col] = existing_dec + val_dec
-                                    except (decimal.InvalidOperation, ValueError, TypeError):
-                                        anchor_row[col] = val_dec
-                                else:
-                                    anchor_row[col] = val_dec
+                    if val is not None and val != 0:  # val is already Decimal from normalization
+                        existing = anchor_row.get(col)
+                        anchor_row[col] = (existing + val) if existing is not None else val
 
-                                raw_cbm_val = None
-                                if col == 'col_cbm' and 'col_cbm_raw' in member_row:
-                                    raw_cbm_val = member_row.get('col_cbm_raw')
-                                    if raw_cbm_val:
-                                        existing_raw = anchor_row.get('col_cbm_raw')
-                                        if existing_raw:
-                                            anchor_row['col_cbm_raw'] = f"{existing_raw} + {raw_cbm_val}"
-                                        else:
-                                            anchor_row['col_cbm_raw'] = str(raw_cbm_val)
-                                    member_row['col_cbm_raw'] = None
-
-                                member_row[col] = None
-                                pull_up_count += 1
-                                
-                                if col == 'col_cbm' and raw_cbm_val:
-                                    moved_details.append(f"CBM='{raw_cbm_val}'")
+                        raw_cbm_val = None
+                        if col == 'col_cbm' and 'col_cbm_raw' in member_row:
+                            raw_cbm_val = member_row.get('col_cbm_raw')
+                            if raw_cbm_val:
+                                existing_raw = anchor_row.get('col_cbm_raw')
+                                if existing_raw:
+                                    anchor_row['col_cbm_raw'] = f"{existing_raw} + {raw_cbm_val}"
                                 else:
-                                    moved_details.append(f"{col}={val}")
-                        except (decimal.InvalidOperation, ValueError, TypeError):
-                            pass
+                                    anchor_row['col_cbm_raw'] = str(raw_cbm_val)
+                            member_row['col_cbm_raw'] = None
+
+                        member_row[col] = None
+                        pull_up_count += 1
+
+                        if col == 'col_cbm' and raw_cbm_val:
+                            moved_details.append(f"CBM='{raw_cbm_val}'")
+                        else:
+                            moved_details.append(f"{col}={val}")
 
                 logging.debug(f"{prefix} Pulled up values from row {member_idx} to anchor row {anchor_idx}")
                 
@@ -272,24 +260,19 @@ def distribute_values(
     num_rows = len(processed_data)
     logging.info(f"{prefix} Starting value distribution for columns: {valid_columns_to_distribute} based on '{basis_column}' ({num_rows} rows).")
 
+    # Basis column is already Decimal from normalization — read directly
     basis_values_dec: List[Optional[decimal.Decimal]] = [
-        _convert_to_decimal(row.get(basis_column), f"{prefix} basis column '{basis_column}' row index {i}")
-        for i, row in enumerate(processed_data)
+        row.get(basis_column) for row in processed_data
     ]
     logging.debug(f"{prefix} Pre-converted basis values (first 10): {basis_values_dec[:10]}")
 
     for col_name in valid_columns_to_distribute:
         logging.info(f"{prefix} Processing column for distribution: '{col_name}'")
 
-        current_col_values_dec: List[Optional[decimal.Decimal]] = []
-        for i, row in enumerate(processed_data):
-            val = row.get(col_name)
-            if isinstance(val, decimal.Decimal):
-                current_col_values_dec.append(val)
-            else:
-                current_col_values_dec.append(
-                    _convert_to_decimal(val, f"{prefix} column '{col_name}' row index {i}")
-                )
+        # Values already Decimal from normalization — read directly
+        current_col_values_dec: List[Optional[decimal.Decimal]] = [
+            row.get(col_name) for row in processed_data
+        ]
 
         processed_col_values: List[Optional[decimal.Decimal]] = [None] * num_rows
 

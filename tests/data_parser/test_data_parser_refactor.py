@@ -69,8 +69,8 @@ class TestDataParserRefactor(unittest.TestCase):
         res = data_processor.aggregate_standard_by_po_item_price(data, global_map)
         expected_key = ("A1", "I1", Decimal('1.5'), None)
         self.assertIn(expected_key, res)
-        self.assertEqual(res[expected_key]['sqft_sum'], Decimal('201.0'))
-        self.assertEqual(res[expected_key]['amount_sum'], Decimal('301.50'))
+        self.assertEqual(res[expected_key]['col_qty_sf'], Decimal('201.0'))
+        self.assertEqual(res[expected_key]['col_amount'], Decimal('301.50'))
 
     # --- PROSPECTIVE BEHAVIOUR TESTS --- #
     def test_new_cbm(self):
@@ -109,8 +109,8 @@ class TestDataParserRefactor(unittest.TestCase):
             res = data_processor.aggregate_standard_by_po_item_price(data, global_map)
             expected_key = ("A1", "I1", Decimal('1.5'), None)
             self.assertIn(expected_key, res)
-            self.assertEqual(res[expected_key]['sqft_sum'], Decimal('201.0'))
-            self.assertEqual(res[expected_key]['amount_sum'], Decimal('301.50'))
+            self.assertEqual(res[expected_key]['col_qty_sf'], Decimal('201.0'))
+            self.assertEqual(res[expected_key]['col_amount'], Decimal('301.50'))
         except TypeError as err:
              self.fail(f"New schema failed: {err}. Function Needs Refactoring!")
         except Exception as err:

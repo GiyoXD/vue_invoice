@@ -183,12 +183,8 @@ def perform_DAF_compounding(
              # Use new col_ keys for sums
              sqft_sum = sums_dict.get('col_qty_sf', decimal.Decimal(0))
              amount_sum = sums_dict.get('col_amount', decimal.Decimal(0))
-             net_sum = sums_dict.get('net_sum', decimal.Decimal(0))
+             net_sum = sums_dict.get('col_net', decimal.Decimal(0))
              
-             # Fallback for legacy keys if not found (just in case)
-             if sqft_sum == 0 and 'sqft_sum' in sums_dict: sqft_sum = sums_dict.get('sqft_sum', decimal.Decimal(0))
-             if amount_sum == 0 and 'amount_sum' in sums_dict: amount_sum = sums_dict.get('amount_sum', decimal.Decimal(0))
-
              if not isinstance(sqft_sum, decimal.Decimal): sqft_sum = decimal.Decimal(0)
              if not isinstance(amount_sum, decimal.Decimal): amount_sum = decimal.Decimal(0)
              if not isinstance(net_sum, decimal.Decimal): net_sum = decimal.Decimal(0)
@@ -266,11 +262,7 @@ def perform_DAF_compounding(
              # Use new col_ keys
              sqft_sum = sums_dict.get('col_qty_sf', decimal.Decimal(0))
              amount_sum = sums_dict.get('col_amount', decimal.Decimal(0))
-             net_sum = sums_dict.get('net_sum', decimal.Decimal(0))
-             
-             # Fallback
-             if sqft_sum == 0 and 'sqft_sum' in sums_dict: sqft_sum = sums_dict.get('sqft_sum', decimal.Decimal(0))
-             if amount_sum == 0 and 'amount_sum' in sums_dict: amount_sum = sums_dict.get('amount_sum', decimal.Decimal(0))
+             net_sum = sums_dict.get('col_net', decimal.Decimal(0))
 
              if not isinstance(sqft_sum, decimal.Decimal): sqft_sum = decimal.Decimal(0)
              if not isinstance(amount_sum, decimal.Decimal): amount_sum = decimal.Decimal(0)
@@ -356,7 +348,7 @@ def json_serializer_default(obj):
     if isinstance(obj, (datetime.datetime, datetime.date)):
         return obj.isoformat() # Convert date/datetime to ISO string format
     elif isinstance(obj, decimal.Decimal): # Keep Decimal handling here too
-        return str(obj)
+        return float(obj)
     elif isinstance(obj, set): # Optional: Handle sets if needed
         return list(obj)
     # Add other custom types if needed
@@ -545,6 +537,9 @@ def run_invoice_automation(
                      monitor.log_warning(f"{table_id_str} is empty or invalid. Skipping.")
                      processed_tables.append([])
                      continue
+
+                # --- 5.0.5: Normalize column types to Decimal/int ---
+                data_processor.normalize_table_types(current_table_data)
 
                 # --- 5.1: Validate Presence of Essential Data ---
                 validate_data(current_table_data, table_id_str, column_mapping, monitor=monitor, phase='presence')
