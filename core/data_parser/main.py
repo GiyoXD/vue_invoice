@@ -3,7 +3,6 @@
 
 import logging
 import pprint
-import re
 import decimal
 import os
 import json # Added for JSON output
@@ -11,28 +10,12 @@ import datetime # <<< ADDED IMPORT for datetime handling
 from pathlib import Path # <<< ADDED IMPORT for pathlib
 from typing import Dict, List, Any, Optional, Tuple, Union
 import time # Added for timing operations
-import copy # For deep-copying raw table data before processing mutates it
 
 # --- Loop Profiler (non-invasive measurement) ---
 from core.utils.loop_profiler import loop_profiler
 
-# Import from our refactored modules
-try:
-    from . import config as cfg # Keep config for fallback and other settings
-except ImportError:
-    logging.error("Failed to import config.py. Please ensure it exists and is configured.")
-    # Define dummy cfg values if needed for script to load, but it will likely fail later
-    class DummyConfig:
-        INPUT_EXCEL_FILE = "fallback_excel.xlsx" # Example placeholder
-        SHEET_NAME = "Sheet1"
-        HEADER_IDENTIFICATION_PATTERN = r"PO#" # Example
-        HEADER_SEARCH_ROW_RANGE = (1, 20) # Example
-        HEADER_SEARCH_COL_RANGE = (1, 30) # Example
-        COLUMNS_TO_DISTRIBUTE = [] # Example
-        DISTRIBUTION_BASIS_COLUMN = "SQFT" # Example
-        CUSTOM_AGGREGATION_WORKBOOK_PREFIXES = ["CUST"] # eeExample
-    cfg = DummyConfig()
-    logging.warning("Using dummy config values due to import failure.")
+# Import config directly
+from . import config as cfg
 
 
 from .excel_handler import ExcelHandler
@@ -386,7 +369,6 @@ def run_invoice_automation(
     input_excel_override: Union[str, Any] = None,
     input_filename_override: str = None,
     output_dir_override: str = None,
-    monitor_override: PipelineMonitor = None,
     ignore_tare_warning: bool = False,
     ignore_cbm_warning: bool = False
 ) -> Tuple[Path, str]:
