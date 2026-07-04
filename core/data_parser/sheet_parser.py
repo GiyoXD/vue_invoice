@@ -452,6 +452,14 @@ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[
         all_tables_data.append(current_table_data)
         logging.info(f"{prefix} Successfully stored {len(current_table_data)} rows for Table Index {table_index}.")
         
+    # Format pallet counts to "x-y" display format in-place across all extracted tables
+    if all_tables_data:
+        total_pallets = sum(
+            sum(row.get('col_pallet_count', 0) for row in table if isinstance(row, dict))
+            for table in all_tables_data if isinstance(table, list)
+        )
+        data_processor.format_pallet_counts_to_xy(all_tables_data, total_pallets)
+        
     return all_tables_data
 
 

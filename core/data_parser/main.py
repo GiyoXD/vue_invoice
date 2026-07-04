@@ -298,9 +298,6 @@ def main(
         normal_aggregate_per_po = data_processor.aggregate_per_po_with_pallets(merged_processed_data)
         logging.info(f"Normal Aggregate Per PO: {len(normal_aggregate_per_po)} unique PO+price combinations")
 
-        # Extract the true total pallets from the aggregated manifest
-        true_total_pallets = sum(item.get('col_pallet_count', 0) for item in normal_aggregate_per_po)
-
         # Calculate leather summary (BUFFALO vs COW) across all tables
         # Use the normal_aggregate_per_po data so we get integer pallet counts and correct sums
         leather_summary = data_processor.calculate_leather_summary(normal_aggregate_per_po)
@@ -332,23 +329,9 @@ def main(
         
         # Calculate grand total (merged across all tables)
         grand_total_footer = data_processor.calculate_footer_totals(merged_processed_data)
-        
-        # Override the potentially inflated pallet count with the true aggregated count
-        grand_total_footer['col_pallet_count'] = true_total_pallets
-        
-        # If there's only one table (common case), ensure its table total also has the correct pallet count
-        if len(table_footer_data) == 1:
-            table_footer_data[0]['col_pallet_count'] = true_total_pallets
-
         logging.info(f"Grand Total Footer: {grand_total_footer}")
 
-        # Format pallet counts to "x-y" display format in-place for JSON output
-        data_processor.format_pallet_counts_to_xy(processed_tables, true_total_pallets)
-        data_processor.format_pallet_counts_to_xy([normal_aggregate_per_po], true_total_pallets)
-        # Remove col_pallet_id from final output structures as it is strictly for validation
-        for table in processed_tables:
-            for row in table:
-                row.pop('col_pallet_id', None)
+
         # --- 8. Export Results to JSON ---
         input_stem = Path(input_filename).stem
         output_json_path = export_invoice_data(
