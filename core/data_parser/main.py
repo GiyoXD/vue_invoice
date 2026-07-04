@@ -298,38 +298,12 @@ def main(
         normal_aggregate_per_po = data_processor.aggregate_per_po_with_pallets(merged_processed_data)
         logging.info(f"Normal Aggregate Per PO: {len(normal_aggregate_per_po)} unique PO+price combinations")
 
-        # Calculate leather summary (BUFFALO vs COW) across all tables
-        # Use the normal_aggregate_per_po data so we get integer pallet counts and correct sums
-        leather_summary = data_processor.calculate_leather_summary(normal_aggregate_per_po)
-        logging.info(f"Leather Summary: {leather_summary}")
-
-        # Calculate weight summary across all tables
-        raw_weight_summary = data_processor.calculate_weight_summary(merged_processed_data)
-        weight_summary_addon = {
-            'net': float(raw_weight_summary.get('col_net', 0.0)),
-            'gross': float(raw_weight_summary.get('col_gross', 0.0))
-        }
-        logging.info(f"Weight Summary Addon: {weight_summary_addon}")
-
-        # --- Calculate Footer Data ---
-        logging.info("--- Calculating Footer Data ---")
-        
-        # Calculate per-table totals
-        table_footer_data = []
-        for table_index, table_data in enumerate(processed_tables):
-            table_id = str(table_index + 1)
-            if isinstance(table_data, list):
-                footer_totals = data_processor.calculate_footer_totals(table_data)
-                
-                # If there's only one table, it gets all the pallets. If multiple, we'd need to distribute, 
-                # but for now we'll rely on the parser to not double count. (Will be fixed in data_processor.py)
-                
-                table_footer_data.append(footer_totals)
-                logging.info(f"Table {table_id} Footer: {footer_totals}")
-        
-        # Calculate grand total (merged across all tables)
-        grand_total_footer = data_processor.calculate_footer_totals(merged_processed_data)
-        logging.info(f"Grand Total Footer: {grand_total_footer}")
+        # --- Calculate Footer & Add-on Data ---
+        footer_results = data_processor.calculate_all_footers(
+            processed_tables=processed_tables,
+            merged_processed_data=merged_processed_data,
+            normal_aggregate_per_po=normal_aggregate_per_po
+        )
 
 
         # --- 8. Export Results to JSON ---
@@ -341,10 +315,10 @@ def main(
             actual_sheet_name=actual_sheet_name,
             aggregation_mode_used=aggregation_mode_used,
             processed_tables=processed_tables,
-            table_footer_data=table_footer_data,
-            grand_total_footer=grand_total_footer,
-            leather_summary=leather_summary,
-            weight_summary_addon=weight_summary_addon,
+            table_footer_data=footer_results["table_footer_data"],
+            grand_total_footer=footer_results["grand_total_footer"],
+            leather_summary=footer_results["leather_summary"],
+            weight_summary_addon=footer_results["weight_summary_addon"],
             global_standard_aggregation_results=global_standard_aggregation_results,
             global_custom_aggregation_results=global_custom_aggregation_results,
             normal_aggregate_per_po=normal_aggregate_per_po,
