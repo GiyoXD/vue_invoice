@@ -78,7 +78,7 @@ from core.utils.snitch import snitch
 # ... (Previous code)
 
 @snitch
-def run_invoice_automation(
+def main(
     input_excel_override: Union[str, Any] = None,
     input_filename_override: str = None,
     output_dir_override: str = None,
