@@ -126,6 +126,11 @@ COLUMNS_TO_DISTRIBUTE = ["col_net", "col_gross", "col_cbm"] # Include 'col_cbm' 
 # The canonical header name of the column used for proportional distribution
 DISTRIBUTION_BASIS_COLUMN = "col_qty_pcs"
 
+# --- DAF Compounding Configuration ---
+DAF_CHUNK_SIZE = 2  # How many items per group (e.g., PO1\\PO2)
+DAF_INTRA_CHUNK_SEPARATOR = "/"  # Separator within a group (e.g., DOUBLE BACKSLASH)
+DAF_INTER_CHUNK_SEPARATOR = "\n"  # Separator between groups (e.g., newline)
+
 # --- Aggregation Strategy Configuration ---
 # List or Tuple of *workbook filename* prefixes (case-sensitive) that trigger CUSTOM aggregation.
 # Custom aggregation sums 'col_qty_sf' and 'col_amount' based ONLY on 'col_po' and 'col_item'.

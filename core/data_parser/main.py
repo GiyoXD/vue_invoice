@@ -5,9 +5,7 @@ import logging
 import pprint
 import decimal
 import os
-import json # Added for JSON output
-import datetime # <<< ADDED IMPORT for datetime handling
-from pathlib import Path # <<< ADDED IMPORT for pathlib
+from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple, Union
 import time # Added for timing operations
 
@@ -22,6 +20,7 @@ from .excel_handler import ExcelHandler
 from . import sheet_parser
 from . import data_processor # Includes all processing functions
 from .validation import DataValidationError, validate_data
+from .util.exporter import export_invoice_data
 
 # Use centralized logger - no basicConfig here
 # Logging is configured by core.logger_config.setup_logging() at app startup
@@ -30,44 +29,9 @@ logger = logging.getLogger(__name__)
 # --- Constants for Log Truncation ---
 MAX_LOG_DICT_LEN = 3000 # Max length for printing large dicts in logs (for DEBUG)
 
-# --- Constants for DAF Compounding Formatting ---
-DAF_CHUNK_SIZE = 2  # How many items per group (e.g., PO1\\PO2)
-DAF_INTRA_CHUNK_SEPARATOR = "/"  # Separator within a group (e.g., DOUBLE BACKSLASH)
-DAF_INTER_CHUNK_SEPARATOR = "\n"  # Separator between groups (e.g., newline)
 
 
-
-# --- >>> ADDED: Default JSON Serializer Function <<< ---
-def json_serializer_default(obj):
-    """JSON serializer for objects not serializable by default json code"""
-    if isinstance(obj, (datetime.datetime, datetime.date)):
-        return obj.isoformat() # Convert date/datetime to ISO string format
-    elif isinstance(obj, decimal.Decimal): # Keep Decimal handling here too
-        return float(obj)
-    elif isinstance(obj, set): # Optional: Handle sets if needed
-        return list(obj)
-    # Add other custom types if needed
-    # elif isinstance(obj, YourCustomClass):
-    #     return obj.__dict__
-    raise TypeError (f"Object of type {obj.__class__.__name__} is not JSON serializable")
-# --- >>> END OF ADDED FUNCTION <<< ---
-
-
-# Helper function to make data JSON serializable
-# Handles tuple keys in aggregation results
-def make_json_serializable(data):
-    """Recursively converts tuple keys in dicts to strings and handles non-serializable types."""
-    # NOTE: Using the default serializer for json.dumps handles Decimal and datetime now.
-    # This function primarily focuses on converting tuple keys.
-    if isinstance(data, dict):
-        # Convert all keys to string, including tuple keys
-        return {str(k): make_json_serializable(v) for k, v in data.items()}
-    elif isinstance(data, list):
-        return [make_json_serializable(item) for item in data]
-    elif data is None:
-        return None # JSON null
-    # Let the default handler in json.dumps deal with Decimal, datetime, etc.
-    return data
+# --- # (Serialization functions refactored and moved to core.data_parser.util.serializer.Serializer)
 
 # <<< MODIFIED FUNCTION SIGNATURE >>>
 # Import PipelineMonitor
@@ -298,9 +262,9 @@ def main(
                 
                 global_DAF_compounded_result = data_processor.perform_DAF_compounding(
                     processed_tables,
-                    daf_chunk_size=DAF_CHUNK_SIZE,
-                    daf_intra_separator=DAF_INTRA_CHUNK_SEPARATOR,
-                    daf_inter_separator=DAF_INTER_CHUNK_SEPARATOR,
+                    daf_chunk_size=cfg.DAF_CHUNK_SIZE,
+                    daf_intra_separator=cfg.DAF_INTRA_CHUNK_SEPARATOR,
+                    daf_inter_separator=cfg.DAF_INTER_CHUNK_SEPARATOR,
                 )
                 monitor.log_process_item("DAF Compounding", status="success")
             except Exception as daf_e:
@@ -385,121 +349,25 @@ def main(
         for table in processed_tables:
             for row in table:
                 row.pop('col_pallet_id', None)
-        # --- 8. Generate JSON Output ---
-        logging.info("--- Preparing Data for JSON Output ---")
-        try:
-            # Create the structure to be converted to JSON
-            # Use the helper function to ensure serializability
-            final_json_structure = {
-                 "metadata": {
-                    "workbook_filename": input_filename, # Use the actual input filename
-                    "worksheet_name": actual_sheet_name,
-                    "DAF_compounding_input_mode": aggregation_mode_used, # Clarify which mode fed DAF
-                    "DAF_chunk_size": DAF_CHUNK_SIZE,
-                     "DAF_intra_separator": DAF_INTRA_CHUNK_SEPARATOR.encode('unicode_escape').decode('utf-8'), # Encode escapes for JSON clarity
-                    "DAF_inter_separator": DAF_INTER_CHUNK_SEPARATOR.encode('unicode_escape').decode('utf-8'), # Encode escapes for JSON clarity
-                    "timestamp": datetime.datetime.now().isoformat(), # Add generation timestamp
-                    "warnings": monitor.warnings # Surface runtime warnings to frontend
-                },
-                "price_adjustment": [], # Initialized for frontend adjustments
-                 # Include processed table data (potentially large)
-                 # RENAME: processed_tables_data -> multi_table
-                 "multi_table": make_json_serializable(processed_tables),
-
-                 # Raw/unprocessed table data exactly as extracted from Excel.
-                 # CBM and other values are NEVER distributed here.
-                  # Kept purely for backward compatibility with old frontend/db queries.
-                  "raw_data": [],
-                 
-                 # Include Footer Data - both per-table and grand total
-                 "footer_data": {
-                     "table_totals": make_json_serializable(table_footer_data),  # Per-table totals
-                     "grand_total": make_json_serializable(grand_total_footer),   # Overall grand total
-                     "add_ons": {
-                         "leather_summary_addon": make_json_serializable(leather_summary),  # BUFFALO vs COW summary
-                         "weight_summary_addon": make_json_serializable(weight_summary_addon),
-                     }
-                 },
-
-                # Group all unified aggregation outputs under single_table
-                "single_table": {
-                    # Include BOTH aggregation results explicitly (formatted as lists)
-                    # RENAME: standard_aggregation_results -> aggregation (Matches Config)
-                    "aggregation": data_processor.format_aggregation_as_list(global_standard_aggregation_results, mode='standard'),
-                    # RENAME: custom_aggregation_results -> aggregation_custom (Matches Suffix Rule)
-                    "aggregation_custom": data_processor.format_aggregation_as_list(global_custom_aggregation_results, mode='custom'),
-                    
-                    # Normal aggregate per PO with pallets (group by PO + price)
-                    # RENAME: normal_aggregate_per_po_with_pallets -> manifest_by_pallet_per_po (User Request)
-                    "manifest_by_pallet_per_po": make_json_serializable(normal_aggregate_per_po),
-
-                    # Include the final compounded result (derived from one of the above, based on mode)
-                    # RENAME: final_DAF_compounded_result -> aggregation_DAF (Matches Suffix Rule)
-                    "aggregation_DAF": make_json_serializable(global_DAF_compounded_result)
-                }
-            }
-
-             # Convert the structure to a JSON string (pretty-printed)
-            json_output_string = json.dumps(final_json_structure,
-                                            indent=4,
-                                            default=json_serializer_default) # Use the default serializer
-
-            # Do not log raw JSON output to keep console output clean
-            logging.info(f"Generated JSON output structure successfully ({len(json_output_string)} chars).")
-
-            # --- MODIFIED: Save JSON using output_dir and simplified filename ---
-            input_stem = Path(input_filename).stem # Get filename without extension
-            json_output_filename = f"{input_stem}.json" # Simplified filename
-            output_json_path = output_dir / json_output_filename # Combine output dir and filename
-
-            logging.info(f"Determined output JSON path: {output_json_path}")
-            try:
-                # --- Atomic Write: write to temp file, verify, then rename ---
-                # This prevents truncated/corrupt JSON from being visible to consumers.
-                import tempfile
-                temp_fd, temp_path = tempfile.mkstemp(
-                    suffix='.json.tmp', dir=str(output_json_path.parent)
-                )
-                try:
-                    with os.fdopen(temp_fd, 'w', encoding='utf-8') as f_json:
-                        f_json.write(json_output_string)
-                        f_json.flush()
-                        os.fsync(f_json.fileno())  # Force write to disk
-                    
-                    # Post-write integrity check: read back and parse to verify
-                    with open(temp_path, 'r', encoding='utf-8') as f_verify:
-                        json.load(f_verify)  # Will raise JSONDecodeError if truncated/corrupt
-                    
-                    # Verification passed — atomically replace the target file
-                    import shutil
-                    shutil.move(temp_path, str(output_json_path))
-                    logging.info(f"Successfully saved JSON output to '{output_json_path}' (verified)")
-                except Exception:
-                    # Clean up temp file on any failure
-                    if os.path.exists(temp_path):
-                        os.unlink(temp_path)
-                    raise
-            except json.JSONDecodeError as verify_err:
-                logging.error(f"CRITICAL: JSON integrity check failed after write — output would be truncated/corrupt: {verify_err}")
-                raise RuntimeError(
-                    f"JSON output verification failed: the generated data could not be re-parsed. "
-                    f"This usually means the data is too large or contains unserializable values. "
-                    f"Details: {verify_err}"
-                )
-            except IOError as io_err:
-                logging.error(f"Failed to write JSON output to file '{output_json_path}': {io_err}")
-                raise io_err
-            except Exception as write_err:
-                 logging.error(f"An unexpected error occurred while writing JSON file: {write_err}", exc_info=True)
-                 raise write_err
-
-        except TypeError as json_err:
-            logging.error(f"Failed to serialize data to JSON: {json_err}. Check data types and default handler.", exc_info=True)
-            raise json_err
-        except Exception as e:
-            logging.error(f"An unexpected error occurred during JSON generation: {e}", exc_info=True)
-            raise e
-        # --- End JSON Generation ---
+        # --- 8. Export Results to JSON ---
+        input_stem = Path(input_filename).stem
+        output_json_path = export_invoice_data(
+            output_dir=output_dir,
+            input_filename=input_filename,
+            input_stem=input_stem,
+            actual_sheet_name=actual_sheet_name,
+            aggregation_mode_used=aggregation_mode_used,
+            processed_tables=processed_tables,
+            table_footer_data=table_footer_data,
+            grand_total_footer=grand_total_footer,
+            leather_summary=leather_summary,
+            weight_summary_addon=weight_summary_addon,
+            global_standard_aggregation_results=global_standard_aggregation_results,
+            global_custom_aggregation_results=global_custom_aggregation_results,
+            normal_aggregate_per_po=normal_aggregate_per_po,
+            global_DAF_compounded_result=global_DAF_compounded_result,
+            warnings=monitor.warnings
+        )
 
         logging.info(f"📁 Processed file: {input_filename}")
 
