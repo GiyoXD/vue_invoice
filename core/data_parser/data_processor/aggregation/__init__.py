@@ -5,6 +5,7 @@ from .strategies import (
     aggregate_custom_by_po_item,
     aggregate_per_po_with_pallets,
     calculate_leather_summary,
+    perform_DAF_compounding,
 )
 from .summaries import (
     calculate_weight_summary,
