@@ -3,37 +3,19 @@
 
 import logging
 import pprint
-import re
 import decimal
 import os
 import json # Added for JSON output
 import datetime # <<< ADDED IMPORT for datetime handling
-import argparse # <<< ADDED IMPORT for argument parsing
 from pathlib import Path # <<< ADDED IMPORT for pathlib
 from typing import Dict, List, Any, Optional, Tuple, Union
 import time # Added for timing operations
-import copy # For deep-copying raw table data before processing mutates it
 
 # --- Loop Profiler (non-invasive measurement) ---
 from core.utils.loop_profiler import loop_profiler
 
-# Import from our refactored modules
-try:
-    from . import config as cfg # Keep config for fallback and other settings
-except ImportError:
-    logging.error("Failed to import config.py. Please ensure it exists and is configured.")
-    # Define dummy cfg values if needed for script to load, but it will likely fail later
-    class DummyConfig:
-        INPUT_EXCEL_FILE = "fallback_excel.xlsx" # Example placeholder
-        SHEET_NAME = "Sheet1"
-        HEADER_IDENTIFICATION_PATTERN = r"PO#" # Example
-        HEADER_SEARCH_ROW_RANGE = (1, 20) # Example
-        HEADER_SEARCH_COL_RANGE = (1, 30) # Example
-        COLUMNS_TO_DISTRIBUTE = [] # Example
-        DISTRIBUTION_BASIS_COLUMN = "SQFT" # Example
-        CUSTOM_AGGREGATION_WORKBOOK_PREFIXES = ["CUST"] # eeExample
-    cfg = DummyConfig()
-    logging.warning("Using dummy config values due to import failure.")
+# Import config directly
+from . import config as cfg
 
 
 from .excel_handler import ExcelHandler
@@ -183,12 +165,8 @@ def perform_DAF_compounding(
              # Use new col_ keys for sums
              sqft_sum = sums_dict.get('col_qty_sf', decimal.Decimal(0))
              amount_sum = sums_dict.get('col_amount', decimal.Decimal(0))
-             net_sum = sums_dict.get('net_sum', decimal.Decimal(0))
+             net_sum = sums_dict.get('col_net', decimal.Decimal(0))
              
-             # Fallback for legacy keys if not found (just in case)
-             if sqft_sum == 0 and 'sqft_sum' in sums_dict: sqft_sum = sums_dict.get('sqft_sum', decimal.Decimal(0))
-             if amount_sum == 0 and 'amount_sum' in sums_dict: amount_sum = sums_dict.get('amount_sum', decimal.Decimal(0))
-
              if not isinstance(sqft_sum, decimal.Decimal): sqft_sum = decimal.Decimal(0)
              if not isinstance(amount_sum, decimal.Decimal): amount_sum = decimal.Decimal(0)
              if not isinstance(net_sum, decimal.Decimal): net_sum = decimal.Decimal(0)
@@ -266,11 +244,7 @@ def perform_DAF_compounding(
              # Use new col_ keys
              sqft_sum = sums_dict.get('col_qty_sf', decimal.Decimal(0))
              amount_sum = sums_dict.get('col_amount', decimal.Decimal(0))
-             net_sum = sums_dict.get('net_sum', decimal.Decimal(0))
-             
-             # Fallback
-             if sqft_sum == 0 and 'sqft_sum' in sums_dict: sqft_sum = sums_dict.get('sqft_sum', decimal.Decimal(0))
-             if amount_sum == 0 and 'amount_sum' in sums_dict: amount_sum = sums_dict.get('amount_sum', decimal.Decimal(0))
+             net_sum = sums_dict.get('col_net', decimal.Decimal(0))
 
              if not isinstance(sqft_sum, decimal.Decimal): sqft_sum = decimal.Decimal(0)
              if not isinstance(amount_sum, decimal.Decimal): amount_sum = decimal.Decimal(0)
@@ -356,7 +330,7 @@ def json_serializer_default(obj):
     if isinstance(obj, (datetime.datetime, datetime.date)):
         return obj.isoformat() # Convert date/datetime to ISO string format
     elif isinstance(obj, decimal.Decimal): # Keep Decimal handling here too
-        return str(obj)
+        return float(obj)
     elif isinstance(obj, set): # Optional: Handle sets if needed
         return list(obj)
     # Add other custom types if needed
@@ -395,7 +369,6 @@ def run_invoice_automation(
     input_excel_override: Union[str, Any] = None,
     input_filename_override: str = None,
     output_dir_override: str = None,
-    monitor_override: PipelineMonitor = None,
     ignore_tare_warning: bool = False,
     ignore_cbm_warning: bool = False
 ) -> Tuple[Path, str]:
@@ -533,9 +506,7 @@ def run_invoice_automation(
             
             all_tables_data = sheet_parser.extract_multiple_tables(sheet, all_header_rows, column_mapping)
 
-            # Freeze a deep copy BEFORE any processing loop mutates the row dicts in-place.
-            # This is what gets written to "raw_data" in the JSON — CBM is never distributed here.
-            raw_tables_snapshot = copy.deepcopy(all_tables_data)
+            # Removed raw_tables_snapshot to avoid deepcopy overhead. Raw values are now saved in-place.
             # --- 5. Process Each Table (Instrumented) ---
             logging.info(f"--- Starting Data Processing Loop for {len(all_tables_data)} Extracted Table(s) ---")
             
@@ -548,6 +519,9 @@ def run_invoice_automation(
                      processed_tables.append([])
                      continue
 
+                # --- 5.0.5: Normalize column types to Decimal/int ---
+                data_processor.normalize_table_types(current_table_data)
+
                 # --- 5.1: Validate Presence of Essential Data ---
                 validate_data(current_table_data, table_id_str, column_mapping, monitor=monitor, phase='presence')
                 
@@ -555,13 +529,8 @@ def run_invoice_automation(
                     # 5a. CBM
                     data_after_cbm = data_processor.process_cbm_column(current_table_data)
                     
-                    # 5a.5 Pallet-anchored normalization
-                    # Ensures net/gross/cbm sit on the same row as pallet_count.
-                    # Misplaced values are pulled up to their pallet anchor row.
-                    data_normalized = data_processor.normalize_by_pallet_anchor(
-                        data_after_cbm, cfg.COLUMNS_TO_DISTRIBUTE, cfg.DISTRIBUTION_BASIS_COLUMN, monitor=monitor
-                    )
-                    
+                    data_normalized = data_after_cbm
+
                     # 5b. Distribute
                     try:
                         # 5b.1 Strict Validation: Gross Weight MUST NOT be smaller than Net Weight (Before Distribution)
@@ -694,6 +663,14 @@ def run_invoice_automation(
         leather_summary = data_processor.calculate_leather_summary(normal_aggregate_per_po)
         logging.info(f"Leather Summary: {leather_summary}")
 
+        # Calculate weight summary across all tables
+        raw_weight_summary = data_processor.calculate_weight_summary(merged_processed_data)
+        weight_summary_addon = {
+            'net': float(raw_weight_summary.get('col_net', 0.0)),
+            'gross': float(raw_weight_summary.get('col_gross', 0.0))
+        }
+        logging.info(f"Weight Summary Addon: {weight_summary_addon}")
+
         # --- Calculate Footer Data ---
         logging.info("--- Calculating Footer Data ---")
         
@@ -722,25 +699,13 @@ def run_invoice_automation(
 
         logging.info(f"Grand Total Footer: {grand_total_footer}")
 
-        # Pallet values are already normalized to 1/0 by normalize_pallet_count().
-        # The x-y display format (e.g. "3-19") is NOT produced here.
-        # It will be reconstructed downstream in the invoice generator UI.
-        for table_index, table_data in enumerate(processed_tables):
-            if isinstance(table_data, list):
-                pallet_sum = sum(
-                    row.get('col_pallet_count', 0) for row in table_data
-                    if isinstance(row.get('col_pallet_count'), (int, float))
-                )
-                logging.info(f"Table {table_index + 1}: {pallet_sum} pallet boundaries (1/0 format)")
-
+        # Format pallet counts to "x-y" display format in-place for JSON output
+        data_processor.format_pallet_counts_to_xy(processed_tables, true_total_pallets)
+        data_processor.format_pallet_counts_to_xy([normal_aggregate_per_po], true_total_pallets)
         # Remove col_pallet_id from final output structures as it is strictly for validation
         for table in processed_tables:
             for row in table:
                 row.pop('col_pallet_id', None)
-        for table in raw_tables_snapshot:
-            for row in table:
-                row.pop('col_pallet_id', None)
-
         # --- 8. Generate JSON Output ---
         logging.info("--- Preparing Data for JSON Output ---")
         try:
@@ -764,8 +729,8 @@ def run_invoice_automation(
 
                  # Raw/unprocessed table data exactly as extracted from Excel.
                  # CBM and other values are NEVER distributed here.
-                 # Kept purely for shipping list record-keeping; never used by invoice generation.
-                 "raw_data": make_json_serializable(raw_tables_snapshot),
+                  # Kept purely for backward compatibility with old frontend/db queries.
+                  "raw_data": [],
                  
                  # Include Footer Data - both per-table and grand total
                  "footer_data": {
@@ -773,6 +738,7 @@ def run_invoice_automation(
                      "grand_total": make_json_serializable(grand_total_footer),   # Overall grand total
                      "add_ons": {
                          "leather_summary_addon": make_json_serializable(leather_summary),  # BUFFALO vs COW summary
+                         "weight_summary_addon": make_json_serializable(weight_summary_addon),
                      }
                  },
 
@@ -869,32 +835,3 @@ def run_invoice_automation(
         loop_profiler.reset()
         
         return output_json_path, input_stem
-
-
-if __name__ == "__main__":
-    # --- Argument Parsing ---
-    parser = argparse.ArgumentParser(description="Process an Excel invoice file to generate JSON data.")
-    parser.add_argument(
-        "--input-excel",
-        type=str,
-        default=None, # Default to None, indicating fallback to config.py
-        help="Path to the input Excel file. Overrides the value in config.py if provided."
-    )
-    # --- ADDED: Output directory argument ---
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default=None, # Default to None, indicating use CWD
-        help="Directory to save the output JSON file. Defaults to the current working directory."
-    )
-    # --- END ADD ---
-    args = parser.parse_args()
-    # --- End Argument Parsing ---
-
-    # --- Run the main logic ---
-    # Pass the parsed arguments to the main function
-    run_invoice_automation(
-        input_excel_override=args.input_excel,
-        output_dir_override=args.output_dir # Pass the output dir argument
-    )
-    # --- End Run Logic ---

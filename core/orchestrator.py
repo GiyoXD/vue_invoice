@@ -2,10 +2,11 @@
 import sys
 import os
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Any
 
 # Import the logic directly!
 from core.invoice_generator.generate_invoice import run_invoice_generation
+from core.invoice_generator.models.request import InvoiceGenerationRequest, InvoicePathConfig, ExplicitOverrides
 from core.data_parser.main import run_invoice_automation
 from core.data_parser.data_processor import DataValidationError
 from core.utils.snitch import snitch
@@ -62,16 +63,23 @@ class Orchestrator:
         """
         try:
             # CALLING DIRECTLY
-            result = run_invoice_generation(
+            paths = InvoicePathConfig(
                 input_data_path=json_path,
                 output_path=output_path,
                 template_dir=template_dir,
-                config_dir=config_dir,
+                config_dir=config_dir
+            )
+            overrides = ExplicitOverrides(
                 explicit_config_path=explicit_config_path,
                 explicit_template_path=explicit_template_path,
-                input_data_dict=input_data_dict,
+                input_data_dict=input_data_dict
+            )
+            req = InvoiceGenerationRequest(
+                paths=paths,
+                overrides=overrides,
                 options=options
             )
+            result = run_invoice_generation(req)
             return result
 
         except Exception as e:
@@ -79,6 +87,41 @@ class Orchestrator:
             import traceback
             tb = traceback.format_exc()
             raise RuntimeError(f"Invoice Generation Failed:\n{tb}") from e
+
+    def package_files(self, generated_files, identifier: str) -> list:
+        """
+        Packages generated files into a list of file dictionaries.
+        If there are multiple files, they are zipped together.
+        """
+        import base64
+        final_payload_files = []
+        if not generated_files:
+            return final_payload_files
+            
+        if len(generated_files) == 1:
+            fname, fbytes = generated_files[0]
+            f_b64 = base64.b64encode(fbytes).decode('utf-8')
+            final_payload_files.append({
+                "filename": fname,
+                "mime_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "content": f_b64
+            })
+        else:
+            import zipfile
+            import io
+            zip_buffer = io.BytesIO()
+            with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+                for fname, fbytes in generated_files:
+                    zf.writestr(fname, fbytes)
+            zip_buffer.seek(0)
+            zip_b64 = base64.b64encode(zip_buffer.read()).decode('utf-8')
+            zip_name = f"Invoices_{identifier}.zip"
+            final_payload_files.append({
+                "filename": zip_name,
+                "mime_type": "application/zip",
+                "content": zip_b64
+            })
+        return final_payload_files
 
     # --- Blueprint / Template Management ---
 
@@ -102,30 +145,38 @@ class Orchestrator:
 
     def generate_blueprint_bundle(self, 
                                 template_path: Path, 
-                                output_dir: Path, 
+                                output_dir: Optional[Path] = None, 
                                 custom_prefix: str = None,
                                 runtime_mappings: Dict[str, str] = None,
                                 bundle_dir_name: str = None,
                                 pricing_mode: str = "standard",
-                                ignore_missing_description: bool = False) -> Path:
+                                ignore_missing_description: bool = False,
+                                in_memory: bool = False,
+                                existing_template_json: Optional[Dict[str, Any]] = None) -> Any:
         """
         Wraps BlueprintGenerator.generate.
         Generates the config and clean template bundle.
         """
         try:
-            from core.blueprint_generator import BlueprintGenerator
+            from core.blueprint_generator.generator import BlueprintGenerator, BlueprintGenerationOptions
             
             generator = BlueprintGenerator(self.project_root)
             
-            result_path = generator.generate(
-                template_path=str(template_path),
-                output_dir=str(output_dir),
+            options = BlueprintGenerationOptions(
+                output_dir=str(output_dir) if output_dir else None,
                 dry_run=False,
                 custom_prefix=custom_prefix,
                 runtime_mappings=runtime_mappings,
                 bundle_dir_name=bundle_dir_name,
                 pricing_mode=pricing_mode,
-                ignore_missing_description=ignore_missing_description
+                ignore_missing_description=ignore_missing_description,
+                in_memory=in_memory,
+                existing_template_json=existing_template_json
+            )
+            
+            result_path = generator.generate(
+                template_path=str(template_path),
+                options=options
             )
             
             return result_path

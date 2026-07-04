@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 from .scanner import TemplateAnalysisResult, SheetAnalysis, ColumnInfo
 from .validator import ConfigValidator, BlueprintLogicValidator
+from .addons import AddonRegistry
 from core.utils.snitch import snitch
 
 logger = logging.getLogger(__name__)
@@ -51,8 +52,6 @@ class ConfigBuilder:
         
         bundle = {
             "_meta": self._build_meta(analysis),
-            "has_static_sheets": analysis.has_static_sheets,
-            "data_preparation_module_hint": self._build_data_prep_hints(),
             "processing": self._build_processing(analysis),
             "styling_bundle": self._build_styling_bundle(analysis),
             "layout_bundle": self._build_layout_bundle(analysis)
@@ -69,7 +68,9 @@ class ConfigBuilder:
             "compatibility": "strict",
             "description": f"Auto-generated Master Config for {analysis.customer_code}",
             "source_template": analysis.file_path,
-            "generator": "blueprint_generator"
+            "generator": "blueprint_generator",
+            "has_static_sheets": analysis.has_static_sheets,
+            "data_preparation_module_hint": self._build_data_prep_hints()
         }
     
     def _build_data_prep_hints(self) -> Dict[str, Any]:
@@ -82,28 +83,14 @@ class ConfigBuilder:
     
     def _build_processing(self, analysis: TemplateAnalysisResult) -> Dict[str, Any]:
         """Build processing section."""
-        sheets = [sheet.name for sheet in analysis.sheets]
-        data_sources = {sheet.name: sheet.data_source for sheet in analysis.sheets}
-        
-        return {
-            "sheets": sheets,
-            "data_sources": data_sources,
-            "source_file": analysis.file_path
-        }
+        # Map sheet names directly to their data source (processing mode)
+        return {sheet.name: sheet.data_source for sheet in analysis.sheets}
 
     def _build_styling_bundle(self, analysis: TemplateAnalysisResult) -> Dict[str, Any]:
         """Build styling_bundle section."""
         styling = {
-            "_comment": "Centralized styling - explicit per sheet",
             "defaults": {
-                "borders": {
-                    "_comment": "Border configuration",
-                    "default_border": "full_grid",
-                    "default_style": "thin",
-                    "exceptions": {
-                        "col_static": "side_only"
-                    }
-                }
+                "default_border": "full_grid"
             }
         }
         
@@ -115,7 +102,6 @@ class ConfigBuilder:
     def _build_sheet_styling(self, sheet: SheetAnalysis) -> Dict[str, Any]:
         """Build styling for a single sheet."""
         sheet_styling = {
-            "_comment": "ID-driven styling with columns + row_contexts",
             "columns": {},
             "row_contexts": {}
         }
@@ -124,11 +110,12 @@ class ConfigBuilder:
         for col in sheet.columns:
             col_style = {
                 "format": col.format,
-                "alignment": col.alignment,
-                "width": round(col.width, 2)
+                "alignment": col.alignment
             }
             if col.wrap_text:
                 col_style["wrap_text"] = True
+            if col.id == 'col_static':
+                col_style["border_style"] = "side_only"
             
             sheet_styling["columns"][col.id] = col_style
             
@@ -136,9 +123,10 @@ class ConfigBuilder:
             for child in col.children:
                 child_style = {
                     "format": child.format,
-                    "alignment": child.alignment,
-                    "width": round(child.width, 2)
+                    "alignment": child.alignment
                 }
+                if child.id == 'col_static':
+                    child_style["border_style"] = "side_only"
                 sheet_styling["columns"][child.id] = child_style
         
         # Build row context styles
@@ -157,21 +145,28 @@ class ConfigBuilder:
                 "font_size": h_size,
                 "font_name": h_name,
                 "border_style": "thin",
-                "row_height": sheet.row_heights.get("header", 35)
+                "row_height": float(sheet.row_heights.get("header", 1))
             },
             "data": {
                 "bold": False,
                 "font_size": d_size,
                 "font_name": d_name,
                 "border_style": "thin",
-                "row_height": sheet.row_heights.get("data", 27)
+                "row_height": float(sheet.row_heights.get("data", 1))
             },
             "footer": {
                 "bold": True,
                 "font_size": h_size, # Usually matches header
                 "font_name": h_name,
                 "border_style": "thin",
-                "row_height": sheet.row_heights.get("footer", 35)
+                "row_height": float(sheet.row_heights.get("footer", 1))
+            },
+            "footer_addon": {
+                "bold": True,
+                "font_size": h_size,
+                "font_name": h_name,
+                "border_style": "none",
+                "row_height": float(sheet.row_heights.get("footer", 1))
             }
         }
         
@@ -250,7 +245,8 @@ class ConfigBuilder:
         for col in sheet.columns:
             col_def = {
                 "id": col.id,
-                "header": col.header
+                "header": col.header,
+                "width": round(col.width, 2)
             }
             
             if col.format != "@":
@@ -268,7 +264,8 @@ class ConfigBuilder:
                 for child in col.children:
                     child_def = {
                         "id": child.id,
-                        "header": child.header
+                        "header": child.header,
+                        "width": round(child.width, 2)
                     }
                     if child.format != "@":
                         child_def["format"] = child.format
@@ -349,112 +346,110 @@ class ConfigBuilder:
     
     def _build_footer(self, sheet: SheetAnalysis) -> Dict[str, Any]:
         """
-        Build footer section for a sheet.
-        
-        Only emits sheet-specific footer data (merge_rules, add_ons).
-        sum_cols and footer_cells are inherited from layout_bundle.defaults.footer.
+        Build footer section for a sheet using the declarative rows layout schema.
         """
-        # --- Detect merge rules from scanner ---
-        merge_rules = []
-        
-        if sheet.footer_info:
-            self.logger.info(f"  [Smart] Using detected footer info for {sheet.name}")
-            total_col = sheet.footer_info.total_text_col_id
-            
-            # Create merge rule if colspan > 1
-            if sheet.footer_info.merge_curr_colspan > 1:
-                merge_rules.append({
-                    "start_column_id": total_col,
-                    "colspan": sheet.footer_info.merge_curr_colspan,
-                    "comment": "Auto-detected from template"
-                })
-                self.logger.info(f"    [Smart] Added merge rule: {total_col} spans {sheet.footer_info.merge_curr_colspan} columns")
-        else:
-            self.logger.warning(f"  ⚠ No footer 'TOTAL' text found for {sheet.name}. Check template footer row.")
-        
-        footer = {
-            "_comment": "Inherits sum_cols from defaults. footer_cells detected per-sheet.",
-            "merge_rules": merge_rules,
-            "add_ons": self._build_footer_addons(sheet)
-        }
-        
-        # Build per-sheet footer_cells from detected FooterInfo
-        if sheet.footer_info:
-            footer_cells = []
-            # Add TOTAL label cell (e.g. ["TOTAL OF:", "col_no"])
-            if sheet.footer_info.total_text_col_id:
-                footer_cells.append([
-                    sheet.footer_info.total_text,
-                    sheet.footer_info.total_text_col_id
-                ])
-                self.logger.info(f"    [Smart] footer_cells: TOTAL label '{sheet.footer_info.total_text}' -> {sheet.footer_info.total_text_col_id}")
-            # Add pallet count cell only if detected in this sheet's template
-            if sheet.footer_info.pallet_count_col_id:
-                footer_cells.append([
-                    "{pallet_count} PALLET{multiple}",
-                    sheet.footer_info.pallet_count_col_id
-                ])
-                self.logger.info(f"    [Smart] footer_cells: pallet count -> {sheet.footer_info.pallet_count_col_id}")
-            if footer_cells:
-                footer["footer_cells"] = footer_cells
-        
-        return footer
-    
-    def _build_footer_addons(self, sheet: SheetAnalysis) -> Dict[str, Any]:
-        """Build footer add-ons configuration."""
-        add_ons = {}
-        
-        # before_footer (HS.CODE line)
-        has_hs_code = False
-        hs_code_text = ""
-        hs_code_colspan = 1
-        hs_code_col_id = "col_po" # Default fallback
-
-        if sheet.footer_info:
-            has_hs_code = sheet.footer_info.has_hs_code
-            if sheet.footer_info.hs_code_text:
-                hs_code_text = sheet.footer_info.hs_code_text
-            hs_code_colspan = sheet.footer_info.hs_code_colspan
-            if sheet.footer_info.hs_code_col_id:
-                hs_code_col_id = sheet.footer_info.hs_code_col_id
-            
+        rows = []
         is_contract = "contract" in sheet.name.lower()
-            
-        add_ons["before_footer"] = {
-            "enabled": not is_contract,
-            "column_id": hs_code_col_id,
-            "text": hs_code_text
-        }
         
-        if hs_code_colspan > 1:
-            add_ons["before_footer"]["merge"] = hs_code_colspan
-        
-        # weight_summary
-        # Usually placed at col_no for labels and col_item/col_desc for values
-        label_col = "col_no" if "col_no" in [c.id for c in sheet.columns] else "col_po"
-        value_col = "col_item" if "col_item" in [c.id for c in sheet.columns] else "col_desc"
+        sheet_col_ids = []
+        for c in sheet.columns:
+            sheet_col_ids.append(c.id)
+            sheet_col_ids.extend(child.id for child in c.children)
 
-        add_ons["weight_summary"] = {
-            "enabled": sheet.data_source == "aggregation",
-            "label_col_id": label_col,
-            "value_col_id": value_col,
-            "mode": ["daf", "standard"]
+        # 1. HS.CODE Row (Before-Footer Addon)
+        if sheet.footer_info and sheet.footer_info.has_hs_code and not is_contract:
+            hs_code_col_id = sheet.footer_info.hs_code_col_id or "col_po"
+            hs_code_text = sheet.footer_info.hs_code_text or ""
+            hs_code_colspan = sheet.footer_info.hs_code_colspan
+            cell = {
+                "col_id": hs_code_col_id,
+                "value": hs_code_text,
+                "style_context": "footer"
+            }
+            if hs_code_colspan > 1:
+                cell["colspan"] = hs_code_colspan
+            rows.append([cell])
+
+        # 2. Main Footer Row
+        main_footer_row = []
+        if sheet.footer_info:
+            # TOTAL label
+            total_col = sheet.footer_info.total_text_col_id or "col_no"
+            total_text = sheet.footer_info.total_text or "TOTAL:"
+            total_cell = {
+                "col_id": total_col,
+                "value": total_text,
+                "style_context": "footer"
+            }
+            if sheet.footer_info.merge_curr_colspan > 1:
+                total_cell["colspan"] = sheet.footer_info.merge_curr_colspan
+            main_footer_row.append(total_cell)
+
+            # Pallet count
+            if sheet.footer_info.pallet_count_col_id:
+                main_footer_row.append({
+                    "col_id": sheet.footer_info.pallet_count_col_id,
+                    "value": "{pallet_count} PALLET{multiple}",
+                    "style_context": "footer"
+                })
+        else:
+            main_footer_row.append({
+                "col_id": "col_desc" if "col_desc" in sheet_col_ids else "col_po",
+                "value": "TOTAL:",
+                "style_context": "footer"
+            })
+
+        # Add SUM formulas for default numeric columns that exist in the sheet
+        default_sum_cols = ["col_qty_pcs", "col_qty_sf", "col_amount", "col_net", "col_gross", "col_cbm", "col_sqm"]
+        for col_id in default_sum_cols:
+            if col_id in sheet_col_ids:
+                main_footer_row.append({
+                    "col_id": col_id,
+                    "formula": "SUM",
+                    "target_section": "data",
+                    "style_context": "footer"
+                })
+
+        if main_footer_row:
+            rows.append(main_footer_row)
+
+        # 3. Post-Footer Addons
+        # weight_summary
+        if sheet.data_source == "aggregation":
+            label_col = "col_no" if "col_no" in sheet_col_ids else "col_po"
+            value_col = "col_item" if "col_item" in sheet_col_ids else "col_desc"
+            
+            # NW Row
+            rows.append([
+                {"col_id": label_col, "value": "NW(KGS)", "style_context": "footer_addon"},
+                {"col_id": value_col, "value": "{weight_net}", "style_context": "footer_addon"}
+            ])
+            # GW Row
+            rows.append([
+                {"col_id": label_col, "value": "GW(KGS):", "style_context": "footer_addon"},
+                {"col_id": value_col, "value": "{weight_gross}", "style_context": "footer_addon"}
+            ])
+
+        # Add any generic addon rows prepared by the scanner and formatted by Addon builders
+        addon_facts = sheet.static_content_hints.get("addon_facts", [])
+        for fact in addon_facts:
+            try:
+                addon_builder = AddonRegistry.get_builder(fact)
+                addon_rows = addon_builder.build_rows(fact, sheet_col_ids)
+                rows.extend(addon_rows)
+            except Exception as e:
+                self.logger.warning(f"    Failed to build addon row for fact {getattr(fact, 'fact_type', 'unknown')}: {e}")
+
+        return {
+            "rows": rows
         }
-        
-        # leather_summary (for packing list)
-        add_ons["leather_summary"] = {
-            "enabled": sheet.data_source == "processed_tables_multi",
-            "mode": ["daf", "standard"]
-        }
-        
-        return add_ons
 
 
 
 if __name__ == "__main__":
     import sys
     import json
-    from .scanner import ExcelLayoutScanner
+    from .scanner import WorkbookManager
     
     from core.logger_config import setup_logging
     from core.system_config import sys_config
@@ -464,7 +459,7 @@ if __name__ == "__main__":
         print("Usage: python config_builder.py <template.xlsx>")
         sys.exit(1)
     
-    scanner = ExcelLayoutScanner()
+    scanner = WorkbookManager()
     result = scanner.scan_template(sys.argv[1])
     
     builder = ConfigBuilder()

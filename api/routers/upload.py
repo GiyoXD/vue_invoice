@@ -72,18 +72,12 @@ def upload_excel(file: UploadFile = File(...), ignore_tare: bool = Form(False), 
             
             # Read pricing_mode from config for frontend
             try:
-                with open(assets.config_path, 'r', encoding='utf-8') as cf:
-                    config_data = json.load(cf)
-                asset_status["pricing_mode"] = config_data.get("_meta", {}).get("pricing_mode", "standard")
+                asset_status["pricing_mode"] = assets.config_data.get("_meta", {}).get("pricing_mode", "standard") if assets.config_data else "standard"
             except Exception as pm_err:
                 logger.warning(f"Could not read pricing_mode from config: {pm_err}")
                 asset_status["pricing_mode"] = "standard"
         else:
-            prefix = identifier[:2] if len(identifier) >= 2 else identifier
-            asset_status["message"] = (
-                f"No config/template found for '{identifier}'. "
-                f"Expected: bundled/{prefix}/ folder with {prefix}_config.json and {prefix}.xlsx"
-            )
+            asset_status["message"] = f"No configuration found in database for '{identifier}'."
         
         # --- Read warnings from generated JSON ---
         warnings_list = []

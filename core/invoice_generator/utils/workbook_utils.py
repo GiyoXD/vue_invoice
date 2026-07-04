@@ -92,33 +92,43 @@ def inject_unknown_sheets(ctx):
         logger.info("[Unknown Sheets] Static sheet injection skipped (has_static_sheets=false)")
         return
 
-    # Derive the bundle directory from the config path
-    config_path = Path(ctx.paths.get('config', ''))
-    if not config_path.exists():
-        logger.debug("No config path found, skipping unknown sheet injection.")
-        return
-
-    bundle_dir = config_path.parent
-
-    # Derive prefix from config filename (e.g. "TEST_VN_config.json" -> "TEST_VN")
-    config_stem = config_path.stem  # "TEST_VN_config"
-    prefix = config_stem.replace("_config", "")  # "TEST_VN"
-
-    # Find matching .xlsx by prefix first, fallback to any .xlsx
-    source_xlsx_path = bundle_dir / f"{prefix}.xlsx"
-    if not source_xlsx_path.exists():
-        xlsx_candidates = list(bundle_dir.glob("*.xlsx"))
-        if not xlsx_candidates:
-            logger.debug(f"No .xlsx files found in bundle dir: {bundle_dir}")
+    # Check for in-memory xlsx bytes first (DB blueprints)
+    from io import BytesIO
+    template_xlsx_bytes = getattr(ctx, 'template_xlsx_bytes', None)
+    if template_xlsx_bytes:
+        try:
+            source_wb = openpyxl.load_workbook(BytesIO(template_xlsx_bytes))
+        except Exception as e:
+            logger.warning(f"[Unknown Sheets] Failed to load in-memory xlsx: {e}")
             return
-        source_xlsx_path = xlsx_candidates[0]
-    logger.info(f"[Unknown Sheets] Loading source template: {source_xlsx_path.name}")
+    else:
+        # Derive the bundle directory from the config path
+        config_path = Path(ctx.paths.get('config', ''))
+        if not config_path.exists():
+            logger.debug("No config path found, skipping unknown sheet injection.")
+            return
 
-    try:
-        source_wb = openpyxl.load_workbook(source_xlsx_path)
-    except Exception as e:
-        logger.warning(f"[Unknown Sheets] Failed to load source xlsx: {e}")
-        return
+        bundle_dir = config_path.parent
+
+        # Derive prefix from config filename (e.g. "TEST_VN_config.json" -> "TEST_VN")
+        config_stem = config_path.stem  # "TEST_VN_config"
+        prefix = config_stem.replace("_config", "")  # "TEST_VN"
+
+        # Find matching .xlsx by prefix first, fallback to any .xlsx
+        source_xlsx_path = bundle_dir / f"{prefix}.xlsx"
+        if not source_xlsx_path.exists():
+            xlsx_candidates = list(bundle_dir.glob("*.xlsx"))
+            if not xlsx_candidates:
+                logger.debug(f"No .xlsx files found in bundle dir: {bundle_dir}")
+                return
+            source_xlsx_path = xlsx_candidates[0]
+        logger.info(f"[Unknown Sheets] Loading source template: {source_xlsx_path.name}")
+
+        try:
+            source_wb = openpyxl.load_workbook(source_xlsx_path)
+        except Exception as e:
+            logger.warning(f"[Unknown Sheets] Failed to load source xlsx: {e}")
+            return
 
     # Determine which sheets are "configured" (already in output)
     configured_sheets = set(ctx.output_workbook.sheetnames)
@@ -155,7 +165,7 @@ def count_layout_columns(config_loader, sheet_name: str) -> Optional[int]:
     children col_qty_pcs + col_qty_sf = 2 actual columns, not 3).
 
     Args:
-        config_loader: The BundledConfigLoader instance.
+        config_loader: The ConfigStore instance.
         sheet_name: Name of the sheet to count columns for.
 
     Returns:
@@ -194,7 +204,7 @@ def apply_print_settings(ctx):
                 logger.warning(f"Sheet '{sheet}' is in sheetnames but returned None - skipping print setup")
                 continue
 
-            max_col = count_layout_columns(ctx.config_loader, sheet)
+            max_col = ctx.config_loader.get_max_columns(sheet)
             configure_print_area(ws, max_col_override=max_col)
         except Exception as e:
             logger.error(f"Print setup failed for '{sheet}': {e}")

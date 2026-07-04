@@ -15,18 +15,18 @@ Pattern:
 import logging
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
+from core.invoice_generator.models.config.styling import SheetStylingModel
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class ColumnStyle:
-    """Base style definition for a column (data format and alignment)."""
+    """Base style definition for a column (data format, alignment)."""
     col_id: str
     format: Optional[str] = None  # Number format: "@", "0.00", "#,##0", etc.
     alignment: Optional[str] = None  # "left", "center", "right"
     vertical_alignment: Optional[str] = None  # "top", "center", "bottom"
-    width: Optional[int] = None  # Column width
     wrap_text: bool = False
     
     def to_dict(self) -> Dict[str, Any]:
@@ -35,8 +35,7 @@ class ColumnStyle:
             'format': self.format,
             'alignment': self.alignment,
             'vertical_alignment': self.vertical_alignment,
-            'width': self.width,
-            'wrap_text': self.wrap_text
+            'wrap_text': self.wrap_text,
         }
 
 
@@ -49,8 +48,6 @@ class RowContextStyle:
     font_size: Optional[int] = None
     font_name: Optional[str] = None
     fill_color: Optional[str] = None  # Hex color: "CCCCCC"
-    border_style: Optional[str] = None  # "thin", "medium", "thick"
-    row_height: Optional[int] = None
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for merging."""
@@ -60,8 +57,6 @@ class RowContextStyle:
             'font_size': self.font_size,
             'font_name': self.font_name,
             'fill_color': self.fill_color,
-            'border_style': self.border_style,
-            'row_height': self.row_height
         }
 
 
@@ -83,16 +78,16 @@ class StyleRegistry:
         # Returns: {format: "0.00", alignment: "center", bold: True, fill: "CCCCCC", ...}
     """
     
-    def __init__(self, sheet_config: Dict[str, Any]):
+    def __init__(self, sheet_styling: Any):
         """
-        Initialize registry from sheet configuration.
+        Initialize registry from sheet styling model.
         
         Args:
-            sheet_config: Sheet configuration containing:
-                - columns: {col_id: {format, alignment, width}}
-                - row_contexts: {context: {bold, fill_color, borders}}
+            sheet_styling: SheetStylingModel or Dict.
         """
-        self.sheet_config = sheet_config
+        if isinstance(sheet_styling, dict):
+            sheet_styling = SheetStylingModel.model_validate(sheet_styling)
+        self.sheet_styling = sheet_styling
         self.columns: Dict[str, ColumnStyle] = {}
         self.row_contexts: Dict[str, RowContextStyle] = {}
         
@@ -101,49 +96,37 @@ class StyleRegistry:
     
     def _load_columns(self):
         """Load column definitions from config."""
-        columns_config = self.sheet_config.get('columns', {})
-        
-        for col_id, col_def in columns_config.items():
+        for col_id, col_def in self.sheet_styling.columns.items():
             self.columns[col_id] = ColumnStyle(
                 col_id=col_id,
-                format=col_def.get('format'),
-                alignment=col_def.get('alignment'),
-                vertical_alignment=col_def.get('vertical_alignment'),
-                width=col_def.get('width'),
-                wrap_text=col_def.get('wrap_text', False)
+                format=col_def.format,
+                alignment=col_def.alignment,
+                vertical_alignment=col_def.vertical_alignment,
+                wrap_text=col_def.wrap_text,
             )
-            logger.debug(f"Loaded column '{col_id}': alignment={col_def.get('alignment')}, vertical_alignment={col_def.get('vertical_alignment')}")
+            logger.debug(f"Loaded column '{col_id}': alignment={col_def.alignment}, vertical_alignment={col_def.vertical_alignment}")
         
         logger.debug(f"Loaded {len(self.columns)} column styles: {list(self.columns.keys())}")
     
     def _load_row_contexts(self):
         """Load row context styles from config."""
-        contexts_config = self.sheet_config.get('row_contexts', {})
-        
-        for context, context_def in contexts_config.items():
+        for context, context_def in self.sheet_styling.row_contexts.items():
             self.row_contexts[context] = RowContextStyle(
                 context=context,
-                bold=context_def.get('bold'),
-                italic=context_def.get('italic'),
-                font_size=context_def.get('font_size'),
-                font_name=context_def.get('font_name'),
-                fill_color=context_def.get('fill_color'),
-                border_style=context_def.get('border_style'),
-                row_height=context_def.get('row_height')
+                bold=context_def.bold,
+                italic=context_def.italic,
+                font_size=context_def.font_size,
+                font_name=context_def.font_name,
+                fill_color=context_def.fill_color,
             )
         
         logger.debug(f"Loaded {len(self.row_contexts)} row contexts: {list(self.row_contexts.keys())}")
-        
-        # Check if border_style is missing from all contexts
-        has_any_border = any(ctx.border_style for ctx in self.row_contexts.values())
-        if not has_any_border and self.row_contexts:
-            logger.warning(f"ℹ️  No 'border_style' found in any row_contexts")
-            logger.warning(f"   Cells will have NO borders unless added to config")
-            logger.warning(f"   To add borders: Add 'border_style: thin' (or 'medium'/'thick') to row_contexts")
     
     def get_style(self, col_id: str, context: str = 'data', overrides: Optional[Dict] = None) -> Dict[str, Any]:
         """
-        Get merged style for a specific cell.
+        Get merged style for a specific cell (font, format, alignment, fill).
+        
+        Borders are NOT handled here — see BorderResolver.
         
         Merge priority: Column base → Row context → Overrides
         
@@ -153,7 +136,7 @@ class StyleRegistry:
             overrides: Optional style overrides for special cases
         
         Returns:
-            Merged style dictionary with all properties
+            Merged style dictionary with all properties (no border)
         
         Example:
             style = registry.get_style('col_cbm', context='header')
@@ -181,11 +164,11 @@ class StyleRegistry:
             logger.warning(f"   Please add column definition to config with: format, alignment, width")
         
         # 2. Merge row context style (HOW: emphasis, decoration)
-        # CRITICAL: Only merge properties that are NOT column-owned
+        # Only merge properties that are NOT column-owned.
         if context in self.row_contexts:
             context_style = self.row_contexts[context].to_dict()
             for key, value in context_style.items():
-                if value is not None and key not in COLUMN_OWNED:
+                if value is not None and key not in COLUMN_OWNED and key not in merged_style:
                     merged_style[key] = value
         else:
             logger.warning(f"❌ Row context '{context}' not found in StyleRegistry!")
@@ -197,11 +180,12 @@ class StyleRegistry:
             merged_style.update(overrides)
         
         # 4. STRICT VALIDATION: Verify all required properties exist
+        sheet_name = getattr(self.sheet_styling, 'sheet_name', 'Sheet')
         required_props = {
-            'alignment': f"Add 'alignment' to styling_bundle.{self.sheet_config.get('sheet_name', 'Sheet')}.columns.{col_id}",
-            'format': f"Add 'format' to styling_bundle.{self.sheet_config.get('sheet_name', 'Sheet')}.columns.{col_id}",
-            'font_name': f"Add 'font_name' to styling_bundle.{self.sheet_config.get('sheet_name', 'Sheet')}.row_contexts.{context}",
-            'font_size': f"Add 'font_size' to styling_bundle.{self.sheet_config.get('sheet_name', 'Sheet')}.row_contexts.{context}"
+            'alignment': f"Add 'alignment' to styling_bundle.{sheet_name}.columns.{col_id}",
+            'format': f"Add 'format' to styling_bundle.{sheet_name}.columns.{col_id}",
+            'font_name': f"Add 'font_name' to styling_bundle.{sheet_name}.row_contexts.{context}",
+            'font_size': f"Add 'font_size' to styling_bundle.{sheet_name}.row_contexts.{context}"
         }
         
         missing_props = []
@@ -218,17 +202,7 @@ class StyleRegistry:
         
         return merged_style
     
-    def get_column_width(self, col_id: str) -> Optional[int]:
-        """Get column width for a specific column ID."""
-        if col_id in self.columns:
-            return self.columns[col_id].width
-        return None
-    
-    def get_row_height(self, context: str) -> Optional[int]:
-        """Get row height for a specific context."""
-        if context in self.row_contexts:
-            return self.row_contexts[context].row_height
-        return None
+
     
     def has_column(self, col_id: str) -> bool:
         """Check if column ID exists in registry."""
@@ -239,7 +213,7 @@ class StyleRegistry:
         return context in self.row_contexts
     
     @classmethod
-    def create_from_styling_bundle(cls, styling_config: Dict[str, Any], sheet_name: str) -> 'StyleRegistry':
+    def create_from_styling_bundle(cls, styling_config: Any, sheet_name: str) -> 'StyleRegistry':
         """
         Factory method to create registry from styling_bundle config.
         
@@ -250,5 +224,12 @@ class StyleRegistry:
         Returns:
             StyleRegistry instance
         """
-        sheet_config = styling_config.get(sheet_name, {})
+        if isinstance(styling_config, dict):
+            sheet_config = styling_config.get(sheet_name)
+        else:
+            sheet_config = getattr(styling_config, sheet_name, None)
+            
+        if isinstance(sheet_config, dict):
+            sheet_config = SheetStylingModel.model_validate(sheet_config)
+            
         return cls(sheet_config)

@@ -33,17 +33,3 @@ class StylingConfigModel(BaseModel):
     columnIdWidths: Optional[Dict[str, float]] = Field(None, alias='column_id_widths')
     rowHeights: Optional[Dict[str, float]] = Field(None, alias='row_heights')
 
-    class Config:
-        populate_by_name = True
-
-class FooterData(BaseModel):
-    """
-    Data object passed from DataTableBuilder to TableFooterBuilder.
-    Contains all necessary information to render the footer without further calculation.
-    """
-    footer_row_start_idx: int
-    data_start_row: int
-    data_end_row: int
-    total_pallets: int
-    leather_summary: Optional[Dict[str, Dict[str, Union[int, float]]]] = None
-    weight_summary: Optional[Dict[str, Union[int, float]]] = None

@@ -34,3 +34,8 @@ database/blueprints/mapper/mapping_config.json
 
 # Node/NPM
 node_modules/
+
+# Ignore test template files from overwhelm context in general
+*_template.json
+tests/fixtures/test_KH_template.json
+tests/fixtures/test_KH_config.json

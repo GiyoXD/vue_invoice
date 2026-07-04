@@ -9,11 +9,10 @@ from openpyxl.utils import get_column_letter
 
 from .base_processor import SheetProcessor
 from ..builders.layout_builder import LayoutBuilder
-from ..builders.footer_builder import TableFooterBuilder
-from ..styling.models import StylingConfigModel, FooterData
+from ..builders.table import TableFooterBuilder
+from ..styling.models import StylingConfigModel
+from ..models.footer import FooterData
 from ..config.builder_config_resolver import BuilderConfigResolver
-
-from ..extractors.header_extractor import HeaderExtractor
 
 logger = logging.getLogger(__name__)
 from core.system_config import ConfigurationError
@@ -47,48 +46,73 @@ class MultiTableProcessor(SheetProcessor):
             return False
 
         # 3. Initialize Tracking Variables
+        from core.invoice_generator.models.layout import SheetLayoutState
+        layout_state = SheetLayoutState()
+        layout_state.advance_to(self.header_row)
+        
         current_row = self.header_row
         all_data_ranges = []
         grand_total_pallets = 0
-        last_header_info = None
+        last_grid = None
         
         # 4. Process Each Table
         for i, table_key in enumerate(table_keys):
-            result = self._process_single_table(
+            is_first_table = (i == 0)
+            is_last_table = (i == len(table_keys) - 1)
+            show_grand_total_addons = (len(table_keys) == 1)
+            
+            logger.info(f"Processing table '{table_key}' ({i+1}/{len(table_keys)})")
+            
+            from core.invoice_generator.models.layout import TableLayoutConfig
+            layout_builder = self._build_table_layout(
+                layout_state=layout_state,
                 table_key=table_key,
-                index=i,
-                total_tables=len(table_keys),
-                current_row=current_row,
-                all_tables_data=all_tables_data,
+                config=TableLayoutConfig(
+                    is_first_table=is_first_table,
+                    is_last_table=is_last_table,
+                    skip_template_footer=True,
+                    show_grand_total_addons=show_grand_total_addons
+                ),
                 template_state_builder=template_state_builder
             )
             
-            if not result:
+            if not layout_builder:
                 return False
             
-            # Unpack result
-            (next_row, table_pallets, data_range, header_info, table_leather_summary) = result
+            # Calculate next row
+            next_row = layout_builder.next_row_after_footer
+            if not is_last_table:
+                next_row += 1
+                
+            # Retrieve pallet count from LayoutBuilder (calculated by TableCalculator)
+            table_pallets = layout_builder.footer_data.total_pallets if layout_builder.footer_data else 0
+            
+            # Get data range
+            data_range = None
+            if layout_builder.data_start_row > 0 and layout_builder.data_end_row >= layout_builder.data_start_row:
+                data_range = (layout_builder.data_start_row, layout_builder.data_end_row)
             
             # Update tracking
-            current_row = next_row
+            layout_state.advance_to(next_row)
+            current_row = layout_state.next_free_row
             grand_total_pallets += table_pallets
             if data_range:
                 all_data_ranges.append(data_range)
-            last_header_info = header_info
+            last_grid = layout_builder.grid
 
         # 5. Build Grand Total Row
-        if len(table_keys) > 1 and last_header_info:
+        if len(table_keys) > 1 and last_grid:
             current_row = self._build_grand_total_row(
                 current_row=current_row,
                 grand_total_pallets=grand_total_pallets,
                 all_data_ranges=all_data_ranges,
-                last_header_info=last_header_info,
+                last_grid=last_grid,
                 all_tables_data=all_tables_data,
                 table_keys=table_keys
             )
 
         # 6. Restore Template Footer
-        self._restore_template_footer(template_state_builder, current_row, table_keys)
+        self._restore_template_footer(template_state_builder, current_row, table_keys, last_grid)
         
         logger.info(f"Successfully processed {len(table_keys)} tables for sheet '{self.sheet_name}'.")
         return True
@@ -126,14 +150,8 @@ class MultiTableProcessor(SheetProcessor):
             try:
                 sheet_layout_json = json_config[self.sheet_name]
                 template_state_builder = JsonTemplateStateBuilder(
-                    sheet_layout_data=sheet_layout_json,
-                    debug=getattr(self.args, 'debug', False)
+                    sheet_layout_data=sheet_layout_json
                 )
-                
-                # Extract header info
-                if self.args and self.invoice_data:
-                    self.header_info = HeaderExtractor.extract(template_state_builder.header_state)
-                    
                 return template_state_builder
             except Exception as e:
                 logger.critical(f"CRITICAL: JsonTemplateStateBuilder failed: {e}", exc_info=True)
@@ -143,85 +161,7 @@ class MultiTableProcessor(SheetProcessor):
         logger.critical(f"CRITICAL: No JSON template found for sheet '{self.sheet_name}'. XLSX scanning has been removed.")
         return None
 
-    def _process_single_table(self, table_key, index, total_tables, current_row, all_tables_data, template_state_builder):
-        """Processes a single table iteration."""
-        is_first_table = (index == 0)
-        is_last_table = (index == total_tables - 1)
-        logger.info(f"Processing table '{table_key}' ({index+1}/{total_tables})")
-        
-        show_grand_total_addons = (total_tables == 1)
-        
-        resolver = BuilderConfigResolver(
-            config_loader=self.config_loader,
-            sheet_name=self.sheet_name,
-            worksheet=self.output_worksheet,
-            args=self.args,
-            invoice_data=self.invoice_data,
-            pallets=0
-        )
-        
-        style_config = resolver.get_style_bundle()
-        context_config = resolver.get_context_bundle(
-            is_last_table=is_last_table,
-            show_grand_total_addons=show_grand_total_addons
-        )
-        layout_config = resolver.get_layout_bundle()
-        
-        # Resolve table data
-        table_data_resolver = resolver.get_table_data_resolver(table_key=str(table_key))
-        resolved_data = table_data_resolver.resolve()
-        layout_config['resolved_data'] = resolved_data
-        
-        # Override header row position
-        if not 'structure' in layout_config.get('sheet_config', {}):
-            if 'sheet_config' not in layout_config:
-                layout_config['sheet_config'] = {}
-            layout_config['sheet_config']['structure'] = {}
-        layout_config['sheet_config']['structure']['header_row'] = current_row
-        
-        layout_config['skip_template_header_restoration'] = (not is_first_table)
-        layout_config['skip_template_footer_restoration'] = True
-        layout_config['allow_col_desc_merge'] = getattr(self, 'allow_col_desc_merge', True)
-        layout_config['is_global_unique_desc'] = getattr(self, 'is_global_unique_desc', False)
-        layout_config['data_source_type'] = self.sheet_config.get('data_source', 'processed_tables_multi') if self.sheet_config else 'processed_tables_multi'
-        
-        layout_builder = LayoutBuilder(
-            self.output_workbook,
-            self.output_worksheet,
-            self.template_worksheet,
-            style_config=style_config,
-            context_config=context_config,
-            layout_config=layout_config,
-            template_state_builder=template_state_builder
-        )
-        
-        success = layout_builder.build()
-        if not success:
-            logger.error(f"Failed to build layout for table '{table_key}'")
-            return None
-        
-        # Calculate next row
-        next_row = layout_builder.next_row_after_footer
-        if not is_last_table:
-            next_row += 1
-            
-        # Retrieve pallet count from LayoutBuilder (calculated by TableCalculator)
-        table_pallets = layout_builder.footer_data.total_pallets if layout_builder.footer_data else 0
-        
-        # Get data range
-        data_range = None
-        if layout_builder.data_start_row > 0 and layout_builder.data_end_row >= layout_builder.data_start_row:
-            data_range = (layout_builder.data_start_row, layout_builder.data_end_row)
-            
-        return (
-            next_row,
-            table_pallets,
-            data_range,
-            layout_builder.header_info,
-            getattr(layout_builder, 'leather_summary', None)
-        )
-
-    def _build_grand_total_row(self, current_row, grand_total_pallets, all_data_ranges, last_header_info, 
+    def _build_grand_total_row(self, current_row, grand_total_pallets, all_data_ranges, last_grid, 
                              all_tables_data, table_keys):
         """Builds the Grand Total row after all tables."""
         logger.info("Adding Grand Total Row")
@@ -246,26 +186,34 @@ class MultiTableProcessor(SheetProcessor):
         gt_style_config = grand_total_resolver.get_style_bundle()
         gt_layout_config = grand_total_resolver.get_layout_bundle()
         
-        # Prepare styling model
-        styling_model = gt_style_config.get('styling_config')
-        if styling_model and not isinstance(styling_model, StylingConfigModel):
-            if isinstance(styling_model, dict) and 'columns' in styling_model and 'row_contexts' in styling_model:
-                pass
-            else:
-                try:
-                    styling_model = StylingConfigModel(**styling_model)
-                except Exception as e:
-                    logger.warning(f"Could not create StylingConfigModel: {e}")
-                    styling_model = None
+        from core.invoice_generator.models.config.styling import SheetStylingModel
+        from core.invoice_generator.models.config.layout import SheetLayoutModel, FooterConfigModel
+        from ..styling.style_registry import StyleRegistry
+        from ..styling.dimension_registry import DimensionRegistry
         
+        sheet_styling = SheetStylingModel.model_validate(gt_style_config.get('styling_config', {}))
+        sheet_layout = SheetLayoutModel.model_validate(gt_layout_config.get('sheet_config', {}))
+
+        style_registry = StyleRegistry(sheet_styling)
+        row_heights = {
+            context: style.row_height
+            for context, style in sheet_styling.row_contexts.items()
+            if style.row_height is not None
+        }
+        dimension_registry = DimensionRegistry(row_heights)
+
+        from ..builders.table.table_grid import Grid
+        gt_grid = Grid(
+            column_mapping=last_grid.column_mapping,
+            style_registry=style_registry,
+            column_colspan=last_grid.column_colspan,
+            dimension_registry=dimension_registry
+        )
+        gt_grid.set_start_row(current_row)
+
         # Prepare footer config
-        sheet_config = gt_layout_config.get('sheet_config', {})
-        footer_config = sheet_config.get('footer', {}).copy()
-        footer_config["type"] = "grand_total"
-        
-        # Legacy DAF summary logic removed - add_ons are now controlled via dictionary config
-        # if sheet_config.get('content', {}).get("summary", False) and self.args.DAF:
-        #     footer_config["add_ons"] = ["summary"]
+        footer_config = sheet_layout.footer.model_copy() if sheet_layout.footer else FooterConfigModel()
+        footer_config.type = "grand_total"
         
         # Calculate overall data range
         if all_data_ranges:
@@ -286,30 +234,30 @@ class MultiTableProcessor(SheetProcessor):
         )
         
         footer_builder = TableFooterBuilder(
-            worksheet=self.output_worksheet,
+            grid=gt_grid,
             footer_data=footer_data,
-            style_config={'styling_config': styling_model},
-            context_config={
-                'header_info': last_header_info,
-                'pallet_count': grand_total_pallets,
-                'sheet_name': self.sheet_name,
-                'is_last_table': True
-            },
-            data_config={
-                'sum_ranges': all_data_ranges,
-                'footer_config': footer_config,
-                'all_tables_data': all_tables_data,
-                'table_keys': table_keys,
-                'mapping_rules': gt_layout_config.get('sheet_config', {}).get('data_flow', {}).get('mappings', {}),
-                'DAF_mode': self.args.DAF,
-                'override_total_text': None,
-                'leather_summary': global_leather_summary
-            }
+            footer_config=footer_config,
+            pallet_count=grand_total_pallets,
+            show_grand_total_addons=True,
+            is_daf=bool(getattr(self.args, 'DAF', False)) if self.args else False,
+            sheet_name=self.sheet_name,
+            sum_ranges=all_data_ranges
         )
         
-        return footer_builder.build()
+        try:
+            footer_builder.build()
+        except Exception as e:
+            logger.error("Failed to build grand total footer", exc_info=True)
+            return current_row
+            
+        row_models = gt_grid.get_row_models()
+        from ..utils.cell_converter import write_models_to_worksheet
+        if row_models:
+            write_models_to_worksheet(self.output_worksheet, row_models, start_row=current_row)
+            
+        return current_row + gt_grid._cursor_row
 
-    def _restore_template_footer(self, template_state_builder, current_row, table_keys):
+    def _restore_template_footer(self, template_state_builder, current_row, table_keys, last_grid):
         """
         Template footer restoration.
         Runs AFTER all tables and the Grand Total row are complete to place 
@@ -317,8 +265,9 @@ class MultiTableProcessor(SheetProcessor):
         """
         if template_state_builder and not self.sheet_config.get('skip_template_footer', False):
             try:
-                # We need actual_num_cols which we can get from the last header_info
-                actual_num_cols = getattr(self, 'header_info', {}).get('num_columns', None)
+                # We need actual_num_cols which we can get from the last grid
+                actual_num_cols = last_grid.num_columns if last_grid else None
+                column_index_mapping = getattr(last_grid, 'column_index_mapping', None) if last_grid else None
                 
                 logger.info(f"--- RESTORING TEMPLATE FOOTER (Multi-Table End) ---")
                 logger.info(f"footer_start_row: {current_row}")
@@ -328,12 +277,13 @@ class MultiTableProcessor(SheetProcessor):
                 if self.args:
                     if getattr(self.args, 'DAF', False): gen_mode = "daf"
                     elif getattr(self.args, 'custom', False): gen_mode = "custom"
-
+ 
                 template_state_builder.restore_template_footer(
                     target_worksheet=self.output_worksheet,
                     footer_start_row=current_row,
                     actual_num_cols=actual_num_cols,
-                    mode=gen_mode
+                    mode=gen_mode,
+                    column_index_mapping=column_index_mapping
                 )
                 logger.info("Template footer restored successfully")
             except Exception as e:

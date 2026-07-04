@@ -40,11 +40,13 @@ class ConfigValidator:
 
         # 3. Processing
         processing = config.get("processing", {})
-        if "sheets" not in processing:
+        sheets = [k for k in processing.keys() if not k.startswith("_")] if isinstance(processing, dict) else []
+
+        if not sheets:
              errors.append({
-                 "issue": "Missing Field: 'processing.sheets'",
-                 "detail": "List of sheets to process (e.g. Invoice, Packing list).",
-                 "fix": "Add 'sheets' list to 'processing'."
+                 "issue": "Missing Field: 'processing'",
+                 "detail": "Dictionary of sheets and data sources to process (e.g. Invoice: aggregation).",
+                 "fix": "Add sheet names and data source mapping to 'processing'."
              })
         
         # 4. Styling Bundle (Deep Check)
@@ -58,20 +60,20 @@ class ConfigValidator:
                 })
             
             # Check for per-sheet styling
-            for sheet in processing.get("sheets", []):
+            for sheet in sheets:
                 if sheet not in sb:
                      errors.append({
                          "issue": f"Missing Styling for Sheet: '{sheet}'",
                          "detail": f"Every sheet listed in 'processing' needs a matching entry in 'styling_bundle'.",
                          "fix": f"Add '{sheet}' to 'styling_bundle' with its column/row styles."
                      })
-
+ 
         # 5. Layout Bundle (Deep Check)
         if "layout_bundle" in config:
             lb = config.get("layout_bundle", {})
             
             # Check for per-sheet layout
-            for sheet in processing.get("sheets", []):
+            for sheet in sheets:
                 if sheet not in lb:
                      errors.append({
                          "issue": f"Missing Layout for Sheet: '{sheet}'",
@@ -103,14 +105,12 @@ class BlueprintLogicValidator:
     @staticmethod
     def verify_strict_mode(sheet_analysis) -> None:
         """
-        Enforce Strict Mode: All column IDs must exist in BlueprintRules.COLUMNS.
-        Raises ValueError if invaid/unknown ID is found.
+        Enforce Strict Mode: All column IDs must exist in BlueprintSchema.COLUMNS.
+        Raises ValueError if invalid/unknown ID is found.
         """
-        # Avoid circular imports by importing inside method if necessary, 
-        # but generally safe if structured correctly.
-        from ..rules import BlueprintRules
+        from ..schema import BlueprintSchema
 
-        allowed_ids = set(BlueprintRules.COLUMNS.keys())
+        allowed_ids = set(BlueprintSchema.COLUMNS.keys())
         
         for col in sheet_analysis.columns:
             # 1. Verify Parent Column ID
@@ -118,7 +118,7 @@ class BlueprintLogicValidator:
                 raise ValueError(
                     f"Blueprint Verification Failed: Column '{col.header}' has Invalid ID '{col.id}'. "
                     f"It must be one of: {sorted(list(allowed_ids))}. "
-                    "Please update BlueprintRules or fix the input template mapping."
+                    "Please update BlueprintSchema or fix the input template mapping."
                 )
             
             # 2. Verify Child Column ID

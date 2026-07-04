@@ -9,7 +9,7 @@ project_root = Path(__file__).resolve().parent.parent.parent
 if str(project_root) not in sys.path:
     sys.path.append(str(project_root))
 
-from core.blueprint_generator.generator import BlueprintGenerator
+from core.blueprint_generator.generator import BlueprintGenerator, BlueprintGenerationOptions
 from core.logger_config import setup_logging
 from core.system_config import sys_config
 
@@ -63,11 +63,14 @@ def main():
         # Standard Generation Flow
         logger.info(f"Starting configuration workflow for: {template_path.name}")
         
-        result_path = generator.generate(
-            template_path=str(template_path),
+        options = BlueprintGenerationOptions(
             output_dir=args.output,
             dry_run=args.dry_run,
             custom_prefix=args.prefix
+        )
+        result_path = generator.generate(
+            template_path=str(template_path),
+            options=options
         )
 
         if result_path:

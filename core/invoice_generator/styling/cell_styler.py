@@ -19,6 +19,8 @@ class CellStyler:
     Applies style definitions to Excel cells.
     
     Translates style dictionaries from StyleRegistry into openpyxl style objects.
+    Borders are NOT handled here — they are resolved by BorderResolver
+    and applied directly via the cell writer.
     
     Usage:
         styler = CellStyler()
@@ -27,17 +29,6 @@ class CellStyler:
         style = {'format': '0.00', 'bold': True, 'alignment': 'center', 'fill_color': 'CCCCCC'}
         styler.apply(cell, style)
     """
-    
-    # Border style mapping
-    BORDER_STYLES = {
-        'thin': 'thin',
-        'medium': 'medium',
-        'thick': 'thick',
-        'double': 'double',
-        'hair': 'hair',
-        'dashed': 'dashed',
-        'dotted': 'dotted'
-    }
     
     def apply(self, cell: Cell, style: Dict[str, Any]):
         """
@@ -67,8 +58,7 @@ class CellStyler:
         # Apply fill color
         self._apply_fill(cell, style)
         
-        # Apply borders
-        self._apply_borders(cell, style)
+        # Borders are NOT applied here — handled by BorderResolver
         
         # Apply number format
         self._apply_format(cell, style)
@@ -146,43 +136,8 @@ class CellStyler:
                 fill_type='solid'
             )
     
-    def _apply_borders(self, cell: Cell, style: Dict[str, Any]):
-        """Apply border style to cell."""
-        border_style_name = style.get('border_style')
-        
-        if border_style_name:
-            # Map style name to openpyxl border style
-            openpyxl_style = self.BORDER_STYLES.get(border_style_name, 'thin')
-            
-            # Create border sides
-            side = Side(style=openpyxl_style, color='000000')
-            
-            # Special case: no_bottom border (for static content rows)
-            if border_style_name == 'no_bottom':
-                cell.border = Border(
-                    left=side,
-                    right=side,
-                    top=side,
-                    bottom=Side(style=None)  # No bottom border
-                )
-            # Special case: sides_only border (for col_static column)
-            elif border_style_name == 'sides_only':
-                cell.border = Border(
-                    left=side,
-                    right=side,
-                    top=Side(style=None),     # No top border
-                    bottom=Side(style=None)   # No bottom border
-                )
-            else:
-                # Apply to all sides (standard behavior)
-                cell.border = Border(
-                    left=side,
-                    right=side,
-                    top=side,
-                    bottom=side
-                )
-        # Note: If border_style not in style dict, no borders are applied
-        # This is expected behavior - borders are optional styling
+    # _apply_borders removed — borders are resolved by BorderResolver
+    # and applied directly via write_models_to_worksheet
     
     def _apply_format(self, cell: Cell, style: Dict[str, Any]):
         """Apply number format to cell."""
