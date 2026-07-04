@@ -717,15 +717,6 @@ def run_invoice_automation(
 
         logging.info(f"Grand Total Footer: {grand_total_footer}")
 
-        # Pallet values are already normalized to 1/0 by normalize_pallet_count().
-        # The x-y display format (e.g. "3-19") is NOT produced here.
-        # It will be reconstructed downstream in the invoice generator UI.
-        for table_index, table_data in enumerate(processed_tables):
-            if isinstance(table_data, list):
-                pallet_sum = sum(
-                    row.get('col_pallet_count', 0) for row in table_data
-                    if isinstance(row.get('col_pallet_count'), (int, float))
-                )
         # Format pallet counts to "x-y" display format in-place for JSON output
         data_processor.format_pallet_counts_to_xy(processed_tables, true_total_pallets)
         data_processor.format_pallet_counts_to_xy([normal_aggregate_per_po], true_total_pallets)
