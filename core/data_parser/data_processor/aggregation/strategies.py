@@ -207,7 +207,7 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
         })
 
     # Sort by PO, Item, and unit price for consistent output
-    result.sort(key=lambda x: (x['col_po'], x['col_item'], x['col_unit_price']))
+    result.sort(key=lambda x: (str(x['col_po']), str(x['col_item']), str(x['col_unit_price'])))
     
     logging.info(f"[aggregate_per_po_with_pallets] Aggregated {len(processed_data)} rows into {len(result)} unique PO+Item+Price combinations.")
     return result
