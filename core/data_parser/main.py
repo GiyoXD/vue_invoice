@@ -548,13 +548,8 @@ def run_invoice_automation(
                     # 5a. CBM
                     data_after_cbm = data_processor.process_cbm_column(current_table_data)
                     
-                    # 5a.5 Pallet-anchored normalization
-                    # Ensures net/gross/cbm sit on the same row as pallet_count.
-                    # Misplaced values are pulled up to their pallet anchor row.
-                    data_normalized = data_processor.normalize_by_pallet_anchor(
-                        data_after_cbm, cfg.COLUMNS_TO_DISTRIBUTE, cfg.DISTRIBUTION_BASIS_COLUMN, monitor=monitor
-                    )
-                    
+                    data_normalized = data_after_cbm
+
                     # 5b. Distribute
                     try:
                         # 5b.1 Strict Validation: Gross Weight MUST NOT be smaller than Net Weight (Before Distribution)

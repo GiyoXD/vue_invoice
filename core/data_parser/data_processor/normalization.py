@@ -11,7 +11,7 @@ def normalize_table_types(table_data: List[Dict[str, Any]]) -> List[Dict[str, An
     This avoids redundant type checking and casting downstream.
     """
     decimal_cols = {
-        'col_qty_sf', 'col_amount', 'col_net', 'col_gross', 'col_cbm', 'col_unit_price'
+        'col_qty_sf', 'col_amount', 'col_net', 'col_gross', 'col_unit_price'
     }
     integer_cols = {
         'col_qty_pcs'

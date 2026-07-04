@@ -98,6 +98,10 @@ def test_differentiate_trailing_hyphen(db):
     """
     resolver = InvoiceAssetResolver()
     
+    # Clean up pre-existing KB/KB- clients in seeded db to ensure isolation
+    db.query(Blueprint).filter(Blueprint.customer_code.in_(["KB", "KB-"])).delete()
+    db.commit()
+    
     create_db_client(db, "KB-")
     create_db_client(db, "KB")
     

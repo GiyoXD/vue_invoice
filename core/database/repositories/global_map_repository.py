@@ -154,8 +154,11 @@ def save_global_mapping_config(data: dict, db=None) -> None:
         # We only write overrides pointing to column IDs that exist in the columns list
         header_mappings = data.get("header_text_mappings", {}).get("mappings", {})
         for raw, canonical in header_mappings.items():
+            raw_clean = raw.strip()
+            if not raw_clean:
+                continue
             if canonical in shipping_map:
-                db.add(GlobalMapHeaderTextMapping(raw_text=raw, canonical_col_id=canonical))
+                db.add(GlobalMapHeaderTextMapping(raw_text=raw_clean, canonical_col_id=canonical))
                 
         # 6. Insert footer label mappings
         footer_kws = data.get("footer_label_mappings", {}).get("keywords", [])
