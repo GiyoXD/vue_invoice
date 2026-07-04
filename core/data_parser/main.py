@@ -8,7 +8,6 @@ import decimal
 import os
 import json # Added for JSON output
 import datetime # <<< ADDED IMPORT for datetime handling
-import argparse # <<< ADDED IMPORT for argument parsing
 from pathlib import Path # <<< ADDED IMPORT for pathlib
 from typing import Dict, List, Any, Optional, Tuple, Union
 import time # Added for timing operations
@@ -863,32 +862,3 @@ def run_invoice_automation(
         loop_profiler.reset()
         
         return output_json_path, input_stem
-
-
-if __name__ == "__main__":
-    # --- Argument Parsing ---
-    parser = argparse.ArgumentParser(description="Process an Excel invoice file to generate JSON data.")
-    parser.add_argument(
-        "--input-excel",
-        type=str,
-        default=None, # Default to None, indicating fallback to config.py
-        help="Path to the input Excel file. Overrides the value in config.py if provided."
-    )
-    # --- ADDED: Output directory argument ---
-    parser.add_argument(
-        "--output-dir",
-        type=str,
-        default=None, # Default to None, indicating use CWD
-        help="Directory to save the output JSON file. Defaults to the current working directory."
-    )
-    # --- END ADD ---
-    args = parser.parse_args()
-    # --- End Argument Parsing ---
-
-    # --- Run the main logic ---
-    # Pass the parsed arguments to the main function
-    run_invoice_automation(
-        input_excel_override=args.input_excel,
-        output_dir_override=args.output_dir # Pass the output dir argument
-    )
-    # --- End Run Logic ---
