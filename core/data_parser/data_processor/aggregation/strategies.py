@@ -152,26 +152,30 @@ def calculate_leather_summary(processed_data: List[Dict[str, Any]]) -> Dict[str,
 
 def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
-    Aggregates data by PO and Item, summing pallet, pcs, sqft, amount, net, gross, cbm.
-    Groups rows that share the same (PO, Item) combination.
+    Aggregates data by PO, Item, Unit Price, and Description (same as STANDARD aggregation),
+    summing pallet, pcs, sqft, amount, net, gross, cbm.
     """
     if not isinstance(processed_data, list) or not processed_data:
         return []
 
-    # Key selector
-    def po_item_key_selector(row):
-        po_val = row.get('col_po')
-        if po_val is None:
-            return None
-        po = str(po_val).strip()
-        if not po:
-            return None
-        item_val = row.get('col_item')
-        item = str(item_val).strip() if item_val is not None else ""
-        return (po, item)
+    # Key selector (same as standard aggregation)
+    def po_item_price_desc_key_selector(row):
+        po_val, item_val = row.get('col_po'), row.get('col_item')
+        unit_price_raw = row.get('col_unit_price')
+        desc_raw = row.get('col_desc')
+        
+        po_key = str(po_val).strip() if isinstance(po_val, str) else po_val
+        item_key = str(item_val).strip() if isinstance(item_val, str) else item_val
+        description_key = str(desc_raw).strip() if isinstance(desc_raw, str) else desc_raw
+        description_key = description_key if description_key else None
+
+        po_key = po_key if po_key is not None else "<MISSING_PO>"
+        item_key = item_key if item_key is not None else "<MISSING_ITEM>"
+
+        price_dec = unit_price_raw
+        return (po_key, item_key, price_dec, description_key)
 
     reducers = {
-        'col_desc': ('col_desc', first_non_empty_reducer),
         'col_qty_pcs': ('col_qty_pcs', int_sum_reducer),
         'col_qty_sf': ('col_qty_sf', decimal_sum_reducer),
         'col_amount': ('col_amount', decimal_sum_reducer),
@@ -182,16 +186,17 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
     }
 
     # Aggregate using Aggregator
-    aggregator = Aggregator(key_selector=po_item_key_selector, reducers=reducers)
+    aggregator = Aggregator(key_selector=po_item_price_desc_key_selector, reducers=reducers)
     agg_map = aggregator.aggregate(processed_data)
 
     # Convert to list of dicts
     result = []
-    for (po, item), data in agg_map.items():
+    for (po, item, price, desc), data in agg_map.items():
         result.append({
             'col_po': po,
             'col_item': item,
-            'col_desc': data.get('col_desc', ''),
+            'col_unit_price': str(price) if price is not None else "",
+            'col_desc': desc if desc else "",
             'col_qty_pcs': data.get('col_qty_pcs', 0),
             'col_qty_sf': data.get('col_qty_sf'),
             'col_amount': data.get('col_amount'),
@@ -201,10 +206,10 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
             'col_cbm': data.get('col_cbm'),
         })
 
-    # Sort by PO, then by Item for consistent output
-    result.sort(key=lambda x: (x['col_po'], x['col_item']))
+    # Sort by PO, Item, and unit price for consistent output
+    result.sort(key=lambda x: (x['col_po'], x['col_item'], x['col_unit_price']))
     
-    logging.info(f"[aggregate_per_po_with_pallets] Aggregated {len(processed_data)} rows into {len(result)} unique PO+Item combinations.")
+    logging.info(f"[aggregate_per_po_with_pallets] Aggregated {len(processed_data)} rows into {len(result)} unique PO+Item+Price combinations.")
     return result
 DAFCompoundingResult = Dict[str, Union[str, decimal.Decimal]]
 FinalDAFResultType = List[DAFCompoundingResult]

@@ -236,11 +236,6 @@ def main(
                         processed_tables.append(data_after_cbm)
                         data_for_aggregation = data_after_cbm
                     
-                    # 5c. Initial Aggregation
-                    if data_for_aggregation:
-                         data_processor.aggregate_standard_by_po_item_price(data_for_aggregation, global_standard_aggregation_results)
-                         data_processor.aggregate_custom_by_po_item(data_for_aggregation, global_custom_aggregation_results)
-                    
                     monitor.log_process_item(table_id_str, status="success")
                 except DataValidationError as ve:
                     # User-facing validation errors MUST stop the whole process immediately.
@@ -250,25 +245,6 @@ def main(
                     # Log failure for this specific table but continue loop for general errors
                     monitor.log_process_item(table_id_str, status="error", error=table_e)
                     processed_tables.append([]) # Append empty to preserve indexing if needed
-
-
-            # --- 6. DAF Compounding (Instrumented) ---
-            try:
-                # Determine strategy (re-using variables set earlier if accurate, or re-calculating simple version)
-                # We reuse 'aggregation_mode_used' and 'use_custom_aggregation_for_DAF' calculated at start
-                agg_source = global_custom_aggregation_results if use_custom_aggregation_for_DAF else global_standard_aggregation_results
-                
-                logging.info(f"Performing DAF Compounding (Mode: {aggregation_mode_used})")
-                
-                global_DAF_compounded_result = data_processor.perform_DAF_compounding(
-                    processed_tables,
-                    daf_chunk_size=cfg.DAF_CHUNK_SIZE,
-                    daf_intra_separator=cfg.DAF_INTRA_CHUNK_SEPARATOR,
-                    daf_inter_separator=cfg.DAF_INTER_CHUNK_SEPARATOR,
-                )
-                monitor.log_process_item("DAF Compounding", status="success")
-            except Exception as daf_e:
-                monitor.log_process_item("DAF Compounding", status="error", error=daf_e)
 
         except Exception as e:
             # Catch-all for the main Loading/Parsing/Extraction block
@@ -297,6 +273,20 @@ def main(
         # We calculate this FIRST so we can use its accurate pallet count for the footer
         normal_aggregate_per_po = data_processor.aggregate_per_po_with_pallets(merged_processed_data)
         logging.info(f"Normal Aggregate Per PO: {len(normal_aggregate_per_po)} unique PO+price combinations")
+
+        # --- Run Standard & Custom Aggregations ---
+        data_processor.aggregate_standard_by_po_item_price(merged_processed_data, global_standard_aggregation_results)
+        data_processor.aggregate_custom_by_po_item(merged_processed_data, global_custom_aggregation_results)
+
+        # --- DAF Compounding ---
+        logging.info(f"Performing DAF Compounding (Mode: {aggregation_mode_used})")
+        global_DAF_compounded_result = data_processor.perform_DAF_compounding(
+            processed_tables,
+            daf_chunk_size=cfg.DAF_CHUNK_SIZE,
+            daf_intra_separator=cfg.DAF_INTRA_CHUNK_SEPARATOR,
+            daf_inter_separator=cfg.DAF_INTER_CHUNK_SEPARATOR,
+        )
+        monitor.log_process_item("DAF Compounding", status="success")
 
         # --- Calculate Footer & Add-on Data ---
         footer_results = data_processor.calculate_all_footers(
