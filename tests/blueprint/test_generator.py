@@ -259,3 +259,47 @@ def test_tabular_scanner_parent_header_override():
     assert parent_col.children[0].id == "col_qty_pcs"
     assert parent_col.children[1].id == "col_qty_sf"
 
+
+def test_tabular_scanner_skip_vertically_merged_columns_for_font_info():
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from core.blueprint_generator.internal.scanner.tabular_scanner import TabularScanner
+    from core.blueprint_generator.internal.scanner.models.boundaries import ZoneBoundaries
+
+    wb = Workbook()
+    ws = wb.active
+
+    # Column 1 has a vertically merged cell spanning row 1 (header) to row 2 (data)
+    ws.merge_cells(start_row=1, start_column=1, end_row=2, end_column=1)
+    
+    # Set header font (Times New Roman, bold, size 12) for the merged cell
+    header_font = Font(name="Times New Roman", size=12, bold=True)
+    ws.cell(row=1, column=1).font = header_font
+    
+    # Column 2 is NOT merged, and has data font (Arial, regular, size 10)
+    data_font = Font(name="Arial", size=10, bold=False)
+    ws.cell(row=2, column=2).font = data_font
+
+    scanner = TabularScanner()
+    boundaries = ZoneBoundaries(
+        header_row=1,
+        data_start_row=2,
+        footer_row=3,
+        footer_end_row=3,
+        max_col=2
+    )
+
+    # Scan to extract layout/fonts
+    layout = scanner.scan_table(ws, boundaries)
+    
+    # Verify that data_font is Arial 10 (from column 2), NOT Times New Roman 12 (from the vertically merged column 1)
+    assert layout.data_font["name"] == "Arial"
+    assert layout.data_font["size"] == 10
+    assert layout.data_font["bold"] is False
+
+    # Verify that header_font is still Times New Roman 12
+    assert layout.header_font["name"] == "Times New Roman"
+    assert layout.header_font["size"] == 12
+    assert layout.header_font["bold"] is True
+
+

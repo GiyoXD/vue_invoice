@@ -37,7 +37,6 @@ class SingleTableProcessor(SheetProcessor):
             config=TableLayoutConfig(
                 is_first_table=True,
                 is_last_table=True,
-                show_grand_total_addons=True,
                 total_net_weight=float(total_net_weight),
                 total_gross_weight=float(total_gross_weight)
             )

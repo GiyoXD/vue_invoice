@@ -59,7 +59,7 @@ export default {
                 
                 <div class="error-actions">
                     <button class="btn-retry" @click="retryUpload">🔄 Try Again</button>
-                    <button v-if="uploadError.message && uploadError.message.includes('Weight Integrity Error')" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg shadow transition-colors ml-2" @click="ignoreTareAndRetry">⚠️ Bypass Weight Check</button>
+                    <button v-if="uploadError.message && (uploadError.message.includes('Weight Integrity Error') || uploadError.message.includes('Tare mismatch') || uploadError.message.includes('Gross <= Net') || uploadError.message.includes('Missing Gross Weight') || uploadError.message.includes('Missing Net Weight'))" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg shadow transition-colors ml-2" @click="ignoreTareAndRetry">⚠️ Bypass Weight Check</button>
                     <button v-if="uploadError.message && uploadError.message.includes('CBM')" class="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded-lg shadow transition-colors ml-2" @click="ignoreCbmAndRetry">⚠️ Bypass CBM Check</button>
                     <button class="btn-copy-error" @click="copyError(uploadError)">📋 Copy Error</button>
                 </div>

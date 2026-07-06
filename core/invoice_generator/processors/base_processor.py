@@ -132,7 +132,6 @@ class SheetProcessor(ABC):
             resolver=resolver,
             table_key=table_key,
             is_last_table=config.is_last_table,
-            show_grand_total_addons=config.show_grand_total_addons,
             next_free_row=layout_state.next_free_row
         )
         
@@ -182,15 +181,13 @@ class SheetProcessor(ABC):
         resolver,
         table_key: Optional[str],
         is_last_table: bool,
-        show_grand_total_addons: bool,
         next_free_row: int
     ):
         """Resolves style, context, and layout config bundles."""
         style_config = resolver.get_style_bundle()
         context_config = resolver.get_context_bundle(
             table_key=table_key,
-            is_last_table=is_last_table,
-            show_grand_total_addons=show_grand_total_addons
+            is_last_table=is_last_table
         )
         layout_config = resolver.get_layout_bundle()
         
@@ -274,7 +271,6 @@ class SheetProcessor(ABC):
             total_net_weight=context_config.get('total_net_weight'),
             total_gross_weight=context_config.get('total_gross_weight'),
             is_last_table=context_config.get('is_last_table', False),
-            show_grand_total_addons=context_config.get('show_grand_total_addons', False),
             skip_template_header_restoration=layout_config.get('skip_template_header_restoration', False),
             skip_header_builder=layout_config.get('skip_header_builder', False),
             skip_data_table_builder=layout_config.get('skip_data_table_builder', False),

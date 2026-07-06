@@ -36,7 +36,6 @@ class LayoutBuilder:
         total_net_weight: Optional[float] = None,
         total_gross_weight: Optional[float] = None,
         is_last_table: bool = False,
-        show_grand_total_addons: bool = False,
         skip_template_header_restoration: bool = False,
         skip_header_builder: bool = False,
         skip_data_table_builder: bool = False,
@@ -62,7 +61,6 @@ class LayoutBuilder:
         self.total_net_weight = total_net_weight
         self.total_gross_weight = total_gross_weight
         self.is_last_table = is_last_table
-        self.show_grand_total_addons = show_grand_total_addons
         
         self.skip_template_header_restoration = skip_template_header_restoration
         self.skip_header_builder = skip_header_builder
@@ -135,7 +133,6 @@ class LayoutBuilder:
             total_net_weight=self.total_net_weight,
             total_gross_weight=self.total_gross_weight,
             is_last_table=self.is_last_table,
-            show_grand_total_addons=self.show_grand_total_addons,
             skip_header_builder=self.skip_header_builder,
             skip_data_table_builder=self.skip_data_table_builder,
             skip_footer_builder=self.skip_footer_builder,

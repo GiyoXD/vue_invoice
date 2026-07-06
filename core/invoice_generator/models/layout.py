@@ -228,7 +228,6 @@ class TableLayoutConfig:
     is_first_table: bool = True
     is_last_table: bool = True
     skip_template_footer: bool = False
-    show_grand_total_addons: bool = False
     total_net_weight: Optional[float] = None
     total_gross_weight: Optional[float] = None
     addons: List[AddonSummaryRow] = field(default_factory=list)

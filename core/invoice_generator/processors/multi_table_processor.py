@@ -59,7 +59,6 @@ class MultiTableProcessor(SheetProcessor):
         for i, table_key in enumerate(table_keys):
             is_first_table = (i == 0)
             is_last_table = (i == len(table_keys) - 1)
-            show_grand_total_addons = (len(table_keys) == 1)
             
             logger.info(f"Processing table '{table_key}' ({i+1}/{len(table_keys)})")
             
@@ -70,8 +69,7 @@ class MultiTableProcessor(SheetProcessor):
                 config=TableLayoutConfig(
                     is_first_table=is_first_table,
                     is_last_table=is_last_table,
-                    skip_template_footer=True,
-                    show_grand_total_addons=show_grand_total_addons
+                    skip_template_footer=True
                 ),
                 template_state_builder=template_state_builder
             )
@@ -174,45 +172,10 @@ class MultiTableProcessor(SheetProcessor):
             if add_ons:
                 global_leather_summary = add_ons.get('leather_summary_addon', {})
         
-        grand_total_resolver = BuilderConfigResolver(
-            config_loader=self.config_loader,
-            sheet_name=self.sheet_name,
-            worksheet=self.output_worksheet,
-            args=self.args,
-            invoice_data=self.invoice_data,
-            pallets=grand_total_pallets
-        )
-        
-        gt_style_config = grand_total_resolver.get_style_bundle()
-        gt_layout_config = grand_total_resolver.get_layout_bundle()
-        
-        from core.invoice_generator.models.config.styling import SheetStylingModel
-        from core.invoice_generator.models.config.layout import SheetLayoutModel, FooterConfigModel
-        from ..styling.style_registry import StyleRegistry
-        from ..styling.dimension_registry import DimensionRegistry
-        
-        sheet_styling = SheetStylingModel.model_validate(gt_style_config.get('styling_config', {}))
-        sheet_layout = SheetLayoutModel.model_validate(gt_layout_config.get('sheet_config', {}))
-
-        style_registry = StyleRegistry(sheet_styling)
-        row_heights = {
-            context: style.row_height
-            for context, style in sheet_styling.row_contexts.items()
-            if style.row_height is not None
-        }
-        dimension_registry = DimensionRegistry(row_heights)
-
-        from ..builders.table.table_grid import Grid
-        gt_grid = Grid(
-            column_mapping=last_grid.column_mapping,
-            style_registry=style_registry,
-            column_colspan=last_grid.column_colspan,
-            dimension_registry=dimension_registry
-        )
-        gt_grid.set_start_row(current_row)
-
         # Prepare footer config
-        footer_config = sheet_layout.footer.model_copy() if sheet_layout.footer else FooterConfigModel()
+        from core.invoice_generator.models.config.layout import FooterConfigModel
+        raw_footer = self.layout_config.get('sheet_config', {}).get('footer', {}) if self.layout_config else {}
+        footer_config = FooterConfigModel.model_validate(raw_footer) if raw_footer else FooterConfigModel()
         footer_config.type = "grand_total"
         
         # Calculate overall data range
@@ -223,24 +186,39 @@ class MultiTableProcessor(SheetProcessor):
             overall_data_start = current_row - 1
             overall_data_end = current_row - 1
             
-        # Create FooterData using resolver to ensure normalized data (including global weights)
-        footer_data = grand_total_resolver.get_footer_data(
+        # Get global weight summary
+        global_net = 0.0
+        global_gross = 0.0
+        if self.invoice_data and 'footer_data' in self.invoice_data:
+            weight_summary = self.invoice_data['footer_data'].get('weight_summary', {})
+            global_net = weight_summary.get('net', 0.0)
+            global_gross = weight_summary.get('gross', 0.0)
+
+        # Create FooterData using overall weights
+        from core.invoice_generator.models.footer import FooterData
+        footer_data = FooterData(
             footer_row_start_idx=current_row,
             data_start_row=overall_data_start,
             data_end_row=overall_data_end,
-            pallet_count=grand_total_pallets,
+            total_pallets=grand_total_pallets,
             leather_summary=global_leather_summary,
-            weight_summary={'net': 0.0, 'gross': 0.0}  # Will be auto-filled with global weights by resolver
+            weight_summary={'net': global_net, 'gross': global_gross}
         )
+
+        # Reuse last_grid's registries to build gt_grid without duplicating Registry/Styling setups
+        from ..builders.table.table_grid import Grid
+        gt_grid = Grid(
+            column_mapping=last_grid.column_mapping,
+            style_registry=last_grid.style_registry,
+            column_colspan=last_grid.column_colspan,
+            dimension_registry=last_grid.dimension_registry
+        )
+        gt_grid.set_start_row(current_row)
         
         footer_builder = TableFooterBuilder(
             grid=gt_grid,
             footer_data=footer_data,
             footer_config=footer_config,
-            pallet_count=grand_total_pallets,
-            show_grand_total_addons=True,
-            is_daf=bool(getattr(self.args, 'DAF', False)) if self.args else False,
-            sheet_name=self.sheet_name,
             sum_ranges=all_data_ranges
         )
         

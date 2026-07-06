@@ -22,51 +22,21 @@ class TableFooterBuilder(TableSectionBuilder):
         grid: Grid,
         footer_data: Optional[FooterData] = None,
         footer_config: Optional[FooterConfigModel] = None,
-        pallet_count: int = 0,
-        show_grand_total_addons: bool = False,
-        is_daf: bool = False,
-        sheet_name: str = "",
         sum_ranges: Optional[List[tuple]] = None,
         **kwargs
     ):
         TableSectionBuilder.__init__(self, grid)
         self.footer_data = footer_data
-        
-        # Extract from legacy test dictionary parameters if provided
-        data_config = kwargs.get('data_config', {}) or {}
-        context_config = kwargs.get('context_config', {}) or {}
-        
-        if footer_config is None:
-            raw_footer = data_config.get('footer_config', {})
-            if isinstance(raw_footer, dict):
-                footer_config = FooterConfigModel.model_validate(raw_footer)
-            elif isinstance(raw_footer, FooterConfigModel):
-                footer_config = raw_footer
-            else:
-                footer_config = FooterConfigModel()
-                
-        if not pallet_count and 'pallet_count' in context_config:
-            pallet_count = context_config['pallet_count']
-            
-        if not sheet_name and 'sheet_name' in context_config:
-            sheet_name = context_config['sheet_name']
-            
-        if not is_daf:
-            if 'is_daf' in context_config:
-                is_daf = context_config['is_daf']
-            elif 'DAF_mode' in data_config:
-                is_daf = data_config['DAF_mode']
-                
-        if sum_ranges is None and 'sum_ranges' in data_config:
-            sum_ranges = data_config['sum_ranges']
-
-        self.footer_config = footer_config
-        self.pallet_count = pallet_count
-        self.show_grand_total_addons = show_grand_total_addons
-        self.is_daf = is_daf
-        self.sheet_name = sheet_name
+        self.footer_config = footer_config or FooterConfigModel()
+        self._pallet_count_override = kwargs.get('pallet_count')
         self.initial_row = 0  # Grid is relative, start at 0 internally
         self._custom_sum_ranges = sum_ranges
+
+    @property
+    def pallet_count(self) -> int:
+        if self._pallet_count_override is not None:
+            return self._pallet_count_override
+        return self.footer_data.total_pallets if self.footer_data else 0
 
     @property
     def sum_ranges(self) -> list:

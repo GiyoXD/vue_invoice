@@ -32,7 +32,6 @@ class TableBuilder:
         total_net_weight: Optional[float] = None,
         total_gross_weight: Optional[float] = None,
         is_last_table: bool = False,
-        show_grand_total_addons: bool = False,
         skip_header_builder: bool = False,
         skip_data_table_builder: bool = False,
         skip_footer_builder: bool = False,
@@ -48,7 +47,6 @@ class TableBuilder:
         self.total_net_weight = total_net_weight
         self.total_gross_weight = total_gross_weight
         self.is_last_table = is_last_table
-        self.show_grand_total_addons = show_grand_total_addons
         
         self.skip_header_builder = skip_header_builder
         self.skip_data_table_builder = skip_data_table_builder
@@ -187,11 +185,7 @@ class TableBuilder:
                 footer_builder = TableFooterBuilder(
                     grid=grid,
                     footer_data=self.footer_data,
-                    footer_config=self.sheet_layout.footer or FooterConfigModel(),
-                    pallet_count=pallet_count,
-                    show_grand_total_addons=self.show_grand_total_addons,
-                    is_daf=bool(getattr(self.args, 'DAF', False)) if self.args else False,
-                    sheet_name=self.sheet_name
+                    footer_config=self.sheet_layout.footer or FooterConfigModel()
                 )
                 footer_builder.build()
             except Exception as e:

@@ -310,8 +310,23 @@ class TabularScanner:
         columns = scan_columns(worksheet, boundaries.header_row, boundaries.data_start_row, mapping_config)
         
         # 2. Extract font info
-        header_font = self.extract_font_info(worksheet, boundaries.header_row, 1)
-        data_font = self.extract_font_info(worksheet, boundaries.data_start_row, 1)
+        active_col_indices = [col.col_index for col in columns] if columns else []
+        header_font = self.extract_font_info(
+            worksheet, 
+            boundaries.header_row, 
+            1, 
+            active_cols=active_col_indices,
+            max_col=boundaries.max_col
+        )
+        data_font = self.extract_font_info(
+            worksheet, 
+            boundaries.data_start_row, 
+            1, 
+            active_cols=active_col_indices,
+            max_col=boundaries.max_col,
+            skip_merged_from_above=True,
+            header_row=boundaries.header_row
+        )
         
         # 3. Extract row heights
         row_heights = self.extract_row_heights(worksheet, boundaries.header_row, "dataset_default", boundaries.data_start_row)
@@ -423,25 +438,61 @@ class TabularScanner:
         
         return hints
 
-    def extract_font_info(self, worksheet: Worksheet, row: int, col: int) -> Dict[str, Any]:
-        """Extract font information from a cell."""
-        cell = worksheet.cell(row=row, column=col)
-        font = cell.font
-
-        if not font:
-            raise ValueError(f"No font detected at Row {row}, Col {col}. Please ensure the template cell has explicit styling.")
-
-        name = font.name
-        size = font.size
-
-        if name is None: name = "Calibri"
-        if size is None: size = 11.0
-
+    def extract_font_info(self, worksheet: Worksheet, row: int, col: int = 1, max_col: Optional[int] = None, active_cols: Optional[List[int]] = None, skip_merged_from_above: bool = False, header_row: int = 1) -> Dict[str, Any]:
+        """Extract font information from a row by majority voting across columns to avoid anomalies."""
+        from collections import Counter
+        from typing import Optional, List
+        
+        if active_cols:
+            cols_to_scan = active_cols
+        else:
+            limit_col = max_col if max_col is not None else min(worksheet.max_column, 20)
+            cols_to_scan = list(range(1, limit_col + 1))
+        
+        fonts = []
+        for col_idx in cols_to_scan:
+            if skip_merged_from_above:
+                is_merged = False
+                for merged_range in worksheet.merged_cells.ranges:
+                    if (merged_range.min_row <= header_row and 
+                        merged_range.min_col <= col_idx <= merged_range.max_col and 
+                        merged_range.min_row <= row <= merged_range.max_row):
+                        is_merged = True
+                        break
+                if is_merged:
+                    continue
+            
+            cell = worksheet.cell(row=row, column=col_idx)
+            font = cell.font
+            if font:
+                name = font.name or "Calibri"
+                size = font.size or 11.0
+                bold = font.bold or False
+                italic = font.italic or False
+                fonts.append((name, size, bold, italic))
+                
+        if not fonts:
+            # Fallback to the specified single column
+            cell = worksheet.cell(row=row, column=col)
+            font = cell.font
+            name = font.name if font and font.name else "Calibri"
+            size = font.size if font and font.size else 11.0
+            bold = font.bold if font and font.bold else False
+            italic = font.italic if font and font.italic else False
+            return {
+                "name": name,
+                "size": size,
+                "bold": bold or False,
+                "italic": italic or False
+            }
+            
+        counter = Counter(fonts)
+        most_common = counter.most_common(1)[0][0]
         return {
-            "name": name,
-            "size": size,
-            "bold": font.bold or False,
-            "italic": font.italic or False
+            "name": most_common[0],
+            "size": most_common[1],
+            "bold": most_common[2],
+            "italic": most_common[3]
         }
 
     def extract_row_heights(self, worksheet: Worksheet, header_row: int, 
