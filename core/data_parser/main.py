@@ -38,6 +38,7 @@ MAX_LOG_DICT_LEN = 3000 # Max length for printing large dicts in logs (for DEBUG
 
 from core.utils.pipeline_monitor import PipelineMonitor
 from core.utils.snitch import snitch
+from .util.io_helper import resolve_output_dir, prepare_input_source, validate_and_resolve_filepath
 
 # ... (Previous code)
 
@@ -54,24 +55,12 @@ def main(
     Refactored to be callable as a library function.
     """
     # 1. Determine Output Directory (Fast Fail)
-    if output_dir_override:
-        output_dir = Path(output_dir_override).resolve()
-        try:
-            output_dir.mkdir(parents=True, exist_ok=True)
-        except OSError as e:
-            raise RuntimeError(f"Invalid output directory specified: {output_dir}")
-    else:
-        from core.system_config import sys_config
-        output_dir = sys_config.temp_uploads_dir
+    output_dir = resolve_output_dir(output_dir_override)
 
     # 2. Determine Input File (Prep for Monitor)
-    is_buffer = hasattr(input_excel_override, "read")
-    if is_buffer:
-        input_filepath = input_excel_override
-        input_name = input_filename_override or "upload.xlsx"
-    else:
-        input_filepath = input_excel_override or getattr(cfg, 'INPUT_EXCEL_FILE', 'unknown.xlsx')
-        input_name = Path(input_filepath).name
+    input_filepath, input_name, is_buffer = prepare_input_source(
+        input_excel_override, input_filename_override
+    )
     
     # 3. Setup Monitor
     monitor_output_path = output_dir / f"{Path(input_name).stem}_parser.json"
@@ -86,30 +75,21 @@ def main(
         # Re-Validate Input File inside Monitor to capture errors
         # -------------------------------------------------------------
         if not is_buffer:
-            if not input_excel_override:
-                 try:
-                     input_filepath = cfg.INPUT_EXCEL_FILE
-                     logging.info(f"Using input Excel path from config.py: {input_filepath}")
-                 except Exception as e:
-                     monitor.log_process_item("Configuration", status="error", error=e)
-                     raise RuntimeError("Input Excel file path is missing in config.")
-
-            if not os.path.isfile(input_filepath):
-                 # Try relative resolution
-                 script_dir = os.path.dirname(__file__)
-                 potential_path = os.path.join(script_dir, input_filepath)
-                 if os.path.isfile(potential_path):
-                     input_filepath = potential_path
-                     logging.info(f"Resolved relative input path: {input_filepath}")
-                 else:
-                     err = FileNotFoundError(f"Input Excel file not found: {input_filepath}")
-                     monitor.log_process_item("Input File Check", status="error", error=err)
-                     raise err
+            try:
+                script_dir = os.path.dirname(__file__)
+                input_filepath = validate_and_resolve_filepath(
+                    input_filepath, script_dir, has_override=bool(input_excel_override)
+                )
+            except Exception as e:
+                step_name = "Configuration" if not input_excel_override else "Input File Check"
+                monitor.log_process_item(step_name, status="error", error=e)
+                raise e
             input_filename = os.path.basename(input_filepath)
         else:
             input_filename = input_name
 
         logging.info(f"Processing workbook: {input_filename}")
+
         
         # ... [Rest of logic continues largely unchanged but inside this block] ...
         

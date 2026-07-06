@@ -206,8 +206,20 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
             'col_cbm': data.get('col_cbm'),
         })
 
-    # Sort by PO, Item, and unit price for consistent output
-    result.sort(key=lambda x: (str(x['col_po']), str(x['col_item']), str(x['col_unit_price'])))
+    # Sort by PO, Item, and unit price for consistent output (natural/numeric order)
+    def natural_sort_key(val):
+        if val is None or val == "":
+            return (0, "")
+        try:
+            return (1, float(val))
+        except (ValueError, TypeError):
+            return (2, str(val))
+
+    result.sort(key=lambda x: (
+        natural_sort_key(x['col_po']),
+        natural_sort_key(x['col_item']),
+        natural_sort_key(x['col_unit_price'])
+    ))
     
     logging.info(f"[aggregate_per_po_with_pallets] Aggregated {len(processed_data)} rows into {len(result)} unique PO+Item+Price combinations.")
     return result
