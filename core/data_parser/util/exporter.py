@@ -55,6 +55,26 @@ def export_invoice_data(
     Returns:
         Path: The absolute path to the successfully written and verified JSON output file.
     """
+    # Construct leather_summary records as raw data (no layout labels)
+    leather_summary_records = []
+    if leather_summary:
+        for l_type, l_data in leather_summary.items():
+            pallet_count = l_data.get('col_pallet_count', 0)
+            qty_sf = l_data.get('col_qty_sf', 0.0)
+            if pallet_count == 0 and qty_sf == 0:
+                continue
+
+            record = {
+                "leather_type": l_type,
+                "pallet_count": int(pallet_count),
+                "col_qty_pcs": int(l_data.get('col_qty_pcs', 0)),
+                "col_qty_sf": float(l_data.get('col_qty_sf', 0.0)),
+                "col_net": float(l_data.get('col_net', 0.0)),
+                "col_gross": float(l_data.get('col_gross', 0.0)),
+                "col_cbm": float(l_data.get('col_cbm', 0.0)),
+            }
+            leather_summary_records.append(record)
+
     # 1. Construct final payload structure
     final_json_structure = {
         "metadata": {
@@ -72,10 +92,7 @@ def export_invoice_data(
         "footer_data": {
             "table_totals": table_footer_data,
             "grand_total": grand_total_footer,
-            "add_ons": {
-                "leather_summary_addon": leather_summary,
-                "weight_summary_addon": weight_summary_addon,
-            }
+            "leather_summary": leather_summary_records
         },
         "single_table": {
             "aggregation": data_processor.format_aggregation_as_list(global_standard_aggregation_results, mode='standard'),

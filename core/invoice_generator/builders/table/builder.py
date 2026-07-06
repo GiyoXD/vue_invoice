@@ -179,13 +179,45 @@ class TableBuilder:
 
         # 7. Build Footer
         if not self.skip_footer_builder:
+            try:
+                # 7a. Build Decoupled HS Code Row
+                if self.sheet_layout.hs_code:
+                    hs_model = self.sheet_layout.hs_code
+                    grid.write(0, hs_model.col_id, hs_model.value, context=hs_model.style_context)
+                    if hs_model.colspan > 1:
+                        grid.merge(0, hs_model.col_id, rowspan=1, colspan=hs_model.colspan)
+                    
+                    # Pad other columns in this row to trigger styling
+                    written_idxs = {grid._resolve_column(hs_model.col_id)}
+                    for col_id in grid.column_mapping.keys():
+                        c_idx = grid._resolve_column(col_id)
+                        if c_idx not in written_idxs:
+                            grid.write(0, col_id, None, context=hs_model.style_context)
+                    
+                    grid.advance_row(1)
+            except Exception as e:
+                logger.error(f"[TableBuilder] HS Code Builder crashed: {e}", exc_info=True)
+                return False
+
+            # Build the payload
+            payload = {}
+            if self.invoice_data and 'footer_data' in self.invoice_data:
+                footer_data_dict = self.invoice_data['footer_data']
+                payload.update(footer_data_dict.get('grand_total', {}))
+                payload['leather_summary'] = footer_data_dict.get('leather_summary', [])
+            
             pallet_count = self.footer_data.total_pallets if self.footer_data else 0
+            payload.setdefault('pallet_count', pallet_count)
+            payload.setdefault('multiple', "S" if payload['pallet_count'] != 1 else "")
+            payload.setdefault('weight_net', payload.get('col_net', 0.0))
+            payload.setdefault('weight_gross', payload.get('col_gross', 0.0))
+            payload.setdefault('leather_summary', [])
 
             try:
                 footer_builder = TableFooterBuilder(
                     grid=grid,
-                    footer_data=self.footer_data,
-                    footer_config=self.sheet_layout.footer or FooterConfigModel()
+                    footer_config=self.sheet_layout.footer or FooterConfigModel(),
+                    payload=payload
                 )
                 footer_builder.build()
             except Exception as e:

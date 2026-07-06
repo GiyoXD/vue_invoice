@@ -368,30 +368,6 @@
               "target_section": "data",
               "style_context": "footer"
             }
-          ],
-          [
-            {
-              "col_id": "col_no",
-              "value": "NW(KGS)",
-              "style_context": "footer_addon"
-            },
-            {
-              "col_id": "col_item",
-              "value": "{weight_net}",
-              "style_context": "footer_addon"
-            }
-          ],
-          [
-            {
-              "col_id": "col_no",
-              "value": "GW(KGS):",
-              "style_context": "footer_addon"
-            },
-            {
-              "col_id": "col_item",
-              "value": "{weight_gross}",
-              "style_context": "footer_addon"
-            }
           ]
         ]
       }
@@ -401,7 +377,8 @@
         "structure",
         "data_flow",
         "content",
-        "footer"
+        "footer",
+        "hs_code"
       ],
       "structure": {
         "header_row": 21,
@@ -500,32 +477,14 @@
               "target_section": "data",
               "style_context": "footer"
             }
-          ],
-          [
-            {
-              "col_id": "col_po",
-              "value": "NW(KGS)",
-              "style_context": "footer_addon"
-            },
-            {
-              "col_id": "col_item",
-              "value": "{weight_net}",
-              "style_context": "footer_addon"
-            }
-          ],
-          [
-            {
-              "col_id": "col_po",
-              "value": "GW(KGS):",
-              "style_context": "footer_addon"
-            },
-            {
-              "col_id": "col_item",
-              "value": "{weight_gross}",
-              "style_context": "footer_addon"
-            }
           ]
-        ]
+        ],
+        "hs_code": {
+          "col_id": "col_po",
+          "value": "COW LEATHER (HS.CODE: 4107.12.00)",
+          "colspan": 2,
+          "style_context": "footer"
+        }
       }
     },
     "Packing list": {
@@ -533,7 +492,8 @@
         "structure",
         "data_flow",
         "content",
-        "footer"
+        "footer",
+        "hs_code"
       ],
       "structure": {
         "header_row": 21,
@@ -635,14 +595,6 @@
           [
             {
               "col_id": "col_po",
-              "value": "COW LEATHER (HS.CODE: 4107.12.00)",
-              "style_context": "footer",
-              "colspan": 2
-            }
-          ],
-          [
-            {
-              "col_id": "col_po",
               "value": "TOTAL:",
               "style_context": "footer"
             },
@@ -682,7 +634,13 @@
               "style_context": "footer"
             }
           ]
-        ]
+        ],
+        "hs_code": {
+          "col_id": "col_po",
+          "value": "COW LEATHER (HS.CODE: 4107.12.00)",
+          "colspan": 2,
+          "style_context": "footer"
+        }
       }
     }
   },

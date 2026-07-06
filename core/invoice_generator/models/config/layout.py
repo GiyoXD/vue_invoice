@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 
 class ColumnDef(BaseModel):
     id: str
@@ -86,10 +86,17 @@ class StaticContentConfigModel(BaseModel):
 
 class FooterConfigModel(BaseModel):
     type: str = "regular"
-    rows: List[List[Dict[str, Any]]] = Field(default_factory=list)
+    rows: List[Union[List[Dict[str, Any]], Dict[str, Any]]] = Field(default_factory=list)
+
+class HSCodeConfigModel(BaseModel):
+    col_id: str
+    value: str
+    colspan: int = 1
+    style_context: str = "footer"
 
 class SheetLayoutModel(BaseModel):
     structure: StructureConfigModel
     data_flow: DataFlowConfigModel = Field(default_factory=DataFlowConfigModel)
     content: Optional[StaticContentConfigModel] = None
     footer: Optional[FooterConfigModel] = None
+    hs_code: Optional[HSCodeConfigModel] = None

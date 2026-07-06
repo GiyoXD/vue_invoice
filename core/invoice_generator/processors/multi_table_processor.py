@@ -174,7 +174,7 @@ class MultiTableProcessor(SheetProcessor):
         
         # Prepare footer config
         from core.invoice_generator.models.config.layout import FooterConfigModel
-        raw_footer = self.layout_config.get('sheet_config', {}).get('footer', {}) if self.layout_config else {}
+        raw_footer = self.layout_config.get('footer', {}) if self.layout_config else {}
         footer_config = FooterConfigModel.model_validate(raw_footer) if raw_footer else FooterConfigModel()
         footer_config.type = "grand_total"
         
@@ -186,24 +186,35 @@ class MultiTableProcessor(SheetProcessor):
             overall_data_start = current_row - 1
             overall_data_end = current_row - 1
             
-        # Get global weight summary
+        # Get global weight summary and pallet count from footer_data.grand_total
         global_net = 0.0
         global_gross = 0.0
+        global_pallets = grand_total_pallets
         if self.invoice_data and 'footer_data' in self.invoice_data:
-            weight_summary = self.invoice_data['footer_data'].get('weight_summary', {})
-            global_net = weight_summary.get('net', 0.0)
-            global_gross = weight_summary.get('gross', 0.0)
+            footer_data_dict = self.invoice_data['footer_data']
+            
+            # Read from grand_total
+            grand_total = footer_data_dict.get('grand_total', {})
+            global_net = grand_total.get('col_net', grand_total.get('net', 0.0))
+            global_gross = grand_total.get('col_gross', grand_total.get('gross', 0.0))
+            
+            if 'col_pallet_count' in grand_total:
+                global_pallets = int(grand_total['col_pallet_count'])
+            elif 'pallet_count' in grand_total:
+                global_pallets = int(grand_total['pallet_count'])
 
-        # Create FooterData using overall weights
-        from core.invoice_generator.models.footer import FooterData
-        footer_data = FooterData(
-            footer_row_start_idx=current_row,
-            data_start_row=overall_data_start,
-            data_end_row=overall_data_end,
-            total_pallets=grand_total_pallets,
-            leather_summary=global_leather_summary,
-            weight_summary={'net': global_net, 'gross': global_gross}
-        )
+        # Build the payload
+        payload = {}
+        if self.invoice_data and 'footer_data' in self.invoice_data:
+            footer_data_dict = self.invoice_data['footer_data']
+            payload.update(footer_data_dict.get('grand_total', {}))
+            payload['leather_summary'] = footer_data_dict.get('leather_summary', [])
+            
+        payload.setdefault('pallet_count', global_pallets)
+        payload.setdefault('multiple', "S" if payload['pallet_count'] != 1 else "")
+        payload.setdefault('weight_net', payload.get('col_net', 0.0))
+        payload.setdefault('weight_gross', payload.get('col_gross', 0.0))
+        payload.setdefault('leather_summary', [])
 
         # Reuse last_grid's registries to build gt_grid without duplicating Registry/Styling setups
         from ..builders.table.table_grid import Grid
@@ -214,11 +225,11 @@ class MultiTableProcessor(SheetProcessor):
             dimension_registry=last_grid.dimension_registry
         )
         gt_grid.set_start_row(current_row)
-        
+
         footer_builder = TableFooterBuilder(
             grid=gt_grid,
-            footer_data=footer_data,
             footer_config=footer_config,
+            payload=payload,
             sum_ranges=all_data_ranges
         )
         

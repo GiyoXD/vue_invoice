@@ -51,12 +51,15 @@ def test_config_builder_leather_summary_detection():
     
     # Verify Buffalo row structure
     buffalo_row = rows[1]
-    assert any(c["col_id"] == "col_po" and c["value"] == "TOTAL OF:" for c in buffalo_row)
-    assert any(c["col_id"] == "col_pallet_no" and c["value"] == "BUFFALO LEATHER" for c in buffalo_row)
-    assert any(c["col_id"] == "col_desc" and c["value"] == "{pallet_count} PALLET{multiple}" for c in buffalo_row)
+    assert isinstance(buffalo_row, dict)
+    assert buffalo_row["source_list"] == "leather_summary"
+    cells = buffalo_row["cells"]
+    assert any(c["col_id"] == "col_po" and c.get("value") == "TOTAL OF:" for c in cells)
+    assert any(c["col_id"] == "col_pallet_no" and c.get("value") == "{leather_type} LEATHER" for c in cells)
+    assert any(c["col_id"] == "col_desc" and c.get("value") == "{pallet_count} PALLET{multiple}" for c in cells)
     # col_qty_pcs and col_net should be dynamically appended because they exist in sheet_col_ids
-    assert any(c["col_id"] == "col_qty_pcs" and "value" not in c for c in buffalo_row)
-    assert any(c["col_id"] == "col_net" and "value" not in c for c in buffalo_row)
+    assert any(c["col_id"] == "col_qty_pcs" for c in cells)
+    assert any(c["col_id"] == "col_net" for c in cells)
 
 
 def test_config_builder_leather_summary_skipped_when_no_pattern():
