@@ -547,6 +547,65 @@ class TestDataParserRefactor(unittest.TestCase):
         except DataValidationError as e:
             self.fail(f"validate_no_duplicate_amount_columns raised error unexpectedly: {e}")
 
+    def test_col_dc_aggregation(self):
+        # We test that col_dc is aggregated across standard, custom, per-PO with pallets, and DAF compounding
+        data = [
+            {
+                "col_po": "PO1",
+                "col_item": "ITEM1",
+                "col_unit_price": Decimal("10.0"),
+                "col_desc": "Desc A",
+                "col_qty_sf": Decimal("50.0"),
+                "col_amount": Decimal("500.0"),
+                "col_net": Decimal("100.0"),
+                "col_cbm": Decimal("1.5"),
+                "col_dc": "DC-NORTH",
+                "col_pallet_count": 1,
+                "col_qty_pcs": 100,
+                "col_gross": Decimal("110.0")
+            },
+            {
+                "col_po": "PO1",
+                "col_item": "ITEM1",
+                "col_unit_price": Decimal("10.0"),
+                "col_desc": "Desc A",
+                "col_qty_sf": Decimal("30.0"),
+                "col_amount": Decimal("300.0"),
+                "col_net": Decimal("60.0"),
+                "col_cbm": Decimal("0.9"),
+                "col_dc": "",
+                "col_pallet_count": 1,
+                "col_qty_pcs": 60,
+                "col_gross": Decimal("66.0")
+            }
+        ]
+
+        # 1. Standard Aggregation
+        std_map = {}
+        data_processor.aggregate_standard_by_po_item_price(data, std_map)
+        key = ("PO1", "ITEM1", Decimal("10.0"), "Desc A")
+        self.assertIn(key, std_map)
+        self.assertEqual(std_map[key].get("col_dc"), "DC-NORTH")
+
+        # 2. Custom Aggregation
+        cust_map = {}
+        data_processor.aggregate_custom_by_po_item(data, cust_map)
+        cust_key = ("PO1", "ITEM1", None, "Desc A")
+        self.assertIn(cust_key, cust_map)
+        self.assertEqual(cust_map[cust_key].get("col_dc"), "DC-NORTH")
+
+        # 3. Per PO with pallets
+        pallet_agg = data_processor.aggregate_per_po_with_pallets(data)
+        self.assertEqual(len(pallet_agg), 1)
+        self.assertEqual(pallet_agg[0].get("col_dc"), "DC-NORTH")
+
+        # 4. DAF Compounding
+        daf_res = data_processor.perform_DAF_compounding(data)
+        self.assertEqual(len(daf_res), 2)
+        # Non-buffalo group (index 1) should have DC-NORTH
+        self.assertEqual(daf_res[1].get("col_dc"), "DC-NORTH")
+
 
 if __name__ == '__main__':
     unittest.main()
+

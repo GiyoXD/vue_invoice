@@ -53,7 +53,8 @@ def aggregate_standard_by_po_item_price(
         'col_qty_sf': ('col_qty_sf', decimal_sum_reducer),
         'col_amount': ('col_amount', decimal_sum_reducer),
         'col_net': ('col_net', decimal_sum_reducer),
-        'col_cbm': ('col_cbm', decimal_sum_reducer)
+        'col_cbm': ('col_cbm', decimal_sum_reducer),
+        'col_dc': ('col_dc', first_non_empty_reducer)
     }
 
     # Run Aggregator
@@ -106,7 +107,8 @@ def aggregate_custom_by_po_item(
         'col_qty_sf': ('col_qty_sf', decimal_sum_reducer),
         'col_amount': ('col_amount', decimal_sum_reducer),
         'col_net': ('col_net', decimal_sum_reducer),
-        'col_cbm': ('col_cbm', decimal_sum_reducer)
+        'col_cbm': ('col_cbm', decimal_sum_reducer),
+        'col_dc': ('col_dc', first_non_empty_reducer)
     }
 
     # Run Aggregator
@@ -183,6 +185,7 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
         'col_net': ('col_net', decimal_sum_reducer),
         'col_gross': ('col_gross', decimal_sum_reducer),
         'col_cbm': ('col_cbm', decimal_sum_reducer),
+        'col_dc': ('col_dc', first_non_empty_reducer),
     }
 
     # Aggregate using Aggregator
@@ -204,6 +207,7 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
             'col_net': data.get('col_net'),
             'col_gross': data.get('col_gross'),
             'col_cbm': data.get('col_cbm'),
+            'col_dc': data.get('col_dc', ""),
         })
 
     # Sort by PO, Item, and unit price for consistent output (natural/numeric order)
@@ -260,7 +264,9 @@ def perform_DAF_compounding(
             'col_item': '',
             'col_desc': '',
             'col_qty_sf': decimal.Decimal(0),
-            'col_amount': decimal.Decimal(0)
+            'col_amount': decimal.Decimal(0),
+            'col_net': decimal.Decimal(0),
+            'col_dc': ''
         }
 
     # Handle empty input consistently -> returns default BUFFALO split dict
@@ -297,6 +303,7 @@ def perform_DAF_compounding(
         buffalo_pos = set()
         buffalo_items = set()
         buffalo_descriptions = set()
+        buffalo_dcs = set()
         buffalo_sqft = decimal.Decimal(0)
         buffalo_amount = decimal.Decimal(0)
         buffalo_net = decimal.Decimal(0)
@@ -304,6 +311,7 @@ def perform_DAF_compounding(
         non_buffalo_pos = set()
         non_buffalo_items = set()
         non_buffalo_descriptions = set()
+        non_buffalo_dcs = set()
         non_buffalo_sqft = decimal.Decimal(0)
         non_buffalo_amount = decimal.Decimal(0)
         non_buffalo_net = decimal.Decimal(0)
@@ -312,10 +320,12 @@ def perform_DAF_compounding(
             po_val = row.get('col_po')
             item_val = row.get('col_item')
             desc_val = row.get('col_desc')
+            dc_val = row.get('col_dc')
 
             po_str = str(po_val).strip() if po_val is not None else "<MISSING_PO>"
             item_str = str(item_val).strip() if item_val is not None else "<MISSING_ITEM>"
             desc_str = str(desc_val).strip() if desc_val is not None else ""
+            dc_str = str(dc_val).strip() if dc_val is not None else ""
 
             is_buffalo = desc_str and "BUFFALO" in desc_str.upper()
 
@@ -332,6 +342,7 @@ def perform_DAF_compounding(
                 buffalo_pos.add(po_str)
                 buffalo_items.add(item_str)
                 buffalo_descriptions.add(desc_str)
+                if dc_str: buffalo_dcs.add(dc_str)
                 buffalo_sqft += sqft_sum
                 buffalo_amount += amount_sum
                 buffalo_net += net_sum
@@ -339,6 +350,7 @@ def perform_DAF_compounding(
                 non_buffalo_pos.add(po_str)
                 non_buffalo_items.add(item_str)
                 if desc_str: non_buffalo_descriptions.add(desc_str)
+                if dc_str: non_buffalo_dcs.add(dc_str)
                 non_buffalo_sqft += sqft_sum
                 non_buffalo_amount += amount_sum
                 non_buffalo_net += net_sum
@@ -349,25 +361,29 @@ def perform_DAF_compounding(
         sorted_buffalo_pos = sorted(list(buffalo_pos))
         sorted_buffalo_items = sorted(list(buffalo_items))
         sorted_buffalo_descriptions = sorted([d for d in buffalo_descriptions if d])
+        sorted_buffalo_dcs = sorted(list(buffalo_dcs))
         buffalo_result: DAFCompoundingResult = {
             'col_po': format_chunks(sorted_buffalo_pos, daf_chunk_size, daf_intra_separator, daf_inter_separator),
             'col_item': format_chunks(sorted_buffalo_items, daf_chunk_size, daf_intra_separator, daf_inter_separator),
             'col_desc': format_chunks(sorted_buffalo_descriptions, 1, "", "\n"),
             'col_qty_sf': buffalo_sqft,
             'col_amount': buffalo_amount,
-            'col_net': buffalo_net
+            'col_net': buffalo_net,
+            'col_dc': format_chunks(sorted_buffalo_dcs, daf_chunk_size, daf_intra_separator, daf_inter_separator)
         }
         # Format NON-BUFFALO Group ("2")
         sorted_non_buffalo_pos = sorted(list(non_buffalo_pos))
         sorted_non_buffalo_items = sorted(list(non_buffalo_items))
         sorted_non_buffalo_descriptions = sorted([d for d in non_buffalo_descriptions if d])
+        sorted_non_buffalo_dcs = sorted(list(non_buffalo_dcs))
         non_buffalo_result: DAFCompoundingResult = {
             'col_po': format_chunks(sorted_non_buffalo_pos, daf_chunk_size, daf_intra_separator, daf_inter_separator),
             'col_item': format_chunks(sorted_non_buffalo_items, daf_chunk_size, daf_intra_separator, daf_inter_separator),
             'col_desc': format_chunks(sorted_non_buffalo_descriptions, 1, "", "\n"),
             'col_qty_sf': non_buffalo_sqft,
             'col_amount': non_buffalo_amount,
-            'col_net': non_buffalo_net
+            'col_net': non_buffalo_net,
+            'col_dc': format_chunks(sorted_non_buffalo_dcs, daf_chunk_size, daf_intra_separator, daf_inter_separator)
         }
         # Construct Final Result LIST for BUFFALO Split Case
         final_buffalo_split_result: FinalDAFResultType = [
@@ -385,13 +401,15 @@ def perform_DAF_compounding(
 
         # Step 1: Aggregate data by PO
         po_data_aggregation: Dict[str, Dict[str, Union[set, decimal.Decimal]]] = {}
-        logging.debug(f"{prefix} Pass 1: Aggregating SQFT/Amount/Items per PO.")
+        logging.debug(f"{prefix} Pass 1: Aggregating SQFT/Amount/Items/DCs per PO.")
         for row in rows:
             po_val = row.get('col_po')
             item_val = row.get('col_item')
+            dc_val = row.get('col_dc')
 
             po_str = str(po_val).strip() if po_val is not None else "<MISSING_PO>"
             item_str = str(item_val).strip() if item_val is not None else "<MISSING_ITEM>"
+            dc_str = str(dc_val).strip() if dc_val is not None else ""
 
             # Use new col_ keys
             sqft_sum = row.get('col_qty_sf', decimal.Decimal(0))
@@ -407,12 +425,14 @@ def perform_DAF_compounding(
                     'sqft_total': decimal.Decimal(0),
                     'amount_total': decimal.Decimal(0),
                     'net_total': decimal.Decimal(0),
-                    'items': set()
+                    'items': set(),
+                    'dcs': set()
                 }
             po_data_aggregation[po_str]['sqft_total'] += sqft_sum # type: ignore
             po_data_aggregation[po_str]['amount_total'] += amount_sum # type: ignore
             po_data_aggregation[po_str]['net_total'] += net_sum # type: ignore
             po_data_aggregation[po_str]['items'].add(item_str) # type: ignore
+            if dc_str: po_data_aggregation[po_str]['dcs'].add(dc_str) # type: ignore
 
         if not po_data_aggregation:
             logging.warning(f"{prefix} No valid PO data found for PO count splitting. Returning empty dict.")
@@ -443,6 +463,7 @@ def perform_DAF_compounding(
             chunk_amount_total = decimal.Decimal(0)
             chunk_net_total = decimal.Decimal(0)
             chunk_items = set()
+            chunk_dcs = set()
             po_list_for_formatting = [] # Collect POs in this chunk for formatting
 
             for po_str in conceptual_po_chunk:
@@ -452,16 +473,19 @@ def perform_DAF_compounding(
                     chunk_amount_total += po_agg_data.get('amount_total', decimal.Decimal(0)) # type: ignore
                     chunk_net_total += po_agg_data.get('net_total', decimal.Decimal(0)) # type: ignore
                     chunk_items.update(po_agg_data.get('items', set())) # type: ignore
+                    chunk_dcs.update(po_agg_data.get('dcs', set())) # type: ignore
                     po_list_for_formatting.append(po_str) # Add the PO itself to the list for formatting
                 else:
                      logging.warning(f"{prefix} PO '{po_str}' not found in aggregation data during chunking.")
 
-            # Sort items collected for this chunk
+            # Sort items/DCs collected for this chunk
             sorted_chunk_items = sorted(list(chunk_items))
+            sorted_chunk_dcs = sorted(list(chunk_dcs))
 
-            # Step 4: Format the collected POs and Items using desired format (size 2)
+            # Step 4: Format the collected POs, Items, and DCs using desired format (size 2)
             formatted_po_chunk = format_chunks(po_list_for_formatting, daf_chunk_size, daf_intra_separator, daf_inter_separator)
             formatted_item_chunk = format_chunks(sorted_chunk_items, daf_chunk_size, daf_intra_separator, daf_inter_separator)
+            formatted_dc_chunk = format_chunks(sorted_chunk_dcs, daf_chunk_size, daf_intra_separator, daf_inter_separator)
 
             # Create the result dictionary for this chunk index
             chunk_result: DAFCompoundingResult = {
@@ -470,7 +494,8 @@ def perform_DAF_compounding(
                 'col_desc': '', # No descriptions in this path
                 'col_qty_sf': chunk_sqft_total,    # Use CHUNK total (calculated based on group of 8)
                 'col_amount': chunk_amount_total,   # Use CHUNK total (calculated based on group of 8)
-                'col_net': chunk_net_total
+                'col_net': chunk_net_total,
+                'col_dc': formatted_dc_chunk
             }
             chunk_index_str = str(i + 1)
             final_po_count_split_result.append(chunk_result)
