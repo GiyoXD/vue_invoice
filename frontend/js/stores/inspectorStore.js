@@ -9,6 +9,7 @@ export const useInspectorStore = defineStore('inspector', () => {
     const currentRun = ref(null);
     const existingInDb = ref(false);
     const isWideCargo = ref(false);
+    const maxStackingLayers = ref(3);
 
     // Computed
     const inspectorData = computed(() => {
@@ -41,11 +42,39 @@ export const useInspectorStore = defineStore('inspector', () => {
         };
     });
 
+    const detectedPalletDims = computed(() => {
+        const items = inspectorItems.value;
+        for (const item of items) {
+            const cbmRaw = item.col_cbm_raw || item.col_cbm;
+            if (typeof cbmRaw === 'string' && cbmRaw.trim()) {
+                const parts = cbmRaw.split(/[xX*]/).map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
+                if (parts.length >= 2) {
+                    let dim1 = parts[0];
+                    let dim2 = parts[1];
+                    if (dim1 > 10) dim1 = dim1 / 100;
+                    if (dim2 > 10) dim2 = dim2 / 100;
+                    if (dim1 > 10) dim1 = dim1 / 10;
+                    if (dim2 > 10) dim2 = dim2 / 10;
+                    
+                    return {
+                        length: Math.max(dim1, dim2),
+                        width: Math.min(dim1, dim2)
+                    };
+                }
+            }
+        }
+        return { length: 1.2, width: 1.0 };
+    });
+
     const recommendedTruckInfo = computed(() => {
         const gross = inspectorTotals.value?.gross || 0;
         const cbm = inspectorTotals.value?.cbm || 0;
         const pallets = inspectorTotals.value?.pallets || 0;
-        return recommendTruck(gross, cbm, pallets, isWideCargo.value);
+        return recommendTruck(gross, cbm, pallets, isWideCargo.value, {
+            maxStackingLayers: maxStackingLayers.value,
+            palletLength: detectedPalletDims.value.length,
+            palletWidth: detectedPalletDims.value.width
+        });
     });
 
     const inspectorItems = computed(() => {
@@ -70,16 +99,48 @@ export const useInspectorStore = defineStore('inspector', () => {
         return items;
     });
 
+    const detectWideCargoFromItems = (items) => {
+        if (!Array.isArray(items)) return false;
+        for (const item of items) {
+            const cbmRaw = item.col_cbm_raw || item.col_cbm;
+            if (typeof cbmRaw === 'string' && cbmRaw.trim()) {
+                const parts = cbmRaw.split(/[xX*]/).map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
+                if (parts.length >= 2) {
+                    let dim1 = parts[0];
+                    let dim2 = parts[1];
+                    
+                    // Handle cm/mm conversions to meters if necessary
+                    if (dim1 > 10) dim1 = dim1 / 100;
+                    if (dim2 > 10) dim2 = dim2 / 100;
+                    if (dim1 > 10) dim1 = dim1 / 10;
+                    if (dim2 > 10) dim2 = dim2 / 10;
+                    
+                    // If any single horizontal dimension is >= 2.0 (e.g. 2.2m),
+                    // or if both horizontal dimensions are > 1.1m (cannot fit side-by-side in 2.1m/2.2m truck):
+                    if (dim1 >= 2.0 || dim2 >= 2.0 || (dim1 > 1.1 && dim2 > 1.1)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    };
+
     // Watchers
     watch(uploadedMetadata, (newData) => {
         if (newData) {
             const desc = String(newData.footer_data?.grand_total?.col_desc || '').toUpperCase();
             const file = String(newData.output_file || '').toUpperCase();
-            if (desc.includes('LEATHER') || file.includes('JF') || file.includes('JLFTLT')) {
-                isWideCargo.value = true;
-            } else {
-                isWideCargo.value = false;
+            let isWide = desc.includes('LEATHER') || file.includes('JF') || file.includes('JLFTLT');
+            
+            if (!isWide) {
+                const items = (newData.multi_table || newData.raw_data || []).flat();
+                if (detectWideCargoFromItems(items)) {
+                    isWide = true;
+                }
             }
+            
+            isWideCargo.value = isWide;
         }
     });
 
@@ -226,6 +287,8 @@ export const useInspectorStore = defineStore('inspector', () => {
         currentRun,
         existingInDb,
         isWideCargo,
+        maxStackingLayers,
+        detectedPalletDims,
         inspectorData,
         inspectorTotals,
         recommendedTruckInfo,

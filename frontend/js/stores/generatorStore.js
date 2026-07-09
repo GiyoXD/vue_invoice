@@ -53,6 +53,7 @@ export const useGeneratorStore = defineStore('generator', () => {
     const showConflictConfirm = ref(false);
     const conflictMessage = ref('');
     const isWideCargo = ref(false);
+    const maxStackingLayers = ref(3);
     const isLookingUp = ref(false);
 
     // --- Computed properties ---
@@ -98,11 +99,65 @@ export const useGeneratorStore = defineStore('generator', () => {
         return { net, gross, cbm };
     });
 
+    const detectedPalletDims = computed(() => {
+        const data = validationData.value;
+        if (!data) return { length: 1.2, width: 1.0 };
+        
+        const items = (data.multi_table || data.raw_data || []).flat();
+        for (const item of items) {
+            const cbmRaw = item.col_cbm_raw || item.col_cbm;
+            if (typeof cbmRaw === 'string' && cbmRaw.trim()) {
+                const parts = cbmRaw.split(/[xX*]/).map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
+                if (parts.length >= 2) {
+                    let dim1 = parts[0];
+                    let dim2 = parts[1];
+                    if (dim1 > 10) dim1 = dim1 / 100;
+                    if (dim2 > 10) dim2 = dim2 / 100;
+                    if (dim1 > 10) dim1 = dim1 / 10;
+                    if (dim2 > 10) dim2 = dim2 / 10;
+                    
+                    return {
+                        length: Math.max(dim1, dim2),
+                        width: Math.min(dim1, dim2)
+                    };
+                }
+            }
+        }
+        
+        if (data.database_export?.packing_list_items) {
+            for (const item of data.database_export.packing_list_items) {
+                const cbmRaw = item.cbm_raw || item.col_cbm_raw || item.cbm || item.col_cbm;
+                if (typeof cbmRaw === 'string' && cbmRaw.trim()) {
+                    const parts = cbmRaw.split(/[xX*]/).map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
+                    if (parts.length >= 2) {
+                        let dim1 = parts[0];
+                        let dim2 = parts[1];
+                        if (dim1 > 10) dim1 = dim1 / 100;
+                        if (dim2 > 10) dim2 = dim2 / 100;
+                        if (dim1 > 10) dim1 = dim1 / 10;
+                        if (dim2 > 10) dim2 = dim2 / 10;
+                        
+                        return {
+                            length: Math.max(dim1, dim2),
+                            width: Math.min(dim1, dim2)
+                        };
+                    }
+                }
+            }
+        }
+        
+        return { length: 1.2, width: 1.0 };
+    });
+
     const recommendedTruckInfo = computed(() => {
         const gross = weightStats.value?.gross || 0;
         const cbm = weightStats.value?.cbm || 0;
         const pallets = summaryStats.value?.total_pallets || 0;
-        return recommendTruck(gross, cbm, pallets, isWideCargo.value);
+        return recommendTruck(gross, cbm, pallets, isWideCargo.value, {
+            maxStackingLayers: maxStackingLayers.value,
+            palletLength: detectedPalletDims.value.length,
+            palletWidth: detectedPalletDims.value.width
+        });
     });
 
     const totalAmount = computed(() => {
@@ -116,16 +171,48 @@ export const useGeneratorStore = defineStore('generator', () => {
         return 0;
     });
 
+    const detectWideCargoFromItems = (items) => {
+        if (!Array.isArray(items)) return false;
+        for (const item of items) {
+            const cbmRaw = item.col_cbm_raw || item.col_cbm;
+            if (typeof cbmRaw === 'string' && cbmRaw.trim()) {
+                const parts = cbmRaw.split(/[xX*]/).map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
+                if (parts.length >= 2) {
+                    let dim1 = parts[0];
+                    let dim2 = parts[1];
+                    
+                    // Handle cm/mm conversions to meters if necessary
+                    if (dim1 > 10) dim1 = dim1 / 100;
+                    if (dim2 > 10) dim2 = dim2 / 100;
+                    if (dim1 > 10) dim1 = dim1 / 10;
+                    if (dim2 > 10) dim2 = dim2 / 10;
+                    
+                    // If any single horizontal dimension is >= 2.0 (e.g. 2.2m),
+                    // or if both horizontal dimensions are > 1.1m (cannot fit side-by-side in 2.1m/2.2m truck):
+                    if (dim1 >= 2.0 || dim2 >= 2.0 || (dim1 > 1.1 && dim2 > 1.1)) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    };
+
     // --- Watchers ---
     watch(validationData, (newData) => {
         if (newData) {
             const desc = String(newData.footer_data?.grand_total?.col_desc || '').toUpperCase();
             const file = String(identifier.value || '').toUpperCase();
-            if (desc.includes('LEATHER') || file.includes('JF') || file.includes('JLFTLT')) {
-                isWideCargo.value = true;
-            } else {
-                isWideCargo.value = false;
+            let isWide = desc.includes('LEATHER') || file.includes('JF') || file.includes('JLFTLT');
+            
+            if (!isWide) {
+                const items = (newData.multi_table || newData.raw_data || []).flat();
+                if (detectWideCargoFromItems(items)) {
+                    isWide = true;
+                }
             }
+            
+            isWideCargo.value = isWide;
         }
     });
 
@@ -538,6 +625,7 @@ export const useGeneratorStore = defineStore('generator', () => {
         showConflictConfirm,
         conflictMessage,
         isWideCargo,
+        maxStackingLayers,
         isLookingUp,
 
         // computed
@@ -546,6 +634,7 @@ export const useGeneratorStore = defineStore('generator', () => {
         assetConfigName,
         summaryStats,
         weightStats,
+        detectedPalletDims,
         recommendedTruckInfo,
         totalAmount,
 
