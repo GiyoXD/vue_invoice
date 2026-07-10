@@ -488,13 +488,15 @@ export const useGeneratorStore = defineStore('generator', () => {
             const grandTotal = validationData.value?.footer_data?.grand_total || {};
             const pallets = grandTotal.col_pallet_count ?? (summaryStats.value?.total_pallets || 0);
             let gross = grandTotal.col_gross ?? (weightStats.value?.gross || 0);
+            const netWeight = grandTotal.col_net ?? (weightStats.value?.net || 0);
+            const amount = grandTotal.col_amount ?? 0;
 
             if (typeof gross === 'string' && !isNaN(parseFloat(gross))) {
                 gross = parseFloat(gross).toString();
             }
 
-            if (!pallets && !gross) {
-                syncStatus.value = { type: 'error', message: 'Cannot sync: pallet and gross weight data is missing. Please regenerate the invoice first.' };
+            if (!pallets && !netWeight && !amount) {
+                syncStatus.value = { type: 'error', message: 'Cannot sync: pallet, weight, or amount data is missing. Please regenerate the invoice first.' };
                 isSyncing.value = false;
                 return;
             }
@@ -506,6 +508,9 @@ export const useGeneratorStore = defineStore('generator', () => {
                 ref_no: invoiceRef.value || '',
                 invoice_date: invoiceDate.value,
                 pallet_str: palletStr,
+                net_weight: parseFloat(netWeight) || 0,
+                pallets: parseInt(pallets, 10) || 0,
+                amount: parseFloat(amount) || 0,
                 force_override: forceOverride === true,
                 worksheet_name: googleSheetName.value || '2026'
             };
