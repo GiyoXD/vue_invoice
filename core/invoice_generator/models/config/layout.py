@@ -100,3 +100,10 @@ class SheetLayoutModel(BaseModel):
     content: Optional[StaticContentConfigModel] = None
     footer: Optional[FooterConfigModel] = None
     hs_code: Optional[HSCodeConfigModel] = None
+    summary: Optional[FooterConfigModel] = None
+
+    # Runtime resolved layout attributes
+    bundled_columns: List[ColumnDef] = Field(default_factory=list)
+    column_mapping: Dict[str, int] = Field(default_factory=dict)
+    column_colspan: Dict[str, int] = Field(default_factory=dict)
+    column_index_mapping: Dict[int, Optional[int]] = Field(default_factory=dict)

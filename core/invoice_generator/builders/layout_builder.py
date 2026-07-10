@@ -44,7 +44,8 @@ class LayoutBuilder:
         template_state_builder: Optional[JsonTemplateStateBuilder] = None,
         template_json_config: Optional[Dict[str, Any]] = None,
         layout_state: Optional[SheetLayoutState] = None,
-        pre_loaded_images: Optional[List[Image]] = None
+        pre_loaded_images: Optional[List[Image]] = None,
+        invoice_data: Optional[Dict[str, Any]] = None
     ):
         """
         Initialize LayoutBuilder with strict model architecture.
@@ -72,6 +73,7 @@ class LayoutBuilder:
         self.template_json_config = template_json_config
         self.layout_state = layout_state or SheetLayoutState()
         self.pre_loaded_images = pre_loaded_images or []
+        self.invoice_data = invoice_data
 
         # Store results after build
         self.next_row_after_footer = -1
@@ -122,24 +124,69 @@ class LayoutBuilder:
             
         # 4. Table Builder delegation
         from .table import TableBuilder
-        table_builder = TableBuilder(
-            workbook=self.workbook,
-            worksheet=self.worksheet,
-            sheet_styling=self.sheet_styling,
-            sheet_layout=self.sheet_layout,
-            resolved_data=self.resolved_data,
-            sheet_name=self.sheet_name,
-            args=self.args,
-            total_net_weight=self.total_net_weight,
-            total_gross_weight=self.total_gross_weight,
-            is_last_table=self.is_last_table,
-            skip_header_builder=self.skip_header_builder,
-            skip_data_table_builder=self.skip_data_table_builder,
-            skip_footer_builder=self.skip_footer_builder,
-            layout_state=self.layout_state
+        from .table.builder import TableBuilderConfig
+        import copy
+        
+        # Resolve active columns/mappings based on DAF and custom mode
+        daf_mode = getattr(self.args, 'DAF', False) if self.args else False
+        custom_mode = getattr(self.args, 'custom', False) if self.args else False
+        
+        columns_source = self.sheet_layout.structure.columns
+        if self.skip_header_builder:
+            columns_source = []
+            
+        from ..models.config.layout import StructureConfigModel
+        structure = StructureConfigModel(
+            header_row=self.sheet_layout.structure.header_row,
+            columns=columns_source
         )
         
-        success = table_builder.build(start_row=table_header_row)
+        bundled_columns, column_index_mapping, column_mapping, column_colspan = (
+            structure.resolve_mappings(DAF_mode=daf_mode, custom_mode=custom_mode)
+        )
+        
+        resolved_data = self.resolved_data
+        if self.skip_data_table_builder:
+            from ..models.table_adapter import ResolvedTableData
+            resolved_data = ResolvedTableData(data_rows=[])
+            
+        sheet_layout = copy.deepcopy(self.sheet_layout)
+        if self.skip_footer_builder:
+            sheet_layout.footer = None
+            
+         # Attach resolved mapping properties directly to sheet_layout
+        sheet_layout.bundled_columns = bundled_columns
+        sheet_layout.column_index_mapping = column_index_mapping
+        sheet_layout.column_mapping = column_mapping
+        sheet_layout.column_colspan = column_colspan
+        
+        # Pre-calculate vertical merges using the transformer
+        from ..utils.merge_transformer import apply_vertical_merges
+        resolved_data.data_rows = apply_vertical_merges(resolved_data.data_rows)
+            
+        if not resolved_data.footer:
+            from ..models.table_adapter import ResolvedTableFooter
+            resolved_data.footer = ResolvedTableFooter()
+            
+        if not resolved_data.footer.weight_summary:
+            resolved_data.footer.weight_summary = {
+                'net': self.total_net_weight or 0.0,
+                'gross': self.total_gross_weight or 0.0
+            }
+        if self.invoice_data and 'footer_data' in self.invoice_data:
+            footer_dict = self.invoice_data['footer_data']
+            resolved_data.footer.grand_total = footer_dict.get('grand_total', {})
+            resolved_data.footer.leather_summary = footer_dict.get('leather_summary', [])
+            
+        config = TableBuilderConfig(
+            worksheet=self.worksheet,
+            sheet_styling=self.sheet_styling,
+            sheet_layout=sheet_layout,
+            resolved_data=resolved_data
+        )
+        table_builder = TableBuilder(config=config)
+        
+        success = table_builder.build(start_row=table_header_row, layout_state=self.layout_state)
         if not success:
             logger.error("Table building failed")
             return False
@@ -205,6 +252,46 @@ class LayoutBuilder:
         except Exception as e:
             logger.error(f"Failed to apply static column widths: {e}", exc_info=True)
  
+        # 6c. Build Page-level Summary
+        if self.is_last_table and self.sheet_layout.summary and self.sheet_layout.summary.rows:
+            logger.info("Building page-level summary section")
+            try:
+                # Prepare payload
+                payload = {}
+                if self.invoice_data and 'footer_data' in self.invoice_data:
+                    footer_data_dict = self.invoice_data['footer_data']
+                    payload.update(footer_data_dict.get('grand_total', {}))
+                    payload['leather_summary'] = footer_data_dict.get('leather_summary', [])
+                
+                # Fetch pallet count from footer_data or default
+                pallet_count = 0
+                if self.invoice_data and 'footer_data' in self.invoice_data:
+                    grand_total = self.invoice_data['footer_data'].get('grand_total', {})
+                    pallet_count = grand_total.get('col_pallet_count', grand_total.get('pallet_count', 0))
+                
+                # Fallback to self.footer_data pallet count
+                if not pallet_count and self.footer_data:
+                    pallet_count = self.footer_data.total_pallets
+                
+                payload.setdefault('pallet_count', int(pallet_count))
+                payload.setdefault('multiple', "S" if payload['pallet_count'] != 1 else "")
+                payload.setdefault('weight_net', payload.get('col_net', 0.0))
+                payload.setdefault('weight_gross', payload.get('col_gross', 0.0))
+                payload.setdefault('leather_summary', [])
+
+                from .table.summary import SummaryBuilder
+                summary_builder = SummaryBuilder(
+                    worksheet=self.worksheet,
+                    summary_config=self.sheet_layout.summary,
+                    payload=payload,
+                    start_row=self.next_row_after_footer,
+                    last_grid=self.grid
+                )
+                self.next_row_after_footer = summary_builder.build()
+            except Exception as e:
+                logger.error(f"[LayoutBuilder] SummaryBuilder failed: {e}", exc_info=True)
+                return False
+
         # 7. Template Footer Restoration
         if self.template_state_builder and not self.skip_template_footer_restoration:
             try:
