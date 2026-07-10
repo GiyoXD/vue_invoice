@@ -23,8 +23,6 @@ class DataTableBuilderStyler(TableSectionBuilder):
         self,
         grid: Grid,
         resolved_data: Union[ResolvedTableData, Dict[str, Any]],
-        vertical_merge_columns: Optional[List[str]] = None,
-        is_global_unique_desc: bool = False,
         parent_column_ids: Optional[List[str]] = None
     ):
         TableSectionBuilder.__init__(self, grid)
@@ -42,8 +40,6 @@ class DataTableBuilderStyler(TableSectionBuilder):
                 resolved_data['data_rows'] = stringified_rows
             resolved_data = ResolvedTableData.model_validate(resolved_data)
         self.resolved_data = resolved_data
-        self.vertical_merge_columns = vertical_merge_columns or []
-        self.is_global_unique_desc = is_global_unique_desc
  
         self.col_id_map = grid.column_mapping
         self.column_colspan = grid.column_colspan
@@ -110,71 +106,12 @@ class DataTableBuilderStyler(TableSectionBuilder):
                             self.grid.merge(r, col_id, rowspan=1, colspan=colspan)
 
             # --- Apply Vertical Merges ---
-            if self.vertical_merge_columns and num_data_rows > 0:
-                relative_start_row = 0
-                relative_end_row = num_data_rows - 1
-                
-                for col_id in self.vertical_merge_columns:
-                    if col_id not in self.col_id_map:
-                        continue
-
-                    if col_id == 'col_desc':
-                        if not self.is_global_unique_desc:
-                            logger.info("  Skipping vertical merge for col_desc because descriptions are mixed globally.")
-                            continue
-                    
-                    # Validate desc baseline uniformity if col_id is col_desc
-                    if col_id == "col_desc":
-                        buffer_value = None
-                        for r in range(relative_start_row, relative_end_row + 1):
-                            cell = self.grid.get_cell(r, self.col_id_map[col_id])
-                            if cell.value is not None and cell.value != "":
-                                buffer_value = cell.value
-                                break
-                                
-                        if buffer_value is not None:
-                            baseline = str(buffer_value).strip().lower()
-                            abort_merge = False
-                            for r in range(relative_start_row, relative_end_row + 1):
-                                cell = self.grid.get_cell(r, self.col_id_map[col_id])
-                                if cell.value is not None and cell.value != "":
-                                    current = str(cell.value).strip().lower()
-                                    if current != baseline:
-                                        abort_merge = True
-                                        break
-                            if abort_merge:
-                                logger.info("  Aborting vertical merge for col_desc because values are mixed in this range.")
-                                continue
-
-                    group_start = relative_start_row
-                    col_idx = self.col_id_map[col_id]
-                    start_cell = self.grid.get_cell(relative_start_row, col_idx)
-                    group_value = start_cell.value if start_cell else None
-                    
-                    for r in range(relative_start_row + 1, relative_end_row + 2):
-                        if r <= relative_end_row:
-                            cell = self.grid.get_cell(r, col_idx)
-                            current_value = cell.value
-                        else:
-                            current_value = None  # sentinel to flush
-                            
-                        if current_value == group_value and r <= relative_end_row:
-                            continue
-                        else:
-                            group_end = r - 1
-                            if group_end > group_start and group_value is not None:
-                                skip_int = False
-                                try:
-                                    int(group_value)
-                                    skip_int = True
-                                except (ValueError, TypeError):
-                                    pass
-
-                                if not skip_int:
-                                    self.grid.merge(group_start, col_id, rowspan=group_end - group_start + 1, colspan=1)
-                            
-                            group_start = r
-                            group_value = current_value
+            for r in range(actual_rows_to_process):
+                row_data = self.data_rows[r]
+                rowspans = row_data.get('rowspans', {})
+                for col_id, rowspan in rowspans.items():
+                    if rowspan > 1:
+                        self.grid.merge(r, col_id, rowspan=rowspan, colspan=1)
 
         except Exception as fill_data_err:
             logger.error(f"Error during data filling loop: {fill_data_err}\n{traceback.format_exc()}")

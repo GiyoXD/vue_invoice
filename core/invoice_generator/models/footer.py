@@ -14,5 +14,5 @@ class FooterData(BaseModel):
     data_start_row: int
     data_end_row: int
     total_pallets: int
-    leather_summary: Optional[Dict] = None
+    leather_summary: Optional[Any] = None
     weight_summary: Optional[Any] = None
