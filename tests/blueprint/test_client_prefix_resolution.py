@@ -49,6 +49,10 @@ def test_brutal_prefix_overlaps(db):
     resolver = InvoiceAssetResolver()
     test_codes = ["JLFTLT-VC", "JLFTLT", "JLFT", "JLF", "JLFTLT_INV"]
     
+    # Clean up pre-existing records to ensure test isolation
+    db.query(Blueprint).filter(Blueprint.customer_code.in_(test_codes)).delete()
+    db.commit()
+    
     for code in test_codes:
         create_db_client(db, code)
 
@@ -77,6 +81,10 @@ def test_validate_similar_client_prefix_not_overlapse(db):
     Test that sourcing correctly differentiates between similar client prefixes like JLFTLT and JLFTLT-VC.
     """
     resolver = InvoiceAssetResolver()
+    
+    # Clean up pre-existing records to ensure test isolation
+    db.query(Blueprint).filter(Blueprint.customer_code.in_(["JLFTLT", "JLFTLT-VC"])).delete()
+    db.commit()
     
     # Create JLFTLT-VC in DB
     create_db_client(db, "JLFTLT-VC")

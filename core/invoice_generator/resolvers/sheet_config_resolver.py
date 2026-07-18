@@ -1,14 +1,16 @@
-# invoice_generator/config/builder_config_resolver.py
+# invoice_generator/config/sheet_config_resolver.py
 import logging
 from typing import Any, Dict, Optional, Tuple
 from openpyxl.worksheet.worksheet import Worksheet
 
-from .resolvers import BundleResolver, ContextResolver, get_data_source_for_type
+from .bundle import BundleResolver
+from .context import ContextResolver
+from .data_router import get_data_source_for_type
 
 logger = logging.getLogger(__name__)
 
 
-class BuilderConfigResolver:
+class SheetConfigResolver:
     """
     Resolves and prepares configuration bundles for specific builders by
     delegating to the dedicated resolvers in the config/resolvers/ subpackage.
@@ -70,16 +72,16 @@ class BuilderConfigResolver:
         return style_config, context_config, merged_layout_config
         
     def get_table_data_resolver(self, table_key: Optional[str] = None):
-        from .table_value_adapter import TableDataAdapter
-        return TableDataAdapter.create_from_bundles(
+        from ..mappers import TableDataMapper
+        return TableDataMapper.create_from_bundles(
             data_config=self.get_data_bundle(table_key=table_key),
-            context_config=self.get_context_bundle(),
+            context_config=self.get_context_bundle(table_key=table_key),
             layout_config=self.get_layout_bundle()
         )
         
     def get_table_footer_resolver(self, table_key: Optional[str] = None):
-        from .table_value_adapter import TableFooterAdapter
-        return TableFooterAdapter.create_from_bundles(
+        from ..mappers import TableFooterMapper
+        return TableFooterMapper.create_from_bundles(
             data_config=self.get_data_bundle(table_key=table_key),
             context_config=self.get_context_bundle()
         )

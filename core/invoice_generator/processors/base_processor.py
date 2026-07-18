@@ -119,7 +119,7 @@ class SheetProcessor(ABC):
         template_state_builder: Optional[Any] = None
     ):
         """
-        Orchestrates the common workflow of BuilderConfigResolver resolution and LayoutBuilder execution.
+        Orchestrates the common workflow of SheetConfigResolver resolution and LayoutBuilder execution.
         Saves subclasses from duplicating this execution sequence.
         """
         resolver = self._init_resolver(
@@ -154,8 +154,8 @@ class SheetProcessor(ABC):
         total_net_weight: Optional[float],
         total_gross_weight: Optional[float]
     ):
-        """Initializes the BuilderConfigResolver with context overrides."""
-        from core.invoice_generator.config.builder_config_resolver import BuilderConfigResolver
+        """Initializes the SheetConfigResolver with context overrides."""
+        from core.invoice_generator.resolvers.sheet_config_resolver import SheetConfigResolver
 
         context_overrides = {}
         if total_net_weight is not None:
@@ -166,7 +166,7 @@ class SheetProcessor(ABC):
         # Add context override
         context_overrides["is_last_table"] = is_last_table
 
-        return BuilderConfigResolver(
+        return SheetConfigResolver(
             config_loader=self.config_loader,
             sheet_name=self.sheet_name,
             worksheet=self.output_worksheet,
@@ -205,7 +205,7 @@ class SheetProcessor(ABC):
         return style_config, context_config, layout_config
 
     def _resolve_table_data(self, resolver, table_key: Optional[str], layout_config: Dict[str, Any]) -> bool:
-        """Resolves table data using TableDataAdapter and updates layout_config."""
+        """Resolves table data using TableDataMapper and updates layout_config."""
         import logging
         logger = logging.getLogger(__name__)
 
@@ -219,7 +219,7 @@ class SheetProcessor(ABC):
             resolved_data = table_resolver.resolve()
             layout_config['resolved_data'] = resolved_data
             
-            logger.info(f"Successfully resolved table data for table '{table_key or 'default'}' using TableDataAdapter")
+            logger.info(f"Successfully resolved table data for table '{table_key or 'default'}' using TableDataMapper")
             return True
         except Exception as e:
             logger.error(f"Error resolving table data: {e}")

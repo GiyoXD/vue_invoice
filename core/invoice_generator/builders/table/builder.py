@@ -10,7 +10,7 @@ from ...styling.dimension_registry import DimensionRegistry
 from ...models.layout import SheetLayoutState
 from ...models.config.styling import SheetStylingModel
 from ...models.config.layout import SheetLayoutModel, ColumnDef, FooterConfigModel
-from ...models.table_adapter import ResolvedTableData
+from ...mappers.model import ResolvedTableData
 from .table_grid import Grid
 
 logger = logging.getLogger(__name__)

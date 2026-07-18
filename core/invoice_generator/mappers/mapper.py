@@ -5,7 +5,7 @@ from .preparer import (
     prepare_data_rows,
     parse_mapping_rules
 )
-from core.invoice_generator.models.table_adapter import (
+from .model import (
     ResolvedTableData,
     ResolvedTableFooter
 )
@@ -20,14 +20,14 @@ from .helpers import (
 logger = logging.getLogger(__name__)
 
 
-class TableDataAdapterError(Exception):
+class TableDataMapperError(Exception):
     """Exception raised when table data resolution fails."""
     pass
 
 
-class TableDataAdapter:
+class TableDataMapper:
     """
-    Adapter for preparing table-specific data for rendering.
+    Mapper for preparing table-specific data for rendering.
     
     This class takes raw invoice data and configuration, then produces
     table-ready row dictionaries with proper formatting, formulas, and
@@ -119,13 +119,13 @@ class TableDataAdapter:
         )
         
         # Resolve footer summaries internally
-        footer_adapter = TableFooterAdapter(
+        footer_mapper = TableFooterMapper(
             data_source_type=self.data_source_type,
             data_source=self.data_source,
             footer_data=self.footer_data,
             table_key=self.table_key
         )
-        resolved_footer = footer_adapter.resolve(data_rows, num_data_rows)
+        resolved_footer = footer_mapper.resolve(data_rows, num_data_rows)
         
         return ResolvedTableData(
             data_rows=data_rows,
@@ -157,9 +157,9 @@ class TableDataAdapter:
         data_config: Dict[str, Any],
         context_config: Dict[str, Any],
         layout_config: Optional[Dict[str, Any]] = None
-    ) -> 'TableDataAdapter':
+    ) -> 'TableDataMapper':
         """
-        Factory method to create TableDataAdapter from bundle configs.
+        Factory method to create TableDataMapper from bundle configs.
         """
         args = context_config.get('args')
         DAF_mode = args.DAF if args and hasattr(args, 'DAF') else False
@@ -173,7 +173,7 @@ class TableDataAdapter:
         metadata = invoice_data.get('metadata')
         
         if metadata is None:
-            raise TableDataAdapterError("CRITICAL: Invoice 'metadata' is missing or null in the provided JSON data.")
+            raise TableDataMapperError("CRITICAL: Invoice 'metadata' is missing or null in the provided JSON data.")
             
         pricing_net_weight = metadata.get('pricing_net_weight', False)
         
@@ -181,7 +181,7 @@ class TableDataAdapter:
         if layout_config:
             sheet_layout = SheetLayoutModel.model_validate(layout_config.get('sheet_config', {}) or layout_config)
 
-        return TableDataAdapter(
+        return TableDataMapper(
             data_source_type=data_config.get('data_source_type', 'aggregation'),
             data_source=data_config.get('data_source'),
             mapping_rules=data_config.get('mapping_rules', {}),
@@ -195,9 +195,9 @@ class TableDataAdapter:
         )
 
 
-class TableFooterAdapter:
+class TableFooterMapper:
     """
-    Adapter for resolving footer summaries and formatting display values.
+    Mapper for resolving footer summaries and formatting display values.
     """
     
     def __init__(
@@ -233,11 +233,11 @@ class TableFooterAdapter:
     def create_from_bundles(
         data_config: Dict[str, Any],
         context_config: Dict[str, Any]
-    ) -> 'TableFooterAdapter':
+    ) -> 'TableFooterMapper':
         """
-        Factory method to create TableFooterAdapter from bundle configs.
+        Factory method to create TableFooterMapper from bundle configs.
         """
-        return TableFooterAdapter(
+        return TableFooterMapper(
             data_source_type=data_config.get('data_source_type', 'aggregation'),
             data_source=data_config.get('data_source'),
             footer_data=data_config.get('footer_data', {}),

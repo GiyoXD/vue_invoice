@@ -1,9 +1,9 @@
 import pytest
 from typing import Dict, Any
 
-from core.invoice_generator.config.table_value_adapter import TableDataAdapter
-from core.invoice_generator.models.table_adapter import ResolvedTableData
-from core.invoice_generator.config.table_value_adapter.helpers import (
+from core.invoice_generator.mappers import TableDataMapper
+from core.invoice_generator.mappers.model import ResolvedTableData
+from core.invoice_generator.mappers.helpers import (
     extract_table_data,
     merge_static_content,
     extract_summaries,

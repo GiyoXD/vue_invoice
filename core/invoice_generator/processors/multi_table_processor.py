@@ -12,7 +12,7 @@ from ..builders.layout_builder import LayoutBuilder
 from ..builders.table import TableFooterBuilder
 from ..styling.models import StylingConfigModel
 from ..models.footer import FooterData
-from ..config.builder_config_resolver import BuilderConfigResolver
+from ..resolvers.sheet_config_resolver import SheetConfigResolver
 
 logger = logging.getLogger(__name__)
 from core.system_config import ConfigurationError
@@ -116,8 +116,8 @@ class MultiTableProcessor(SheetProcessor):
         return True
 
     def _resolve_all_tables_data(self) -> Tuple[Optional[List], List]:
-        """Resolves all tables data using BuilderConfigResolver."""
-        initial_resolver = BuilderConfigResolver(
+        """Resolves all tables data using SheetConfigResolver."""
+        initial_resolver = SheetConfigResolver(
             config_loader=self.config_loader,
             sheet_name=self.sheet_name,
             worksheet=self.output_worksheet,

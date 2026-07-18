@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Dict, List, Optional, Any
 
 class ResolvedTableFooter(BaseModel):
+    grand_total: Optional[Dict[str, Any]] = None
     leather_summary: Optional[Dict[str, Any]] = None
     weight_summary: Optional[Dict[str, Any]] = None
     pallet_summary_total: Optional[int] = None

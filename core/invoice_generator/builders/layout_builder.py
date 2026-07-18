@@ -11,7 +11,7 @@ from .json_template_builder import JsonTemplateStateBuilder
 from ..models.layout import SheetLayoutState
 from ..models.config.styling import SheetStylingModel
 from ..models.config.layout import SheetLayoutModel
-from ..models.table_adapter import ResolvedTableData
+from ..mappers.model import ResolvedTableData
 
 # Initialize logger for this module
 logger = logging.getLogger(__name__)
@@ -147,7 +147,7 @@ class LayoutBuilder:
         
         resolved_data = self.resolved_data
         if self.skip_data_table_builder:
-            from ..models.table_adapter import ResolvedTableData
+            from ..mappers.model import ResolvedTableData
             resolved_data = ResolvedTableData(data_rows=[])
             
         sheet_layout = copy.deepcopy(self.sheet_layout)
@@ -165,7 +165,7 @@ class LayoutBuilder:
         resolved_data.data_rows = apply_vertical_merges(resolved_data.data_rows)
             
         if not resolved_data.footer:
-            from ..models.table_adapter import ResolvedTableFooter
+            from ..mappers.model import ResolvedTableFooter
             resolved_data.footer = ResolvedTableFooter()
             
         if not resolved_data.footer.weight_summary:

@@ -3,7 +3,7 @@ import sys
 import logging
 from .base_processor import SheetProcessor
 from ..builders.layout_builder import LayoutBuilder
-from ..config.builder_config_resolver import BuilderConfigResolver
+from ..resolvers.sheet_config_resolver import SheetConfigResolver
 
 logger = logging.getLogger(__name__)
 

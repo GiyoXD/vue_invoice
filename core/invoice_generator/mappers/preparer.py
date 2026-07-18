@@ -43,7 +43,7 @@ def parse_mapping_rules(
             static_column_id = rule_value.get("column_header_id")
             target_col_idx = column_id_map.get(static_column_id)
 
-            if target_col_idx:
+            if target_col_idx is not None:
                 parsed_result["static_column_header_name"] = idx_to_header_map.get(target_col_idx)
                 parsed_result["col1_index"] = target_col_idx
                 parsed_result["initial_static_col1_values"] = rule_value.get("values", [])
