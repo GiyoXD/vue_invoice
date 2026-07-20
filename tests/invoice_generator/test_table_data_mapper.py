@@ -2,13 +2,10 @@ import pytest
 from typing import Dict, Any
 
 from core.invoice_generator.mappers import TableDataMapper
-from core.invoice_generator.mappers.model import ResolvedTableData
-from core.invoice_generator.mappers.helpers import (
-    extract_table_data,
-    merge_static_content,
-    extract_summaries,
-    format_pallet_counts
-)
+from core.invoice_generator.mappers.models import ResolvedTableData
+from core.invoice_generator.mappers.transforms import extract_table_data
+from core.invoice_generator.mappers.table import merge_static_content
+from core.invoice_generator.mappers.footer import extract_summaries, format_pallet_counts
 
 
 def test_helpers_extract_table_data():

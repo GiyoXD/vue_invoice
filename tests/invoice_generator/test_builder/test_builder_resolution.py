@@ -3,7 +3,7 @@ from openpyxl import Workbook
 from core.invoice_generator.builders.table.builder import TableBuilder, TableBuilderConfig
 from core.invoice_generator.models.config.layout import SheetLayoutModel
 from core.invoice_generator.models.config.styling import SheetStylingModel
-from core.invoice_generator.mappers.model import ResolvedTableData
+from core.invoice_generator.mappers.models import ResolvedTableData
 
 def test_resolve_columns_packing_list():
     wb = Workbook()

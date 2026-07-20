@@ -2,8 +2,8 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 import traceback
 
-from core.invoice_generator.mappers.model import ResolvedTableData
-from core.invoice_generator.mappers.preparer import _to_numeric
+from core.invoice_generator.mappers.models import ResolvedTableData
+from core.invoice_generator.utils.math_utils import to_numeric
 from .table_grid import Grid
 from .base import TableSectionBuilder
 
@@ -85,7 +85,7 @@ class DataTableBuilderStyler(TableSectionBuilder):
                     if isinstance(value, dict) and value.get('type') == 'formula':
                         self.grid.write_formula(i, col_id, value.get('template', ''), value.get('inputs', []), context='data')
                     else:
-                        coerced_value = _to_numeric(value)
+                        coerced_value = to_numeric(value)
                         self.grid.write(i, col_id, coerced_value, context='data')
                 
                 # Handle columns defined in header but missing from row_data
