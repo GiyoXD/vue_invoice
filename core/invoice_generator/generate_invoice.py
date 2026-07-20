@@ -9,8 +9,7 @@ from pathlib import Path
 from typing import Optional, Dict, Any, List
 import openpyxl
 
-from core.invoice_generator.config.config_reader import ConfigFileReader
-from core.invoice_generator.config.config_store import ConfigStore
+from core.invoice_generator.config import ConfigFileReader, ConfigStore
 from core.invoice_generator.builders.deep_sheet_builder import DeepSheetBuilder
 from core.invoice_generator.processors.single_table_processor import SingleTableProcessor
 from core.invoice_generator.processors.multi_table_processor import MultiTableProcessor

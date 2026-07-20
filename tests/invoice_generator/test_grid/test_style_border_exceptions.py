@@ -1,8 +1,7 @@
 import pytest
 import json
 from pathlib import Path
-from core.invoice_generator.config.config_reader import ConfigFileReader
-from core.invoice_generator.config.config_store import ConfigStore
+from core.invoice_generator.config import ConfigFileReader, ConfigStore
 from core.invoice_generator.styling.style_registry import StyleRegistry
 from core.invoice_generator.styling.border_resolver import BorderResolver
 from core.invoice_generator.builders.table.table_grid import TableGrid
