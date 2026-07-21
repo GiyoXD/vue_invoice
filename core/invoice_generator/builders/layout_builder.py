@@ -12,6 +12,7 @@ from ..models.layout import SheetLayoutState
 from ..models.config.styling import SheetStylingModel
 from ..models.config.layout import SheetLayoutModel
 from ..mappers.models import ResolvedTableData
+from .summary import SummaryBuilder
 
 # Initialize logger for this module
 logger = logging.getLogger(__name__)
@@ -279,13 +280,10 @@ class LayoutBuilder:
                 payload.setdefault('weight_gross', payload.get('col_gross', 0.0))
                 payload.setdefault('leather_summary', [])
 
-                from .table.summary import SummaryBuilder
                 summary_builder = SummaryBuilder(
-                    worksheet=self.worksheet,
+                    grid=self.grid,
                     summary_config=self.sheet_layout.summary,
-                    payload=payload,
-                    start_row=self.next_row_after_footer,
-                    last_grid=self.grid
+                    payload=payload
                 )
                 self.next_row_after_footer = summary_builder.build()
             except Exception as e:
