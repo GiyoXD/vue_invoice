@@ -75,7 +75,7 @@ def test_helpers_extract_summaries():
         "weight_summary": "w_sum",
         "pallet_summary_total": 4
     }
-    l, w, p = extract_summaries(data_source_dict, footer_data={}, table_key=None)
+    l, w, p = extract_summaries(data_source_dict, footer_data={})
     assert l == "l_sum"
     assert w == "w_sum"
     assert p == 4
@@ -86,7 +86,7 @@ def test_helpers_extract_summaries():
             "col_pallet_count": 10
         }
     }
-    _, _, p = extract_summaries(None, footer_data, table_key=None)
+    _, _, p = extract_summaries(None, footer_data)
     assert p == 10
 
     # Multi-table table_totals list
@@ -96,33 +96,48 @@ def test_helpers_extract_summaries():
             {"col_pallet_count": 5}
         ]
     }
-    _, _, p0 = extract_summaries(None, footer_data_multi, table_key=0)
-    _, _, p1 = extract_summaries(None, footer_data_multi, table_key=1)
+    _, _, p0 = extract_summaries(None, footer_data_multi)
     assert p0 == 3
-    assert p1 == 5
 
 
 def test_helpers_format_pallet_counts():
-    """Verify that format_pallet_counts formats counts and carries values forward correctly."""
+    """Verify that format_pallet_counts carries values forward for vertical merging."""
     data_rows = [
-        {"col_item": "Item 1", "col_pallet_count": 1},
+        {"col_item": "Item 1", "col_pallet_count": "1-5"},
         {"col_item": "Item 2", "col_pallet_count": 0},
-        {"col_item": "Item 3", "col_pallet_count": 1}
+        {"col_item": "Item 3", "col_pallet_count": "2-5"}
     ]
-    footer_data = {
-        "grand_total": {
-            "col_pallet_count": 5
-        }
-    }
     format_pallet_counts(
         data_rows=data_rows,
         num_data_rows=3,
-        pallet_col_id="col_pallet_count",
-        footer_data=footer_data,
-        table_key=None
+        pallet_col_id="col_pallet_count"
     )
 
-    # 1-5, then carry 1-5 forward, then next is 2-5
     assert data_rows[0]["col_pallet_count"] == "1-5"
     assert data_rows[1]["col_pallet_count"] == "1-5"
     assert data_rows[2]["col_pallet_count"] == "2-5"
+
+
+def test_mapping_context_and_rule_engine():
+    """Verify MappingContext initialization and RuleEngine evaluation."""
+    from core.invoice_generator.mappers import MappingContext, RuleEngine
+
+    context = MappingContext(
+        data_source_type="aggregation",
+        data_source=[{"col_a": "val1"}],
+        DAF_mode=True,
+        custom_mode=False
+    )
+    assert context.DAF_mode is True
+    assert context.custom_mode is False
+
+    row_dict = {}
+    rule = {
+        "fallback": {
+            "daf": "DAF Value",
+            "standard": "Standard Value"
+        }
+    }
+    RuleEngine.evaluate_column_rule("col_test", rule, row_dict, context)
+    assert row_dict["col_test"] == "DAF Value"
+

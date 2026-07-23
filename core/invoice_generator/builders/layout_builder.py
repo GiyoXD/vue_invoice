@@ -12,7 +12,9 @@ from ..models.layout import SheetLayoutState
 from ..models.config.styling import SheetStylingModel
 from ..models.config.layout import SheetLayoutModel
 from ..mappers.models import ResolvedTableData
+from ..mappers.footer import resolve_summary_payload
 from .summary import SummaryBuilder
+
 
 # Initialize logger for this module
 logger = logging.getLogger(__name__)
@@ -257,28 +259,10 @@ class LayoutBuilder:
         if self.is_last_table and self.sheet_layout.summary and self.sheet_layout.summary.rows:
             logger.info("Building page-level summary section")
             try:
-                # Prepare payload
-                payload = {}
-                if self.invoice_data and 'footer_data' in self.invoice_data:
-                    footer_data_dict = self.invoice_data['footer_data']
-                    payload.update(footer_data_dict.get('grand_total', {}))
-                    payload['leather_summary'] = footer_data_dict.get('leather_summary', [])
-                
-                # Fetch pallet count from footer_data or default
-                pallet_count = 0
-                if self.invoice_data and 'footer_data' in self.invoice_data:
-                    grand_total = self.invoice_data['footer_data'].get('grand_total', {})
-                    pallet_count = grand_total.get('col_pallet_count', grand_total.get('pallet_count', 0))
-                
-                # Fallback to self.footer_data pallet count
-                if not pallet_count and self.footer_data:
-                    pallet_count = self.footer_data.total_pallets
-                
-                payload.setdefault('pallet_count', int(pallet_count))
-                payload.setdefault('multiple', "S" if payload['pallet_count'] != 1 else "")
-                payload.setdefault('weight_net', payload.get('col_net', 0.0))
-                payload.setdefault('weight_gross', payload.get('col_gross', 0.0))
-                payload.setdefault('leather_summary', [])
+                payload = resolve_summary_payload(
+                    invoice_data=self.invoice_data,
+                    footer_data_model=self.footer_data
+                )
 
                 summary_builder = SummaryBuilder(
                     grid=self.grid,
@@ -289,6 +273,7 @@ class LayoutBuilder:
             except Exception as e:
                 logger.error(f"[LayoutBuilder] SummaryBuilder failed: {e}", exc_info=True)
                 return False
+
 
         # 7. Template Footer Restoration
         if self.template_state_builder and not self.skip_template_footer_restoration:

@@ -11,6 +11,7 @@ from .base_processor import SheetProcessor
 from ..builders.layout_builder import LayoutBuilder
 from ..builders.table import TableFooterBuilder
 from ..styling.models import StylingConfigModel
+from ..mappers.footer import resolve_summary_payload
 from ..models.footer import FooterData
 from ..resolvers.sheet_config_resolver import SheetConfigResolver
 
@@ -204,17 +205,11 @@ class MultiTableProcessor(SheetProcessor):
                 global_pallets = int(grand_total['pallet_count'])
 
         # Build the payload
-        payload = {}
-        if self.invoice_data and 'footer_data' in self.invoice_data:
-            footer_data_dict = self.invoice_data['footer_data']
-            payload.update(footer_data_dict.get('grand_total', {}))
-            payload['leather_summary'] = footer_data_dict.get('leather_summary', [])
-            
-        payload.setdefault('pallet_count', global_pallets)
-        payload.setdefault('multiple', "S" if payload['pallet_count'] != 1 else "")
-        payload.setdefault('weight_net', payload.get('col_net', 0.0))
-        payload.setdefault('weight_gross', payload.get('col_gross', 0.0))
-        payload.setdefault('leather_summary', [])
+        payload = resolve_summary_payload(
+            invoice_data=self.invoice_data,
+            footer_data_model=None
+        )
+
 
         # Reuse last_grid's registries to build gt_grid without duplicating Registry/Styling setups
         from ..builders.table.table_grid import Grid

@@ -11,7 +11,9 @@ from ...models.layout import SheetLayoutState
 from ...models.config.styling import SheetStylingModel
 from ...models.config.layout import SheetLayoutModel, ColumnDef, FooterConfigModel
 from ...mappers.models import ResolvedTableData
+from ...mappers.footer import resolve_summary_payload
 from .table_grid import Grid
+
 
 logger = logging.getLogger(__name__)
 
@@ -163,20 +165,22 @@ class TableBuilder:
                 logger.error(f"[TableBuilder] HS Code Builder crashed: {e}", exc_info=True)
                 return False
 
-            # Build the payload
-            payload = {}
+            # Build the payload using resolve_summary_payload
             footer = self.config.resolved_data.footer if self.config.resolved_data else None
-            if footer and footer.grand_total:
-                payload.update(footer.grand_total)
-            if footer and footer.leather_summary:
-                payload['leather_summary'] = footer.leather_summary
-            
-            pallet_count = self.footer_data.total_pallets if self.footer_data else 0
-            payload.setdefault('pallet_count', pallet_count)
-            payload.setdefault('multiple', "S" if payload['pallet_count'] != 1 else "")
-            payload.setdefault('weight_net', payload.get('col_net', 0.0))
-            payload.setdefault('weight_gross', payload.get('col_gross', 0.0))
-            payload.setdefault('leather_summary', [])
+            invoice_data_for_payload = None
+            if footer:
+                invoice_data_for_payload = {
+                    'footer_data': {
+                        'grand_total': footer.grand_total or {},
+                        'leather_summary': footer.leather_summary or []
+                    }
+                }
+
+            payload = resolve_summary_payload(
+                invoice_data=invoice_data_for_payload,
+                footer_data_model=self.footer_data
+            )
+
 
             try:
                 footer_builder = TableFooterBuilder(

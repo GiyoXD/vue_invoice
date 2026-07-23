@@ -5,8 +5,7 @@ from .row_builder import prepare_data_rows
 from .static_merger import merge_static_content
 from ..rules import parse_mapping_rules
 from ..transforms import extract_table_data
-from ..models import ResolvedTableData
-from ..footer import TableFooterMapper
+from ..models import ResolvedTableData, MappingContext
 from core.invoice_generator.models.config.layout import SheetLayoutModel
 
 logger = logging.getLogger(__name__)
@@ -28,35 +27,52 @@ class TableDataMapper:
     
     def __init__(
         self,
-        data_source_type: str,
-        data_source: Union[Dict, List, None],
-        mapping_rules: Dict[str, Any],
+        data_source_type: str = "aggregation",
+        data_source: Union[Dict, List, None] = None,
+        mapping_rules: Optional[Dict[str, Any]] = None,
         sheet_layout: Optional[SheetLayoutModel] = None,
         DAF_mode: bool = False,
         custom_mode: bool = False,
         static_content: Optional[Dict[str, Any]] = None,
         pricing_net_weight: bool = False,
         footer_data: Optional[Dict[str, Any]] = None,
-        table_key: Optional[str] = None
+        context: Optional[MappingContext] = None
     ):
-        self.data_source_type = data_source_type
-        self.data_source = data_source
-        self.mapping_rules = mapping_rules
-        self.sheet_layout = sheet_layout
-        self.DAF_mode = DAF_mode
-        self.custom_mode = custom_mode
-        self.static_content = static_content or {}
-        self.pricing_net_weight = pricing_net_weight
-        self.footer_data = footer_data or {}
-        self.table_key = table_key
+        if context is not None:
+            self.context = context
+        else:
+            self.context = MappingContext(
+                data_source_type=data_source_type,
+                data_source=data_source,
+                mapping_rules=mapping_rules or {},
+                sheet_layout=sheet_layout,
+                DAF_mode=DAF_mode,
+                custom_mode=custom_mode,
+                static_content=static_content or {},
+                pricing_net_weight=pricing_net_weight,
+                footer_data=footer_data or {}
+            )
+
+        self.data_source_type = self.context.data_source_type
+        self.data_source = self.context.data_source
+        self.mapping_rules = self.context.mapping_rules
+        self.sheet_layout = self.context.sheet_layout
+        self.DAF_mode = self.context.DAF_mode
+        self.custom_mode = self.context.custom_mode
+        self.static_content = self.context.static_content
+        self.pricing_net_weight = self.context.pricing_net_weight
+        self.footer_data = self.context.footer_data
         
         self.column_id_map = {}
         self.column_map = {}
         self.parent_column_ids = []
         
-        if sheet_layout:
+        if self.sheet_layout:
             bundled_columns, column_map, column_id_map, _ = (
-                sheet_layout.structure.resolve_mappings(DAF_mode=DAF_mode, custom_mode=custom_mode)
+                self.sheet_layout.structure.resolve_mappings(
+                    DAF_mode=self.DAF_mode,
+                    custom_mode=self.custom_mode
+                )
             )
             self.column_id_map = column_id_map
             self.column_map = column_map
@@ -74,13 +90,16 @@ class TableDataMapper:
         Returns:
             ResolvedTableData model instance containing prepared rows.
         """
+        # Lazy import to avoid circular dependency
+        from ..footer import TableFooterMapper
+
         # Parse mapping rules first
         parsed = self._parse_mapping_rules()
         
         # Extract data for this specific table (if multi-table)
         table_data_source = extract_table_data(self.data_source, self.data_source_type)
         
-        # Prepare data rows using the existing data_preparer logic
+        # Prepare data rows using data_preparer logic
         data_rows, num_data_rows = prepare_data_rows(
             data_source_type=self.data_source_type,
             data_source=table_data_source,
@@ -111,12 +130,7 @@ class TableDataMapper:
         )
         
         # Resolve footer summaries internally
-        footer_mapper = TableFooterMapper(
-            data_source_type=self.data_source_type,
-            data_source=self.data_source,
-            footer_data=self.footer_data,
-            table_key=self.table_key
-        )
+        footer_mapper = TableFooterMapper(context=self.context)
         resolved_footer = footer_mapper.resolve(data_rows, num_data_rows)
         
         return ResolvedTableData(
@@ -126,7 +140,7 @@ class TableDataMapper:
         )
     
     def _parse_mapping_rules(self) -> Dict[str, Any]:
-        """Parse mapping rules using existing data_preparer logic."""
+        """Parse mapping rules using existing logic."""
         if self._parsed_rules is None:
             self._parsed_rules = parse_mapping_rules(
                 mapping_rules=self.mapping_rules,
@@ -157,31 +171,20 @@ class TableDataMapper:
         DAF_mode = args.DAF if args and hasattr(args, 'DAF') else False
         custom_mode = args.custom if args and hasattr(args, 'custom') else False
         
-        static_content = {}
-        if layout_config:
-            static_content = layout_config.get('static_content', {})
-            
         invoice_data = context_config.get('invoice_data') or {}
         metadata = invoice_data.get('metadata')
-        
         if metadata is None:
             raise TableDataMapperError("CRITICAL: Invoice 'metadata' is missing or null in the provided JSON data.")
             
-        pricing_net_weight = metadata.get('pricing_net_weight', False)
-        
-        sheet_layout = None
-        if layout_config:
-            sheet_layout = SheetLayoutModel.model_validate(layout_config.get('sheet_config', {}) or layout_config)
-
-        return TableDataMapper(
-            data_source_type=data_config.get('data_source_type', 'aggregation'),
-            data_source=data_config.get('data_source'),
-            mapping_rules=data_config.get('mapping_rules', {}),
-            sheet_layout=sheet_layout,
-            DAF_mode=DAF_mode,
-            custom_mode=custom_mode,
-            static_content=static_content,
-            pricing_net_weight=pricing_net_weight,
-            footer_data=data_config.get('footer_data', {}),
-            table_key=data_config.get('table_key')
+        context = MappingContext.from_bundles(
+            data_config=data_config,
+            context_config={
+                **context_config,
+                'DAF_mode': DAF_mode,
+                'custom_mode': custom_mode,
+                'pricing_net_weight': metadata.get('pricing_net_weight', False)
+            },
+            layout_config=layout_config
         )
+
+        return TableDataMapper(context=context)
