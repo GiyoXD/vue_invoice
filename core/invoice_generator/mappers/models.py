@@ -25,7 +25,7 @@ class MappingContext:
     sheet_layout: Optional[Any] = None
     DAF_mode: bool = False
     custom_mode: bool = False
-    static_content: Dict[str, Any] = field(default_factory=dict)
+    static_payload: Dict[str, Any] = field(default_factory=dict)
     pricing_net_weight: bool = False
     footer_data: Dict[str, Any] = field(default_factory=dict)
 
@@ -42,6 +42,10 @@ class MappingContext:
             from core.invoice_generator.models.config.layout import SheetLayoutModel
             sheet_layout = SheetLayoutModel.model_validate(layout_config.get('sheet_config', {}) or layout_config)
 
+        raw_static = data_config.get('static_payload') or data_config.get('static_content') or {}
+        if isinstance(raw_static, dict) and 'static' in raw_static and isinstance(raw_static['static'], dict):
+            raw_static = raw_static['static']
+
         return cls(
             data_source_type=data_config.get('data_source_type', 'aggregation'),
             data_source=data_config.get('data_source'),
@@ -49,7 +53,7 @@ class MappingContext:
             sheet_layout=sheet_layout,
             DAF_mode=context_config.get('DAF_mode', False),
             custom_mode=context_config.get('custom_mode', False),
-            static_content=data_config.get('static_content', {}),
+            static_payload=raw_static or {},
             pricing_net_weight=context_config.get('pricing_net_weight', False),
             footer_data=data_config.get('footer_data', {})
         )

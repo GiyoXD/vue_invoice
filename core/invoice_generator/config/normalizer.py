@@ -110,4 +110,10 @@ def normalize_layout(sheet_config: Dict[str, Any], defaults: Dict[str, Any]) -> 
                 sheet_footer[key] = copy.deepcopy(default_val)
         merged_sheet_config['footer'] = sheet_footer
 
+    # Merge static_payload (fallback to defaults if sheet layout has no static_payload or missing col_static)
+    default_static = defaults.get('static_payload')
+    sheet_static = merged_sheet_config.get('static_payload')
+    if (not sheet_static or (isinstance(sheet_static, dict) and 'col_static' not in sheet_static)) and default_static:
+        merged_sheet_config['static_payload'] = copy.deepcopy(default_static)
+
     return merged_sheet_config

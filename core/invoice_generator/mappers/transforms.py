@@ -175,44 +175,45 @@ def prepare_data_rows(
     return data_rows, num_data_rows
 
 
-def merge_static_content(
+def resolve_static_placeholders(
+    static_payload: Dict[str, Any],
+    desc_fallback_str: str = ""
+) -> Dict[str, Any]:
+    """Resolve placeholders in static_payload dictionary and return resolved static_payload."""
+    if not static_payload or 'col_static' not in static_payload:
+        return static_payload or {}
+
+    desc_str = desc_fallback_str or static_payload.get('description_fallback', "")
+    resolved_static = dict(static_payload)
+    static_values = static_payload.get('col_static', [])
+    if isinstance(static_values, list):
+        new_static_values = []
+        for val in static_values:
+            if isinstance(val, str) and "{col_desc_fallback}" in val:
+                val = val.replace("{col_desc_fallback}", str(desc_str or ""))
+            new_static_values.append(val)
+        resolved_static['col_static'] = new_static_values
+
+    return resolved_static
+
+
+def populate_static_content(
     data_rows: List[Dict[str, Any]],
-    static_content: Dict[str, Any],
-    dynamic_mapping_rules: Dict[str, Any],
-    DAF_mode: bool,
-    custom_mode: bool
+    static_payload: Dict[str, Any]
 ) -> None:
-    """Merge static content into data rows."""
-    if not static_content or 'col_static' not in static_content:
+    """Populate resolved static payload into data rows."""
+    if not static_payload or 'col_static' not in static_payload:
         return
 
-    static_values = static_content['col_static']
+    static_values = static_payload['col_static']
     static_col_id = 'col_static'
     
-    if static_values and len(data_rows) > 0:
-        desc_fallback_str = ""
-        for rule_key, rule in dynamic_mapping_rules.items():
-            if rule_key == 'col_desc' and isinstance(rule, dict):
-                fallback_cfg = rule.get('fallback')
-                if isinstance(fallback_cfg, dict):
-                    if DAF_mode and 'daf' in fallback_cfg:
-                        desc_fallback_str = fallback_cfg['daf']
-                    elif custom_mode and 'custom' in fallback_cfg:
-                        desc_fallback_str = fallback_cfg['custom']
-                    elif 'standard' in fallback_cfg:
-                        desc_fallback_str = fallback_cfg['standard']
-                elif fallback_cfg is not None:
-                    desc_fallback_str = str(fallback_cfg)
-                break
-        
+    if static_values:
         num_static_values = len(static_values)
         while len(data_rows) < num_static_values:
             data_rows.append({})
 
         for i, static_value in enumerate(static_values):
-            if isinstance(static_value, str) and "{col_desc_fallback}" in static_value:
-                static_value = static_value.replace("{col_desc_fallback}", str(desc_fallback_str))
-                
             data_rows[i][static_col_id] = static_value
 
 
@@ -282,7 +283,8 @@ def extract_summaries(
 __all__ = [
     "extract_table_data",
     "prepare_data_rows",
-    "merge_static_content",
+    "resolve_static_placeholders",
+    "populate_static_content",
     "format_pallet_counts",
     "extract_summaries"
 ]

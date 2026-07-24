@@ -3,6 +3,31 @@ from typing import Any, Dict, Optional, Union
 from .models import MappingContext
 
 
+def get_fallback_value(
+    mapping_rule: Dict[str, Any],
+    DAF_mode: bool,
+    custom_mode: bool
+) -> Optional[Any]:
+    """Resolves fallback value based on execution flags."""
+    if not isinstance(mapping_rule, dict):
+        return None
+
+    fallback_config = mapping_rule.get('fallback')
+    if isinstance(fallback_config, dict):
+        if DAF_mode and 'daf' in fallback_config:
+            return fallback_config['daf']
+        elif custom_mode and 'custom' in fallback_config:
+            return fallback_config['custom']
+        elif 'standard' in fallback_config:
+            return fallback_config['standard']
+        elif 'default' in fallback_config:
+            return fallback_config['default']
+    elif fallback_config is not None:
+        return fallback_config
+
+    return None
+
+
 def apply_fallback(
     row_dict: Dict[str, Any],
     target_id: str,
@@ -11,23 +36,9 @@ def apply_fallback(
     custom_mode: bool
 ):
     """Applies fallback value based on execution flags."""
-    fallback_config = mapping_rule.get('fallback')
-    if isinstance(fallback_config, dict):
-        if DAF_mode and 'daf' in fallback_config:
-            row_dict[target_id] = fallback_config['daf']
-            return
-        elif custom_mode and 'custom' in fallback_config:
-            row_dict[target_id] = fallback_config['custom']
-            return
-        elif 'standard' in fallback_config:
-            row_dict[target_id] = fallback_config['standard']
-            return
-        elif 'default' in fallback_config:
-            row_dict[target_id] = fallback_config['default']
-            return
-    elif fallback_config is not None:
-        row_dict[target_id] = fallback_config
-        return
+    val = get_fallback_value(mapping_rule, DAF_mode, custom_mode)
+    if val is not None:
+        row_dict[target_id] = val
 
 
 def parse_formula_def(formula_def: Union[str, Dict[str, Any]]) -> Optional[Dict[str, Any]]:
@@ -177,6 +188,7 @@ def parse_mapping_rules(
 
 __all__ = [
     "RuleEngine",
+    "get_fallback_value",
     "apply_fallback",
     "parse_formula_def",
     "resolve_mode_formula",

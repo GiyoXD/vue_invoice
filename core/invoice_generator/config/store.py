@@ -1,3 +1,4 @@
+import copy
 import logging
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
@@ -68,13 +69,44 @@ class ConfigStore:
         defaults = self._styling_bundle.get('defaults', {})
         return normalize_styling(sheet_styling, defaults)
     
+    @staticmethod
+    @lru_cache(maxsize=1)
+    def _get_master_defaults() -> Dict[str, Any]:
+        """
+        Load defaults section from master_config.json as global fallback.
+        
+        NOTE: This is cached in process memory via @lru_cache.
+        If master_config.json on disk is modified while the dev server is running,
+        you MUST restart the dev server (.\start_dev.ps1) or call
+        ConfigStore._get_master_defaults.cache_clear() for changes to take effect.
+        """
+        try:
+            from core.system_config import sys_config
+            import json
+            master_path = sys_config.blueprints_root / "mapper" / "master_config.json"
+            if master_path.exists():
+                with open(master_path, 'r', encoding='utf-8') as f:
+                    master_data = json.load(f)
+                    return master_data.get('layout_bundle', {}).get('defaults', {})
+        except Exception as e:
+            logger.warning(f"Could not load master_config.json defaults: {e}")
+        return {}
+
     def get_layout_config(self, sheet_name: str) -> Dict[str, Any]:
         """
         Get layout configuration for a sheet (headers, blanks, static content, merges),
         with global defaults merged in.
         """
         sheet_config = self._layout_bundle.get(sheet_name, {})
-        defaults = self._layout_bundle.get('defaults', {})
+        defaults = copy.deepcopy(self._layout_bundle.get('defaults', {}))
+        master_defaults = self._get_master_defaults()
+        
+        # Merge master defaults for any missing default keys (like static_payload, mappings, footer)
+        if master_defaults:
+            for k, v in master_defaults.items():
+                if k not in defaults:
+                    defaults[k] = copy.deepcopy(v)
+
         return normalize_layout(sheet_config, defaults)
     
     def get_data_config(self, sheet_name: str) -> Dict[str, Any]:

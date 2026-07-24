@@ -5,7 +5,8 @@ from core.invoice_generator.mappers import (
     TableDataMapper,
     ResolvedTableData,
     extract_table_data,
-    merge_static_content,
+    resolve_static_placeholders,
+    populate_static_content,
     extract_summaries,
     format_pallet_counts
 )
@@ -31,24 +32,20 @@ def test_helpers_extract_table_data():
     assert extract_table_data(None, "aggregation") is None
 
 
-def test_helpers_merge_static_content():
-    """Verify merge_static_content merges static values and resolves fallback descriptions."""
+def test_helpers_populate_static_content():
+    """Verify resolve_static_placeholders and populate_static_content sequence."""
     data_rows = [{"col_item": "dynamic1"}, {"col_item": "dynamic2"}]
-    static_content = {"col_static": ["Static1", "{col_desc_fallback}"]}
-    dynamic_mapping_rules = {
-        "col_desc": {
-            "fallback": {
-                "standard": "Standard Desc"
-            }
-        }
-    }
+    static_payload = {"col_static": ["Static1", "{col_desc_fallback}"]}
 
-    merge_static_content(
+    resolved_static = resolve_static_placeholders(
+        static_payload=static_payload,
+        desc_fallback_str="Standard Desc"
+    )
+    assert resolved_static["col_static"][1] == "Standard Desc"
+
+    populate_static_content(
         data_rows=data_rows,
-        static_content=static_content,
-        dynamic_mapping_rules=dynamic_mapping_rules,
-        DAF_mode=False,
-        custom_mode=False
+        static_payload=resolved_static
     )
 
     # Values should be merged into col_static
@@ -57,13 +54,10 @@ def test_helpers_merge_static_content():
 
     # Test extending rows if we have more static values than data rows
     data_rows_short = [{"col_item": "dynamic1"}]
-    static_content_long = {"col_static": ["Static1", "Static2"]}
-    merge_static_content(
+    static_payload_long = {"col_static": ["Static1", "Static2"]}
+    populate_static_content(
         data_rows=data_rows_short,
-        static_content=static_content_long,
-        dynamic_mapping_rules={},
-        DAF_mode=False,
-        custom_mode=False
+        static_payload=static_payload_long
     )
     assert len(data_rows_short) == 2
     assert data_rows_short[0]["col_static"] == "Static1"
@@ -162,5 +156,27 @@ def test_table_binding_single_input_mapping():
     mapper = TableDataMapper(binding=binding)
     assert mapper.binding is binding
     assert mapper.data_source == binding.data
+
+
+def test_populate_static_content_empty_data_rows():
+    """Verify resolve_static_placeholders + populate_static_content when data_rows is initially empty."""
+    data_rows = []
+    static_payload = {"col_static": ["VENDOR#:", "Des: {col_desc_fallback}", "MADE IN CAMBODIA"]}
+
+    resolved_static = resolve_static_placeholders(
+        static_payload=static_payload,
+        desc_fallback_str="Standard Cow Leather"
+    )
+
+    populate_static_content(
+        data_rows=data_rows,
+        static_payload=resolved_static
+    )
+
+    assert len(data_rows) == 3
+    assert data_rows[0]["col_static"] == "VENDOR#:"
+    assert data_rows[1]["col_static"] == "Des: Standard Cow Leather"
+    assert data_rows[2]["col_static"] == "MADE IN CAMBODIA"
+
 
 

@@ -82,7 +82,8 @@ class DataFlowConfigModel(BaseModel):
     mappings: Dict[str, MappingRuleModel] = Field(default_factory=dict)
 
 class StaticContentConfigModel(BaseModel):
-    static: Dict[str, List[str]] = Field(default_factory=dict)
+    static_payload: Dict[str, Any] = Field(default_factory=dict)
+    static: Dict[str, Any] = Field(default_factory=dict)
 
 class FooterConfigModel(BaseModel):
     type: str = "regular"
@@ -97,7 +98,7 @@ class HSCodeConfigModel(BaseModel):
 class SheetLayoutModel(BaseModel):
     structure: StructureConfigModel
     data_flow: DataFlowConfigModel = Field(default_factory=DataFlowConfigModel)
-    content: Optional[StaticContentConfigModel] = None
+    static_payload: Dict[str, Any] = Field(default_factory=dict)
     footer: Optional[FooterConfigModel] = None
     hs_code: Optional[HSCodeConfigModel] = None
     summary: Optional[FooterConfigModel] = None

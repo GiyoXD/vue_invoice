@@ -226,10 +226,10 @@ class ConfigBuilder:
     def _build_sheet_layout(self, sheet: SheetAnalysis) -> Dict[str, Any]:
         """Build layout for a single sheet."""
         layout = {
-            "_sections": ["structure", "data_flow", "content", "footer"],
+            "_sections": ["structure", "data_flow", "static_payload", "footer"],
             "structure": self._build_structure(sheet),
             "data_flow": self._build_data_flow(sheet),
-            "content": self._build_content(sheet),
+            "static_payload": self._build_static_payload(sheet),
             "footer": self._build_footer(sheet)
         }
         
@@ -338,17 +338,24 @@ class ConfigBuilder:
         }
 
     
-    def _build_content(self, sheet: SheetAnalysis) -> Dict[str, Any]:
-        """Build content section for a sheet."""
-        content = {"static": {}}
+    def _build_static_payload(self, sheet: SheetAnalysis) -> Dict[str, Any]:
+        """Build flat static_payload dictionary for a sheet."""
+        static_payload = {}
         
-        if "col_static" in [c.id for c in sheet.columns]:
+        all_col_ids = [c.id for c in sheet.columns]
+        for c in sheet.columns:
+            all_col_ids.extend([child.id for child in c.children])
+
+        if "col_static" in all_col_ids:
             static_lines = []
             if sheet.static_content_hints:
                 static_lines = sheet.static_content_hints.get("static_lines", [])
-            content["static"]["col_static"] = static_lines
+            static_payload["col_static"] = static_lines
+
+        if sheet.static_content_hints and sheet.static_content_hints.get("description_fallback"):
+            static_payload["description_fallback"] = sheet.static_content_hints.get("description_fallback")
         
-        return content
+        return static_payload
     
     def _build_hs_code(self, sheet: SheetAnalysis) -> Optional[Dict[str, Any]]:
         """

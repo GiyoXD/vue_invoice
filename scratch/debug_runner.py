@@ -27,11 +27,19 @@ from core.invoice_generator.models.request import (
 
 def main():
     # Find sample json file if not provided as argument
+    sample_dir = PROJECT_ROOT / "database" / "temp_uploads" / "processed"
+
     if len(sys.argv) > 1:
-        json_path = Path(sys.argv[1])
+        arg_path = Path(sys.argv[1])
+        if arg_path.exists():
+            json_path = arg_path
+        elif (sample_dir / arg_path.name).exists():
+            json_path = sample_dir / arg_path.name
+        else:
+            print(f"Error: JSON file '{sys.argv[1]}' not found directly or in {sample_dir}")
+            return
     else:
-        sample_dir = PROJECT_ROOT / "database" / "temp_uploads" / "processed"
-        target_file = sample_dir / "KB26017-1厂.json"
+        target_file = sample_dir / "test1111111111.json"
         if target_file.exists():
             json_path = target_file
         else:
