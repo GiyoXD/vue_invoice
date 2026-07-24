@@ -66,7 +66,7 @@ def main():
 
 
 
-    from core.invoice_generator.mappers.footer import resolve_summary_payload
+    from core.invoice_generator.mappers import resolve_summary_payload
 
     print("\n--- Testing resolve_summary_payload ---")
     

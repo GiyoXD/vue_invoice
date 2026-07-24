@@ -1,11 +1,14 @@
 import pytest
 from typing import Dict, Any
 
-from core.invoice_generator.mappers import TableDataMapper
-from core.invoice_generator.mappers.models import ResolvedTableData
-from core.invoice_generator.mappers.transforms import extract_table_data
-from core.invoice_generator.mappers.table import merge_static_content
-from core.invoice_generator.mappers.footer import extract_summaries, format_pallet_counts
+from core.invoice_generator.mappers import (
+    TableDataMapper,
+    ResolvedTableData,
+    extract_table_data,
+    merge_static_content,
+    extract_summaries,
+    format_pallet_counts
+)
 
 
 def test_helpers_extract_table_data():
@@ -140,4 +143,24 @@ def test_mapping_context_and_rule_engine():
     }
     RuleEngine.evaluate_column_rule("col_test", rule, row_dict, context)
     assert row_dict["col_test"] == "DAF Value"
+
+
+def test_table_binding_single_input_mapping():
+    """Verify single-input TableBinding construction and mapper resolution."""
+    from core.invoice_generator.mappers import TableBinding, TableDataMapper
+
+    data_config = {
+        "data_source_type": "aggregation",
+        "data_source": [{"col_item": "leather_bag"}],
+        "mapping_rules": {"col_item": {"field": "col_item"}}
+    }
+    context_config = {"DAF_mode": False}
+
+    binding = TableBinding.from_bundles(data_config, context_config)
+    assert binding.data == [{"col_item": "leather_bag"}]
+
+    mapper = TableDataMapper(binding=binding)
+    assert mapper.binding is binding
+    assert mapper.data_source == binding.data
+
 

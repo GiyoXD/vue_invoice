@@ -11,8 +11,7 @@ from .json_template_builder import JsonTemplateStateBuilder
 from ..models.layout import SheetLayoutState
 from ..models.config.styling import SheetStylingModel
 from ..models.config.layout import SheetLayoutModel
-from ..mappers.models import ResolvedTableData
-from ..mappers.footer import resolve_summary_payload
+from ..mappers import ResolvedTableData, resolve_summary_payload
 from .summary import SummaryBuilder
 
 

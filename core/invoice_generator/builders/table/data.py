@@ -2,7 +2,7 @@ import logging
 from typing import Any, Dict, List, Optional, Union
 import traceback
 
-from core.invoice_generator.mappers.models import ResolvedTableData
+from core.invoice_generator.mappers import ResolvedTableData
 from core.invoice_generator.utils.math_utils import to_numeric
 from .table_grid import Grid
 from .base import TableSectionBuilder

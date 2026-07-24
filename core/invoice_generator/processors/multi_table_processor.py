@@ -11,7 +11,7 @@ from .base_processor import SheetProcessor
 from ..builders.layout_builder import LayoutBuilder
 from ..builders.table import TableFooterBuilder
 from ..styling.models import StylingConfigModel
-from ..mappers.footer import resolve_summary_payload
+from ..mappers import resolve_summary_payload
 from ..models.footer import FooterData
 from ..resolvers.sheet_config_resolver import SheetConfigResolver
 

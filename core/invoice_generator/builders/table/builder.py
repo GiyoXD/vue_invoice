@@ -10,8 +10,7 @@ from ...styling.dimension_registry import DimensionRegistry
 from ...models.layout import SheetLayoutState
 from ...models.config.styling import SheetStylingModel
 from ...models.config.layout import SheetLayoutModel, ColumnDef, FooterConfigModel
-from ...mappers.models import ResolvedTableData
-from ...mappers.footer import resolve_summary_payload
+from ...mappers import ResolvedTableData, resolve_summary_payload
 from .table_grid import Grid
 
 
