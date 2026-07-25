@@ -39,7 +39,7 @@ def main():
             print(f"Error: JSON file '{sys.argv[1]}' not found directly or in {sample_dir}")
             return
     else:
-        target_file = sample_dir / "test1111111111.json"
+        target_file = sample_dir / "best111.json"
         if target_file.exists():
             json_path = target_file
         else:

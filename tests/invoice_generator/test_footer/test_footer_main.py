@@ -2,7 +2,6 @@ import pytest
 from core.invoice_generator.builders.table.table_grid import Grid
 from core.invoice_generator.builders.table.footer import TableFooterBuilder
 from core.invoice_generator.styling.style_registry import StyleRegistry
-from core.invoice_generator.models.footer import FooterData
 from core.invoice_generator.models.config.layout import FooterConfigModel
 
 def test_footer_builder_pads_styles_without_erasing_values():
@@ -28,20 +27,10 @@ def test_footer_builder_pads_styles_without_erasing_values():
     ]]
     footer_config = FooterConfigModel(rows=rows)
     
-    footer_data = FooterData(
-        footer_row_start_idx=1,
-        data_start_row=1,
-        data_end_row=5,
-        total_pallets=10,
-        weight_summary=None,
-        leather_summary=None
-    )
-    
     builder = TableFooterBuilder(
         grid=grid,
-        footer_data=footer_data,
         footer_config=footer_config,
-        pallet_count=10
+        payload={"col_pallet_count": 10, "pallet_count": 10, "multiple": "S"}
     )
     builder.build()
     
@@ -61,15 +50,12 @@ def test_footer_builder_pallet_count_templating():
     ]]
     footer_config = FooterConfigModel(rows=rows)
     
-    footer_data = FooterData(
-        footer_row_start_idx=1, data_start_row=1, data_end_row=5, total_pallets=1,
-        weight_summary=None, leather_summary=None
-    )
+
     
     builder1 = TableFooterBuilder(
-        grid=grid, footer_data=footer_data,
+        grid=grid,
         footer_config=footer_config,
-        pallet_count=1
+        payload={"col_pallet_count": 1, "multiple": ""}
     )
     builder1.build()
     assert grid._grid[0][1].value == "1 PALLET"
@@ -77,9 +63,9 @@ def test_footer_builder_pallet_count_templating():
     # Test pluralization
     grid2 = Grid(column_mapping, style_registry)
     builder2 = TableFooterBuilder(
-        grid=grid2, footer_data=footer_data,
+        grid=grid2,
         footer_config=footer_config,
-        pallet_count=5
+        payload={"col_pallet_count": 5, "multiple": "S"}
     )
     builder2.build()
     assert grid2._grid[0][1].value == "5 PALLETS"
@@ -94,13 +80,8 @@ def test_footer_builder_main_footer_merges():
     ]]
     footer_config = FooterConfigModel(rows=rows)
     
-    footer_data = FooterData(
-        footer_row_start_idx=1, data_start_row=1, data_end_row=5, total_pallets=10,
-        weight_summary=None, leather_summary=None
-    )
-    
     builder = TableFooterBuilder(
-        grid=grid, footer_data=footer_data,
+        grid=grid,
         footer_config=footer_config
     )
     builder.build()
@@ -124,15 +105,10 @@ def test_footer_builder_pallet_count_zero_does_not_skip_row():
         {"col_id": "col_qty", "value": "100", "style_context": "footer"}
     ]]
     footer_config = FooterConfigModel(rows=rows)
-    footer_data = FooterData(
-        footer_row_start_idx=1, data_start_row=1, data_end_row=5, total_pallets=0,
-        weight_summary=None, leather_summary=None
-    )
-    
     builder = TableFooterBuilder(
-        grid=grid, footer_data=footer_data,
+        grid=grid,
         footer_config=footer_config,
-        pallet_count=0
+        payload={"col_pallet_count": 0, "pallet_count": 0, "multiple": ""}
     )
     builder.build()
     

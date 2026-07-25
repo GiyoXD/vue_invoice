@@ -31,20 +31,48 @@ class SingleTableProcessor(SheetProcessor):
         layout_state = SheetLayoutState()
         layout_state.advance_to(self.header_row)
 
+        template_state_builder = None
+        json_config = self.config_loader.get_template_json_config() if self.config_loader else None
+        if json_config and self.sheet_name in json_config:
+            from core.invoice_generator.builders.json_template_builder import JsonTemplateStateBuilder
+            try:
+                template_state_builder = JsonTemplateStateBuilder(
+                    sheet_layout_data=json_config[self.sheet_name]
+                )
+            except Exception as e:
+                logger.error(f"Failed to load JsonTemplateStateBuilder for '{self.sheet_name}': {e}")
+
         layout_builder = self._build_table_layout(
             layout_state=layout_state,
             table_key=None,
             config=TableLayoutConfig(
                 is_first_table=True,
-                is_last_table=True,
+                skip_template_footer=True,
                 total_net_weight=float(total_net_weight),
                 total_gross_weight=float(total_gross_weight)
-            )
+            ),
+            template_state_builder=template_state_builder
         )
         
         if not layout_builder:
             logger.error(f"Failed to build layout for sheet '{self.sheet_name}'")
             return False
             
+        current_row = layout_builder.next_row_after_footer
+
+        # 2. Build Page-level Summary
+        current_row = self._build_page_summary(
+            grid=layout_builder.grid,
+            sheet_layout=layout_builder.sheet_layout,
+            footer_data=layout_builder.footer_data
+        )
+
+        # 3. Restore Template Footer
+        self._restore_template_footer(
+            template_state_builder=template_state_builder or layout_builder.template_state_builder,
+            current_row=current_row,
+            last_grid=layout_builder.grid
+        )
+
         logger.info(f"Successfully filled table data/footer for sheet '{self.sheet_name}'")
         return True

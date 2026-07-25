@@ -237,7 +237,8 @@ def format_pallet_counts(
 
 def extract_summaries(
     data_source: Any,
-    footer_data: Dict[str, Any]
+    footer_data: Dict[str, Any],
+    table_key: Optional[str] = None
 ) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[int]]:
     """Extract leather_summary, weight_summary, and pallet_summary_total."""
     leather_summary = None
@@ -258,17 +259,24 @@ def extract_summaries(
             weight_summary = footer_data['add_ons'].get('weight_summary_addon')
             
     if footer_data:
-        if 'grand_total' in footer_data and 'col_pallet_count' in footer_data['grand_total']:
+        if 'grand_total' in footer_data and 'col_pallet_count' in footer_data['grand_total'] and table_key is None:
             pallet_summary_total = int(footer_data['grand_total']['col_pallet_count'])
         
         if pallet_summary_total is None and 'table_totals' in footer_data:
             table_totals = footer_data['table_totals']
-            if isinstance(table_totals, list) and len(table_totals) > 0:
-                tbl_footer = table_totals[0]
+            idx = 0
+            if table_key is not None:
+                try:
+                    idx = int(table_key)
+                except ValueError:
+                    idx = 0
+            if isinstance(table_totals, list) and 0 <= idx < len(table_totals):
+                tbl_footer = table_totals[idx]
                 if 'col_pallet_count' in tbl_footer:
                     pallet_summary_total = int(tbl_footer['col_pallet_count'])
             elif isinstance(table_totals, dict):
-                first_val = next(iter(table_totals.values()), {})
+                key = str(table_key) if table_key is not None else next(iter(table_totals.keys()), "")
+                first_val = table_totals.get(key, next(iter(table_totals.values()), {}))
                 if 'col_pallet_count' in first_val:
                     pallet_summary_total = int(first_val['col_pallet_count'])
                     

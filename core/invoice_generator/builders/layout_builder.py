@@ -37,7 +37,6 @@ class LayoutBuilder:
         args: Any = None,
         total_net_weight: Optional[float] = None,
         total_gross_weight: Optional[float] = None,
-        is_last_table: bool = False,
         skip_template_header_restoration: bool = False,
         skip_header_builder: bool = False,
         skip_data_table_builder: bool = False,
@@ -47,7 +46,8 @@ class LayoutBuilder:
         template_json_config: Optional[Dict[str, Any]] = None,
         layout_state: Optional[SheetLayoutState] = None,
         pre_loaded_images: Optional[List[Image]] = None,
-        invoice_data: Optional[Dict[str, Any]] = None
+        invoice_data: Optional[Dict[str, Any]] = None,
+        table_key: Optional[str] = None
     ):
         """
         Initialize LayoutBuilder with strict model architecture.
@@ -63,7 +63,6 @@ class LayoutBuilder:
         self.args = args
         self.total_net_weight = total_net_weight
         self.total_gross_weight = total_gross_weight
-        self.is_last_table = is_last_table
         
         self.skip_template_header_restoration = skip_template_header_restoration
         self.skip_header_builder = skip_header_builder
@@ -76,6 +75,7 @@ class LayoutBuilder:
         self.layout_state = layout_state or SheetLayoutState()
         self.pre_loaded_images = pre_loaded_images or []
         self.invoice_data = invoice_data
+        self.table_key = table_key
 
         # Store results after build
         self.next_row_after_footer = -1
@@ -177,14 +177,28 @@ class LayoutBuilder:
             }
         if self.invoice_data and 'footer_data' in self.invoice_data:
             footer_dict = self.invoice_data['footer_data']
-            resolved_data.footer.grand_total = footer_dict.get('grand_total', {})
+            table_total = None
+            if self.table_key is not None and 'table_totals' in footer_dict:
+                table_totals = footer_dict['table_totals']
+                if isinstance(table_totals, list):
+                    try:
+                        idx = int(self.table_key)
+                        if 0 <= idx < len(table_totals):
+                            table_total = table_totals[idx]
+                    except ValueError:
+                        pass
+                elif isinstance(table_totals, dict) and str(self.table_key) in table_totals:
+                    table_total = table_totals[str(self.table_key)]
+
+            resolved_data.footer.grand_total = table_total or footer_dict.get('grand_total', {})
             resolved_data.footer.leather_summary = footer_dict.get('leather_summary', [])
             
         config = TableBuilderConfig(
             worksheet=self.worksheet,
             sheet_styling=self.sheet_styling,
             sheet_layout=sheet_layout,
-            resolved_data=resolved_data
+            resolved_data=resolved_data,
+            table_key=self.table_key
         )
         table_builder = TableBuilder(config=config)
         
@@ -254,56 +268,7 @@ class LayoutBuilder:
         except Exception as e:
             logger.error(f"Failed to apply static column widths: {e}", exc_info=True)
  
-        # 6c. Build Page-level Summary
-        if self.is_last_table and self.sheet_layout.summary and self.sheet_layout.summary.rows:
-            logger.info("Building page-level summary section")
-            try:
-                payload = resolve_summary_payload(
-                    invoice_data=self.invoice_data,
-                    footer_data_model=self.footer_data
-                )
-
-                summary_builder = SummaryBuilder(
-                    grid=self.grid,
-                    summary_config=self.sheet_layout.summary,
-                    payload=payload
-                )
-                self.next_row_after_footer = summary_builder.build()
-            except Exception as e:
-                logger.error(f"[LayoutBuilder] SummaryBuilder failed: {e}", exc_info=True)
-                return False
-
-
-        # 7. Template Footer Restoration
-        if self.template_state_builder and not self.skip_template_footer_restoration:
-            try:
-                actual_num_cols = self.grid.num_columns
-                
-                if self.is_last_table:
-                    logger.info(f"--- RESTORING TEMPLATE FOOTER (Last Table) ---")
-                    
-                    gen_mode = "standard"
-                    if self.args:
-                        if getattr(self.args, 'DAF', False): gen_mode = "daf"
-                        elif getattr(self.args, 'custom', False): gen_mode = "custom"
-
-                    self.template_state_builder.restore_template_footer(
-                        target_worksheet=self.worksheet,
-                        footer_start_row=self.next_row_after_footer,
-                        actual_num_cols=actual_num_cols,
-                        mode=gen_mode,
-                        layout_state=self.layout_state,
-                        column_index_mapping=self.column_index_mapping
-                    )
-                else:
-                    logger.info(f"Skipping template footer restoration (Not last table)")
-                logger.info(f"Template footer restored successfully")
-            except Exception as e:
-                logger.error(f"Failed to restore template footer: {e}", exc_info=True)
-        else:
-            logger.debug("Skipping template footer restoration")
-
-        # 8. Inject Template Images
+        # 7. Inject Template Images
         self._inject_images()
         
         logger.info(f"Layout built successfully for sheet '{self.sheet_name}'")

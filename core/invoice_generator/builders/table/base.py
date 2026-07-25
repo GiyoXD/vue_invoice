@@ -53,7 +53,8 @@ class TableSectionBuilder(ABC):
                         logger.debug(f"Placeholder formatting failed for text '{val_str}': {format_err}")
                         
                     # Skip writing empty pallet count description
-                    if "{pallet_count}" in str(cell.get("value", "")) and row_payload.get("pallet_count", 0) <= 0:
+                    cell_val_template = str(cell.get("value", ""))
+                    if ("{pallet_count}" in cell_val_template or "{col_pallet_count}" in cell_val_template) and (row_payload.get("col_pallet_count", 0) <= 0):
                         pass
                     elif cell.get("is_pallet") and val_str.isdigit():
                         self.grid.write(current_row, col_id, int(val_str), context=cell_style)
@@ -191,8 +192,8 @@ class TableSectionBuilder(ABC):
     def _enrich_payload(self, record: Dict[str, Any]) -> Dict[str, Any]:
         """Standard payload enrichment for repeating row records."""
         rec_payload = copy.deepcopy(record)
-        pallet_count = rec_payload.get("col_pallet_count", rec_payload.get("pallet_count", 0))
-        rec_payload["pallet_count"] = pallet_count
+        pallet_count = rec_payload.pop("pallet_count", rec_payload.get("col_pallet_count", 0))
+        rec_payload["col_pallet_count"] = pallet_count
         rec_payload["multiple"] = "S" if pallet_count != 1 else ""
         rec_payload["weight_net"] = rec_payload.get("col_net", rec_payload.get("net", 0.0))
         rec_payload["weight_gross"] = rec_payload.get("col_gross", rec_payload.get("gross", 0.0))
@@ -201,8 +202,9 @@ class TableSectionBuilder(ABC):
     def _prepare_row_payload(self, base_payload: Dict[str, Any], row_schema: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Prepare payload for standard rows, handling legacy leather addon fields and prefix remapping."""
         row_payload = copy.deepcopy(base_payload)
-        p_count = row_payload.get("pallet_count", 0)
-        row_payload.setdefault("pallet_count", p_count)
+        p_count = row_payload.pop("pallet_count", row_payload.get("col_pallet_count", 0))
+        row_payload["col_pallet_count"] = p_count
+        row_payload["pallet_count"] = p_count
         row_payload.setdefault("multiple", "S" if p_count != 1 else "")
 
         leather_cells = [c for c in row_schema if isinstance(c, dict) and c.get("addon_type") == "leather"]

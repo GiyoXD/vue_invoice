@@ -39,7 +39,8 @@ def calculate_footer_totals(processed_data: List[Dict[str, Any]]) -> Dict[str, A
         "col_gross": decimal.Decimal(0),
         "col_cbm": decimal.Decimal(0),
         "col_amount": decimal.Decimal(0),
-        "col_pallet_count": 0
+        "col_pallet_count": 0,
+        "multiple": ""
     }
     
     if not processed_data:
@@ -51,7 +52,10 @@ def calculate_footer_totals(processed_data: List[Dict[str, Any]]) -> Dict[str, A
     totals['col_gross'] = decimal_sum_reducer([r.get('col_gross') for r in processed_data])
     totals['col_cbm'] = decimal_sum_reducer([r.get('col_cbm') for r in processed_data])
     totals['col_amount'] = decimal_sum_reducer([r.get('col_amount') for r in processed_data])
-    totals['col_pallet_count'] = int_sum_reducer([r.get('col_pallet_count') for r in processed_data])
+    
+    p_cnt = int_sum_reducer([r.get('col_pallet_count') for r in processed_data])
+    totals['col_pallet_count'] = p_cnt
+    totals['multiple'] = "S" if p_cnt != 1 else ""
 
     return totals
 

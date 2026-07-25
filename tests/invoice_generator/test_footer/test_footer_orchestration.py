@@ -2,7 +2,6 @@ import pytest
 from core.invoice_generator.builders.table.table_grid import Grid
 from core.invoice_generator.builders.table.footer import TableFooterBuilder
 from core.invoice_generator.styling.style_registry import StyleRegistry
-from core.invoice_generator.models.footer import FooterData
 from core.invoice_generator.models.config.layout import FooterConfigModel
 
 def test_footer_orchestration_basic():
@@ -13,13 +12,8 @@ def test_footer_orchestration_basic():
     rows = [[{"col_id": "col_po", "value": "TOTAL:", "style_context": "footer"}]]
     footer_config = FooterConfigModel(rows=rows)
     
-    footer_data = FooterData(
-        footer_row_start_idx=1, data_start_row=1, data_end_row=5, total_pallets=10,
-        weight_summary=None, leather_summary=None
-    )
-    
     builder = TableFooterBuilder(
-        grid=grid, footer_data=footer_data,
+        grid=grid,
         footer_config=footer_config
     )
     builder.build()
@@ -35,16 +29,10 @@ def test_footer_orchestration_empty_config_raises():
     style_registry = StyleRegistry({"columns": {}, "row_contexts": {}})
     grid = Grid(column_mapping, style_registry)
     
-    footer_data = FooterData(
-        footer_row_start_idx=1, data_start_row=1, data_end_row=5, total_pallets=10,
-        weight_summary=None, leather_summary=None
-    )
-    
-    # Empty config model (no rows)
     footer_config = FooterConfigModel(rows=[])
     
     builder = TableFooterBuilder(
-        grid=grid, footer_data=footer_data,
+        grid=grid,
         footer_config=footer_config
     )
     
@@ -65,13 +53,8 @@ def test_footer_orchestration_dynamic_sum_ranges():
     
     footer_config = FooterConfigModel(rows=[])
     
-    footer_data = FooterData(
-        footer_row_start_idx=6, data_start_row=12, data_end_row=15, total_pallets=10,
-        weight_summary=None, leather_summary=None
-    )
-    
     builder = TableFooterBuilder(
-        grid=grid, footer_data=footer_data,
+        grid=grid,
         footer_config=footer_config
     )
     

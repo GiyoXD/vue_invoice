@@ -64,9 +64,11 @@ def export_invoice_data(
             if pallet_count == 0 and qty_sf == 0:
                 continue
 
+            p_cnt = int(pallet_count)
             record = {
                 "leather_type": l_type,
-                "pallet_count": int(pallet_count),
+                "col_pallet_count": p_cnt,
+                "multiple": "S" if p_cnt != 1 else "",
                 "col_qty_pcs": int(l_data.get('col_qty_pcs', 0)),
                 "col_qty_sf": float(l_data.get('col_qty_sf', 0.0)),
                 "col_net": float(l_data.get('col_net', 0.0)),

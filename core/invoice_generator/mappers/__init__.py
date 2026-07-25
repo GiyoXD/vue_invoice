@@ -1,4 +1,4 @@
-from .mapper import TableDataMapper, TableDataMapperError, TableFooterMapper, resolve_summary_payload
+from .mapper import TableDataMapper, TableDataMapperError, TableFooterMapper, resolve_summary_payload, resolve_flat_footer_payload
 from .models import ResolvedTableData, ResolvedTableFooter, MappingContext, TableBinding
 from .rules import parse_mapping_rules, RuleEngine, apply_fallback, parse_formula_def, resolve_mode_formula
 from .transforms import (

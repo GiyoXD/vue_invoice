@@ -10,7 +10,7 @@ from ...styling.dimension_registry import DimensionRegistry
 from ...models.layout import SheetLayoutState
 from ...models.config.styling import SheetStylingModel
 from ...models.config.layout import SheetLayoutModel, ColumnDef, FooterConfigModel
-from ...mappers import ResolvedTableData, resolve_summary_payload
+from ...mappers import ResolvedTableData, resolve_summary_payload, resolve_flat_footer_payload
 from .table_grid import Grid
 
 
@@ -23,6 +23,7 @@ class TableBuilderConfig:
     sheet_styling: SheetStylingModel
     sheet_layout: SheetLayoutModel
     resolved_data: ResolvedTableData
+    table_key: Optional[str] = None
 
 
 class TableBuilder:
@@ -164,28 +165,19 @@ class TableBuilder:
                 logger.error(f"[TableBuilder] HS Code Builder crashed: {e}", exc_info=True)
                 return False
 
-            # Build the payload using resolve_summary_payload
+            # Build flat table footer payload
             footer = self.config.resolved_data.footer if self.config.resolved_data else None
-            invoice_data_for_payload = None
-            if footer:
-                invoice_data_for_payload = {
-                    'footer_data': {
-                        'grand_total': footer.grand_total or {},
-                        'leather_summary': footer.leather_summary or []
-                    }
-                }
-
-            payload = resolve_summary_payload(
-                invoice_data=invoice_data_for_payload,
-                footer_data_model=self.footer_data
-            )
+            raw_footer = footer.grand_total if footer else {}
+            payload = resolve_flat_footer_payload(raw_footer, footer_data_model=self.footer_data)
 
 
             try:
+                data_range = [(self.data_start_row, self.data_end_row)] if self.data_start_row > 0 and self.data_end_row >= self.data_start_row else None
                 footer_builder = TableFooterBuilder(
                     grid=grid,
                     footer_config=self.config.sheet_layout.footer or FooterConfigModel(),
-                    payload=payload
+                    payload=payload,
+                    sum_ranges=data_range
                 )
                 footer_builder.build()
             except Exception as e:

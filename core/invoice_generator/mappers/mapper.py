@@ -316,6 +316,18 @@ class TableFooterMapper:
         return TableFooterMapper(context=context)
 
 
+def resolve_flat_footer_payload(
+    raw_dict: Optional[Dict[str, Any]] = None,
+    footer_data_model: Optional[Any] = None
+) -> Dict[str, Any]:
+    """Passes flat payload directly from Data Parser."""
+    raw = dict(raw_dict) if isinstance(raw_dict, dict) else {}
+    if 'col_pallet_count' not in raw and footer_data_model:
+        raw['col_pallet_count'] = getattr(footer_data_model, 'total_pallets', 0)
+    raw.setdefault('multiple', "S" if raw.get('col_pallet_count', 0) != 1 else "")
+    return raw
+
+
 def resolve_summary_payload(
     invoice_data: Optional[Dict[str, Any]] = None,
     footer_data_model: Optional[Any] = None
@@ -325,16 +337,7 @@ def resolve_summary_payload(
     footer_dict = invoice_data.get('footer_data', {})
     raw_grand_total = footer_dict.get('grand_total', {})
 
-    pallet_count = raw_grand_total.get('col_pallet_count', raw_grand_total.get('pallet_count'))
-    if pallet_count is None and footer_data_model:
-        pallet_count = getattr(footer_data_model, 'total_pallets', 0)
-    p_count = int(pallet_count or 0)
-
-    grand_total_target = {
-        **raw_grand_total,
-        'pallet_count': p_count,
-        'multiple': "S" if p_count != 1 else ""
-    }
+    grand_total_target = resolve_flat_footer_payload(raw_grand_total, footer_data_model)
 
     net_weight = float(raw_grand_total.get('col_net', 0.0))
     gross_weight = float(raw_grand_total.get('col_gross', 0.0))
@@ -354,14 +357,15 @@ def resolve_summary_payload(
     for item in raw_leather:
         if isinstance(item, dict):
             rec = dict(item)
-            l_cnt = int(rec.get('col_pallet_count', rec.get('pallet_count', 0)) or 0)
-            rec['pallet_count'] = l_cnt
+            l_cnt = int(rec.get('col_pallet_count', 0) or 0)
+            rec['col_pallet_count'] = l_cnt
             rec['multiple'] = "S" if l_cnt != 1 else ""
             leather_summary_target.append(rec)
         else:
             leather_summary_target.append(item)
 
     payload = {
+        **grand_total_target,
         'grand_total': grand_total_target,
         'weight_summary': weight_summary_target,
         'leather_summary': leather_summary_target

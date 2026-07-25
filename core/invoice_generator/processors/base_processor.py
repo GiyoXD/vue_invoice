@@ -145,7 +145,8 @@ class SheetProcessor(ABC):
             layout_config=layout_config,
             template_state_builder=template_state_builder,
             is_first_table=config.is_first_table,
-            skip_template_footer=config.skip_template_footer
+            skip_template_footer=config.skip_template_footer,
+            table_key=table_key
         )
 
     def _init_resolver(
@@ -235,7 +236,8 @@ class SheetProcessor(ABC):
         layout_config: Dict[str, Any],
         template_state_builder: Optional[Any],
         is_first_table: bool,
-        skip_template_footer: bool
+        skip_template_footer: bool,
+        table_key: Optional[str] = None
     ):
         """Runs the LayoutBuilder and returns layout_builder if successful."""
         import logging
@@ -270,7 +272,6 @@ class SheetProcessor(ABC):
             args=self.args,
             total_net_weight=context_config.get('total_net_weight'),
             total_gross_weight=context_config.get('total_gross_weight'),
-            is_last_table=context_config.get('is_last_table', False),
             skip_template_header_restoration=layout_config.get('skip_template_header_restoration', False),
             skip_header_builder=layout_config.get('skip_header_builder', False),
             skip_data_table_builder=layout_config.get('skip_data_table_builder', False),
@@ -278,7 +279,9 @@ class SheetProcessor(ABC):
             skip_template_footer_restoration=layout_config.get('skip_template_footer_restoration', False),
             template_state_builder=template_state_builder,
             template_json_config=self.config_loader.get_template_json_config(),
-            layout_state=layout_state
+            layout_state=layout_state,
+            table_key=table_key,
+            invoice_data=self.invoice_data
         )
         
         success = layout_builder.build()
@@ -287,4 +290,77 @@ class SheetProcessor(ABC):
             return None
             
         return layout_builder
+
+    def _build_page_summary(
+        self,
+        grid: Any,
+        sheet_layout: Any,
+        footer_data: Optional[Any] = None
+    ) -> int:
+        """
+        Builds page-level summary section (e.g. grand total, weight, leather summary).
+        Returns the next available row index after summary.
+        """
+        if not sheet_layout or not sheet_layout.summary or not sheet_layout.summary.rows:
+            return grid.start_row_index + grid._cursor_row if grid else -1
+
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info("Building page-level summary section")
+        try:
+            from core.invoice_generator.builders.summary import SummaryBuilder
+            from core.invoice_generator.mappers import resolve_summary_payload
+
+            payload = resolve_summary_payload(
+                invoice_data=self.invoice_data,
+                footer_data_model=footer_data
+            )
+
+            summary_builder = SummaryBuilder(
+                grid=grid,
+                summary_config=sheet_layout.summary,
+                payload=payload
+            )
+            return summary_builder.build()
+        except Exception as e:
+            logger.error(f"[SheetProcessor] SummaryBuilder failed: {e}", exc_info=True)
+            return grid.start_row_index + grid._cursor_row if grid else -1
+
+    def _restore_template_footer(
+        self,
+        template_state_builder: Any,
+        current_row: int,
+        last_grid: Any
+    ):
+        """
+        Restores template footer elements at the specified start row.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        if template_state_builder and not self.sheet_config.get('skip_template_footer', False):
+            try:
+                actual_num_cols = last_grid.num_columns if last_grid else None
+                column_index_mapping = getattr(last_grid, 'column_index_mapping', None) if last_grid else None
+                
+                logger.info(f"--- RESTORING TEMPLATE FOOTER ---")
+                logger.info(f"footer_start_row: {current_row}")
+                
+                gen_mode = "standard"
+                if self.args:
+                    if getattr(self.args, 'DAF', False): gen_mode = "daf"
+                    elif getattr(self.args, 'custom', False): gen_mode = "custom"
+
+                template_state_builder.restore_template_footer(
+                    target_worksheet=self.output_worksheet,
+                    footer_start_row=current_row,
+                    actual_num_cols=actual_num_cols,
+                    mode=gen_mode,
+                    column_index_mapping=column_index_mapping
+                )
+                logger.info("Template footer restored successfully")
+            except Exception as e:
+                logger.error(f"Failed to restore template footer: {e}", exc_info=True)
+        else:
+            logger.debug("Skipping template footer restoration")
+
 
