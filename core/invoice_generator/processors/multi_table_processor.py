@@ -176,8 +176,10 @@ class MultiTableProcessor(SheetProcessor):
         footer_config.type = "grand_total"
         
         # Build the payload
-        raw_gt = self.invoice_data.get('footer_data', {}).get('grand_total', {}) if self.invoice_data else {}
+        footer_dict = self.invoice_data.get('footer_data', {}) if self.invoice_data else {}
+        raw_gt = footer_dict.get('grand_total', {})
         gt_payload = resolve_flat_footer_payload(raw_gt)
+        gt_payload['leather_summary'] = footer_dict.get('leather_summary', [])
 
         # Reuse last_grid's registries to build gt_grid without duplicating Registry/Styling setups
         gt_grid = Grid(

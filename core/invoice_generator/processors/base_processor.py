@@ -326,6 +326,15 @@ class SheetProcessor(ABC):
             logger.error(f"[SheetProcessor] SummaryBuilder failed: {e}", exc_info=True)
             return grid.start_row_index + grid._cursor_row if grid else -1
 
+    @property
+    def skip_footer_restoration(self) -> bool:
+        """Returns True if template footer restoration should be bypassed."""
+        return (
+            self.sheet_config.get('skip_template_footer', False) or
+            self.sheet_config.get('skip_template_footer_restoration', False) or
+            getattr(self, 'skip_template_footer_restoration', False)
+        )
+
     def _restore_template_footer(
         self,
         template_state_builder: Any,
@@ -337,8 +346,10 @@ class SheetProcessor(ABC):
         """
         import logging
         logger = logging.getLogger(__name__)
-        if template_state_builder and not self.sheet_config.get('skip_template_footer', False):
+        if template_state_builder and not self.skip_footer_restoration:
             try:
+
+
                 actual_num_cols = last_grid.num_columns if last_grid else None
                 column_index_mapping = getattr(last_grid, 'column_index_mapping', None) if last_grid else None
                 

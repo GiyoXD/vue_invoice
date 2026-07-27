@@ -352,23 +352,10 @@ def resolve_summary_payload(
         'weight_gross': gross_weight
     }
 
-    raw_leather = footer_dict.get('leather_summary', [])
-    leather_summary_target = []
-    for item in raw_leather:
-        if isinstance(item, dict):
-            rec = dict(item)
-            l_cnt = int(rec.get('col_pallet_count', 0) or 0)
-            rec['col_pallet_count'] = l_cnt
-            rec['multiple'] = "S" if l_cnt != 1 else ""
-            leather_summary_target.append(rec)
-        else:
-            leather_summary_target.append(item)
+    leather_summary_target = footer_dict.get('leather_summary', [])
 
-    payload = {
-        **grand_total_target,
+    return {
         'grand_total': grand_total_target,
         'weight_summary': weight_summary_target,
         'leather_summary': leather_summary_target
     }
-
-    return payload

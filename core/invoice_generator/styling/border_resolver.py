@@ -39,7 +39,7 @@ BORDER_PATTERNS: Dict[str, Optional[BorderStyle]] = {
 
 # Contexts that always get full thin borders regardless of default_border mode
 FULL_BORDER_CONTEXTS = {"header", "footer"}
-NO_BORDER_CONTEXTS = {"footer_addon", "grand_total"}
+NO_BORDER_CONTEXTS = {"summary", "grand_total"}
 
 
 class BorderResolver:

@@ -159,14 +159,22 @@ class StyleRegistry:
             merged_style.update({k: v for k, v in col_style.items() if v is not None})
             logger.debug(f"After column merge: {merged_style}")
         else:
-            logger.warning(f"❌ Column '{col_id}' not found in StyleRegistry!")
-            logger.warning(f"   Available columns: {list(self.columns.keys())}")
-            logger.warning(f"   Please add column definition to config with: format, alignment, width")
+            merged_style.setdefault('alignment', 'center')
+            merged_style.setdefault('format', '@')
+            logger.debug(f"Column '{col_id}' not found in StyleRegistry, using default alignment/format")
         
         # 2. Merge row context style (HOW: emphasis, decoration)
         # Only merge properties that are NOT column-owned.
-        if context in self.row_contexts:
-            context_style = self.row_contexts[context].to_dict()
+        target_context = context
+        if target_context not in self.row_contexts:
+            if target_context == "summary" and "footer" in self.row_contexts:
+                target_context = "footer"
+            elif target_context in ("data", "row", "body") and "data" in self.row_contexts:
+                target_context = "data"
+
+
+        if target_context in self.row_contexts:
+            context_style = self.row_contexts[target_context].to_dict()
             for key, value in context_style.items():
                 if value is not None and key not in COLUMN_OWNED and key not in merged_style:
                     merged_style[key] = value

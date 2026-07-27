@@ -162,13 +162,14 @@ class ConfigBuilder:
                 "border_style": "thin",
                 "row_height": float(sheet.row_heights.get("footer", 1))
             },
-            "footer_addon": {
+            "summary": {
                 "bold": True,
                 "font_size": h_size,
                 "font_name": h_name,
-                "border_style": "none",
-                "row_height": float(sheet.row_heights.get("footer", 1))
+                "border_style": "none"
             }
+
+
         }
         
         return sheet_styling

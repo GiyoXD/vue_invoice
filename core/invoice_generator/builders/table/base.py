@@ -134,6 +134,7 @@ class TableSectionBuilder(ABC):
                 records = payload.get(source_list_key) or []
 
                 for record in records:
+
                     fallback_context = default_context if default_context == "summary" else f"{default_context}_addon"
                     row_context = cells_schema[0].get("style_context", fallback_context) if cells_schema else fallback_context
 

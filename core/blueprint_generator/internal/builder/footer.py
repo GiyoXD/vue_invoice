@@ -45,7 +45,7 @@ def build_footer(sheet: SheetAnalysis) -> Dict[str, Any]:
         if sheet.footer_info.pallet_count_col_id:
             main_footer_row.append({
                 "col_id": sheet.footer_info.pallet_count_col_id,
-                "value": "{pallet_count} PALLET{multiple}",
+                "value": "{col_pallet_count} PALLET{multiple}",
                 "style_context": "footer"
             })
     else:
@@ -71,14 +71,22 @@ def build_footer(sheet: SheetAnalysis) -> Dict[str, Any]:
 
     # 2. Add any generic addon rows prepared by the scanner and formatted by Addon builders
     addon_facts = sheet.static_content_hints.get("addon_facts", [])
+    seen_source_lists = set()
     for fact in addon_facts:
         try:
             addon_builder = AddonRegistry.get_builder(fact)
             addon_rows = addon_builder.build_rows(fact, sheet_col_ids)
-            rows.extend(addon_rows)
+            for r in addon_rows:
+                if isinstance(r, dict) and "source_list" in r:
+                    src = r["source_list"]
+                    if src in seen_source_lists:
+                        continue
+                    seen_source_lists.add(src)
+                rows.append(r)
         except Exception as e:
             logger.warning(f"    Failed to build addon row for fact {getattr(fact, 'fact_type', 'unknown')}: {e}")
 
     return {
         "rows": rows
     }
+

@@ -169,6 +169,10 @@ class TableBuilder:
             footer = self.config.resolved_data.footer if self.config.resolved_data else None
             raw_footer = footer.grand_total if footer else {}
             payload = resolve_flat_footer_payload(raw_footer, footer_data_model=self.footer_data)
+            leather_summary = getattr(footer, "leather_summary", None) or getattr(self.footer_data, "leather_summary", None)
+            if leather_summary:
+                payload["leather_summary"] = leather_summary
+
 
 
             try:

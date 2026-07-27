@@ -40,12 +40,12 @@ def test_weight_summary_addon():
     
     rows = [
         [
-            {"col_id": "col_desc", "value": "NW(KGS)", "style_context": "footer_addon"},
-            {"col_id": "col_qty", "value": "{weight_net}", "style_context": "footer_addon"}
+            {"col_id": "col_desc", "value": "NW(KGS)", "style_context": "summary"},
+            {"col_id": "col_qty", "value": "{weight_net}", "style_context": "summary"}
         ],
         [
-            {"col_id": "col_desc", "value": "GW(KGS):", "style_context": "footer_addon"},
-            {"col_id": "col_qty", "value": "{weight_gross}", "style_context": "footer_addon"}
+            {"col_id": "col_desc", "value": "GW(KGS):", "style_context": "summary"},
+            {"col_id": "col_qty", "value": "{weight_gross}", "style_context": "summary"}
         ]
     ]
     footer_config = FooterConfigModel(rows=rows)
@@ -70,14 +70,14 @@ def test_leather_summary_addon():
     
     rows = [
         [
-            {"col_id": "col_desc", "value": "BUFFALO LEATHER", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "BUFFALO"},
-            {"col_id": "col_pallet_count", "value": "{buffalo_pallet_count}", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "BUFFALO", "is_pallet": True},
-            {"col_id": "col_qty", "value": "{buffalo_col_qty}", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "BUFFALO"}
+            {"col_id": "col_desc", "value": "BUFFALO LEATHER", "style_context": "summary", "addon_type": "leather", "leather_key": "BUFFALO"},
+            {"col_id": "col_pallet_count", "value": "{buffalo_pallet_count}", "style_context": "summary", "addon_type": "leather", "leather_key": "BUFFALO", "is_pallet": True},
+            {"col_id": "col_qty", "value": "{buffalo_col_qty}", "style_context": "summary", "addon_type": "leather", "leather_key": "BUFFALO"}
         ],
         [
-            {"col_id": "col_desc", "value": "LEATHER", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "COW"},
-            {"col_id": "col_pallet_count", "value": "{cow_pallet_count}", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "COW", "is_pallet": True},
-            {"col_id": "col_qty", "value": "{cow_col_qty}", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "COW"}
+            {"col_id": "col_desc", "value": "LEATHER", "style_context": "summary", "addon_type": "leather", "leather_key": "COW"},
+            {"col_id": "col_pallet_count", "value": "{cow_pallet_count}", "style_context": "summary", "addon_type": "leather", "leather_key": "COW", "is_pallet": True},
+            {"col_id": "col_qty", "value": "{cow_col_qty}", "style_context": "summary", "addon_type": "leather", "leather_key": "COW"}
         ]
     ]
     footer_config = FooterConfigModel(rows=rows)
@@ -133,14 +133,14 @@ def test_leather_summary_addon_auto_lookup():
     
     rows = [
         [
-            {"col_id": "col_desc", "value": "BUFFALO LEATHER", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "BUFFALO"},
-            {"col_id": "col_pallet_count", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "BUFFALO"},
-            {"col_id": "col_qty", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "BUFFALO"}
+            {"col_id": "col_desc", "value": "BUFFALO LEATHER", "style_context": "summary", "addon_type": "leather", "leather_key": "BUFFALO"},
+            {"col_id": "col_pallet_count", "style_context": "summary", "addon_type": "leather", "leather_key": "BUFFALO"},
+            {"col_id": "col_qty", "style_context": "summary", "addon_type": "leather", "leather_key": "BUFFALO"}
         ],
         [
-            {"col_id": "col_desc", "value": "LEATHER", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "COW"},
-            {"col_id": "col_pallet_count", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "COW"},
-            {"col_id": "col_qty", "style_context": "footer_addon", "addon_type": "leather", "leather_key": "COW"}
+            {"col_id": "col_desc", "value": "LEATHER", "style_context": "summary", "addon_type": "leather", "leather_key": "COW"},
+            {"col_id": "col_pallet_count", "style_context": "summary", "addon_type": "leather", "leather_key": "COW"},
+            {"col_id": "col_qty", "style_context": "summary", "addon_type": "leather", "leather_key": "COW"}
         ]
     ]
     footer_config = FooterConfigModel(rows=rows)

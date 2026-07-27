@@ -56,7 +56,7 @@ def test_config_builder_leather_summary_detection():
     cells = buffalo_row["cells"]
     assert any(c["col_id"] == "col_po" and c.get("value") == "TOTAL OF:" for c in cells)
     assert any(c["col_id"] == "col_pallet_no" and c.get("value") == "{leather_type} LEATHER" for c in cells)
-    assert any(c["col_id"] == "col_desc" and c.get("value") == "{pallet_count} PALLET{multiple}" for c in cells)
+    assert any(c["col_id"] == "col_desc" and c.get("value") == "{col_pallet_count} PALLET{multiple}" for c in cells)
     # col_qty_pcs and col_net should be dynamically appended because they exist in sheet_col_ids
     assert any(c["col_id"] == "col_qty_pcs" for c in cells)
     assert any(c["col_id"] == "col_net" for c in cells)
