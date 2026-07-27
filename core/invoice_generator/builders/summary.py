@@ -28,12 +28,19 @@ class SummaryBuilder(TableSectionBuilder):
             return self.grid.start_row_index + self.grid._cursor_row
 
         try:
-            logger.info(f"[SummaryBuilder] Building summary with payload keys: {list(self.payload.keys())}")
+            flat_payload = dict(self.payload)
+            ws = self.payload.get("weight_summary")
+            if isinstance(ws, dict):
+                flat_payload.update(ws)
+
+            logger.info(f"[SummaryBuilder] Building summary with payload keys: {list(flat_payload.keys())}")
             rows_rendered = self._build_declarative_section(
                 rows_schema=self.summary_config.rows,
-                payload=self.payload,
+                payload=flat_payload,
                 default_context="summary"
             )
+
+
 
             if rows_rendered == 0:
                 logger.warning("[SummaryBuilder] Built 0 rows. Check if source_list keys exist in payload.")

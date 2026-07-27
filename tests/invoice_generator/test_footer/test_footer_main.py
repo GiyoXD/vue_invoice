@@ -46,8 +46,9 @@ def test_footer_builder_pallet_count_templating():
     grid.set_start_row(1)
     
     rows = [[
-        {"col_id": "col_item", "value": "{pallet_count} PALLET{multiple}", "style_context": "footer"}
+        {"col_id": "col_item", "value": "{col_pallet_count} PALLET{multiple}", "style_context": "footer"}
     ]]
+
     footer_config = FooterConfigModel(rows=rows)
     
 

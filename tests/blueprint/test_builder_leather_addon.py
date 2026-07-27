@@ -44,13 +44,17 @@ def test_config_builder_leather_summary_detection():
 
     builder = ConfigBuilder()
     footer_data = builder._build_footer(sheet)
-    rows = footer_data["rows"]
+    summary_data = builder._build_summary(sheet)
+    footer_rows = footer_data["rows"]
+    summary_rows = summary_data["rows"]
 
-    # Total rows: 1 main footer row + 1 leather row = 2 rows
-    assert len(rows) == 2
+    # Footer total row: 1 main row
+    assert len(footer_rows) == 1
+    # Summary rows: 2 weight summary rows + 1 leather row = 3 rows
+    assert len(summary_rows) == 3
     
     # Verify Buffalo row structure
-    buffalo_row = rows[1]
+    buffalo_row = summary_rows[2]
     assert isinstance(buffalo_row, dict)
     assert buffalo_row["source_list"] == "leather_summary"
     cells = buffalo_row["cells"]
@@ -82,7 +86,12 @@ def test_config_builder_leather_summary_skipped_when_no_pattern():
 
     builder = ConfigBuilder()
     footer_data = builder._build_footer(sheet)
-    rows = footer_data["rows"]
+    summary_data = builder._build_summary(sheet)
+    footer_rows = footer_data["rows"]
+    summary_rows = summary_data["rows"]
 
-    # Since the pattern was not found, we expect only the Main footer row.
-    assert len(rows) == 1
+    # Main footer row = 1, weight summary rows = 2
+    assert len(footer_rows) == 1
+    assert len(summary_rows) == 2
+
+

@@ -106,6 +106,51 @@ class TableSectionBuilder(ABC):
             if col_idx not in excluded_idxs:
                 self.grid.write(row, col_id, None, context=context)
 
+    def _expand_rows_schema(
+        self,
+        rows_schema: List[Any],
+        payload: Dict[str, Any],
+        default_context: str = "footer"
+    ) -> List[Any]:
+        """
+        Pass 1: Unpack mixed rows_schema (lists and source_list dicts) into a uniform flat list of
+        (cells_schema, row_payload, row_context) tuples ready for rendering.
+        """
+        expanded = []
+        seen_source_lists = set()
+        for row_item in rows_schema:
+            if isinstance(row_item, dict):
+                if "source_list" not in row_item:
+                    logger.error(f"Invalid row_item dict structure (missing source_list): {row_item}")
+                    continue
+                source_list_key = row_item["source_list"]
+                if source_list_key in seen_source_lists:
+                    continue
+                seen_source_lists.add(source_list_key)
+
+                cells_schema = row_item.get("cells", [])
+
+                records = payload.get(source_list_key) or []
+                fallback_context = default_context
+                row_context = cells_schema[0].get("style_context", fallback_context) if cells_schema else fallback_context
+
+
+                for record in records:
+                    rec_payload = self._enrich_payload(record)
+                    expanded.append((cells_schema, rec_payload, row_context))
+
+            elif isinstance(row_item, list):
+                row_schema = row_item
+                if not row_schema:
+                    continue
+                row_context = row_schema[0].get("style_context", default_context) if row_schema else default_context
+                row_payload = self._prepare_row_payload(payload, row_schema)
+                expanded.append((row_schema, row_payload, row_context))
+            else:
+                logger.error(f"Invalid row_item structure (expected dict or list): {row_item}")
+
+        return expanded
+
     def _build_declarative_section(
         self,
         rows_schema: List[Any],
@@ -114,71 +159,31 @@ class TableSectionBuilder(ABC):
         section_name_override: Optional[str] = None
     ) -> int:
         """
-        Shared declarative row rendering engine.
-        Handles repeating rows (dict with source_list) and standard single rows (list of cells).
-        Returns number of rows rendered.
+        Pass 2: Render expanded rows schema using pure Grid interface.
+        Iterates over uniform (cells_schema, row_payload, row_context) tuples.
         """
+        expanded_rows = self._expand_rows_schema(rows_schema, payload, default_context)
+
         current_row = 0
         active_section = None
         section_start_row = -1
         cursor_base = self.grid._cursor_row
 
-        for row_item in rows_schema:
-            if isinstance(row_item, dict):
-                if "source_list" not in row_item:
-                    logger.error(f"Invalid row_item dict structure (missing source_list): {row_item}")
-                    continue
+        for cells_schema, row_payload, row_context in expanded_rows:
+            if active_section != row_context:
+                if active_section is not None:
+                    final_name = section_name_override if section_name_override and active_section == default_context else active_section
+                    self.grid.set_section_bounds(
+                        final_name,
+                        cursor_base + section_start_row,
+                        cursor_base + current_row - 1
+                    )
+                active_section = row_context
+                section_start_row = current_row
 
-                source_list_key = row_item["source_list"]
-                cells_schema = row_item.get("cells", [])
-                records = payload.get(source_list_key) or []
-
-                for record in records:
-
-                    fallback_context = default_context if default_context == "summary" else f"{default_context}_addon"
-                    row_context = cells_schema[0].get("style_context", fallback_context) if cells_schema else fallback_context
-
-                    if active_section != row_context:
-                        if active_section is not None:
-                            final_name = section_name_override if section_name_override and active_section == default_context else active_section
-                            self.grid.set_section_bounds(
-                                final_name,
-                                cursor_base + section_start_row,
-                                cursor_base + current_row - 1
-                            )
-                        active_section = row_context
-                        section_start_row = current_row
-
-                    rec_payload = self._enrich_payload(record)
-                    written_cols = self._render_row(cells_schema, rec_payload, current_row, row_context)
-                    self._pad_row_styles(current_row, exclude_cols=written_cols, context=row_context)
-                    current_row += 1
-
-            elif isinstance(row_item, list):
-                row_schema = row_item
-                if not row_schema:
-                    continue
-
-                row_context = row_schema[0].get("style_context", default_context) if row_schema else default_context
-
-                if active_section != row_context:
-                    if active_section is not None:
-                        final_name = section_name_override if section_name_override and active_section == default_context else active_section
-                        self.grid.set_section_bounds(
-                            final_name,
-                            cursor_base + section_start_row,
-                            cursor_base + current_row - 1
-                        )
-                    active_section = row_context
-                    section_start_row = current_row
-
-                row_payload = self._prepare_row_payload(payload, row_schema)
-                written_cols = self._render_row(row_schema, row_payload, current_row, row_context)
-                self._pad_row_styles(current_row, exclude_cols=written_cols, context=row_context)
-                current_row += 1
-            else:
-                logger.error(f"Invalid row_item structure (expected dict or list): {row_item}")
-                continue
+            written_cols = self._render_row(cells_schema, row_payload, current_row, row_context)
+            self._pad_row_styles(current_row, exclude_cols=written_cols, context=row_context)
+            current_row += 1
 
         if active_section is not None:
             final_name = section_name_override if section_name_override and active_section == default_context else active_section
@@ -190,31 +195,38 @@ class TableSectionBuilder(ABC):
 
         return current_row
 
+
     def _enrich_payload(self, record: Dict[str, Any]) -> Dict[str, Any]:
         """Standard payload enrichment for repeating row records."""
         rec_payload = copy.deepcopy(record)
-        pallet_count = rec_payload.pop("pallet_count", rec_payload.get("col_pallet_count", 0))
-        rec_payload["col_pallet_count"] = pallet_count
-        rec_payload["multiple"] = "S" if pallet_count != 1 else ""
         rec_payload["weight_net"] = rec_payload.get("col_net", rec_payload.get("net", 0.0))
         rec_payload["weight_gross"] = rec_payload.get("col_gross", rec_payload.get("gross", 0.0))
         return rec_payload
 
     def _prepare_row_payload(self, base_payload: Dict[str, Any], row_schema: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Prepare payload for standard rows, handling legacy leather addon fields and prefix remapping."""
+        """
+        Prepare payload for standard rows using setdefault for template formatting keys.
+        
+        Sub-map Priority Ordering:
+        1. Top-level base_payload keys take highest priority.
+        2. First sub-dictionary key wins (e.g. grand_total > weight_summary) via setdefault.
+        """
         row_payload = copy.deepcopy(base_payload)
-        p_count = row_payload.pop("pallet_count", row_payload.get("col_pallet_count", 0))
-        row_payload["col_pallet_count"] = p_count
-        row_payload["pallet_count"] = p_count
-        row_payload.setdefault("multiple", "S" if p_count != 1 else "")
+        # Flatten nested sub-dictionaries (first sub-map key wins via setdefault)
+        for key, value in base_payload.items():
+            if isinstance(value, dict):
+                for sub_k, sub_v in value.items():
+                    row_payload.setdefault(sub_k, sub_v)
+
+
+        p_cnt = row_payload.get("col_pallet_count", 0)
+        row_payload.setdefault("col_pallet_count", p_cnt)
+        row_payload.setdefault("multiple", "S" if p_cnt != 1 else "")
+
 
         leather_cells = [c for c in row_schema if isinstance(c, dict) and c.get("addon_type") == "leather"]
         if leather_cells:
             l_key = leather_cells[0]["leather_key"].lower()
-            l_pallet = base_payload.get(f"{l_key}_pallet_count", 0)
-            row_payload["pallet_count"] = l_pallet
-            row_payload["multiple"] = "S" if l_pallet != 1 else ""
-
             prefix = f"{l_key}_"
             for k, v in base_payload.items():
                 if k.startswith(prefix):
@@ -222,4 +234,7 @@ class TableSectionBuilder(ABC):
                     row_payload[base_name] = v
 
         return row_payload
+
+
+
 

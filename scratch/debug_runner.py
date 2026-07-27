@@ -35,11 +35,10 @@ def main():
             json_path = arg_path
         elif (sample_dir / arg_path.name).exists():
             json_path = sample_dir / arg_path.name
-        else:
-            print(f"Error: JSON file '{sys.argv[1]}' not found directly or in {sample_dir}")
-            return
     else:
-        target_file = sample_dir / "best111.json"
+        target_file = sample_dir / "test101010.json"
+        if not target_file.exists():
+            target_file = sample_dir / "best111.json"
         if target_file.exists():
             json_path = target_file
         else:
@@ -48,6 +47,7 @@ def main():
                 print(f"No valid JSON files found in {sample_dir}")
                 return
             json_path = json_files[0]
+
 
 
     output_path = PROJECT_ROOT / "scratch" / "output_test.xlsx"

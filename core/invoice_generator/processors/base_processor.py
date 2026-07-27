@@ -1,12 +1,19 @@
-# invoice_generator/processors/base_processor.py
+import logging
 from abc import ABC, abstractmethod
 from openpyxl.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 import argparse
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
+
 from core.system_config import ConfigurationError
 from core.invoice_generator.models.context import ProcessorContext
 from core.invoice_generator.models.layout import SheetLayoutState, TableLayoutConfig
+from core.invoice_generator.builders.summary import SummaryBuilder
+from core.invoice_generator.mappers import resolve_summary_payload
+from core.invoice_generator.utils.cell_converter import write_models_to_worksheet
+
+logger = logging.getLogger(__name__)
+
 
 class SheetProcessor(ABC):
     """
@@ -304,13 +311,11 @@ class SheetProcessor(ABC):
         if not sheet_layout or not sheet_layout.summary or not sheet_layout.summary.rows:
             return grid.start_row_index + grid._cursor_row if grid else -1
 
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.info("Building page-level summary section")
-        try:
-            from core.invoice_generator.builders.summary import SummaryBuilder
-            from core.invoice_generator.mappers import resolve_summary_payload
+        summary_config = sheet_layout.summary
 
+
+        logger.info("[SheetProcessor] Building page-level summary section")
+        try:
             payload = resolve_summary_payload(
                 invoice_data=self.invoice_data,
                 footer_data_model=footer_data
@@ -318,13 +323,37 @@ class SheetProcessor(ABC):
 
             summary_builder = SummaryBuilder(
                 grid=grid,
-                summary_config=sheet_layout.summary,
+                summary_config=summary_config,
                 payload=payload
             )
-            return summary_builder.build()
+            next_row = summary_builder.build()
+
+            summary_models = [
+                m for m in grid.get_row_models()
+                if getattr(m, "row_idx", grid.start_row_index) >= grid.start_row_index
+            ]
+            self._commit_row_models(summary_models, start_row=grid.start_row_index, next_row=next_row)
+
+            return next_row
+
         except Exception as e:
             logger.error(f"[SheetProcessor] SummaryBuilder failed: {e}", exc_info=True)
             return grid.start_row_index + grid._cursor_row if grid else -1
+
+    def _commit_row_models(self, row_models: List[Any], start_row: int, next_row: Optional[int] = None) -> None:
+        """Commits generated row models through layout_state or directly to output_worksheet."""
+        if not row_models:
+            return
+
+        layout_state = getattr(self, "layout_state", None)
+        if layout_state:
+            layout_state.write_row_models(row_models, start_row=start_row)
+            if next_row is not None and hasattr(layout_state, "advance_to"):
+                layout_state.advance_to(next_row)
+        elif getattr(self, "output_worksheet", None):
+            write_models_to_worksheet(self.output_worksheet, row_models, start_row=start_row)
+
+
 
     @property
     def skip_footer_restoration(self) -> bool:

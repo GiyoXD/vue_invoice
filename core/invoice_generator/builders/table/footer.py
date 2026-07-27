@@ -46,11 +46,14 @@ class TableFooterBuilder(TableSectionBuilder):
             raise ValueError("[FooterBuilder] CANNOT BUILD FOOTER - Invalid config")
 
         try:
+            flat_payload = self.payload.get("grand_total") if isinstance(self.payload.get("grand_total"), dict) else self.payload
             rows_rendered = self._build_declarative_section(
                 rows_schema=self.footer_config.rows,
-                payload=self.payload,
+                payload=flat_payload,
                 default_context="footer"
             )
+
+
 
             self.grid.advance_row(rows_rendered)
             logger.info(f"[FooterBuilder] COMPLETE - generated {rows_rendered} rows")

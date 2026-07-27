@@ -11,11 +11,11 @@ def test_summary_builder_pallet_count_templating():
     grid.set_start_row(1)
     
     rows = [[
-        {"col_id": "col_item", "value": "{pallet_count} PALLET{multiple}", "style_context": "summary"}
+        {"col_id": "col_item", "value": "{col_pallet_count} PALLET{multiple}", "style_context": "summary"}
     ]]
     summary_config = FooterConfigModel(rows=rows)
     
-    payload = {"pallet_count": 1}
+    payload = {"col_pallet_count": 1, "multiple": ""}
     builder1 = SummaryBuilder(
         grid=grid,
         summary_config=summary_config,
@@ -29,10 +29,11 @@ def test_summary_builder_pallet_count_templating():
     builder2 = SummaryBuilder(
         grid=grid2,
         summary_config=summary_config,
-        payload={"pallet_count": 5}
+        payload={"col_pallet_count": 5, "multiple": "S"}
     )
     builder2.build()
     assert grid2._grid[0][1].value == "5 PALLETS"
+
 
 
 def test_summary_builder_rendering_and_merges():

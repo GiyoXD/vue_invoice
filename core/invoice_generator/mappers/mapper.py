@@ -359,3 +359,5 @@ def resolve_summary_payload(
         'weight_summary': weight_summary_target,
         'leather_summary': leather_summary_target
     }
+
+

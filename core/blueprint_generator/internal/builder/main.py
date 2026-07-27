@@ -16,6 +16,8 @@ from ..scanner import TemplateAnalysisResult, SheetAnalysis, ColumnInfo
 from ..validator import ConfigValidator, BlueprintLogicValidator
 from ..addons import AddonRegistry
 from .footer import build_footer
+from .summary import build_summary
+
 from core.utils.snitch import snitch
 
 logger = logging.getLogger(__name__)
@@ -227,12 +229,14 @@ class ConfigBuilder:
     def _build_sheet_layout(self, sheet: SheetAnalysis) -> Dict[str, Any]:
         """Build layout for a single sheet."""
         layout = {
-            "_sections": ["structure", "data_flow", "static_payload", "footer"],
+            "_sections": ["structure", "data_flow", "static_payload", "footer", "summary"],
             "structure": self._build_structure(sheet),
             "data_flow": self._build_data_flow(sheet),
             "static_payload": self._build_static_payload(sheet),
-            "footer": self._build_footer(sheet)
+            "footer": self._build_footer(sheet),
+            "summary": self._build_summary(sheet)
         }
+
         
         hs_code_info = self._build_hs_code(sheet)
         if hs_code_info:
@@ -375,6 +379,11 @@ class ConfigBuilder:
     def _build_footer(self, sheet: SheetAnalysis) -> Dict[str, Any]:
         """Delegates to the extracted footer builder module."""
         return build_footer(sheet)
+
+    def _build_summary(self, sheet: SheetAnalysis) -> Dict[str, Any]:
+        """Delegates to the extracted summary builder module."""
+        return build_summary(sheet)
+
 
 
 
