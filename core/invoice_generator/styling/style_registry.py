@@ -167,11 +167,13 @@ class StyleRegistry:
         # Only merge properties that are NOT column-owned.
         target_context = context
         if target_context not in self.row_contexts:
-            if target_context == "summary" and "footer" in self.row_contexts:
-                target_context = "footer"
+            if target_context in ("summary", "summary_value_only", "value_only"):
+                if "summary" in self.row_contexts:
+                    target_context = "summary"
+                elif "footer" in self.row_contexts:
+                    target_context = "footer"
             elif target_context in ("data", "row", "body") and "data" in self.row_contexts:
                 target_context = "data"
-
 
         if target_context in self.row_contexts:
             context_style = self.row_contexts[target_context].to_dict()
@@ -218,7 +220,13 @@ class StyleRegistry:
     
     def has_context(self, context: str) -> bool:
         """Check if row context exists in registry."""
-        return context in self.row_contexts
+        if context in self.row_contexts:
+            return True
+        if context in ("summary", "summary_value_only", "value_only") and ("summary" in self.row_contexts or "footer" in self.row_contexts):
+            return True
+        if context in ("data", "row", "body") and "data" in self.row_contexts:
+            return True
+        return False
     
     @classmethod
     def create_from_styling_bundle(cls, styling_config: Any, sheet_name: str) -> 'StyleRegistry':

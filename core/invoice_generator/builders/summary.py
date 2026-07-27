@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 from .table.base import TableSectionBuilder
 from .table.table_grid import Grid
 from core.invoice_generator.models.config.layout import FooterConfigModel
+from core.invoice_generator.styling.border_resolver import apply_border_resolver
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,9 @@ class SummaryBuilder(TableSectionBuilder):
                 logger.warning("[SummaryBuilder] Built 0 rows. Check if source_list keys exist in payload.")
             else:
                 logger.info(f"[SummaryBuilder] Successfully rendered {rows_rendered} summary rows.")
+
+            # Stamp borders onto summary section grid cells
+            apply_border_resolver(self.grid)
 
             self.grid.advance_row(rows_rendered)
             return self.grid.start_row_index + self.grid._cursor_row

@@ -28,12 +28,12 @@ def build_summary(sheet: SheetAnalysis) -> Dict[str, Any]:
     qty_col = "col_qty_pcs" if "col_qty_pcs" in sheet_col_ids else ("col_qty" if "col_qty" in sheet_col_ids else "col_item")
 
     rows.append([
-        {"col_id": desc_col, "value": "NW(KGS)", "style_context": "summary"},
-        {"col_id": qty_col, "value": "{weight_net}", "style_context": "summary"}
+        {"col_id": desc_col, "value": "NW(KGS)", "style_context": "summary_value_only"},
+        {"col_id": qty_col, "value": "{weight_net}", "style_context": "summary_value_only"}
     ])
     rows.append([
-        {"col_id": desc_col, "value": "GW(KGS):", "style_context": "summary"},
-        {"col_id": qty_col, "value": "{weight_gross}", "style_context": "summary"}
+        {"col_id": desc_col, "value": "GW(KGS):", "style_context": "summary_value_only"},
+        {"col_id": qty_col, "value": "{weight_gross}", "style_context": "summary_value_only"}
     ])
 
     # 2. Addon rows (leather summary, etc.)

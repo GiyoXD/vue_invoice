@@ -16,7 +16,7 @@ from typing import Dict, Any, Optional
 logger = logging.getLogger(__name__)
 
 
-FOOTER_FALLBACK_CONTEXTS = {"summary", "grand_total"}
+FOOTER_FALLBACK_CONTEXTS = {"summary", "summary_value_only", "value_only", "grand_total"}
 
 
 class DimensionRegistry:

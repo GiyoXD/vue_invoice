@@ -189,23 +189,8 @@ class TableBuilder:
                 return False
 
         # 8. Finalize borders (post-build: stamps borders onto the completed grid)
-        from ...styling.border_resolver import BorderResolver
-        
-        # Collect column-level border overrides from config
-        column_border_overrides = {}
-        for col_id, col_def in self.config.sheet_styling.columns.items():
-            if col_def.border_style:
-                border_style = col_def.border_style
-                # Normalize legacy naming
-                if border_style == 'side_only':
-                    border_style = 'sides_only'
-                column_border_overrides[col_id] = border_style
-        
-        border_resolver = BorderResolver(
-            default_border=self.config.sheet_styling.default_border or "full_grid",
-            column_overrides=column_border_overrides
-        )
-        border_resolver.apply(grid)
+        from ...styling.border_resolver import apply_border_resolver
+        apply_border_resolver(grid, self.config.sheet_styling)
 
         # 9. Export and write to Layout State
         row_models = grid.get_row_models()

@@ -172,7 +172,7 @@ class TableSectionBuilder(ABC):
         for cells_schema, row_payload, row_context in expanded_rows:
             if active_section != row_context:
                 if active_section is not None:
-                    final_name = section_name_override if section_name_override and active_section == default_context else active_section
+                    final_name = section_name_override if section_name_override else active_section
                     self.grid.set_section_bounds(
                         final_name,
                         cursor_base + section_start_row,
@@ -186,7 +186,7 @@ class TableSectionBuilder(ABC):
             current_row += 1
 
         if active_section is not None:
-            final_name = section_name_override if section_name_override and active_section == default_context else active_section
+            final_name = section_name_override if section_name_override else active_section
             self.grid.set_section_bounds(
                 final_name,
                 cursor_base + section_start_row,
