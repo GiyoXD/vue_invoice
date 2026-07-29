@@ -118,10 +118,10 @@ class PrintAreaConfig:
         if max_row is None or max_col is None:
             return
 
-        # Use config-derived column count if provided
+        # Use config-derived column count if provided (cap to override bounds)
         if max_col_override and max_col_override > 0:
-            max_col = max_col_override
-            logger.debug(f"Using config-derived max_col={max_col} for '{worksheet.title}'")
+            max_col = min(max_col, max_col_override)
+            logger.debug(f"Using capped max_col={max_col} (override={max_col_override}) for '{worksheet.title}'")
 
         # Convert column numbers to letters
         # If min_col is somehow greater than max_col (e.g. override is very small), 
