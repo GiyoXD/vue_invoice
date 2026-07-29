@@ -1,9 +1,9 @@
 import pytest
 from openpyxl import Workbook
-from core.invoice_generator.builders.table.builder import TableBuilder
+from core.invoice_generator.builders.table.builder import TableBuilder, TableBuilderConfig
 from core.invoice_generator.models.config.layout import SheetLayoutModel
 from core.invoice_generator.models.config.styling import SheetStylingModel
-from core.invoice_generator.models.table_adapter import ResolvedTableData
+from core.invoice_generator.mappers import ResolvedTableData
 
 def test_resolve_columns_packing_list():
     wb = Workbook()
@@ -69,18 +69,26 @@ def test_resolve_columns_packing_list():
     }
     
     sheet_layout = SheetLayoutModel.model_validate({"structure": {"columns": sheet_config["structure"]["columns"]}})
+    
+    # Resolve and attach layout mapping properties
+    bundled_columns, column_index_mapping, column_mapping, column_colspan = (
+        sheet_layout.structure.resolve_mappings(DAF_mode=False, custom_mode=False)
+    )
+    sheet_layout.bundled_columns = bundled_columns
+    sheet_layout.column_index_mapping = column_index_mapping
+    sheet_layout.column_mapping = column_mapping
+    sheet_layout.column_colspan = column_colspan
+
     sheet_styling = SheetStylingModel()
     resolved_data = ResolvedTableData()
     
-    builder = TableBuilder(
-        workbook=wb,
+    config = TableBuilderConfig(
         worksheet=ws,
         sheet_styling=sheet_styling,
         sheet_layout=sheet_layout,
-        resolved_data=resolved_data,
-        sheet_name="Packing list",
-        args=None
+        resolved_data=resolved_data
     )
+    builder = TableBuilder(config=config)
     
     bundled_columns, column_mapping, column_colspan = builder._resolve_columns()
     
@@ -120,18 +128,26 @@ def test_resolve_columns_daf_mode_filtering():
     }
     
     sheet_layout = SheetLayoutModel.model_validate({"structure": {"columns": sheet_config["structure"]["columns"]}})
+    
+    # Resolve and attach layout mapping properties in DAF mode
+    bundled_columns, column_index_mapping, column_mapping, column_colspan = (
+        sheet_layout.structure.resolve_mappings(DAF_mode=True, custom_mode=False)
+    )
+    sheet_layout.bundled_columns = bundled_columns
+    sheet_layout.column_index_mapping = column_index_mapping
+    sheet_layout.column_mapping = column_mapping
+    sheet_layout.column_colspan = column_colspan
+
     sheet_styling = SheetStylingModel()
     resolved_data = ResolvedTableData()
     
-    builder = TableBuilder(
-        workbook=wb,
+    config = TableBuilderConfig(
         worksheet=ws,
         sheet_styling=sheet_styling,
         sheet_layout=sheet_layout,
-        resolved_data=resolved_data,
-        sheet_name="Test Sheet",
-        args=ArgsMock()
+        resolved_data=resolved_data
     )
+    builder = TableBuilder(config=config)
     
     bundled_columns, column_mapping, column_colspan = builder._resolve_columns()
     

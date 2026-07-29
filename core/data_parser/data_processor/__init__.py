@@ -13,5 +13,8 @@ from .aggregation import (
     calculate_weight_summary,
     calculate_pallet_summary,
     calculate_footer_totals,
-    format_aggregation_as_list
+    format_aggregation_as_list,
+    perform_DAF_compounding,
 )
+from .footer import calculate_all_footers
+

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 
 class ColumnDef(BaseModel):
     id: str
@@ -82,14 +82,29 @@ class DataFlowConfigModel(BaseModel):
     mappings: Dict[str, MappingRuleModel] = Field(default_factory=dict)
 
 class StaticContentConfigModel(BaseModel):
-    static: Dict[str, List[str]] = Field(default_factory=dict)
+    static_payload: Dict[str, Any] = Field(default_factory=dict)
+    static: Dict[str, Any] = Field(default_factory=dict)
 
 class FooterConfigModel(BaseModel):
     type: str = "regular"
-    rows: List[List[Dict[str, Any]]] = Field(default_factory=list)
+    rows: List[Union[List[Dict[str, Any]], Dict[str, Any]]] = Field(default_factory=list)
+
+class HSCodeConfigModel(BaseModel):
+    col_id: str
+    value: str
+    colspan: int = 1
+    style_context: str = "footer"
 
 class SheetLayoutModel(BaseModel):
     structure: StructureConfigModel
     data_flow: DataFlowConfigModel = Field(default_factory=DataFlowConfigModel)
-    content: Optional[StaticContentConfigModel] = None
+    static_payload: Dict[str, Any] = Field(default_factory=dict)
     footer: Optional[FooterConfigModel] = None
+    hs_code: Optional[HSCodeConfigModel] = None
+    summary: Optional[FooterConfigModel] = None
+
+    # Runtime resolved layout attributes
+    bundled_columns: List[ColumnDef] = Field(default_factory=list)
+    column_mapping: Dict[str, int] = Field(default_factory=dict)
+    column_colspan: Dict[str, int] = Field(default_factory=dict)
+    column_index_mapping: Dict[int, Optional[int]] = Field(default_factory=dict)

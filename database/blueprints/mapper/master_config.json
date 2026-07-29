@@ -280,7 +280,7 @@
       "_sections": [
         "structure",
         "data_flow",
-        "content",
+        "static_payload",
         "footer"
       ],
       "structure": {
@@ -288,23 +288,23 @@
         "columns": [
           {
             "id": "col_static",
-            "header": "Mark & N\u00ba",
+            "header": "Mark & Nº",
             "width": 24.71
           },
           {
             "id": "col_po",
-            "header": "P.O. N\u00ba",
-            "width": 28
+            "header": "P.O Nº",
+            "width": 17
           },
           {
             "id": "col_item",
-            "header": "ITEM N\u00ba",
+            "header": "ITEM Nº",
             "width": 22.14
           },
           {
             "id": "col_desc",
             "header": "Description",
-            "width": 20
+            "width": 26
           },
           {
             "id": "col_qty_sf",
@@ -330,14 +330,12 @@
         "_comment": "Inherits from defaults. Only overrides go here.",
         "mappings": {}
       },
-      "content": {
-        "static": {
-          "col_static": [
-            "VENDOR#:",
-            "Des: {col_desc_fallback}",
-            "MADE IN CAMBODIA"
-          ]
-        }
+      "static_payload": {
+        "col_static": [
+          "VENDOR#:",
+          "Des: {col_desc_fallback}",
+          "MADE IN CAMBODIA"
+        ]
       },
       "footer": {
         "sum_cols": [
@@ -461,7 +459,7 @@
       "_sections": [
         "structure",
         "data_flow",
-        "content",
+        "static_payload",
         "footer"
       ],
       "structure": {
@@ -539,15 +537,13 @@
         "_comment": "Inherits from defaults. Only overrides go here.",
         "mappings": {}
       },
-      "content": {
-        "static": {
-          "col_static": [
-            "VENDOR#:",
-            "Des: {col_desc_fallback}",
-            "Case Qty:",
-            "MADE IN CAMBODIA"
-          ]
-        }
+      "static_payload": {
+        "col_static": [
+          "VENDOR#:",
+          "Des: {col_desc_fallback}",
+          "Case Qty:",
+          "MADE IN CAMBODIA"
+        ]
       },
       "footer": {
         "sum_cols": [

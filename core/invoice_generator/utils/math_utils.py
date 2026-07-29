@@ -7,6 +7,7 @@ handling common issues like whitespace, string representations, and negative num
 
 import logging
 from typing import Any, Optional, Union
+from decimal import Decimal
 
 logger = logging.getLogger(__name__)
 
@@ -90,3 +91,29 @@ def safe_int_convert(value: Any, default: int = 0) -> int:
             pass
             
     return default
+
+
+def to_numeric(value: Any) -> Union[int, float, None, Any]:
+    """
+    Safely attempts to convert a value to a float or int.
+    
+    If conversion fails, returns the original value.
+    Handles removal of thousands separator (',') in strings,
+    and converts Decimal instances to float or int.
+    """
+    if isinstance(value, (int, float)):
+        return value
+    if isinstance(value, str):
+        try:
+            cleaned_val = value.replace(',', '').strip()
+            if not cleaned_val:
+                return None
+            return float(cleaned_val) if '.' in cleaned_val else int(cleaned_val)
+        except (ValueError, TypeError):
+            return value
+    if isinstance(value, Decimal):
+        if value == value.to_integral_value():
+            return int(value)
+        return float(str(value))
+    return value
+

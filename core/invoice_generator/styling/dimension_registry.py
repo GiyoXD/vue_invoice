@@ -16,6 +16,9 @@ from typing import Dict, Any, Optional
 logger = logging.getLogger(__name__)
 
 
+FOOTER_FALLBACK_CONTEXTS = {"summary", "summary_value_only", "value_only", "grand_total"}
+
+
 class DimensionRegistry:
     """
     Row height lookup by context (header, data, footer).
@@ -47,8 +50,19 @@ class DimensionRegistry:
 
     def get_row_height(self, context: str) -> Optional[float]:
         """Get row height for a specific context."""
-        return self._row_heights.get(context)
+        if context in self._row_heights:
+            return self._row_heights[context]
+        if context in FOOTER_FALLBACK_CONTEXTS and "footer" in self._row_heights:
+            return self._row_heights["footer"]
+        return None
 
     def has_context(self, context: str) -> bool:
         """Check if a context exists in the registry."""
-        return context in self._row_heights
+        if context in self._row_heights:
+            return True
+        if context in FOOTER_FALLBACK_CONTEXTS and "footer" in self._row_heights:
+            return True
+        return False
+
+
+

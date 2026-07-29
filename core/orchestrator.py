@@ -7,7 +7,7 @@ from typing import Dict, Optional, Tuple, Any
 # Import the logic directly!
 from core.invoice_generator.generate_invoice import run_invoice_generation
 from core.invoice_generator.models.request import InvoiceGenerationRequest, InvoicePathConfig, ExplicitOverrides
-from core.data_parser.main import run_invoice_automation
+from core.data_parser.main import main as run_data_parser
 from core.data_parser.data_processor import DataValidationError
 from core.utils.snitch import snitch
 
@@ -29,7 +29,7 @@ class Orchestrator:
         try:
             # Call the refactored main function from data_parser
             # It returns (json_path, identifier) on success
-            json_path, identifier = run_invoice_automation(
+            json_path, identifier = run_data_parser(
                 input_excel_override=excel_path if hasattr(excel_path, 'read') else str(excel_path),
                 input_filename_override=input_filename_override,
                 output_dir_override=str(output_dir),

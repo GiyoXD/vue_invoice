@@ -34,10 +34,14 @@ class ExportRequest(BaseModel):
     invoice_no: str
     ref_no: Optional[str] = ""
     invoice_date: str
-    pallet_str: str
+    pallet_str: Optional[str] = ""
+    net_weight: Optional[float] = 0.0
+    pallets: Optional[int] = 0
+    amount: Optional[float] = 0.0
     force_override: bool = False
     spreadsheet_id: Optional[str] = None
     worksheet_name: Optional[str] = "2026"
+
 
 def _get_worksheet(spreadsheet_id: Optional[str], worksheet_name: str):
     if not _GSPREAD_AVAILABLE:
@@ -174,6 +178,12 @@ async def export_to_google_sheets(request: ExportRequest):
         except Exception:
             formatted_date = request.invoice_date
 
+        # Construct combined cell value for Column M: {pallets} PALLETS: {net} / {amount}
+        pallets_val = request.pallets or 0
+        net_val = request.net_weight or 0.0
+        amount_val = request.amount or 0.0
+        combined_val = f"{pallets_val} PALLETS: {float(net_val)} / {float(amount_val)}"
+
         if request.invoice_no in col_c_values:
             if not request.force_override:
                 return {
@@ -187,7 +197,7 @@ async def export_to_google_sheets(request: ExportRequest):
                     {'range': f'C{row_idx}', 'values': [[request.invoice_no]]},
                     {'range': f'D{row_idx}', 'values': [[request.ref_no]]},
                     {'range': f'F{row_idx}', 'values': [[formatted_date]]},
-                    {'range': f'L{row_idx}', 'values': [[request.pallet_str]]}
+                    {'range': f'M{row_idx}', 'values': [[combined_val]]}
                 ]
                 worksheet.batch_update(updates, value_input_option='USER_ENTERED')
                 logger.info(f"Successfully overridden invoice {request.invoice_no} safely using batch update.")
@@ -197,16 +207,13 @@ async def export_to_google_sheets(request: ExportRequest):
                     "action": "updated"
                 }
         else:
-            # Find the next truly empty row across all columns we write to (C, D, F, L).
-            # Using only col C length could land on rows with stray data in other columns.
-            col_f_values = worksheet.col_values(6)
-            col_l_values = worksheet.col_values(12)
-            next_row = max(len(col_c_values), len(col_d_values), len(col_f_values), len(col_l_values)) + 1
+            # Determine next row using Column C (Invoice No) as the single source of truth for row existence.
+            next_row = len(col_c_values) + 1
             updates = [
                 {'range': f'C{next_row}', 'values': [[request.invoice_no]]},
                 {'range': f'D{next_row}', 'values': [[request.ref_no]]},
                 {'range': f'F{next_row}', 'values': [[formatted_date]]},
-                {'range': f'L{next_row}', 'values': [[request.pallet_str]]}
+                {'range': f'M{next_row}', 'values': [[combined_val]]}
             ]
             worksheet.batch_update(updates, value_input_option='USER_ENTERED')
             logger.info(f"Successfully exported new invoice {request.invoice_no} to Google Sheets (row {next_row}).")

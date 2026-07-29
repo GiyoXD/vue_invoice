@@ -108,7 +108,7 @@ export default {
                             </div>
                             <div class="mt-1 flex flex-wrap gap-1 items-center">
                                 <span class="text-slate-500 font-medium" style="font-size: 10px;">Text:</span>
-                                <button type="button" @click="insertRef('standard', 'DAF')" class="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors border border-slate-700/50" style="font-size: 10px;">DAF</button>
+                                <button type="button" @click="insertRef('standard', 'DAF')" class="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors border border-slate-700/50" style="font-size: 10px;">DAF:</button>
                                 <button type="button" @click="insertRef('standard', 'BAVET')" class="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors border border-slate-700/50" style="font-size: 10px;">BAVET</button>
                             </div>
                         </div>
@@ -132,7 +132,7 @@ export default {
                             </div>
                             <div class="mt-1 flex flex-wrap gap-1 items-center">
                                 <span class="text-slate-500 font-medium" style="font-size: 10px;">Text:</span>
-                                <button type="button" @click="insertRef('daf', 'DAF')" class="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors border border-slate-700/50" style="font-size: 10px;">DAF</button>
+                                <button type="button" @click="insertRef('daf', 'DAF')" class="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors border border-slate-700/50" style="font-size: 10px;">DAF:</button>
                                 <button type="button" @click="insertRef('daf', 'BAVET')" class="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded transition-colors border border-slate-700/50" style="font-size: 10px;">BAVET</button>
                             </div>
                         </div>
@@ -337,7 +337,7 @@ export default {
                 for (const cellDict of (rowDict.cells || [])) {
                     const ci = (cellDict.col_index || 1) - 1;
                     if (ci > maxCol) maxCol = ci;
-                    
+
                     if (cellDict.merge) {
                         const mc = (cellDict.merge.max_col || 1) - 1;
                         if (mc > maxCol) maxCol = mc;
@@ -356,7 +356,7 @@ export default {
                 for (const cellDict of (rowDict.cells || [])) {
                     const ci = (cellDict.col_index || 1) - 1;
                     if (ci > maxCol) maxCol = ci;
-                    
+
                     if (cellDict.merge) {
                         const mc = (cellDict.merge.max_col || 1) - 1;
                         if (mc > maxCol) maxCol = mc;

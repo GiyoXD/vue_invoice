@@ -146,7 +146,7 @@ class TableGrid(CoreGrid):
 
         self.write(row, col_id, formula, context)
 
-    def write_section_aggregate(self, row: int, col_id: str, function: str = "SUM", section: str = "data", context: str = 'footer'):
+    def write_section_aggregate(self, row: int, col_id: str, function: str = "SUM", section: str = "data", context: str = 'footer', sum_ranges: Optional[List[Tuple[int, int]]] = None):
         """
         Automatically calculates the absolute coordinates for a section range on a column 
         and writes the formula to the grid. E.g. write_section_aggregate(row, 'col_qty', 'SUM', 'data')
@@ -154,6 +154,14 @@ class TableGrid(CoreGrid):
         col_idx = self._resolve_column(col_id)
         if not col_idx:
             return
+
+        if sum_ranges:
+            col_letter = get_column_letter(col_idx)
+            range_strs = [f"{col_letter}{start}:{col_letter}{end}" for start, end in sum_ranges if start > 0 and end >= start]
+            if range_strs:
+                formula = f"={function}({','.join(range_strs)})"
+                self.write(row, col_id, formula, context)
+                return
 
         start, end = self.get_section_range(section)
         if start > 0 and end >= start:

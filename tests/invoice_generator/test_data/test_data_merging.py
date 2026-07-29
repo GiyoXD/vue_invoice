@@ -51,16 +51,15 @@ def test_data_table_builder_vertical_merge_consecutive():
     
     resolved_data = {
         "data_rows": [
-            {1: "PO-001", 2: 10},
-            {1: "PO-001", 2: 15},
-            {1: "PO-002", 2: 20}
+            {1: "PO-001", 2: 10, "rowspans": {"col_po": 2}},
+            {1: "PO-001", 2: 15, "rowspans": {"col_po": 0}},
+            {1: "PO-002", 2: 20, "rowspans": {"col_po": 1}}
         ]
     }
     
     builder = DataTableBuilderStyler(
         grid=grid,
-        resolved_data=resolved_data,
-        vertical_merge_columns=["col_po"]
+        resolved_data=resolved_data
     )
     builder.build()
     
@@ -83,21 +82,49 @@ def test_data_table_builder_vertical_merge_skip_int():
     
     resolved_data = {
         "data_rows": [
-            {1: "100"},
-            {1: "100"}
+            {1: "100", "rowspans": {"col_num": 1}},
+            {1: "100", "rowspans": {"col_num": 1}}
         ]
     }
     
     builder = DataTableBuilderStyler(
         grid=grid,
-        resolved_data=resolved_data,
-        vertical_merge_columns=["col_num"]
+        resolved_data=resolved_data
     )
     builder.build()
     
     # Numeric values should skip vertical merging
     cell = grid.get_cell(-2, "col_num")
     assert cell.merge is None
+
+
+def test_apply_vertical_merges():
+    from core.invoice_generator.utils.merge_transformer import apply_vertical_merges
+    
+    # Test merging of description (when uniform) and pallet numbers
+    rows = [
+        {"col_pallet_no": "P1", "col_desc": "Uniform Item"},
+        {"col_pallet_no": "P1", "col_desc": "Uniform Item"},
+        {"col_pallet_no": "P2", "col_desc": "Uniform Item"}
+    ]
+    
+    result = apply_vertical_merges(rows)
+    assert result[0]["rowspans"]["col_pallet_no"] == 2
+    assert result[1]["rowspans"]["col_pallet_no"] == 0
+    assert result[2]["rowspans"]["col_pallet_no"] == 1
+    
+    assert result[0]["rowspans"]["col_desc"] == 3
+    assert result[1]["rowspans"]["col_desc"] == 0
+    assert result[2]["rowspans"]["col_desc"] == 0
+
+    # Test that digit-only strings in col_pallet_no are not merged
+    rows_digits = [
+        {"col_pallet_no": "1", "col_desc": "Uniform Item"},
+        {"col_pallet_no": "1", "col_desc": "Uniform Item"}
+    ]
+    result_digits = apply_vertical_merges(rows_digits)
+    assert result_digits[0]["rowspans"].get("col_pallet_no", 1) == 1
+    assert result_digits[1]["rowspans"].get("col_pallet_no", 1) == 1
 
 
 def test_data_table_builder_parent_logical_keys_no_overwrite():

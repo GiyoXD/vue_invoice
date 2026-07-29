@@ -53,17 +53,36 @@ export default {
                     </div>
 
                     <!-- Recommended Truck -->
-                    <div class="flex flex-col pl-6 min-w-[220px]">
-                        <span class="text-xs font-medium text-slate-400 uppercase tracking-wider font-semibold">Recommended Truck</span>
+                    <div class="flex flex-col pl-6 min-w-[280px]">
+                        <div class="flex items-center justify-between gap-4">
+                            <span class="text-xs font-medium text-slate-400 uppercase tracking-wider font-semibold">Recommended Truck</span>
+                            <span class="text-[10px] font-bold text-slate-400 select-none bg-slate-900 border border-slate-700/50 rounded px-1 py-0.5" v-if="detectedPalletDims && (detectedPalletDims.length !== 1.2 || detectedPalletDims.width !== 1.0)">
+                                {{ detectedPalletDims.length }}m × {{ detectedPalletDims.width }}m
+                            </span>
+                        </div>
                         <div class="flex items-center gap-2 mt-0.5">
                             <span v-if="recommendedTruckInfo" class="text-xs font-bold px-2.5 py-0.5 rounded-full border transition-all" :class="recommendedTruckInfo.color" :title="recommendedTruckInfo.description">
                                 {{ recommendedTruckInfo.displayName }}
                             </span>
                             <span v-else class="text-xs font-bold text-slate-500">—</span>
-                            <label class="flex items-center gap-1 cursor-pointer text-[10px] font-bold text-slate-400 uppercase tracking-wider select-none bg-slate-900 border border-slate-700/50 rounded px-1.5 py-0.5 hover:border-slate-500 transition-colors">
-                                <input type="checkbox" v-model="isWideCargo" accent-color="#10b981" class="rounded bg-slate-950 border-slate-800 w-3 h-3 cursor-pointer" />
-                                <span class="px-1">Wide</span>
-                            </label>
+                            
+                            <div class="flex items-center gap-1.5 bg-slate-950 border border-slate-700/50 rounded px-1.5 py-0.5 select-none">
+                                <label class="flex items-center gap-1 cursor-pointer text-[10px] font-bold text-slate-400 uppercase tracking-wider hover:text-slate-200 transition-colors">
+                                    <input type="checkbox" v-model="isWideCargo" accent-color="#10b981" class="rounded bg-slate-950 border-slate-850 w-3 h-3 cursor-pointer" />
+                                    <span>Wide</span>
+                                </label>
+                                
+                                <span class="text-slate-700 font-bold text-[10px] select-none">|</span>
+                                
+                                <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                                    <span>Stack:</span>
+                                    <select v-model="maxStackingLayers" class="bg-slate-950 text-slate-300 border-0 rounded px-0.5 py-0 text-[10px] font-bold cursor-pointer focus:ring-0 focus:outline-none">
+                                        <option :value="3">3x</option>
+                                        <option :value="2">2x</option>
+                                        <option :value="1">1x</option>
+                                    </select>
+                                </label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -80,6 +99,8 @@ export default {
             weightStats,
             recommendedTruckInfo,
             isWideCargo,
+            maxStackingLayers,
+            detectedPalletDims,
             totalAmount
         } = storeToRefs(store);
 
@@ -99,6 +120,8 @@ export default {
             weightStats,
             recommendedTruckInfo,
             isWideCargo,
+            maxStackingLayers,
+            detectedPalletDims,
             totalAmount,
             formatNumber
         };

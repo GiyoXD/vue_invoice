@@ -1,12 +1,19 @@
-# invoice_generator/processors/base_processor.py
+import logging
 from abc import ABC, abstractmethod
 from openpyxl.workbook import Workbook
 from openpyxl.worksheet.worksheet import Worksheet
 import argparse
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
+
 from core.system_config import ConfigurationError
 from core.invoice_generator.models.context import ProcessorContext
 from core.invoice_generator.models.layout import SheetLayoutState, TableLayoutConfig
+from core.invoice_generator.builders.summary import SummaryBuilder
+from core.invoice_generator.mappers import resolve_summary_payload
+from core.invoice_generator.utils.cell_converter import write_models_to_worksheet
+
+logger = logging.getLogger(__name__)
+
 
 class SheetProcessor(ABC):
     """
@@ -119,7 +126,7 @@ class SheetProcessor(ABC):
         template_state_builder: Optional[Any] = None
     ):
         """
-        Orchestrates the common workflow of BuilderConfigResolver resolution and LayoutBuilder execution.
+        Orchestrates the common workflow of SheetConfigResolver resolution and LayoutBuilder execution.
         Saves subclasses from duplicating this execution sequence.
         """
         resolver = self._init_resolver(
@@ -132,7 +139,6 @@ class SheetProcessor(ABC):
             resolver=resolver,
             table_key=table_key,
             is_last_table=config.is_last_table,
-            show_grand_total_addons=config.show_grand_total_addons,
             next_free_row=layout_state.next_free_row
         )
         
@@ -146,7 +152,8 @@ class SheetProcessor(ABC):
             layout_config=layout_config,
             template_state_builder=template_state_builder,
             is_first_table=config.is_first_table,
-            skip_template_footer=config.skip_template_footer
+            skip_template_footer=config.skip_template_footer,
+            table_key=table_key
         )
 
     def _init_resolver(
@@ -155,8 +162,8 @@ class SheetProcessor(ABC):
         total_net_weight: Optional[float],
         total_gross_weight: Optional[float]
     ):
-        """Initializes the BuilderConfigResolver with context overrides."""
-        from core.invoice_generator.config.builder_config_resolver import BuilderConfigResolver
+        """Initializes the SheetConfigResolver with context overrides."""
+        from core.invoice_generator.resolvers.sheet_config_resolver import SheetConfigResolver
 
         context_overrides = {}
         if total_net_weight is not None:
@@ -167,7 +174,7 @@ class SheetProcessor(ABC):
         # Add context override
         context_overrides["is_last_table"] = is_last_table
 
-        return BuilderConfigResolver(
+        return SheetConfigResolver(
             config_loader=self.config_loader,
             sheet_name=self.sheet_name,
             worksheet=self.output_worksheet,
@@ -182,15 +189,13 @@ class SheetProcessor(ABC):
         resolver,
         table_key: Optional[str],
         is_last_table: bool,
-        show_grand_total_addons: bool,
         next_free_row: int
     ):
         """Resolves style, context, and layout config bundles."""
         style_config = resolver.get_style_bundle()
         context_config = resolver.get_context_bundle(
             table_key=table_key,
-            is_last_table=is_last_table,
-            show_grand_total_addons=show_grand_total_addons
+            is_last_table=is_last_table
         )
         layout_config = resolver.get_layout_bundle()
         
@@ -208,7 +213,7 @@ class SheetProcessor(ABC):
         return style_config, context_config, layout_config
 
     def _resolve_table_data(self, resolver, table_key: Optional[str], layout_config: Dict[str, Any]) -> bool:
-        """Resolves table data using TableDataAdapter and updates layout_config."""
+        """Resolves table data using TableDataMapper and updates layout_config."""
         import logging
         logger = logging.getLogger(__name__)
 
@@ -222,7 +227,7 @@ class SheetProcessor(ABC):
             resolved_data = table_resolver.resolve()
             layout_config['resolved_data'] = resolved_data
             
-            logger.info(f"Successfully resolved table data for table '{table_key or 'default'}' using TableDataAdapter")
+            logger.info(f"Successfully resolved table data for table '{table_key or 'default'}' using TableDataMapper")
             return True
         except Exception as e:
             logger.error(f"Error resolving table data: {e}")
@@ -238,7 +243,8 @@ class SheetProcessor(ABC):
         layout_config: Dict[str, Any],
         template_state_builder: Optional[Any],
         is_first_table: bool,
-        skip_template_footer: bool
+        skip_template_footer: bool,
+        table_key: Optional[str] = None
     ):
         """Runs the LayoutBuilder and returns layout_builder if successful."""
         import logging
@@ -273,8 +279,6 @@ class SheetProcessor(ABC):
             args=self.args,
             total_net_weight=context_config.get('total_net_weight'),
             total_gross_weight=context_config.get('total_gross_weight'),
-            is_last_table=context_config.get('is_last_table', False),
-            show_grand_total_addons=context_config.get('show_grand_total_addons', False),
             skip_template_header_restoration=layout_config.get('skip_template_header_restoration', False),
             skip_header_builder=layout_config.get('skip_header_builder', False),
             skip_data_table_builder=layout_config.get('skip_data_table_builder', False),
@@ -282,7 +286,9 @@ class SheetProcessor(ABC):
             skip_template_footer_restoration=layout_config.get('skip_template_footer_restoration', False),
             template_state_builder=template_state_builder,
             template_json_config=self.config_loader.get_template_json_config(),
-            layout_state=layout_state
+            layout_state=layout_state,
+            table_key=table_key,
+            invoice_data=self.invoice_data
         )
         
         success = layout_builder.build()
@@ -291,4 +297,110 @@ class SheetProcessor(ABC):
             return None
             
         return layout_builder
+
+    def _build_page_summary(
+        self,
+        grid: Any,
+        sheet_layout: Any,
+        footer_data: Optional[Any] = None
+    ) -> int:
+        """
+        Builds page-level summary section (e.g. grand total, weight, leather summary).
+        Returns the next available row index after summary.
+        """
+        if not sheet_layout or not sheet_layout.summary or not sheet_layout.summary.rows:
+            return grid.start_row_index + grid._cursor_row if grid else -1
+
+        summary_config = sheet_layout.summary
+
+
+        logger.info("[SheetProcessor] Building page-level summary section")
+        try:
+            payload = resolve_summary_payload(
+                invoice_data=self.invoice_data,
+                footer_data_model=footer_data
+            )
+
+            summary_builder = SummaryBuilder(
+                grid=grid,
+                summary_config=summary_config,
+                payload=payload
+            )
+            next_row = summary_builder.build()
+
+            summary_models = [
+                m for m in grid.get_row_models()
+                if getattr(m, "row_idx", grid.start_row_index) >= grid.start_row_index
+            ]
+            self._commit_row_models(summary_models, start_row=grid.start_row_index, next_row=next_row)
+
+            return next_row
+
+        except Exception as e:
+            logger.error(f"[SheetProcessor] SummaryBuilder failed: {e}", exc_info=True)
+            return grid.start_row_index + grid._cursor_row if grid else -1
+
+    def _commit_row_models(self, row_models: List[Any], start_row: int, next_row: Optional[int] = None) -> None:
+        """Commits generated row models through layout_state or directly to output_worksheet."""
+        if not row_models:
+            return
+
+        layout_state = getattr(self, "layout_state", None)
+        if layout_state:
+            layout_state.write_row_models(row_models, start_row=start_row)
+            if next_row is not None and hasattr(layout_state, "advance_to"):
+                layout_state.advance_to(next_row)
+        elif getattr(self, "output_worksheet", None):
+            write_models_to_worksheet(self.output_worksheet, row_models, start_row=start_row)
+
+
+
+    @property
+    def skip_footer_restoration(self) -> bool:
+        """Returns True if template footer restoration should be bypassed."""
+        return (
+            self.sheet_config.get('skip_template_footer', False) or
+            self.sheet_config.get('skip_template_footer_restoration', False) or
+            getattr(self, 'skip_template_footer_restoration', False)
+        )
+
+    def _restore_template_footer(
+        self,
+        template_state_builder: Any,
+        current_row: int,
+        last_grid: Any
+    ):
+        """
+        Restores template footer elements at the specified start row.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        if template_state_builder and not self.skip_footer_restoration:
+            try:
+
+
+                actual_num_cols = last_grid.num_columns if last_grid else None
+                column_index_mapping = getattr(last_grid, 'column_index_mapping', None) if last_grid else None
+                
+                logger.info(f"--- RESTORING TEMPLATE FOOTER ---")
+                logger.info(f"footer_start_row: {current_row}")
+                
+                gen_mode = "standard"
+                if self.args:
+                    if getattr(self.args, 'DAF', False): gen_mode = "daf"
+                    elif getattr(self.args, 'custom', False): gen_mode = "custom"
+
+                template_state_builder.restore_template_footer(
+                    target_worksheet=self.output_worksheet,
+                    footer_start_row=current_row,
+                    actual_num_cols=actual_num_cols,
+                    mode=gen_mode,
+                    column_index_mapping=column_index_mapping
+                )
+                logger.info("Template footer restored successfully")
+            except Exception as e:
+                logger.error(f"Failed to restore template footer: {e}", exc_info=True)
+        else:
+            logger.debug("Skipping template footer restoration")
+
 

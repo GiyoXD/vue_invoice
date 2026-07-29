@@ -14,9 +14,9 @@ from core.data_parser.data_processor import (
     aggregate_custom_by_po_item,
     format_aggregation_as_list,
     aggregate_per_po_with_pallets,
-    calculate_footer_totals
+    calculate_footer_totals,
+    perform_DAF_compounding
 )
-from core.data_parser.main import perform_DAF_compounding
 
 router = APIRouter(prefix="/api", tags=["generate"])
 logger = logging.getLogger(__name__)
@@ -127,10 +127,7 @@ def generate_invoice(request: GenerateRequest):
             single["aggregation"] = format_aggregation_as_list(std_map, mode='standard')
             single["aggregation_custom"] = format_aggregation_as_list(cust_map, mode='custom')
             
-            # Recalculate DAF Compounding based on the mode used originally
-            daf_mode = full_data.get("metadata", {}).get("DAF_compounding_input_mode", "standard")
-            daf_source = cust_map if daf_mode == "custom" else std_map
-            single["aggregation_DAF"] = perform_DAF_compounding(daf_source, daf_mode)
+            single["aggregation_DAF"] = perform_DAF_compounding(merged_data)
             
             single["manifest_by_pallet_per_po"] = aggregate_per_po_with_pallets(merged_data)
             full_data["single_table"] = single

@@ -21,12 +21,12 @@ class BundleResolver:
 
     def get_layout_bundle(self) -> Dict[str, Any]:
         layout_config = self._sheet_config.get('layout_config', {})
-        content_section = layout_config.get('content', {})
-        static_section = content_section.get('static', {})
+        static_payload = layout_config.get('static_payload', {})
+
         return {
             'sheet_config': layout_config,
             'blanks': layout_config.get('blanks', {}),
-            'static_content': static_section,
+            'static_payload': static_payload,
             'merge_rules': layout_config.get('merge_rules', {}),
         }
 
@@ -67,6 +67,7 @@ class BundleResolver:
             'data_source': data_source,
             'data_source_type': data_source_type,
             'mapping_rules': mapping_rules,
+            'static_payload': layout_config.get('static_payload', {}),
             'table_key': table_key,
             'footer_data': self.invoice_data.get('footer_data', {}) if self.invoice_data else {},
         }
