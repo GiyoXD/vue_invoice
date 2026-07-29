@@ -23,18 +23,18 @@ def build_summary(sheet: SheetAnalysis) -> Dict[str, Any]:
         sheet_col_ids.append(c.id)
         sheet_col_ids.extend(child.id for child in c.children)
 
-    # 1. Weight summary declaration rows
-    desc_col = "col_desc" if "col_desc" in sheet_col_ids else "col_po"
-    qty_col = "col_qty_pcs" if "col_qty_pcs" in sheet_col_ids else ("col_qty" if "col_qty" in sheet_col_ids else "col_item")
+    # 1. Weight summary declaration rows (Disabled by default - enable when invoice use case is found)
+    # desc_col = "col_desc" if "col_desc" in sheet_col_ids else "col_po"
+    # qty_col = "col_qty_pcs" if "col_qty_pcs" in sheet_col_ids else ("col_qty" if "col_qty" in sheet_col_ids else "col_item")
 
-    rows.append([
-        {"col_id": desc_col, "value": "NW(KGS)", "style_context": "summary_value_only"},
-        {"col_id": qty_col, "value": "{weight_net}", "style_context": "summary_value_only"}
-    ])
-    rows.append([
-        {"col_id": desc_col, "value": "GW(KGS):", "style_context": "summary_value_only"},
-        {"col_id": qty_col, "value": "{weight_gross}", "style_context": "summary_value_only"}
-    ])
+    # rows.append([
+    #     {"col_id": desc_col, "value": "NET WEIGHT:", "style_context": "summary_value_only"},
+    #     {"col_id": qty_col, "value": "{weight_net} KGS", "style_context": "summary_value_only"}
+    # ])
+    # rows.append([
+    #     {"col_id": desc_col, "value": "GROSS WEIGHT:", "style_context": "summary_value_only"},
+    #     {"col_id": qty_col, "value": "{weight_gross} KGS", "style_context": "summary_value_only"}
+    # ])
 
     # 2. Addon rows (leather summary, etc.)
     addon_facts = sheet.static_content_hints.get("addon_facts", [])

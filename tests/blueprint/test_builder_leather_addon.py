@@ -50,11 +50,11 @@ def test_config_builder_leather_summary_detection():
 
     # Footer total row: 1 main row
     assert len(footer_rows) == 1
-    # Summary rows: 2 weight summary rows + 1 leather row = 3 rows
-    assert len(summary_rows) == 3
+    # Summary rows: 0 weight summary rows + 1 leather row = 1 row
+    assert len(summary_rows) == 1
     
     # Verify Buffalo row structure
-    buffalo_row = summary_rows[2]
+    buffalo_row = summary_rows[0]
     assert isinstance(buffalo_row, dict)
     assert buffalo_row["source_list"] == "leather_summary"
     cells = buffalo_row["cells"]
@@ -90,8 +90,8 @@ def test_config_builder_leather_summary_skipped_when_no_pattern():
     footer_rows = footer_data["rows"]
     summary_rows = summary_data["rows"]
 
-    # Main footer row = 1, weight summary rows = 2
+    # Main footer row = 1, weight summary rows = 0
     assert len(footer_rows) == 1
-    assert len(summary_rows) == 2
+    assert len(summary_rows) == 0
 
 
