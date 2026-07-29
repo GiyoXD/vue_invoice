@@ -111,3 +111,36 @@ def test_count_layout_columns_no_layout():
 
     # 3. Assert
     assert result is None
+
+
+# --- Tests for split_workbook_to_buffers ---
+
+def test_split_workbook_to_buffers_preserves_deepsheet():
+    import io
+    import openpyxl
+    from pathlib import Path
+    from core.invoice_generator.utils.workbook_utils import split_workbook_to_buffers
+
+    wb = openpyxl.Workbook()
+    ws_inv = wb.active
+    ws_inv.title = "Invoice"
+    
+    ws_pkg = wb.create_sheet("Packing List")
+    
+    ws_deep = wb.create_sheet("DeepSheet")
+    ws_deep.sheet_state = "veryHidden"
+
+    output_path = Path("TH26001_Invoice.xlsx")
+    split_results = split_workbook_to_buffers(wb, output_path)
+
+    # Should split into 2 visible sheet buffers
+    assert len(split_results) == 2
+    filenames = [res[0] for res in split_results]
+    assert "TH26001_Invoice.xlsx" in filenames
+    assert "TH26001_Packing List.xlsx" in filenames
+
+    # Verify each split file contains its sheet AND DeepSheet
+    for filename, buf in split_results:
+        split_wb = openpyxl.load_workbook(io.BytesIO(buf))
+        assert "DeepSheet" in split_wb.sheetnames
+

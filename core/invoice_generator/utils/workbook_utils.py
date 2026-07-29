@@ -351,9 +351,9 @@ def split_workbook_to_buffers(workbook, output_path) -> list:
         master_buffer.seek(0)
         wb = openpyxl.load_workbook(master_buffer)
 
-        # Remove every sheet except the target
+        # Remove every sheet except the target and metadata sheets (e.g. DeepSheet)
         for sn in wb.sheetnames:
-            if sn != sheet_name:
+            if sn != sheet_name and sn != "DeepSheet":
                 wb.remove(wb[sn])
 
         sheet_buffer = io.BytesIO()
