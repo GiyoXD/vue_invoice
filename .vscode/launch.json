@@ -11,6 +11,15 @@
             "justMyCode": true
         },
         {
+            "name": "Python: Blueprint Debug Runner",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/scratch/debug_blueprint_runner.py",
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
             "name": "Python: Current File",
             "type": "debugpy",
             "request": "launch",
