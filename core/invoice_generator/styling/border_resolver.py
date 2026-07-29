@@ -23,7 +23,7 @@ import logging
 from copy import copy
 from typing import Dict, Optional, Any
 
-from core.models.cell import BorderStyle, CellStyle
+from core.models.cell import BorderStyle, CellStyle, UnitCell
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +43,7 @@ BORDER_PATTERNS: Dict[str, Optional[BorderStyle]] = {
 FULL_BORDER_CONTEXTS = {"header", "footer"}
 NO_BORDER_CONTEXTS = {"summary", "grand_total"}
 VALUE_ONLY_CONTEXTS = {"value_only", "summary_value_only"}
+SUMMARY_CONTEXTS = NO_BORDER_CONTEXTS | VALUE_ONLY_CONTEXTS
 
 
 class BorderResolver:
@@ -132,13 +133,13 @@ class BorderResolver:
             return
 
         all_rows = sorted(grid._grid.keys())
-        
-        # Find the absolute last row of the "actual" table (excluding borderless add-ons)
+
+        # Find the absolute last row of the "actual" table (excluding borderless summary and value-only add-ons)
         last_table_row = -1
         for section, (start, end) in grid._sections.items():
-            if section not in NO_BORDER_CONTEXTS:
+            if section not in SUMMARY_CONTEXTS:
                 last_table_row = max(last_table_row, end)
-        
+
         # Fallback if somehow no standard sections are present
         if last_table_row == -1:
             last_table_row = all_rows[-1]
@@ -148,9 +149,16 @@ class BorderResolver:
 
             for col_id, col_idx in grid.column_mapping.items():
                 if row not in grid._grid or col_idx not in grid._grid[row]:
-                    continue
+                    if row == last_table_row:
+                        if row not in grid._grid:
+                            grid._grid[row] = {}
+                        cell = UnitCell(col_index=col_idx)
+                        grid._grid[row][col_idx] = cell
+                    else:
+                        continue
+                else:
+                    cell = grid._grid[row][col_idx]
 
-                cell = grid._grid[row][col_idx]
                 pattern_name = self.column_overrides.get(col_id, "")
                 if pattern_name == "side_only":
                     pattern_name = "sides_only"
@@ -189,20 +197,30 @@ class BorderResolver:
         )
 
 
+def _get_prop(obj: Any, key: str, default: Any = None) -> Any:
+    """Helper to safely retrieve a property from either a dict or object."""
+    if isinstance(obj, dict):
+        return obj.get(key, default)
+    return getattr(obj, key, default) or default
+
+
 def apply_border_resolver(grid: Any, sheet_styling: Optional[Any] = None) -> None:
     """Convenience helper to construct and apply BorderResolver to a grid using sheet styling config."""
     if sheet_styling is None and hasattr(grid, "style_registry") and grid.style_registry:
         sheet_styling = getattr(grid.style_registry, "sheet_styling", None)
+        if sheet_styling is None:
+            sheet_styling = getattr(grid.style_registry, "styling_config", None)
 
     column_border_overrides = {}
     default_border = "full_grid"
 
     if sheet_styling:
-        default_border = getattr(sheet_styling, "default_border", "full_grid") or "full_grid"
-        columns = getattr(sheet_styling, "columns", None)
+        default_border = _get_prop(sheet_styling, "default_border", "full_grid") or "full_grid"
+        columns = _get_prop(sheet_styling, "columns", {})
+
         if isinstance(columns, dict):
             for col_id, col_def in columns.items():
-                b_style = getattr(col_def, "border_style", None)
+                b_style = _get_prop(col_def, "border_style")
                 if b_style:
                     if b_style == "side_only":
                         b_style = "sides_only"

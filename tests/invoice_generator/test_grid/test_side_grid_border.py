@@ -314,3 +314,72 @@ def test_value_only_border_stamps_only_on_populated_cells():
     assert val_cell.style is not None and val_cell.style.border is not None
     assert empty_cell.style is None or empty_cell.style.border is None
 
+
+def test_static_column_finish_border_on_last_table_row():
+    """Verify that col_static receives a closing bottom border on the last table row even if unwritten."""
+    registry = StyleRegistry({"columns": {"col_static": {"border_style": "side_only"}}})
+    column_mapping = {"col_static": 1, "col_desc": 2}
+    dim_registry = DimensionRegistry({})
+
+    grid = TableGrid(column_mapping=column_mapping, style_registry=registry, dimension_registry=dim_registry)
+    grid.set_start_row(0)
+
+    grid.mark_section_start("data")
+    grid.write(0, "col_static", "Item 1", context="data")
+    grid.write(0, "col_desc", "Description 1", context="data")
+    grid.advance_row(1)
+    grid.mark_section_end("data")
+
+    grid.mark_section_start("footer")
+    grid.write(0, "col_desc", "TOTAL", context="footer") # col_static NOT explicitly written in footer
+    grid.advance_row(1)
+    grid.mark_section_end("footer")
+
+    resolver = BorderResolver(default_border="full_grid", column_overrides={"col_static": "sides_only"})
+    resolver.apply(grid)
+
+    last_table_row = grid._sections["footer"][1]
+    static_col_idx = grid.column_mapping["col_static"]
+    footer_static_cell = grid._grid[last_table_row][static_col_idx]
+
+    assert footer_static_cell.style is not None and footer_static_cell.style.border is not None
+    assert footer_static_cell.style.border.left == "thin"
+    assert footer_static_cell.style.border.right == "thin"
+    assert footer_static_cell.style.border.bottom == "thin", "col_static missing bottom border on last table row"
+
+
+def test_summary_section_does_not_override_last_table_row():
+    """Verify that summary/summary_value_only sections after footer do not override last_table_row."""
+    registry = StyleRegistry({"columns": {"col_static": {"border_style": "side_only"}}})
+    column_mapping = {"col_static": 1, "col_desc": 2}
+    dim_registry = DimensionRegistry({})
+
+    grid = TableGrid(column_mapping=column_mapping, style_registry=registry, dimension_registry=dim_registry)
+    grid.set_start_row(0)
+
+    grid.mark_section_start("data")
+    grid.write(0, "col_static", "Item 1", context="data")
+    grid.write(0, "col_desc", "Description 1", context="data")
+    grid.advance_row(1)
+    grid.mark_section_end("data")
+
+    grid.mark_section_start("footer")
+    grid.write(0, "col_desc", "TOTAL", context="footer") # col_static NOT explicitly written
+    grid.advance_row(1)
+    grid.mark_section_end("footer")
+
+    grid.mark_section_start("summary_value_only")
+    grid.write(0, "col_desc", "Net Weight Summary", context="summary_value_only")
+    grid.advance_row(1)
+    grid.mark_section_end("summary_value_only")
+
+    resolver = BorderResolver(default_border="full_grid", column_overrides={"col_static": "sides_only"})
+    resolver.apply(grid)
+
+    footer_row = grid._sections["footer"][1]
+    static_col_idx = grid.column_mapping["col_static"]
+    footer_static_cell = grid._grid[footer_row][static_col_idx]
+
+    # footer row should still be identified as the last table row, so col_static gets closing bottom border
+    assert footer_static_cell.style is not None and footer_static_cell.style.border is not None
+    assert footer_static_cell.style.border.bottom == "thin", "footer row should have bottom border even with trailing summary section"
