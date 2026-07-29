@@ -115,7 +115,8 @@ class MultiTableProcessor(SheetProcessor):
             current_row = self._build_page_summary(
                 grid=last_grid,
                 sheet_layout=layout_builder.sheet_layout,
-                footer_data=layout_builder.footer_data
+                footer_data=layout_builder.footer_data,
+                current_row=current_row
             )
 
         # 7. Restore Template Footer

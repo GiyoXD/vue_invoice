@@ -108,15 +108,10 @@ def generate_invoice(request: GenerateRequest):
             for t in tables:
                 if isinstance(t, list): merged_data.extend(t)
             
-            # Recalculate footers for database export accurate grand totals
-            grand_total_footer = calculate_footer_totals(merged_data)
             footer_data = full_data.get("footer_data")
             if not footer_data or "grand_total" not in footer_data:
                 return JSONResponse(status_code=422, content={"error": "Missing footer_data or grand_total in parsed data. Cannot process pricing."})
-                
-            gt = footer_data["grand_total"]
-            gt["col_amount"] = str(grand_total_footer.get("col_amount", 0))
-            gt["col_qty_sf"] = str(grand_total_footer.get("col_qty_sf", 0))
+            
             
             std_map = {}
             cust_map = {}

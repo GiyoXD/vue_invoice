@@ -302,17 +302,19 @@ class SheetProcessor(ABC):
         self,
         grid: Any,
         sheet_layout: Any,
-        footer_data: Optional[Any] = None
+        footer_data: Optional[Any] = None,
+        current_row: Optional[int] = None
     ) -> int:
         """
         Builds page-level summary section (e.g. grand total, weight, leather summary).
         Returns the next available row index after summary.
         """
+        fallback_row = current_row if current_row is not None else (grid.start_row_index + grid._cursor_row if grid else -1)
+
         if not sheet_layout or not sheet_layout.summary or not sheet_layout.summary.rows:
-            return grid.start_row_index + grid._cursor_row if grid else -1
+            return fallback_row
 
         summary_config = sheet_layout.summary
-
 
         logger.info("[SheetProcessor] Building page-level summary section")
         try:
@@ -338,7 +340,7 @@ class SheetProcessor(ABC):
 
         except Exception as e:
             logger.error(f"[SheetProcessor] SummaryBuilder failed: {e}", exc_info=True)
-            return grid.start_row_index + grid._cursor_row if grid else -1
+            return fallback_row
 
     def _commit_row_models(self, row_models: List[Any], start_row: int, next_row: Optional[int] = None) -> None:
         """Commits generated row models through layout_state or directly to output_worksheet."""
