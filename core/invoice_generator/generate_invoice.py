@@ -249,7 +249,7 @@ def _prepare_workbooks(ctx: GeneratorContext):
     try:
         DeepSheetBuilder.build(ctx.output_workbook, ctx.invoice_data)
     except Exception as e:
-        logger.warning(f"DeepSheet injection skipped: {e}")
+        logger.error(f"DeepSheet injection failed: {e}", exc_info=True)
 
 
 def _process_sheets(ctx: GeneratorContext, session: GenerationSession):
@@ -268,7 +268,13 @@ def _process_sheets(ctx: GeneratorContext, session: GenerationSession):
             tmpl_ws = ctx.template_workbook[sheet_name]
             out_ws = ctx.output_workbook[sheet_name]
             sheet_conf = ctx.config_loader.get_sheet_config(sheet_name)
-            ds_type = ctx.config_loader.get_data_source_type(sheet_name)
+            
+            # Resolve active mode for config-driven source routing
+            mode = "standard"
+            if proc_args:
+                if getattr(proc_args, 'DAF', False): mode = "daf"
+                elif getattr(proc_args, 'custom', False): mode = "custom"
+            ds_type = ctx.config_loader.get_data_source_type(sheet_name, mode=mode)
             
             if not ds_type:
                 continue
@@ -406,7 +412,7 @@ def main():
         req = InvoiceGenerationRequest(paths=paths, overrides=overrides, options=cli_options)
 
         run_invoice_generation(req)
-        print(f"Successfully generated: {args.output}")
+        print(f"Successfully generated: {output_path}")
     except Exception as e:
         print(f"Generation failed: {e}")
         # The monitor would have already written the metadata file with the stack trace

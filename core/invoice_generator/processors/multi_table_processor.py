@@ -57,6 +57,7 @@ class MultiTableProcessor(SheetProcessor):
         
         current_row = self.header_row
         all_data_ranges = []
+        all_footer_ranges = []
         grand_total_pallets = 0
         last_grid = None
         
@@ -81,7 +82,11 @@ class MultiTableProcessor(SheetProcessor):
             if not layout_builder:
                 return False
             
-            # Calculate next row
+            # Calculate next row & track sub-total footer row
+            footer_row = layout_builder.next_row_after_footer - 1
+            if footer_row > 0:
+                all_footer_ranges.append((footer_row, footer_row))
+
             next_row = layout_builder.next_row_after_footer
             if not is_last_table:
                 next_row += 1
@@ -106,7 +111,7 @@ class MultiTableProcessor(SheetProcessor):
         if len(table_keys) > 1 and last_grid:
             current_row = self._build_grand_total_row(
                 current_row=current_row,
-                all_data_ranges=all_data_ranges,
+                all_data_ranges=all_footer_ranges,
                 last_grid=last_grid
             )
 

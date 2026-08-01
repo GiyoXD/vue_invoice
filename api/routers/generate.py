@@ -119,10 +119,10 @@ def generate_invoice(request: GenerateRequest):
             aggregate_custom_by_po_item(merged_data, cust_map)
             
             single = full_data.get("single_table", {})
-            single["aggregation"] = format_aggregation_as_list(std_map, mode='standard')
-            single["aggregation_custom"] = format_aggregation_as_list(cust_map, mode='custom')
+            single["standard"] = format_aggregation_as_list(std_map, mode='standard')
+            single["custom"] = format_aggregation_as_list(cust_map, mode='custom')
             
-            single["aggregation_DAF"] = perform_DAF_compounding(merged_data)
+            single["daf"] = perform_DAF_compounding(merged_data)
             
             single["manifest_by_pallet_per_po"] = aggregate_per_po_with_pallets(merged_data)
             full_data["single_table"] = single

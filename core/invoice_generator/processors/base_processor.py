@@ -75,8 +75,7 @@ class SheetProcessor(ABC):
             # Check single_table
             single_table = self.invoice_data.get('single_table', {})
             if isinstance(single_table, dict):
-                for agg_key in ['aggregation', 'aggregation_custom', 'aggregation_DAF']:
-                    agg_data = single_table.get(agg_key, [])
+                for agg_key, agg_data in single_table.items():
                     if isinstance(agg_data, list):
                         for row in agg_data:
                             d = str(row.get('col_desc', "")).strip()

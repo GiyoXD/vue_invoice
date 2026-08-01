@@ -55,12 +55,14 @@ def build_footer(sheet: SheetAnalysis) -> Dict[str, Any]:
             "style_context": "footer"
         })
 
-    # Add numeric total columns that exist in the sheet (values read directly from payload)
+    # Add SUM formulas for default numeric columns that exist in the sheet
     default_numeric_cols = ["col_qty_pcs", "col_qty_sf", "col_amount", "col_net", "col_gross", "col_cbm", "col_sqm"]
     for col_id in default_numeric_cols:
         if col_id in sheet_col_ids:
             main_footer_row.append({
                 "col_id": col_id,
+                "formula": "SUM",
+                "target_section": "data",
                 "style_context": "footer"
             })
 

@@ -32,9 +32,24 @@ class BundleResolver:
 
     def get_data_bundle(self, table_key: Optional[str] = None) -> Dict[str, Any]:
         layout_config = self._sheet_config.get('layout_config', {})
-        data_source_type = self._sheet_config.get('data_source', 'aggregation')
         
-        data_source = get_data_source_for_type(data_source_type, self.invoice_data, self.sheet_name, self.args)
+        # Resolve active mode from args
+        mode = "standard"
+        if self.args:
+            if getattr(self.args, 'DAF', False): mode = "daf"
+            elif getattr(self.args, 'custom', False): mode = "custom"
+        
+        # Resolve data source type — supports both string and per-mode dict
+        raw_source = self._sheet_config.get('data_source', 'aggregation')
+        if isinstance(raw_source, dict):
+            data_source_type = raw_source.get(mode, raw_source.get('standard', 'standard'))
+        elif raw_source == 'aggregation':
+            # Classification type → actual data key is the mode name
+            data_source_type = mode
+        else:
+            data_source_type = raw_source
+        
+        data_source = get_data_source_for_type(data_source_type, self.invoice_data, self.sheet_name)
         
         if table_key and isinstance(data_source, list):
             try:

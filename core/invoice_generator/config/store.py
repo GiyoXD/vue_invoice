@@ -46,16 +46,19 @@ class ConfigStore:
         """Get list of sheets to process."""
         return list(self._processing.keys())
     
-    def get_data_source_type(self, sheet_name: str) -> Optional[str]:
-        """Get data source type for a sheet."""
-        return self._processing.get(sheet_name)
+    def get_data_source_type(self, sheet_name: str, mode: str = "standard") -> Optional[str]:
+        """Get data source type for a sheet, resolved by mode if config is mode-aware."""
+        val = self._processing.get(sheet_name)
+        if isinstance(val, dict):
+            return val.get(mode, val.get("standard"))
+        return val
     
     def get_sheet_config(self, sheet_name: str) -> Dict[str, Any]:
         """
         Get complete config for a sheet (combines all bundles).
         """
         return {
-            'data_source': self.get_data_source_type(sheet_name),
+            'data_source': self._processing.get(sheet_name),
             'styling_config': self.get_styling_config(sheet_name),
             'layout_config': self.get_layout_config(sheet_name),
             'data_config': self.get_data_config(sheet_name)

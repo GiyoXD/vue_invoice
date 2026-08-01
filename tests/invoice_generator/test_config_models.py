@@ -58,17 +58,18 @@ def test_load_and_validate_master_config():
 
 def test_validation_failure():
     # Verify that invalid structure raises ValidationError
+    # processing values must be str or Dict[str, str], not int
     invalid_data = {
         "_meta": {
             "config_version": "2.2",
             "customer": "Test"
         },
         "processing": {
-            # Sheets list is missing!
-            "data_sources": {}
+            "Sheet1": 12345
         },
         "styling_bundle": {},
         "layout_bundle": {}
     }
     with pytest.raises(ValidationError):
         ClientConfigBundle.model_validate(invalid_data)
+

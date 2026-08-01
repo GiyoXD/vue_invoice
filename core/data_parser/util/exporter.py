@@ -97,10 +97,10 @@ def export_invoice_data(
             "leather_summary": leather_summary_records
         },
         "single_table": {
-            "aggregation": data_processor.format_aggregation_as_list(global_standard_aggregation_results, mode='standard'),
-            "aggregation_custom": data_processor.format_aggregation_as_list(global_custom_aggregation_results, mode='custom'),
+            "standard": data_processor.format_aggregation_as_list(global_standard_aggregation_results, mode='standard'),
+            "custom": data_processor.format_aggregation_as_list(global_custom_aggregation_results, mode='custom'),
             "manifest_by_pallet_per_po": normal_aggregate_per_po,
-            "aggregation_DAF": global_DAF_compounded_result
+            "daf": global_DAF_compounded_result
         }
     }
 

@@ -43,14 +43,14 @@ class TableGrid(CoreGrid):
     def get_column_letter(self, col_id: str) -> str:
         """Resolves logical column ID to Excel column letter."""
         idx = self._resolve_column(col_id)
-        if not idx:
+        if idx is None or idx < 1:
             raise ValueError(f"Column ID '{col_id}' not found in grid mapping.")
         return get_column_letter(idx)
 
     def get_column_index(self, col_id: str) -> int:
         """Resolves logical column ID to physical 1-based column index."""
         idx = self._resolve_column(col_id)
-        if not idx:
+        if idx is None or idx < 1:
             raise ValueError(f"Column ID '{col_id}' not found in grid mapping.")
         return idx
 
@@ -113,8 +113,9 @@ class TableGrid(CoreGrid):
         # Apply style (font, format, alignment, fill — no borders)
         cell_style = None
         if self.style_registry:
-            if isinstance(col_id, str):
-                style_dict = self.style_registry.get_style(col_id, context=context)
+            col_key = str(col_id) if col_id is not None else None
+            if col_key:
+                style_dict = self.style_registry.get_style(col_key, context=context)
                 if style_dict:
                     cell_style = convert_registry_style_to_cell_style(style_dict)
 
@@ -130,7 +131,7 @@ class TableGrid(CoreGrid):
             return
 
         formula = template
-        for i, input_id in enumerate(inputs):
+        for i, input_id in sorted(enumerate(inputs), key=lambda x: x[0], reverse=True):
             input_col_idx = self._resolve_column(input_id)
             if input_col_idx:
                 col_letter = get_column_letter(input_col_idx)
@@ -157,7 +158,10 @@ class TableGrid(CoreGrid):
 
         if sum_ranges:
             col_letter = get_column_letter(col_idx)
-            range_strs = [f"{col_letter}{start}:{col_letter}{end}" for start, end in sum_ranges if start > 0 and end >= start]
+            range_strs = [
+                f"{col_letter}{start}" if start == end else f"{col_letter}{start}:{col_letter}{end}"
+                for start, end in sum_ranges if start > 0 and end >= start
+            ]
             if range_strs:
                 formula = f"={function}({','.join(range_strs)})"
                 self.write(row, col_id, formula, context)

@@ -131,6 +131,6 @@ class SheetConfigResolver:
         return get_data_source_for_type(
             data_source_type=data_source_type,
             invoice_data=self.invoice_data,
-            sheet_name=self.sheet_name,
-            args=self.args
+            sheet_name=self.sheet_name
         )
+
