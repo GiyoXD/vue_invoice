@@ -32,6 +32,14 @@
   ::-webkit-scrollbar-thumb {
     @apply bg-slate-600 rounded hover:bg-slate-500;
   }
+  /* Date picker icon styling */
+  input[type="date"] {
+    color-scheme: dark;
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    filter: invert(0.8) sepia(100%) saturate(1000%) hue-rotate(15deg) brightness(1.2);
+  }
 }
 
 @layer components {
