@@ -160,3 +160,57 @@ def test_resolve_columns_daf_mode_filtering():
     assert column_mapping["col_a"] == 1
     assert "col_b" not in column_mapping
     assert column_mapping["col_c"] == 2
+
+
+def test_layout_builder_daf_unit_price_format():
+    from core.invoice_generator.builders.layout_builder import LayoutBuilder
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    wb = Workbook()
+    ws = wb.active
+
+    args = SimpleNamespace(DAF=True, custom=False)
+    sheet_layout = SheetLayoutModel.model_validate({
+        "structure": {
+            "header_row": 1,
+            "columns": [
+                {"id": "col_unit_price", "colspan": 1},
+                {"id": "col_amount", "colspan": 1}
+            ]
+        }
+    })
+    sheet_styling = SheetStylingModel.model_validate({
+        "columns": {
+            "col_unit_price": {"format": "#,##0.00"},
+            "col_amount": {"format": "#,##0.00"}
+        }
+    })
+    resolved_data = ResolvedTableData()
+
+    builder = LayoutBuilder(
+        workbook=wb,
+        worksheet=ws,
+        template_worksheet=ws,
+        sheet_styling=sheet_styling,
+        sheet_layout=sheet_layout,
+        resolved_data=resolved_data,
+        sheet_name="Invoice",
+        all_sheet_configs={},
+        args=args,
+        skip_template_header_restoration=True,
+        template_state_builder=MagicMock()
+    )
+
+    # Execute layout build
+    builder.build()
+
+    # Inspect style_registry on generated grid
+    unit_price_style = builder.grid.style_registry.get_style("col_unit_price")
+    amount_style = builder.grid.style_registry.get_style("col_amount")
+
+    assert unit_price_style["format"] == "#,##0.0000000"
+    assert amount_style["format"] == "#,##0.00"
+
+
+

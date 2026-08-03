@@ -193,9 +193,17 @@ class LayoutBuilder:
             resolved_data.footer.grand_total = table_total or footer_dict.get('grand_total', {})
             resolved_data.footer.leather_summary = footer_dict.get('leather_summary', [])
             
+        sheet_styling = copy.deepcopy(self.sheet_styling)
+        if daf_mode and sheet_styling:
+            if hasattr(sheet_styling, "columns") and "col_unit_price" in sheet_styling.columns:
+                sheet_styling.columns["col_unit_price"].format = "#,##0.0000000"
+            elif isinstance(sheet_styling, dict) and "columns" in sheet_styling and "col_unit_price" in sheet_styling["columns"]:
+                if isinstance(sheet_styling["columns"]["col_unit_price"], dict):
+                    sheet_styling["columns"]["col_unit_price"]["format"] = "#,##0.0000000"
+
         config = TableBuilderConfig(
             worksheet=self.worksheet,
-            sheet_styling=self.sheet_styling,
+            sheet_styling=sheet_styling,
             sheet_layout=sheet_layout,
             resolved_data=resolved_data,
             table_key=self.table_key
