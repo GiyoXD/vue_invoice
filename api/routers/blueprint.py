@@ -22,6 +22,7 @@ class ScanResult(BaseModel):
     file_token: str # Temporary filename to reference in step 2
     unknown_headers: List[str] = []
     unconfirmed_footers: List[str] = []
+    unrecognized_sheets: List[str] = []
     warnings: List[str] = []
     preview_analysis: Optional[Dict[str, Any]] = None
 

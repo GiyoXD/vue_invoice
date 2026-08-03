@@ -77,4 +77,33 @@ def test_blueprint_scan_and_generate_flow(client, db):
     template_data = response.json()
     assert "template_layout" in template_data
     assert "Invoice" in template_data["template_layout"]
+
+def test_unrecognized_sheets_detection(client, db):
+    wb = openpyxl.Workbook()
+    ws1 = wb.active
+    ws1.title = "Invoice"
+    ws1.cell(row=3, column=1, value="Mark & No")
+    ws1.cell(row=3, column=2, value="P.O. No.")
+    ws1.cell(row=3, column=3, value="Quantity")
+    ws1.cell(row=3, column=4, value="Unit Price")
+    ws1.cell(row=3, column=5, value="Amount")
+    ws1.cell(row=4, column=1, value="DES: LEATHER")
+    ws1.cell(row=8, column=5, value="HS CODE: 1234")
+    ws1.cell(row=10, column=2, value="TOTAL:")
+    
+    ws2 = wb.create_sheet(title="UnknownSheet123")
+    ws2.cell(row=1, column=1, value="Some Data")
+    
+    buf = BytesIO()
+    wb.save(buf)
+    
+    response = client.post(
+        "/api/template/analyze",
+        files={"file": ("test_unrecognized.xlsx", buf.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "unrecognized_sheets" in data
+    assert "UnknownSheet123" in data["unrecognized_sheets"]
+
     

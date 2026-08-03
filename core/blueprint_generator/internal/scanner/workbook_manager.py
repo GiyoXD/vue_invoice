@@ -54,16 +54,27 @@ class WorkbookManager:
         
         sheets = []
         warnings = []
+        unrecognized_sheets = []
         
         global_desc = None
         global_hs_code = None
         global_hs_colspan = 1
         global_hs_col_id = None
         
+        # Extract pre-normalized sheet mappings once for performance
+        sheet_mappings_map = {}
+        if mapping_config and isinstance(mapping_config, dict):
+            raw_mappings = mapping_config.get('sheet_name_mappings', {}).get('mappings', {})
+            if isinstance(raw_mappings, dict):
+                sheet_mappings_map = {k.lower().strip(): v for k, v in raw_mappings.items()}
+
         supported_sheet_names = set()
         for sheet_name in workbook.sheetnames:
-            if not self._is_sheet_supported(sheet_name, mapping_config):
-                self.logger.info(f"  Skipping sheet '{sheet_name}': Not in allowed search list.")
+            if not self._is_sheet_supported(sheet_name, sheet_mappings_map):
+                warn_msg = f"Unrecognized sheet '{sheet_name}': Not in allowed search list."
+                self.logger.warning(f"  {warn_msg}")
+                unrecognized_sheets.append(sheet_name)
+                warnings.append(warn_msg)
                 continue
             worksheet = workbook[sheet_name]
             analysis = self.sheet_manager.analyze_sheet(
@@ -89,7 +100,12 @@ class WorkbookManager:
                         global_hs_code = analysis.footer_info.hs_code_text
                         global_hs_colspan = analysis.footer_info.hs_code_colspan
                         global_hs_col_id = analysis.footer_info.hs_code_col_id
- 
+            else:
+                warn_msg = f"Unrecognized sheet '{sheet_name}': Header boundaries could not be detected."
+                self.logger.warning(f"  {warn_msg}")
+                unrecognized_sheets.append(sheet_name)
+                warnings.append(warn_msg)
+
         # Check mapping config options to ignore missing description fallback
         ignore_missing_desc = False
         if mapping_config:
@@ -149,21 +165,24 @@ class WorkbookManager:
             customer_code=customer_code,
             sheets=sheets,
             warnings=warnings,
-            has_static_sheets=has_static
+            has_static_sheets=has_static,
+            unrecognized_sheets=unrecognized_sheets
         )
 
-    def _is_sheet_supported(self, sheet_name: str, mapping_config: Optional[Dict[str, Any]] = None) -> bool:
+    def _is_sheet_supported(self, sheet_name: str, mapping_config_or_map: Optional[Any] = None) -> bool:
         """Check if a sheet name is in the allowed search list."""
         normalized_name = sheet_name.lower().strip()
         
-        # Fast mapping resolution using nested structure
-        if mapping_config and isinstance(mapping_config, dict):
-            sheet_mappings = mapping_config.get('sheet_name_mappings', {}).get('mappings', {})
-            if isinstance(sheet_mappings, dict):
-                # Fast case-insensitive exact matching
-                lower_mappings = {k.lower().strip(): v for k, v in sheet_mappings.items()}
-                if normalized_name in lower_mappings:
-                    normalized_name = lower_mappings[normalized_name].lower().strip()
+        # Fast mapping resolution using nested structure or pre-normalized map
+        if mapping_config_or_map and isinstance(mapping_config_or_map, dict):
+            if 'sheet_name_mappings' in mapping_config_or_map:
+                sheet_mappings = mapping_config_or_map.get('sheet_name_mappings', {}).get('mappings', {})
+                if isinstance(sheet_mappings, dict):
+                    lower_mappings = {k.lower().strip(): v for k, v in sheet_mappings.items()}
+                    if normalized_name in lower_mappings:
+                        normalized_name = lower_mappings[normalized_name].lower().strip()
+            elif normalized_name in mapping_config_or_map:
+                normalized_name = str(mapping_config_or_map[normalized_name]).lower().strip()
 
         is_supported = False
         

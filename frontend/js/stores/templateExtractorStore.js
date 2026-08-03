@@ -27,6 +27,7 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
     const fileTokens = ref([]); // Array of { filename, missingHeaders }
     const allMissingHeaders = ref([]); // Deduplicated list across all files
     const allMissingFooters = ref([]); // Deduplicated footers
+    const allUnrecognizedSheets = ref([]); // Unrecognized sheet names
     const filePrefix = ref("");
     const userMappings = reactive({});
     const confirmedHeaders = ref([]);
@@ -219,6 +220,7 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
         statusMessage.value = "Scanning template structure...";
         allMissingHeaders.value = [];
         allMissingFooters.value = [];
+        allUnrecognizedSheets.value = [];
         fileTokens.value = [];
 
         // Refresh footer mappings before analysis to prevent stale keywords
@@ -228,6 +230,7 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
             const headerSet = new Set();
             const footerSet = new Set();
             const warningSet = new Set();
+            const unrecognizedSheetSet = new Set();
 
             for (const file of rawFiles) {
                 const formData = new FormData();
@@ -264,6 +267,11 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
                     }
                 }
 
+                // Collect unrecognized sheets
+                if (data.unrecognized_sheets && data.unrecognized_sheets.length > 0) {
+                    data.unrecognized_sheets.forEach(s => unrecognizedSheetSet.add(s));
+                }
+
                 // Collect proactive warnings
                 if (data.warnings && data.warnings.length > 0) {
                     data.warnings.forEach(w => warningSet.add(w));
@@ -272,10 +280,11 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
 
             allMissingHeaders.value = Array.from(headerSet);
             allMissingFooters.value = Array.from(footerSet);
+            allUnrecognizedSheets.value = Array.from(unrecognizedSheetSet);
             proactiveWarnings.value = Array.from(warningSet);
 
-            if (allMissingHeaders.value.length > 0 || allMissingFooters.value.length > 0) {
-                statusMessage.value = "Unmapped fields found. Please review.";
+            if (allMissingHeaders.value.length > 0 || allMissingFooters.value.length > 0 || allUnrecognizedSheets.value.length > 0) {
+                statusMessage.value = "Unmapped fields or unrecognized sheets found. Please review.";
             } else if (proactiveWarnings.value.length > 0) {
                 statusMessage.value = "Template analyzed with warnings.";
             } else {
@@ -409,6 +418,7 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
         confirmedHeaders.value = [];
         confirmedFooters.value = [];
         allMissingFooters.value = [];
+        allUnrecognizedSheets.value = [];
         proactiveWarnings.value = [];
         ignoreMissingDescription.value = false;
     };
@@ -437,6 +447,7 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
         filePrefix,
         allMissingHeaders,
         allMissingFooters,
+        allUnrecognizedSheets,
         userMappings,
         confirmedHeaders,
         confirmedFooters,

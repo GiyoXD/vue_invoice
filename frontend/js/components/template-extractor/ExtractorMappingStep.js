@@ -14,10 +14,10 @@ export default {
                 <input type="text" v-model="store.filePrefix" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="e.g. MOTO, JLFHM" />
                 
                 <!-- Show preview of what will be created -->
-                <div v-if="store.filePrefix && store.isDualMode" class="mt-2 py-2 px-3 bg-blue-100 border border-blue-200 rounded-md text-sm text-blue-300">
+                <div v-if="store.filePrefix && store.isDualMode" class="mt-2 py-2 px-3 bg-blue-950/50 border border-blue-800/50 rounded-md text-sm text-blue-300">
                     📁 Will create: <strong>{{ store.filePrefix }}</strong> (KH + VN variants) in database
                 </div>
-                <div v-else-if="store.filePrefix && store.singleFileSuffix" class="mt-2 py-2 px-3 bg-blue-100 border border-blue-200 rounded-md text-sm text-blue-300">
+                <div v-else-if="store.filePrefix && store.singleFileSuffix" class="mt-2 py-2 px-3 bg-blue-950/50 border border-blue-800/50 rounded-md text-sm text-blue-300">
                     📁 Will create: <strong>{{ store.filePrefix }}</strong> ({{ store.singleFileSuffix }} variant) in database
                 </div>
             </div>

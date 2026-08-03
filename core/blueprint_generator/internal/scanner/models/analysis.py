@@ -55,6 +55,7 @@ class TemplateAnalysisResult:
     sheets: List[SheetAnalysis]
     warnings: List[str] = field(default_factory=list)
     has_static_sheets: bool = False
+    unrecognized_sheets: List[str] = field(default_factory=list)
 
     def to_legacy_dict(self) -> Dict[str, Any]:
         """Convert to legacy JSON format for frontend compatibility."""
@@ -62,5 +63,7 @@ class TemplateAnalysisResult:
             "file_path": self.file_path,
             "sheets": [sheet.to_legacy_dict() for sheet in self.sheets],
             "warnings": self.warnings,
-            "has_static_sheets": self.has_static_sheets
+            "has_static_sheets": self.has_static_sheets,
+            "unrecognized_sheets": self.unrecognized_sheets
         }
+

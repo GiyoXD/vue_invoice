@@ -55,6 +55,7 @@ class BlueprintService:
             unknown_headers = list(set(unknown_headers))
             unconfirmed_footers = list(set(unconfirmed_footers))
             
+            unrecognized_sheets = analysis.get("unrecognized_sheets", [])
             status = "needs_mapping" if (unknown_headers or unconfirmed_footers) else "clean"
             
             return {
@@ -62,6 +63,7 @@ class BlueprintService:
                 "file_token": file_token,
                 "unknown_headers": unknown_headers,
                 "unconfirmed_footers": unconfirmed_footers,
+                "unrecognized_sheets": unrecognized_sheets,
                 "warnings": analysis.get("warnings", []),
                 "preview_analysis": analysis
             }
@@ -91,6 +93,7 @@ class BlueprintService:
             return {
                 "missing_headers": missing_headers,
                 "missing_footers": missing_footers,
+                "unrecognized_sheets": analysis.get("unrecognized_sheets", []),
                 "warnings": analysis.get("warnings", []),
                 "temp_filename": safe_filename,
                 "suggested_prefix": safe_filename.split('.')[0]
