@@ -30,17 +30,18 @@ class LookupRequest(BaseModel):
     spreadsheet_id: Optional[str] = None
     worksheet_name: Optional[str] = "2026"
 
-class ExportRequest(BaseModel):
+class SheetDataPayload(BaseModel):
     invoice_no: str
     ref_no: Optional[str] = ""
     invoice_date: str
-    pallet_str: Optional[str] = ""
-    net_weight: Optional[float] = 0.0
-    pallets: Optional[int] = 0
-    amount: Optional[float] = 0.0
-    force_override: bool = False
+    summary: Optional[str] = ""
+
+class ExportRequest(BaseModel):
+    payload: SheetDataPayload
     spreadsheet_id: Optional[str] = None
     worksheet_name: Optional[str] = "2026"
+    force_override: bool = False
+
 
 
 def _get_worksheet(spreadsheet_id: Optional[str], worksheet_name: str):
@@ -156,35 +157,32 @@ async def export_to_google_sheets(request: ExportRequest):
     Export or update invoice details based on matching logic.
     """
     try:
+        data = request.payload
         worksheet = _get_worksheet(request.spreadsheet_id, request.worksheet_name)
         col_c_values = worksheet.col_values(3)
         col_d_values = worksheet.col_values(4)
         
         # 1. Duplicate Ref No Check
-        ref_no_clean = request.ref_no.strip() if request.ref_no else ""
+        ref_no_clean = data.ref_no.strip() if data.ref_no else ""
         if ref_no_clean and ref_no_clean in col_d_values:
             ref_idx = col_d_values.index(ref_no_clean)
             existing_invoice_for_ref = col_c_values[ref_idx] if ref_idx < len(col_c_values) else ""
             
             # If the Ref No exists but belongs to a completely different Invoice, block it!
-            if existing_invoice_for_ref and existing_invoice_for_ref != request.invoice_no:
+            if existing_invoice_for_ref and existing_invoice_for_ref != data.invoice_no:
                 return JSONResponse(status_code=400, content={
                     "error": f"Duplicate Ref No: '{ref_no_clean}' is already assigned to Invoice '{existing_invoice_for_ref}'. Please use a different Reference Number."
                 })
         
         try:
-            dt = datetime.strptime(request.invoice_date, "%Y-%m-%d")
+            dt = datetime.strptime(data.invoice_date, "%Y-%m-%d")
             formatted_date = dt.strftime("%d/%m/%Y")
         except Exception:
-            formatted_date = request.invoice_date
+            formatted_date = data.invoice_date
 
-        # Construct combined cell value for Column M: {pallets} PALLETS: {net} / {amount}
-        pallets_val = request.pallets or 0
-        net_val = request.net_weight or 0.0
-        amount_val = request.amount or 0.0
-        combined_val = f"{pallets_val} PALLETS: {float(net_val)} / {float(amount_val)}"
+        combined_val = data.summary or ""
 
-        if request.invoice_no in col_c_values:
+        if data.invoice_no in col_c_values:
             if not request.force_override:
                 return {
                     "status": "conflict",
@@ -192,15 +190,15 @@ async def export_to_google_sheets(request: ExportRequest):
                     "action": "conflict"
                 }
             else:
-                row_idx = col_c_values.index(request.invoice_no) + 1
+                row_idx = col_c_values.index(data.invoice_no) + 1
                 updates = [
-                    {'range': f'C{row_idx}', 'values': [[request.invoice_no]]},
-                    {'range': f'D{row_idx}', 'values': [[request.ref_no]]},
+                    {'range': f'C{row_idx}', 'values': [[data.invoice_no]]},
+                    {'range': f'D{row_idx}', 'values': [[data.ref_no]]},
                     {'range': f'F{row_idx}', 'values': [[formatted_date]]},
                     {'range': f'M{row_idx}', 'values': [[combined_val]]}
                 ]
                 worksheet.batch_update(updates, value_input_option='USER_ENTERED')
-                logger.info(f"Successfully overridden invoice {request.invoice_no} safely using batch update.")
+                logger.info(f"Successfully overridden invoice {data.invoice_no} safely using batch update.")
                 return {
                     "status": "success",
                     "message": "Data successfully overridden without affecting other columns.",
@@ -210,13 +208,13 @@ async def export_to_google_sheets(request: ExportRequest):
             # Determine next row using Column C (Invoice No) as the single source of truth for row existence.
             next_row = len(col_c_values) + 1
             updates = [
-                {'range': f'C{next_row}', 'values': [[request.invoice_no]]},
-                {'range': f'D{next_row}', 'values': [[request.ref_no]]},
+                {'range': f'C{next_row}', 'values': [[data.invoice_no]]},
+                {'range': f'D{next_row}', 'values': [[data.ref_no]]},
                 {'range': f'F{next_row}', 'values': [[formatted_date]]},
                 {'range': f'M{next_row}', 'values': [[combined_val]]}
             ]
             worksheet.batch_update(updates, value_input_option='USER_ENTERED')
-            logger.info(f"Successfully exported new invoice {request.invoice_no} to Google Sheets (row {next_row}).")
+            logger.info(f"Successfully exported new invoice {data.invoice_no} to Google Sheets (row {next_row}).")
             return {
                 "status": "success",
                 "message": "Data successfully exported as a new row.",

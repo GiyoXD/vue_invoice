@@ -18,7 +18,11 @@ export const useGeneratorStore = defineStore('generator', () => {
     const jsonPath = ref('');
 
     const invoiceNo = ref('');
-    const invoiceDate = ref(new Date().toISOString().split('T')[0]);
+    const getLocalDate = () => {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    };
+    const invoiceDate = ref(getLocalDate());
     const invoiceRef = ref('');
     const refSourceStatus = ref(null);
 
@@ -91,10 +95,11 @@ export const useGeneratorStore = defineStore('generator', () => {
         if (!validationData.value?.database_export?.packing_list_items) return null;
         const items = validationData.value.database_export.packing_list_items;
         let net = 0; let gross = 0; let cbm = 0;
+        const parseNum = (val) => parseFloat(String(val ?? '').replace(/,/g, '')) || 0;
         items.forEach(item => {
-            try { net += parseFloat(item.net) || 0; } catch { }
-            try { gross += parseFloat(item.gross) || 0; } catch { }
-            try { cbm += parseFloat(item.cbm) || 0; } catch { }
+            try { net += parseNum(item.net); } catch { }
+            try { gross += parseNum(item.gross); } catch { }
+            try { cbm += parseNum(item.cbm); } catch { }
         });
         return { net, gross, cbm };
     });
@@ -488,29 +493,28 @@ export const useGeneratorStore = defineStore('generator', () => {
             const grandTotal = validationData.value?.footer_data?.grand_total || {};
             const pallets = grandTotal.col_pallet_count ?? (summaryStats.value?.total_pallets || 0);
             let gross = grandTotal.col_gross ?? (weightStats.value?.gross || 0);
-            const netWeight = grandTotal.col_net ?? (weightStats.value?.net || 0);
+            const sqft = grandTotal.col_qty_sf ?? (summaryStats.value?.total_sqft || 0);
             const amount = grandTotal.col_amount ?? 0;
 
             if (typeof gross === 'string' && !isNaN(parseFloat(gross))) {
                 gross = parseFloat(gross).toString();
             }
 
-            if (!pallets && !netWeight && !amount) {
+            if (!pallets && !gross && !sqft && !amount) {
                 syncStatus.value = { type: 'error', message: 'Cannot sync: pallet, weight, or amount data is missing. Please regenerate the invoice first.' };
                 isSyncing.value = false;
                 return;
             }
 
-            const palletStr = `${pallets} PALLETS: ${gross}`;
+            const summaryText = `PALLET: ${parseInt(pallets, 10) || 0} | GW: ${parseFloat(gross) || 0} | SF: ${parseFloat(sqft) || 0} | AMT: ${parseFloat(amount) || 0}`;
 
             const payload = {
-                invoice_no: invoiceNo.value || identifier.value,
-                ref_no: invoiceRef.value || '',
-                invoice_date: invoiceDate.value,
-                pallet_str: palletStr,
-                net_weight: parseFloat(netWeight) || 0,
-                pallets: parseInt(pallets, 10) || 0,
-                amount: parseFloat(amount) || 0,
+                payload: {
+                    invoice_no: invoiceNo.value || identifier.value,
+                    ref_no: invoiceRef.value || '',
+                    invoice_date: invoiceDate.value,
+                    summary: summaryText
+                },
                 force_override: forceOverride === true,
                 worksheet_name: googleSheetName.value || '2026'
             };
