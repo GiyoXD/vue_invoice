@@ -73,3 +73,27 @@ def test_validation_failure():
     with pytest.raises(ValidationError):
         ClientConfigBundle.model_validate(invalid_data)
 
+
+def test_deep_copy_worksheet_copies_print_area():
+    from core.invoice_generator.utils.workbook_utils import deep_copy_worksheet
+    import openpyxl
+
+    source_wb = openpyxl.Workbook()
+    source_ws = source_wb.active
+    source_ws.title = "StaticSheet"
+    source_ws.print_area = "A1:G50"
+    source_ws.page_setup.orientation = source_ws.ORIENTATION_LANDSCAPE
+    source_ws.page_setup.paperSize = source_ws.PAPERSIZE_A4
+
+    target_wb = openpyxl.Workbook()
+    target_ws = target_wb.create_sheet("StaticSheet")
+
+    deep_copy_worksheet(source_ws, target_ws)
+
+    assert target_ws.print_area == source_ws.print_area
+    assert target_ws.page_setup.orientation == source_ws.page_setup.orientation
+    assert target_ws.page_setup.paperSize == source_ws.page_setup.paperSize
+
+
+
+

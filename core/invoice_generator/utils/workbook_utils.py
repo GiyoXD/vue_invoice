@@ -73,6 +73,32 @@ def deep_copy_worksheet(source_ws, target_ws):
     # 5. Copy sheet visibility state (visible/hidden/veryHidden)
     target_ws.sheet_state = source_ws.sheet_state
 
+    # 6. Copy print area, page setup, margins, and header/footer metadata
+    target_ws.print_area = source_ws.print_area
+    target_ws.print_title_rows = source_ws.print_title_rows
+    target_ws.print_title_cols = source_ws.print_title_cols
+
+    if source_ws.page_setup:
+        target_ws.page_setup.orientation = source_ws.page_setup.orientation
+        target_ws.page_setup.paperSize = source_ws.page_setup.paperSize
+        target_ws.page_setup.fitToWidth = source_ws.page_setup.fitToWidth
+        target_ws.page_setup.fitToHeight = source_ws.page_setup.fitToHeight
+
+    if source_ws.page_margins:
+        target_ws.page_margins.left = source_ws.page_margins.left
+        target_ws.page_margins.right = source_ws.page_margins.right
+        target_ws.page_margins.top = source_ws.page_margins.top
+        target_ws.page_margins.bottom = source_ws.page_margins.bottom
+        target_ws.page_margins.header = source_ws.page_margins.header
+        target_ws.page_margins.footer = source_ws.page_margins.footer
+
+    if source_ws.sheet_properties and source_ws.sheet_properties.pageSetUpPr:
+        target_ws.sheet_properties.pageSetUpPr.fitToPage = source_ws.sheet_properties.pageSetUpPr.fitToPage
+
+    if source_ws.HeaderFooter:
+        target_ws.HeaderFooter = copy(source_ws.HeaderFooter)
+
+
 
 # ---------------------------------------------------------------------------
 # Unknown Sheet Injection
@@ -402,5 +428,4 @@ def finalize(ctx):
     ctx.output_workbook.save(ctx.output_path)
 
     # Cleanup
-    if ctx.template_workbook: ctx.template_workbook.close()
     if ctx.output_workbook: ctx.output_workbook.close()

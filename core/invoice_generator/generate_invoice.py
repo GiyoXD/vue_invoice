@@ -100,14 +100,12 @@ def run_invoice_generation(req: InvoiceGenerationRequest):
             
             if opts.split_sheets:
                 output_files = split_workbook_to_buffers(ctx.output_workbook, ctx.output_path)
-                if ctx.template_workbook: ctx.template_workbook.close()
                 if ctx.output_workbook: ctx.output_workbook.close()
                 return output_files
             else:
                 logger.info("Saving workbook to in-memory buffer")
                 buffer = io.BytesIO()
                 ctx.output_workbook.save(buffer)
-                if ctx.template_workbook: ctx.template_workbook.close()
                 if ctx.output_workbook: ctx.output_workbook.close()
                 return ctx.output_path.name, buffer.getvalue()
         else:
@@ -230,20 +228,59 @@ def _prepare_workbooks(ctx: GeneratorContext):
         logger.critical(error_msg)
         raise ValueError(error_msg)
 
-    # Initialize clean workbook
-    ctx.output_workbook = openpyxl.Workbook()
-    default_ws = ctx.output_workbook.active
-    if default_ws: ctx.output_workbook.remove(default_ws)
-    
-    # Create sheets defined in JSON config
+    # Initialize output workbook directly from template if available (preserves native static sheets & print areas)
+    from io import BytesIO
+    template_xlsx_bytes = getattr(ctx, 'template_xlsx_bytes', None)
+    template_path = ctx.paths.get('template')
+    ctx.output_workbook = None
+
+    if template_xlsx_bytes:
+        try:
+            logger.info("Loading output workbook directly from template xlsx bytes")
+            ctx.output_workbook = openpyxl.load_workbook(BytesIO(template_xlsx_bytes))
+        except Exception as e:
+            logger.warning(f"Failed to load output workbook from template bytes: {e}")
+            ctx.output_workbook = None
+    elif template_path and Path(template_path).exists():
+        try:
+            logger.info(f"Loading output workbook directly from template path: {template_path}")
+            ctx.output_workbook = openpyxl.load_workbook(template_path)
+        except Exception as e:
+            logger.warning(f"Failed to load output workbook from template path: {e}")
+            ctx.output_workbook = None
+
+    if ctx.output_workbook is None:
+        logger.info("Initializing clean output workbook (scratch fallback)")
+        ctx.output_workbook = openpyxl.Workbook()
+        default_ws = ctx.output_workbook.active
+        if default_ws:
+            ctx.output_workbook.remove(default_ws)
+
+    # Ensure sheets defined in JSON config exist in workbook
     for sheet_name in json_config.keys():
-        ctx.output_workbook.create_sheet(sheet_name)
-        logger.info(f"Created sheet '{sheet_name}' from JSON template")
+        if sheet_name not in ctx.output_workbook.sheetnames:
+            ctx.output_workbook.create_sheet(sheet_name)
+            logger.info(f"Created sheet '{sheet_name}' from JSON template")
+
+    # Reorder sheets so dynamic JSON sheets come first, followed by static template sheets
+    sheet_map = {ws.title: ws for ws in ctx.output_workbook.worksheets}
+    reordered_sheets = []
+    for sheet_name in json_config.keys():
+        if sheet_name in sheet_map:
+            reordered_sheets.append(sheet_map[sheet_name])
+    for ws in ctx.output_workbook.worksheets:
+        if ws.title not in json_config:
+            reordered_sheets.append(ws)
+
+    ctx.output_workbook._sheets = reordered_sheets
+    logger.info(f"Reordered sheet tabs: {[ws.title for ws in ctx.output_workbook.worksheets]}")
         
-    # Set template_workbook to refer to output_workbook 
-    # (since we are creating from scratch, they are effectively the same object in this new flow)
-    # This satisfies processors that expect a template_workbook object, although they should rely on JSON.
+    # WARNING: template_workbook is aliased to output_workbook (same object).
+    # No processor currently reads from template_workbook, so this is safe.
+    # Do NOT read from template_workbook expecting pristine/unmutated template data.
     ctx.template_workbook = ctx.output_workbook
+
+
 
     # Deep Sheet Injection
     try:

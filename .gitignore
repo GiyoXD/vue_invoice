@@ -2,6 +2,11 @@ secret.json
 # Ignore Database Files (Large)
 database/*.db
 database/*.sqlite
+*.db-shm
+*.db-wal
+database/*.db-shm
+database/*.db-wal
+
 
 # Ignore all blueprints subdirectories except mapper
 database/blueprints/*

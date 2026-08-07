@@ -27,7 +27,6 @@ class SheetProcessor(ABC):
         Args:
             ctx: The structured ProcessorContext holding io, config, and data sub-contexts.
         """
-        self.template_workbook = ctx.io.template_workbook
         self.output_workbook = ctx.io.output_workbook
         self.template_worksheet = ctx.io.template_worksheet
         self.output_worksheet = ctx.io.output_worksheet
