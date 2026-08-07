@@ -7,6 +7,7 @@ def list_blueprints(db_path: str, search_query: str = None):
     """
     Lists available blueprints in the database. Optionally filters by a search query.
     """
+    conn = None
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -24,7 +25,6 @@ def list_blueprints(db_path: str, search_query: str = None):
             cursor.execute(query)
             
         rows = cursor.fetchall()
-        conn.close()
         
         if not rows:
             print("No blueprints found.")
@@ -38,81 +38,90 @@ def list_blueprints(db_path: str, search_query: str = None):
         print()
     except Exception as e:
         print(f"Error reading database: {e}")
+    finally:
+        if conn:
+            conn.close()
 
 def fetch_config(db_path: str, customer: str, locale: str, output_dir: str):
     """
     Fetches the configuration JSON and template JSON from the blueprints table for a given customer code and locale,
     and writes them to files.
     """
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
-    query = "SELECT config_json, template_json FROM blueprints WHERE customer_code = ? AND locale = ?"
-    cursor.execute(query, (customer, locale))
-    row = cursor.fetchone()
-    
-    if not row:
-        # Check if customer exists but with different locales
-        cursor.execute("SELECT locale FROM blueprints WHERE customer_code = ?", (customer,))
-        locales = [r[0] for r in cursor.fetchall()]
+    conn = None
+    try:
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
         
-        if locales:
-            print(f"\nError: No configuration found for customer '{customer}' with locale '{locale}'.")
-            print(f"Available locales for '{customer}': {', '.join(locales)}")
-        else:
-            # Check if there are similar customer codes (case-insensitive substring search)
-            cursor.execute("SELECT DISTINCT customer_code FROM blueprints WHERE customer_code LIKE ?", (f"%{customer}%",))
-            similar = [r[0] for r in cursor.fetchall()]
-            print(f"\nError: Customer '{customer}' not found.")
-            if similar:
-                print(f"Did you mean: {', '.join(similar)}?")
+        query = "SELECT config_json, template_json FROM blueprints WHERE customer_code = ? AND locale = ?"
+        cursor.execute(query, (customer, locale))
+        row = cursor.fetchone()
+        
+        if not row:
+            # Check if customer exists but with different locales
+            cursor.execute("SELECT locale FROM blueprints WHERE customer_code = ?", (customer,))
+            locales = [r[0] for r in cursor.fetchall()]
+            
+            if locales:
+                print(f"\nError: No configuration found for customer '{customer}' with locale '{locale}'.")
+                print(f"Available locales for '{customer}': {', '.join(locales)}")
             else:
-                print("Run with --list to see all available configurations.")
-        print()
-        conn.close()
+                # Check if there are similar customer codes (case-insensitive substring search)
+                cursor.execute("SELECT DISTINCT customer_code FROM blueprints WHERE customer_code LIKE ?", (f"%{customer}%",))
+                similar = [r[0] for r in cursor.fetchall()]
+                print(f"\nError: Customer '{customer}' not found.")
+                if similar:
+                    print(f"Did you mean: {', '.join(similar)}?")
+                else:
+                    print("Run with --list to see all available configurations.")
+            print()
+            return False
+            
+        try:
+            config_data = json.loads(row[0])
+        except Exception as e:
+            print(f"Error: Failed to parse configuration JSON from database: {e}")
+            config_data = None
+            
+        try:
+            template_data = json.loads(row[1])
+        except Exception as e:
+            print(f"Error: Failed to parse template JSON from database: {e}")
+            template_data = None
+            
+        out_dir_path = Path(output_dir)
+        out_dir_path.mkdir(parents=True, exist_ok=True)
+        
+        success = False
+        
+        if config_data is not None:
+            output_filename = f"{customer}_{locale}_config.json"
+            output_filepath = out_dir_path / output_filename
+            try:
+                with open(output_filepath, "w", encoding="utf-8") as f:
+                    json.dump(config_data, f, indent=2, ensure_ascii=False)
+                print(f"Success: Configuration exported successfully to {output_filepath}")
+                success = True
+            except Exception as e:
+                print(f"Error: Failed to write configuration to file: {e}")
+                
+        if template_data is not None:
+            output_filename = f"{customer}_{locale}_template.json"
+            output_filepath = out_dir_path / output_filename
+            try:
+                with open(output_filepath, "w", encoding="utf-8") as f:
+                    json.dump(template_data, f, indent=2, ensure_ascii=False)
+                print(f"Success: Template exported successfully to {output_filepath}")
+                success = True
+            except Exception as e:
+                print(f"Error: Failed to write template to file: {e}")
+                
+        return success
+    except Exception as e:
+        print(f"Error accessing database or files: {e}")
         return False
-        
-    try:
-        config_data = json.loads(row[0])
-    except Exception as e:
-        print(f"Error: Failed to parse configuration JSON from database: {e}")
-        config_data = None
-        
-    try:
-        template_data = json.loads(row[1])
-    except Exception as e:
-        print(f"Error: Failed to parse template JSON from database: {e}")
-        template_data = None
-        
-    out_dir_path = Path(output_dir)
-    out_dir_path.mkdir(parents=True, exist_ok=True)
-    
-    success = False
-    
-    if config_data is not None:
-        output_filename = f"{customer}_{locale}_config.json"
-        output_filepath = out_dir_path / output_filename
-        try:
-            with open(output_filepath, "w", encoding="utf-8") as f:
-                json.dump(config_data, f, indent=2, ensure_ascii=False)
-            print(f"Success: Configuration exported successfully to {output_filepath}")
-            success = True
-        except Exception as e:
-            print(f"Error: Failed to write configuration to file: {e}")
-            
-    if template_data is not None:
-        output_filename = f"{customer}_{locale}_template.json"
-        output_filepath = out_dir_path / output_filename
-        try:
-            with open(output_filepath, "w", encoding="utf-8") as f:
-                json.dump(template_data, f, indent=2, ensure_ascii=False)
-            print(f"Success: Template exported successfully to {output_filepath}")
-            success = True
-        except Exception as e:
-            print(f"Error: Failed to write template to file: {e}")
-            
-    conn.close()
-    return success
+    finally:
+        if conn:
+            conn.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Fetch or list JSON configurations from blueprints database.")

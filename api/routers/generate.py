@@ -326,9 +326,8 @@ def generate_invoice(request: GenerateRequest):
             "metadata_error": metadata_error  # None on success; non-null means footer_data will be missing
         }
     except Exception as e:
-        import traceback
+        logger.error("Invoice generation failed", exc_info=True)
         return JSONResponse(status_code=500, content={
-            "error": str(e), 
-            "traceback": traceback.format_exc(),
+            "error": "Internal server error during invoice generation",
             "step": "Invoice Generation"
         })

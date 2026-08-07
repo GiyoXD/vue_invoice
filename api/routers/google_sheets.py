@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+from core.system_config import sys_config
 
 _DEBUG = os.getenv("GIYO_DEBUG", "").strip() == "1"
 
@@ -52,9 +53,9 @@ def _get_worksheet(spreadsheet_id: Optional[str], worksheet_name: str):
     credentials_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
     if not credentials_path:
         possible_paths = [
-            Path(__file__).parent.parent.parent / "secret.json",
-            Path(__file__).parent.parent.parent / "credentials.json",
-            Path(__file__).parent.parent.parent / "database" / "credentials.json"
+            sys_config.base_dir / "secret.json",
+            sys_config.base_dir / "credentials.json",
+            sys_config.base_dir / "database" / "credentials.json"
         ]
         for p in possible_paths:
             if p.exists():

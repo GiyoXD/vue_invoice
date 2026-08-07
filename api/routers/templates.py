@@ -89,7 +89,6 @@ async def view_template(customer_code: str, locale: str = "KH", db: Session = De
         logger.exception("Viewing template failed")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
-@router.patch("/api/template/cell")
 @router.patch("/template/cell")
 async def update_template_cell(req: CellOverrideRequest, db: Session = Depends(get_db)):
     try:

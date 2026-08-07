@@ -39,7 +39,7 @@ async def get_history():
                         "item_count": data.get("database_export", {}).get("summary", {}).get("item_count", 0),
                         "total_sqft": data.get("database_export", {}).get("summary", {}).get("total_sqft", 0)
                     })
-            except: continue
+            except Exception: continue
 
     processed_dir = sys_config.temp_uploads_dir / "processed"
     if processed_dir.exists():
@@ -62,13 +62,13 @@ async def get_history():
                         "item_count": item_count,
                         "total_sqft": 0
                     })
-            except: continue
+            except Exception: continue
 
     history.sort(key=lambda x: x["timestamp"] or "", reverse=True)
     return history
 
 @router.get("/history/view")
-async def view_history_item(filename: str, source: str = "run_log"):
+async def view_history_item(filename: str, source: str = "run_log", db: Session = Depends(get_db)):
     if ".." in filename or "/" in filename or "\\" in filename:
          return JSONResponse(status_code=400, content={"error": "Invalid filename"})
 
@@ -76,7 +76,6 @@ async def view_history_item(filename: str, source: str = "run_log"):
         file_path = sys_config.temp_uploads_dir / "processed" / filename
     elif source == "accepted":
         try:
-            db = next(get_db())
             record = db.query(ProcessedData).filter(ProcessedData.filename == filename).first()
             if record: return record.data_payload
             return JSONResponse(status_code=404, content={"error": "Database record not found"})
@@ -210,6 +209,7 @@ async def accept_invoice(req: HistoryRequest, db: Session = Depends(get_db)):
         file_path.unlink()
         return {"status": "success", "message": f"Invoice {req.filename} accepted."}
     except Exception as e:
+        db.rollback()
         logger.error(f"Accept failed: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 

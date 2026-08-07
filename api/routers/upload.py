@@ -19,7 +19,7 @@ def upload_excel(file: UploadFile = File(...), ignore_tare: bool = Form(False), 
     Returns the identifier, json path, and asset availability status.
     """
     try:
-        print(f"DEBUG: Received upload request for {file.filename}")
+        logger.debug(f"Received upload request for {file.filename}")
         
         # Read the file into memory
         file_bytes = file.file.read()
@@ -115,9 +115,8 @@ def upload_excel(file: UploadFile = File(...), ignore_tare: bool = Form(False), 
             "step": "Data Validation"
         })
     except Exception as e:
-        import traceback
+        logger.error("Upload failed", exc_info=True)
         return JSONResponse(status_code=500, content={
-            "error": str(e), 
-            "traceback": traceback.format_exc(),
+            "error": "Internal server error during upload",
             "step": "Upload & Parse"
         })

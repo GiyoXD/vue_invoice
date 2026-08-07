@@ -42,10 +42,7 @@ class Orchestrator:
             # User-facing validation errors pass through cleanly (no traceback wrapping)
             raise
         except Exception as e:
-            # Capture the full traceback for the UI to display
-            import traceback
-            tb = traceback.format_exc()
-            raise RuntimeError(f"Data Parser Failed:\n{tb}") from e
+            raise RuntimeError("Data Parser Failed") from e
 
     @snitch
     def generate_invoice(self, 

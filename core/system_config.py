@@ -70,6 +70,10 @@ class SystemConfig:
         logger.info(f"Configuration validated: all {len(self.REQUIRED_ENV_VARS)} required env vars present.")
 
     @property
+    def base_dir(self) -> Path:
+        return PROJECT_ROOT
+
+    @property
     def blueprints_root(self) -> Path:
         return self._resolve_path("blueprints_root", "database/blueprints", env_key="BLUEPRINTS_ROOT")
 

@@ -52,7 +52,7 @@ async def scan_template(file: UploadFile = File(...), db: Session = Depends(get_
         return res
     except Exception as e:
         logger.error(f"Scan failed: {e}")
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/generate", response_model=GenerateResult)
 async def generate_config(request: GenerateRequest, db: Session = Depends(get_db)):
@@ -72,7 +72,7 @@ async def generate_config(request: GenerateRequest, db: Session = Depends(get_db
         return res
     except Exception as e:
         logger.error(f"Blueprint generation failed: {e}")
-        return JSONResponse(status_code=500, content={"error": str(e)})
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/options")
 async def get_mapping_options():

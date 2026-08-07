@@ -1,0 +1,16 @@
+Generic single-database configuration.
+
+## Migration Notes
+
+### Revision `20a9bb8ceb01` (`20a9bb8ceb01_initial_schema.py`)
+- **Script Type**: Alembic Database Migration
+- **What it does**:
+  - `upgrade()`: Drops `source_file` column from `blueprints` table (`op.drop_column('blueprints', 'source_file')`).
+  - `downgrade()`: Re-adds `source_file` column as nullable `TEXT` (`op.add_column('blueprints', sa.Column('source_file', sa.TEXT(), nullable=True))`).
+- **Risks**:
+  - **Permanent Data Loss**: `op.drop_column` permanently deletes all data stored in `blueprints.source_file`.
+  - **Type Mismatch on Downgrade**: Downgrade re-adds column as `sa.TEXT()`. If original column type was `VARCHAR`/`String`, schema rollback will not match original model type.
+  - **Name Mismatch**: Named `initial_schema` but only drops a single column.
+- **Action Items**:
+  - **Do NOT execute** (`alembic upgrade head`) if `source_file` column data is needed or if database schema is not final.
+  - Delete revision file if migration is unneeded, or update migration script before running.
