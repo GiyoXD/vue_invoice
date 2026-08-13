@@ -17,10 +17,15 @@ from core.invoice_generator.generate_invoice import run_invoice_generation, Invo
 
 # 1. Fetch blueprint from DB
 conn = sqlite3.connect('database/invoice_registry.db')
-cursor = conn.cursor()
-row = cursor.execute("SELECT config_json, template_json FROM blueprints WHERE customer_code='JF' AND locale='KH'").fetchone()
-config_json = row[0]
-template_json = row[1]
+try:
+    cursor = conn.cursor()
+    row = cursor.execute("SELECT config_json, template_json FROM blueprints WHERE customer_code='JF' AND locale='KH'").fetchone()
+    if row is None:
+        raise ValueError("No blueprint row found for JF KH in blueprints table")
+    config_json = row[0]
+    template_json = row[1]
+finally:
+    conn.close()
 
 config_data = json.loads(config_json)
 template_data = json.loads(template_json)

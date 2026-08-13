@@ -19,10 +19,23 @@ def upload_excel(file: UploadFile = File(...), ignore_tare: bool = Form(False), 
     Returns the identifier, json path, and asset availability status.
     """
     try:
-        logger.debug(f"Received upload request for {file.filename}")
+        filename = file.filename or "upload.xlsx"
+        logger.debug(f"Received upload request for {filename}")
         
         # Read the file into memory
-        file_bytes = file.file.read()
+        MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+        file_bytes = file.file.read(MAX_FILE_SIZE + 1)
+        if len(file_bytes) > MAX_FILE_SIZE:
+            file.file.close()
+            return JSONResponse(
+                status_code=413,
+                content={"error": "File size exceeds maximum limit of 50MB", "step": "File Upload"}
+            )
+        if len(file_bytes) == 0:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Uploaded file is empty", "step": "File Upload"}
+            )
         buffer = io.BytesIO(file_bytes)
             
         # Process to JSON using Orchestrator
@@ -33,13 +46,13 @@ def upload_excel(file: UploadFile = File(...), ignore_tare: bool = Form(False), 
         json_path, identifier = orchestrator.process_excel_to_json(
             buffer, 
             json_output_dir,
-            input_filename_override=file.filename,
+            input_filename_override=filename,
             ignore_tare_warning=ignore_tare,
             ignore_cbm_warning=ignore_cbm
         )
         
         # Default Invoice No to filename stem
-        default_inv_no = Path(file.filename).stem
+        default_inv_no = Path(filename).stem
         
         # === CHECK ASSET AVAILABILITY ===
         from core.invoice_generator.resolvers import InvoiceAssetResolver
@@ -82,11 +95,18 @@ def upload_excel(file: UploadFile = File(...), ignore_tare: bool = Form(False), 
         # --- Read warnings from generated JSON ---
         warnings_list = []
         try:
-            with open(json_path, 'r', encoding='utf-8') as f:
-                parsed_data = json.load(f)
-                warnings_list = parsed_data.get('metadata', {}).get('warnings', [])
+            if json_path and Path(json_path).exists():
+                with open(json_path, 'r', encoding='utf-8') as f:
+                    parsed_data = json.load(f)
+                    if isinstance(parsed_data, dict):
+                        metadata = parsed_data.get('metadata')
+                        if isinstance(metadata, dict):
+                            raw_warnings = metadata.get('warnings')
+                            if isinstance(raw_warnings, list):
+                                warnings_list = raw_warnings
         except Exception as e:
             logger.warning(f"Could not read warnings from JSON output: {e}")
+            warnings_list = []
 
         # Add variant info
         if variants:
@@ -101,7 +121,7 @@ def upload_excel(file: UploadFile = File(...), ignore_tare: bool = Form(False), 
         
         return {
             "status": "success",
-            "file_name": file.filename,
+            "file_name": filename,
             "identifier": identifier,
             "json_path": str(json_path),
             "default_inv_no": default_inv_no,

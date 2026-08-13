@@ -155,7 +155,7 @@ def generate_invoice(request: GenerateRequest):
                     f.flush()
                     os.fsync(f.fileno())
                 
-                shutil.move(temp_path, str(json_path_obj))
+                os.replace(temp_path, str(json_path_obj))
             except Exception:
                 if os.path.exists(temp_path):
                     os.unlink(temp_path)
@@ -287,15 +287,22 @@ def generate_invoice(request: GenerateRequest):
                     task_name = f"{variant_suffix.lstrip('_')} {task['name']}" if variant_suffix else task['name']
                     errors.append(f"Failed to generate {task_name}: {str(e)}")
 
-        if not processed_any and errors:
-             status_code = 500
-             error_message = "All generation tasks failed."
-             config_errors = [err for err in errors if "CRITICAL: No 'header_row'" in err]
-             if config_errors:
-                 status_code = 422
-                 error_message = config_errors[0]
+        if not processed_any:
+            if not errors:
+                return JSONResponse(status_code=400, content={
+                    "error": "No files generated",
+                    "details": []
+                })
 
-             return JSONResponse(status_code=status_code, content={
+            status_code = 500
+            config_errors = [str(err) for err in errors if "CRITICAL: No 'header_row'" in str(err)]
+            if config_errors:
+                status_code = 422
+                error_message = config_errors[0].splitlines()[0].strip()
+            else:
+                error_message = errors[0].splitlines()[0].strip()
+
+            return JSONResponse(status_code=status_code, content={
                 "error": error_message, 
                 "details": errors
             })
