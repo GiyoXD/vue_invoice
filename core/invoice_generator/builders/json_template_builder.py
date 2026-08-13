@@ -75,7 +75,8 @@ class JsonTemplateStateBuilder:
         header_end_row = 0
         max_col = 1
         for row in self.layout_obj.header_rows:
-            r_idx = row.relative_index + 1
+            row_max_span = max((c.merge.row_span - 1 for c in row.cells if c.merge), default=0)
+            r_idx = row.relative_index + 1 + row_max_span
             header_end_row = max(header_end_row, r_idx)
             for cell in row.cells:
                 max_col = max(max_col, cell.col_index)
@@ -95,7 +96,10 @@ class JsonTemplateStateBuilder:
                 )
             else:
                 template_footer_start_row = header_end_row + 1
-            max_rel_idx = max((r.relative_index for r in self.layout_obj.footer_rows), default=-1)
+            max_rel_idx = max(
+                (r.relative_index + max((c.merge.row_span - 1 for c in r.cells if c.merge), default=0) for r in self.layout_obj.footer_rows),
+                default=-1
+            )
             template_footer_end_row = (template_footer_start_row + max_rel_idx) if max_rel_idx >= 0 else -1
             
             # Update max_col based on footer cells
@@ -137,7 +141,10 @@ class JsonTemplateStateBuilder:
     def template_footer_end_row(self) -> int:
         if not self.boundaries or self.boundaries.footer_row is None:
             return -1
-        max_rel_idx = max((r.relative_index for r in self.layout_obj.footer_rows), default=-1)
+        max_rel_idx = max(
+            (r.relative_index + max((c.merge.row_span - 1 for c in r.cells if c.merge), default=0) for r in self.layout_obj.footer_rows),
+            default=-1
+        )
         return (self.template_footer_start_row + max_rel_idx) if max_rel_idx >= 0 else -1
 
     # --- Style Helpers ---
@@ -253,7 +260,10 @@ class JsonTemplateStateBuilder:
             
             # Cells
             for cell in row.cells:
-                target = ws.cell(row=actual_row, column=cell.col_index)
+                col_idx = cell.col_index
+                if layout_state and hasattr(layout_state, "record_restored_cell"):
+                    layout_state.record_restored_cell(actual_row, col_idx)
+                target = ws.cell(row=actual_row, column=col_idx)
                 
                 # Value (with mode resolution)
                 if cell.value is not None:
@@ -360,6 +370,26 @@ class JsonTemplateStateBuilder:
             rows = translate_template_rows(rows, column_index_mapping)
         
         self.restore_rows(target_worksheet, rows, start_row=footer_start_row, mode=mode, layout_state=layout_state)
+
+        if rows:
+            max_offset = max(
+                r.relative_index + max((c.merge.row_span - 1 for c in r.cells if c.merge), default=0)
+                for r in rows
+            )
+            end_row = footer_start_row + max_offset
+            if layout_state:
+                if hasattr(layout_state, "template_footer_range"):
+                    layout_state.template_footer_range = (footer_start_row, end_row)
+                if hasattr(layout_state, "advance_to"):
+                    layout_state.advance_to(end_row + 1)
+                if hasattr(layout_state, "record_restored_cell"):
+                    for row in rows:
+                        r = footer_start_row + row.relative_index
+                        for cell in row.cells:
+                            c = cell.col_index
+                            layout_state.record_restored_cell(r, c)
+                            if cell.merge:
+                                layout_state.record_restored_cell(r + cell.merge.row_span - 1, cell.merge.max_col)
 
     # --- Value Resolution ---
 

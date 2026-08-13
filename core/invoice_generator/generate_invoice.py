@@ -256,11 +256,13 @@ def _prepare_workbooks(ctx: GeneratorContext):
         if default_ws:
             ctx.output_workbook.remove(default_ws)
 
-    # Ensure sheets defined in JSON config exist in workbook
+    # Ensure dynamic sheets defined in JSON config are created as fresh worksheets,
+    # removing pre-existing template sheets and old static merges while preserving static/unknown sheets
     for sheet_name in json_config.keys():
-        if sheet_name not in ctx.output_workbook.sheetnames:
-            ctx.output_workbook.create_sheet(sheet_name)
-            logger.info(f"Created sheet '{sheet_name}' from JSON template")
+        if sheet_name in ctx.output_workbook.sheetnames:
+            ctx.output_workbook.remove(ctx.output_workbook[sheet_name])
+        ctx.output_workbook.create_sheet(sheet_name)
+        logger.info(f"Initialized fresh dynamic sheet '{sheet_name}' from JSON template")
 
     # Reorder sheets so dynamic JSON sheets come first, followed by static template sheets
     sheet_map = {ws.title: ws for ws in ctx.output_workbook.worksheets}
@@ -273,6 +275,8 @@ def _prepare_workbooks(ctx: GeneratorContext):
             reordered_sheets.append(ws)
 
     ctx.output_workbook._sheets = reordered_sheets
+    if ctx.output_workbook.worksheets:
+        ctx.output_workbook.active = 0
     logger.info(f"Reordered sheet tabs: {[ws.title for ws in ctx.output_workbook.worksheets]}")
         
     # WARNING: template_workbook is aliased to output_workbook (same object).

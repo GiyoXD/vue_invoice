@@ -30,6 +30,7 @@ class SingleTableProcessor(SheetProcessor):
         from core.invoice_generator.models.layout import SheetLayoutState, TableLayoutConfig
         layout_state = SheetLayoutState()
         layout_state.advance_to(self.header_row)
+        self.layout_state = layout_state
 
         template_state_builder = None
         json_config = self.config_loader.get_template_json_config() if self.config_loader else None

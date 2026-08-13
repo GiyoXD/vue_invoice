@@ -44,6 +44,9 @@ class SheetLayoutState:
     
     # Track the data range of the current table for formula generation
     current_data_range: Optional[Tuple[int, int]] = None
+    
+    last_restored_row: int = 1
+    last_restored_col: int = 1
 
     @property
     def next_free_row(self) -> int:
@@ -53,6 +56,13 @@ class SheetLayoutState:
     def advance_to(self, row: int):
         """Advances the free row pointer."""
         self._next_free_row = max(self._next_free_row, row)
+
+    def record_restored_cell(self, row: int, col: int = 1):
+        """Records a restored cell coordinate to ensure bounds calculations include restored layout elements."""
+        if isinstance(row, int) and row > 0:
+            self.last_restored_row = max(self.last_restored_row, row)
+        if isinstance(col, int) and col > 0:
+            self.last_restored_col = max(self.last_restored_col, col)
 
     def add_table_zone(self, table_key: str, header: Tuple[int, int], data: Tuple[int, int], footer: Tuple[int, int]):
         """Records a built table zone and advances the free row pointer."""
@@ -206,6 +216,54 @@ class SheetLayoutState:
                             self.merged_cells.add((r, c))
                             if not (r == min_r and c == min_c):
                                 self.occupied_cells.add((r, c))
+
+    def get_last_cell(self) -> Tuple[int, str]:
+        """Calculates the maximum row and column occupied in the sheet layout state."""
+        row_candidates = [max(1, self._next_free_row - 1), self.last_restored_row]
+        col_candidates = [self.last_restored_col]
+
+        if self._rows_with_height_applied:
+            row_candidates.extend(self._rows_with_height_applied)
+
+        if self.occupied_cells:
+            row_candidates.extend(r for r, c in self.occupied_cells)
+            col_candidates.extend(c for r, c in self.occupied_cells)
+
+        if self.merged_cells:
+            row_candidates.extend(r for r, c in self.merged_cells)
+            col_candidates.extend(c for r, c in self.merged_cells)
+
+        if self.column_mapping:
+            col_candidates.extend(self.column_mapping.values())
+
+        if self.table_zones:
+            for zone in self.table_zones:
+                if zone.header_range:
+                    row_candidates.extend(zone.header_range)
+                if zone.data_range:
+                    row_candidates.extend(zone.data_range)
+                if zone.footer_range:
+                    row_candidates.extend(zone.footer_range)
+
+        if self.ws is not None:
+            if getattr(self.ws, "max_row", None) is not None:
+                row_candidates.append(self.ws.max_row)
+            if getattr(self.ws, "max_column", None) is not None:
+                col_candidates.append(self.ws.max_column)
+            if hasattr(self.ws, "merged_cells") and hasattr(self.ws.merged_cells, "ranges"):
+                for rng in self.ws.merged_cells.ranges:
+                    if getattr(rng, "max_row", None) is not None:
+                        row_candidates.append(rng.max_row)
+                    if getattr(rng, "max_col", None) is not None:
+                        col_candidates.append(rng.max_col)
+
+        max_row = max([r for r in row_candidates if r is not None], default=1)
+        max_col = max([c for c in col_candidates if c is not None], default=1)
+
+        max_row = max(1, max_row)
+        max_col = max(1, max_col)
+
+        return max_row, get_column_letter(max_col)
 
 @dataclass
 class TableData:

@@ -69,3 +69,48 @@ def test_layout_coordinator_write_row_models():
     assert (1, 2) in state.merged_cells
     assert (1, 2) in state.occupied_cells
     assert ws.cell(row=1, column=1).value == 'Header'
+
+def test_get_last_cell():
+    wb = Workbook()
+    ws = wb.active
+    state = SheetLayoutState()
+    state.bind(ws, {'col_a': 1, 'col_b': 5}, style_registry=None)
+    
+    state.advance_to(15)
+    result = state.get_last_cell()
+    assert result == (14, 'E')
+
+
+def test_layout_builder_get_last_cell():
+    from unittest.mock import MagicMock
+    from core.invoice_generator.builders.layout_builder import LayoutBuilder
+    
+    builder = MagicMock(spec=LayoutBuilder)
+    builder.layout_state = SheetLayoutState()
+    builder.layout_state.advance_to(20)
+    
+    res = LayoutBuilder.get_last_cell(builder, col=" n ")
+    assert res == (19, 'N')
+
+
+def test_get_last_cell_explicit_write():
+    from unittest.mock import MagicMock
+    from core.invoice_generator.builders.layout_builder import LayoutBuilder
+
+    wb = Workbook()
+    ws = wb.active
+    layout_state = SheetLayoutState()
+    layout_state.bind(ws, {}, style_registry=None)
+
+    ws.cell(row=50, column=10, value="test_end")
+
+    res = layout_state.get_last_cell()
+    assert res == (50, 'J')
+
+    builder = MagicMock(spec=LayoutBuilder)
+    builder.layout_state = layout_state
+    builder_res = LayoutBuilder.get_last_cell(builder)
+    assert builder_res == (50, 'J')
+
+
+

@@ -53,6 +53,7 @@ class MultiTableProcessor(SheetProcessor):
 
         # 3. Initialize Tracking Variables
         layout_state = SheetLayoutState()
+        self.layout_state = layout_state
         layout_state.advance_to(self.header_row)
         
         current_row = self.header_row
@@ -209,8 +210,11 @@ class MultiTableProcessor(SheetProcessor):
             logger.error("Failed to build grand total footer", exc_info=True)
             return current_row
             
+        next_row = current_row + gt_grid._cursor_row
         row_models = gt_grid.get_row_models()
         if row_models:
             write_models_to_worksheet(self.output_worksheet, row_models, start_row=current_row)
+            if getattr(self, "layout_state", None) and hasattr(self.layout_state, "advance_to"):
+                self.layout_state.advance_to(next_row)
             
-        return current_row + gt_grid._cursor_row
+        return next_row

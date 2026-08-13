@@ -93,6 +93,12 @@ def deep_copy_worksheet(source_ws, target_ws):
         target_ws.page_margins.footer = source_ws.page_margins.footer
 
     if source_ws.sheet_properties and source_ws.sheet_properties.pageSetUpPr:
+        if target_ws.sheet_properties is None:
+            from openpyxl.worksheet.properties import WorksheetProperties
+            target_ws.sheet_properties = WorksheetProperties()
+        if target_ws.sheet_properties.pageSetUpPr is None:
+            from openpyxl.worksheet.properties import PageSetupProperties
+            target_ws.sheet_properties.pageSetUpPr = PageSetupProperties()
         target_ws.sheet_properties.pageSetUpPr.fitToPage = source_ws.sheet_properties.pageSetUpPr.fitToPage
 
     if source_ws.HeaderFooter:

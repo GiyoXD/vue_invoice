@@ -1,10 +1,14 @@
 import logging
-from typing import Any, Dict, List, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
 
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl import Workbook
 from openpyxl.drawing.image import Image
-from openpyxl.utils import get_column_letter
+from openpyxl.drawing.spreadsheet_drawing import OneCellAnchor, AnchorMarker
+from openpyxl.drawing.xdr import XDRPositiveSize2D
+from openpyxl.utils.units import pixels_to_EMU
+from openpyxl.utils import get_column_letter, column_index_from_string, coordinate_to_tuple
 
 from ..models.footer import FooterData
 from .json_template_builder import JsonTemplateStateBuilder
@@ -13,6 +17,7 @@ from ..models.config.styling import SheetStylingModel
 from ..models.config.layout import SheetLayoutModel
 from ..mappers import ResolvedTableData, resolve_summary_payload
 from .summary import SummaryBuilder
+from ...system_config import sys_config
 
 
 # Initialize logger for this module
@@ -276,25 +281,133 @@ class LayoutBuilder:
         except Exception as e:
             logger.error(f"Failed to apply static column widths: {e}", exc_info=True)
  
-        # 7. Inject Template Images
-        self._inject_images()
-        
         logger.info(f"Layout built successfully for sheet '{self.sheet_name}'")
         return True
 
-    def _inject_images(self):
+    def inject_images(self, stamp_cell: Optional[str] = None, signature_cell: Optional[str] = None):
         """
-        Injects pre-loaded images into the worksheet.
+        Public method to inject template images after template footer restoration.
         """
-        if not self.pre_loaded_images:
-            logger.debug("No pre-loaded images to inject")
-            return
-            
-        logger.info(f"Injecting {len(self.pre_loaded_images)} pre-loaded images")
-        for img in self.pre_loaded_images:
+        self._inject_images(stamp_cell=stamp_cell, signature_cell=signature_cell)
+
+    def get_last_cell(self, col: Optional[str] = None) -> Tuple[int, str]:
+        """
+        Delegates to self.layout_state.get_last_cell().
+        If col parameter is provided, overrides column_letter and updates cell_address.
+        """
+        max_row, col_letter = self.layout_state.get_last_cell()
+        if col:
+            col_letter = col.strip().upper()
+        return max_row, col_letter
+
+    def inject_image(self, image_path: str, cell_address: str = "N1") -> bool:
+        """
+        Inject an image at specified cell_address if image_path exists.
+        Returns True on success, False on failure.
+        """
+        path = Path(image_path)
+        if not path.is_file():
+            logger.warning(f"Image path does not exist: {image_path}")
+            return False
+        try:
+            img = Image(str(path))
+            self.worksheet.add_image(img, cell_address)
+            logger.info(f"Injected image '{image_path}' at {cell_address}")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to inject image '{image_path}' at {cell_address}: {e}")
+            return False
+
+    def inject_image_with_offset(self, image_path: str, cell_address: str, col_offset_px: int = 0, row_offset_px: int = 0) -> bool:
+        """
+        Inject an image anchored at cell_address with pixel offsets.
+        """
+        path = Path(image_path)
+        if not path.is_file():
+            logger.warning(f"Image path does not exist: {image_path}")
+            return False
+        try:
+            row_idx, col_idx = coordinate_to_tuple(cell_address)
+        except Exception as e:
+            logger.warning(f"Invalid cell address '{cell_address}': {e}")
+            return False
+
+        try:
+            img = Image(str(path))
+            col_off_emu = pixels_to_EMU(col_offset_px)
+            row_off_emu = pixels_to_EMU(row_offset_px)
+            w_px = getattr(img, 'width', None) or 100
+            h_px = getattr(img, 'height', None) or 100
+            img_w_emu = pixels_to_EMU(w_px)
+            img_h_emu = pixels_to_EMU(h_px)
+
+            col_marker = max(0, col_idx - 1)
+            row_marker = max(0, row_idx - 1)
+            marker = AnchorMarker(col=col_marker, colOff=col_off_emu, row=row_marker, rowOff=row_off_emu)
+            size = XDRPositiveSize2D(img_w_emu, img_h_emu)
+            img.anchor = OneCellAnchor(_from=marker, ext=size)
+            self.worksheet.add_image(img)
+            logger.info(f"Injected image '{image_path}' with offset ({col_offset_px}px, {row_offset_px}px) at {cell_address}")
+            return True
+        except Exception as e:
+            logger.warning(f"Failed to inject image with offset '{image_path}' at {cell_address}: {e}")
+            return False
+
+    def _inject_images(self, stamp_cell: Optional[str] = None, signature_cell: Optional[str] = None):
+        """
+        Injects stamp/signature images from database/template_images and pre-loaded images using last cell position.
+        """
+        max_row, col_let = self.get_last_cell()
+        stamp_address = stamp_cell or f"{col_let}{max_row}"
+
+        stamp_path = sys_config.template_image_dir / "stamp.png"
+        sig_path = sys_config.template_image_dir / "signiture.png"
+        if not sig_path.exists():
+            sig_path = sys_config.template_image_dir / "signature.png"
+
+        stamp_width = 120
+        stamp_height = 120
+        if stamp_path.exists():
             try:
-                # Default placement at N1 (as requested)
-                self.worksheet.add_image(img, 'N1')
-                logger.debug(f"Injected image at N1")
-            except Exception as e:
-                logger.warning(f"Failed to inject pre-loaded image: {e}")
+                stamp_img = Image(str(stamp_path))
+                stamp_width = getattr(stamp_img, 'width', None) or 120
+                stamp_height = getattr(stamp_img, 'height', None) or 120
+            except Exception:
+                pass
+
+        self.inject_image(str(stamp_path), stamp_address)
+
+        if signature_cell is not None:
+            self.inject_image(str(sig_path), signature_cell)
+        else:
+            col_off_px = int(stamp_width * 0.35)
+            row_off_px = int(stamp_height * 0.25)
+            self.inject_image_with_offset(str(sig_path), stamp_address, col_offset_px=col_off_px, row_offset_px=row_off_px)
+
+        if self.pre_loaded_images:
+            logger.info(f"Injecting {len(self.pre_loaded_images)} pre-loaded images into sheet '{self.sheet_name}'")
+            for idx, img_item in enumerate(self.pre_loaded_images):
+                try:
+                    inc_offset = idx * 10
+                    if isinstance(img_item, (str, Path)):
+                        self.inject_image_with_offset(str(img_item), stamp_address, col_offset_px=inc_offset, row_offset_px=inc_offset)
+                    elif isinstance(img_item, Image):
+                        try:
+                            row_idx, col_idx = coordinate_to_tuple(stamp_address)
+                            col_off_emu = pixels_to_EMU(inc_offset)
+                            row_off_emu = pixels_to_EMU(inc_offset)
+                            w_px = getattr(img_item, 'width', None) or 100
+                            h_px = getattr(img_item, 'height', None) or 100
+                            img_w_emu = pixels_to_EMU(w_px)
+                            img_h_emu = pixels_to_EMU(h_px)
+                            marker = AnchorMarker(col=max(0, col_idx - 1), colOff=col_off_emu, row=max(0, row_idx - 1), rowOff=row_off_emu)
+                            size = XDRPositiveSize2D(img_w_emu, img_h_emu)
+                            img_item.anchor = OneCellAnchor(_from=marker, ext=size)
+                            self.worksheet.add_image(img_item)
+                        except Exception:
+                            self.worksheet.add_image(img_item, stamp_address)
+                    else:
+                        self.worksheet.add_image(img_item, stamp_address)
+                    logger.debug(f"Injected pre-loaded image at {stamp_address}")
+                except Exception as e:
+                    logger.warning(f"Failed to inject pre-loaded image into worksheet: {e}")

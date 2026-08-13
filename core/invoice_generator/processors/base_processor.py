@@ -294,6 +294,7 @@ class SheetProcessor(ABC):
             logger.error("Failed to build layout")
             return None
             
+        self.layout_builder = layout_builder
         return layout_builder
 
     def _build_page_summary(
@@ -358,9 +359,10 @@ class SheetProcessor(ABC):
     @property
     def skip_footer_restoration(self) -> bool:
         """Returns True if template footer restoration should be bypassed."""
+        cfg = self.sheet_config or {}
         return (
-            self.sheet_config.get('skip_template_footer', False) or
-            self.sheet_config.get('skip_template_footer_restoration', False) or
+            cfg.get('skip_template_footer', False) or
+            cfg.get('skip_template_footer_restoration', False) or
             getattr(self, 'skip_template_footer_restoration', False)
         )
 
@@ -395,6 +397,7 @@ class SheetProcessor(ABC):
                     footer_start_row=current_row,
                     actual_num_cols=actual_num_cols,
                     mode=gen_mode,
+                    layout_state=getattr(self, 'layout_state', None),
                     column_index_mapping=column_index_mapping
                 )
                 logger.info("Template footer restored successfully")
@@ -402,5 +405,11 @@ class SheetProcessor(ABC):
                 logger.error(f"Failed to restore template footer: {e}", exc_info=True)
         else:
             logger.debug("Skipping template footer restoration")
+
+        if getattr(self, 'layout_builder', None):
+            try:
+                self.layout_builder.inject_images()
+            except Exception as e:
+                logger.error(f"Failed to inject images: {e}", exc_info=True)
 
 
