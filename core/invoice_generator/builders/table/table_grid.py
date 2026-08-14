@@ -6,6 +6,7 @@ from openpyxl.utils import get_column_letter
 from ...styling.style_registry import StyleRegistry
 from ...styling.dimension_registry import DimensionRegistry
 from ...utils.cell_converter import convert_registry_style_to_cell_style
+from ...utils.formula_formatter import extract_decimal_places, wrap_with_round
 from core.models.cell import UnitRow, UnitCell, TemplateMerge
 
 from core.models.grid import Grid as CoreGrid
@@ -144,6 +145,14 @@ class TableGrid(CoreGrid):
 
         if not formula.startswith('='):
             formula = '=' + formula
+
+        decimals = None
+        if self.style_registry:
+            style = self.style_registry.get_style(str(col_id), context=context)
+            number_format_str = style.get('format') if style else None
+            decimals = extract_decimal_places(number_format_str)
+
+        formula = wrap_with_round(formula, decimals)
 
         self.write(row, col_id, formula, context)
 

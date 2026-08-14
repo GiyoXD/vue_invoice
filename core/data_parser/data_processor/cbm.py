@@ -5,7 +5,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from ..util.converters import DataConverter
 
 # Define precision specifically for CBM results
-CBM_DECIMAL_PLACES = decimal.Decimal('0.0001')
+CBM_DECIMAL_PLACES = decimal.Decimal('0.01')
 
 def _calculate_single_cbm(cbm_value: Any, row_index: int) -> Optional[decimal.Decimal]:
     """

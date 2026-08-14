@@ -28,9 +28,9 @@ export default {
             <div v-if="validationWarnings && validationWarnings.length > 0" class="warning-panel">
                 <div class="warning-header flex items-center gap-2 mb-3">
                     <span class="warning-icon text-xl">⚠️</span>
-                    <h3 class="m-0 text-amber-700 text-base">Data Auto-Correction Notices</h3>
+                    <h3 class="m-0 text-amber-400 font-bold text-base">Data Auto-Correction Notices</h3>
                 </div>
-                <ul class="m-0 pl-6 text-amber-800 text-sm">
+                <ul class="m-0 pl-6 text-slate-200 text-sm">
                     <li v-for="(msg, idx) in validationWarnings" :key="idx" class="mb-1">
                         {{ msg }}
                     </li>

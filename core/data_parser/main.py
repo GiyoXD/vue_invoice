@@ -20,6 +20,7 @@ from . import config as cfg
 from .excel_handler import ExcelHandler
 from . import sheet_parser
 from . import data_processor # Includes all processing functions
+from .data_processor.aggregation.strategies import FinalDAFResultType
 from .validation import DataValidationError, validate_data
 from .util.exporter import export_invoice_data
 
@@ -179,15 +180,14 @@ def main(
                 # --- 5.0.5: Normalize column types to Decimal/int ---
                 data_processor.normalize_table_types(current_table_data)
 
+                # 5a. CBM
+                data_after_cbm = data_processor.process_cbm_column(current_table_data)
+                data_normalized = data_after_cbm
+
                 # --- 5.1: Validate Presence of Essential Data ---
-                validate_data(current_table_data, table_id_str, column_mapping, monitor=monitor, phase='presence')
+                validate_data(data_normalized, table_id_str, column_mapping, monitor=monitor, phase='presence')
                 
                 try:
-                    # 5a. CBM
-                    data_after_cbm = data_processor.process_cbm_column(current_table_data)
-                    
-                    data_normalized = data_after_cbm
-
                     # 5b. Distribute
                     try:
                         # 5b.1 Strict Validation: Gross Weight MUST NOT be smaller than Net Weight (Before Distribution)

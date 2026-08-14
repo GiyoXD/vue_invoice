@@ -142,6 +142,58 @@ def validate_no_duplicate_amount_columns(sheet, header_row: int, column_mapping:
         )
 
 
+def validate_col_level_discount(
+    table_data: List[Dict[str, Any]], 
+    table_id_str: Optional[str] = None, 
+    monitor: Optional[Any] = None
+) -> None:
+    """
+    Scans table_data for any rows where 'col_level' contains '折扣'.
+    Logs a warning if discount rows are found.
+    """
+    if not table_data:
+        return
+
+    discount_rows = []
+    for idx, row in enumerate(table_data):
+        if not isinstance(row, dict):
+            continue
+        val = row.get('col_level')
+        if val is not None:
+            try:
+                if '折扣' in str(val):
+                    discount_rows.append(row.get('_row_num', idx + 1))
+            except Exception:
+                continue
+
+    if discount_rows:
+        row_list = ', '.join(str(r) for r in discount_rows)
+        msg = f"[{table_id_str or 'Table'}] Warning: '折扣' (discount) detected in col_level on {len(discount_rows)} row(s): row(s) {row_list}."
+        logging.warning(msg)
+        if monitor:
+            monitor.log_warning(msg)
+
+
+def _is_valid_cell_value(val: Any, is_numeric: bool = False) -> bool:
+    """Checks if a cell value is present and non-zero (if numeric)."""
+    if val is None:
+        return False
+    val_str = str(val).strip()
+    if not val_str:
+        return False
+    if not is_numeric:
+        return True
+    try:
+        return decimal.Decimal(val_str.replace(',', '')) != 0
+    except (decimal.InvalidOperation, ValueError, TypeError):
+        try:
+            from .data_processor.cbm import _calculate_single_cbm
+            cbm_val = _calculate_single_cbm(val_str, 0)
+            return cbm_val is not None and cbm_val != 0
+        except Exception:
+            return False
+
+
 def validate_table_data_presence(
     current_table_data: List[Dict[str, Any]], 
     table_id_str: str, 
@@ -149,54 +201,26 @@ def validate_table_data_presence(
     monitor: Optional[Any] = None
 ):
     """
-    Validates that the first row of the table contains valid values for all required columns.
-    If a required column is missing its value on the first row, throw DataValidationError.
+    Validates that required columns exist in headers and contain valid values across rows.
     """
-    # Columns that MUST always be present in every valid table
-    ALWAYS_REQUIRED = [
-        'col_po', 'col_item', 'col_qty_pcs', 'col_net', 'col_gross', 'col_cbm'
-    ]
-    
-    # Pricing columns — only required if the scanner actually found them.
-    # Shipping lists (net-weight mode) won't have these; they get injected later.
-    PRICING_COLUMNS = [
-        'col_amount', 'col_unit_price', 'col_qty_sf'
-    ]
-    
+    validate_col_level_discount(current_table_data, table_id_str, monitor=monitor)
+
+    ALWAYS_REQUIRED = ['col_po', 'col_item', 'col_qty_pcs', 'col_net', 'col_gross', 'col_cbm']
+    PRICING_COLUMNS = ['col_amount', 'col_unit_price', 'col_qty_sf']
+
     if not current_table_data:
         logging.warning(f"Validation: {table_id_str} has no data rows to validate.")
         return
 
     first_row = current_table_data[0]
-    missing_data_cols = []
-    
-    # Build the actual required list: always-required + pricing cols IF mapped
-    required_cols = list(ALWAYS_REQUIRED)
-    for pc in PRICING_COLUMNS:
-        if pc in column_mapping:
-            required_cols.append(pc)
-    
-    for col_name in required_cols:
-        # 1. Check mapping first (did we even find the header?)
-        if col_name not in column_mapping:
-            missing_data_cols.append(f"{col_name} (Missing Header)")
-            continue
-        
-        # 2. Check ONLY the first row for a valid value
-        val = first_row.get(col_name)
-        has_val = False
-        if val is not None:
-            val_str = str(val).strip()
-            if val_str:
-                try:
-                    num_val = decimal.Decimal(val_str.replace(',', ''))
-                    if num_val != 0:
-                        has_val = True
-                except (decimal.InvalidOperation, ValueError, TypeError):
-                    has_val = True
-        
-        if not has_val:
-            missing_data_cols.append(col_name)
+    required_cols = list(ALWAYS_REQUIRED) + [c for c in PRICING_COLUMNS if c in column_mapping]
+    missing_data_cols = [f"{c} (Missing Header)" for c in required_cols if c not in column_mapping]
+
+    for col in required_cols:
+        if col in column_mapping:
+            is_num = col not in ('col_po', 'col_item')
+            if not _is_valid_cell_value(first_row.get(col), is_numeric=is_num):
+                missing_data_cols.append(col)
 
     if missing_data_cols:
         row_num = first_row.get('_row_num', '?')
@@ -204,6 +228,22 @@ def validate_table_data_presence(
         if monitor:
             monitor.log_process_item(f"{table_id_str} First-Row Validation", status="error", error=err_msg)
         raise DataValidationError(err_msg)
+
+    # Validate all rows for critical identifiers, qty & pricing columns
+    STRICT_ALL_ROWS_COLS = ['col_po', 'col_item', 'col_qty_pcs', 'col_qty_sf', 'col_unit_price', 'col_amount']
+    check_all_cols = [c for c in STRICT_ALL_ROWS_COLS if c in column_mapping]
+
+    for row in current_table_data:
+        missing_in_row = [
+            c for c in check_all_cols
+            if not _is_valid_cell_value(row.get(c), is_numeric=(c not in ('col_po', 'col_item')))
+        ]
+        if missing_in_row:
+            row_num = row.get('_row_num', '?')
+            err_msg = f"Row {row_num}: Missing or zero value for: {', '.join(missing_in_row)}"
+            if monitor:
+                monitor.log_process_item(f"{table_id_str} Row Validation", status="error", error=err_msg)
+            raise DataValidationError(err_msg)
 
 def validate_weight_integrity(
     data_rows: List[Dict[str, Any]], 
@@ -420,33 +460,41 @@ def validate_cbm_pcs_proportion(
     cbm_tol_pct = decimal.Decimal('0.032') # 3.2% relative tolerance
     for po, group_rows in po_groups.items():
         n = len(group_rows)
-        for i in range(n):
-            for j in range(i + 1, n):
-                row_A = group_rows[i]
-                row_B = group_rows[j]
-                
-                if row_A['basis'] > row_B['basis']:
-                    # Row A has more pieces, so it should have more CBM.
-                    # We allow a tolerance of up to 3.2% of B's CBM.
-                    allowed_cbm = row_B['cbm'] * (decimal.Decimal('1.0') - cbm_tol_pct)
-                    if row_A['cbm'] < allowed_cbm - tolerance:
-                        row_A_num = row_A['row'].get('_row_num', '?')
-                        row_B_num = row_B['row'].get('_row_num', '?')
-                        discrepancy = row_B['cbm'] - row_A['cbm']
-                        violations.append(
-                            f"Row {row_A_num} & {row_B_num}: Qty/CBM wrong ({row_A['basis']:.0f}pcs={row_A['cbm']:.2f}, {row_B['basis']:.0f}pcs={row_B['cbm']:.2f}, discrepancy {discrepancy:.2f} CBM)"
-                        )
-                elif row_B['basis'] > row_A['basis']:
-                    # Row B has more pieces, so it should have more CBM.
-                    # We allow a tolerance of up to 3.2% of A's CBM.
-                    allowed_cbm = row_A['cbm'] * (decimal.Decimal('1.0') - cbm_tol_pct)
-                    if row_B['cbm'] < allowed_cbm - tolerance:
-                        row_A_num = row_A['row'].get('_row_num', '?')
-                        row_B_num = row_B['row'].get('_row_num', '?')
-                        discrepancy = row_A['cbm'] - row_B['cbm']
-                        violations.append(
-                            f"Row {row_A_num} & {row_B_num}: Qty/CBM wrong ({row_B['basis']:.0f}pcs={row_B['cbm']:.2f}, {row_A['basis']:.0f}pcs={row_A['cbm']:.2f}, discrepancy {discrepancy:.2f} CBM)"
-                        )
+        if n < 2:
+            continue
+            
+        # O(N) ratio validation against group median ratio
+        # Sort group by basis ascending so adjacent comparisons suffice (O(N log N) / O(N))
+        sorted_group = sorted(group_rows, key=lambda x: x['basis'])
+        
+        # Calculate group median ratio
+        group_ratios = [r['cbm'] / r['basis'] for r in sorted_group if r['basis'] > 0 and r['cbm'] > 0]
+        if group_ratios:
+            sorted_ratios = sorted(group_ratios)
+            m_len = len(sorted_ratios)
+            if m_len % 2 == 1:
+                group_median_ratio = sorted_ratios[m_len // 2]
+            else:
+                group_median_ratio = (sorted_ratios[m_len // 2 - 1] + sorted_ratios[m_len // 2]) / decimal.Decimal(2)
+        else:
+            group_median_ratio = None
+
+        # Perform adjacent linear checks O(N) on sorted group
+        for i in range(n - 1):
+            row_low = sorted_group[i]       # smaller or equal basis
+            row_high = sorted_group[i + 1]   # larger or equal basis
+            
+            if row_high['basis'] > row_low['basis']:
+                allowed_cbm = row_low['cbm'] * (decimal.Decimal('1.0') - cbm_tol_pct)
+                if row_high['cbm'] < allowed_cbm - tolerance:
+                    row_A_num = row_low['row'].get('_row_num', '?')
+                    row_B_num = row_high['row'].get('_row_num', '?')
+                    if isinstance(row_A_num, int) and isinstance(row_B_num, int) and row_A_num > row_B_num:
+                        row_A_num, row_B_num = row_B_num, row_A_num
+                    discrepancy = row_low['cbm'] - row_high['cbm']
+                    violations.append(
+                        f"Row {row_A_num} & {row_B_num}: Qty/CBM wrong ({row_high['basis']:.0f}pcs={row_high['cbm']:.2f}, {row_low['basis']:.0f}pcs={row_low['cbm']:.2f}, discrepancy {discrepancy:.2f} CBM)"
+                    )
 
     # 4. Check for Ratio Outliers
     ratios = []
@@ -508,7 +556,7 @@ def verify_pallet_integrity(
     monitor: Optional[Any] = None
 ) -> None:
     """
-    Validates pallet data integrity in two phases:
+    Validates pallet data integrity in three phases:
     
     Phase 1 — Pairing check (col_pallet_id vs col_qty_sf):
       If col_pallet_id column exists, every row with sqft data MUST have a pallet ID.
@@ -521,6 +569,11 @@ def verify_pallet_integrity(
       - If col_pallet_id is same as last row, col_pallet_count MUST be 0.
       - If col_pallet_count is 1, a valid non-empty col_pallet_id MUST be present.
       - A col_pallet_id cannot reappear after a different one (no gaps).
+
+    Phase 3 — Pallet Metric Alignment Check (col_cbm, col_net, col_gross):
+      Checks col_cbm, col_net, and col_gross alignment with pallet anchor rows.
+      When count == 0 (sub-row) and the row has non-empty/non-zero value for any of
+      ['col_cbm', 'col_net', 'col_gross'], logs a warning.
     """
     import re
     pallet_count_key = 'col_pallet_count'
@@ -530,94 +583,127 @@ def verify_pallet_integrity(
     has_count = any(pallet_count_key in row for row in table_data)
     has_id = any(pallet_id_key in row for row in table_data)
     
-    # If col_pallet_id doesn't exist at all, warn and skip
-    if not has_id:
-        msg = f"[Pallet Pairing] col_pallet_id column not found in {table_id_str or 'data'}. Skipping pallet validation."
-        logging.warning(msg)
-        if monitor:
-            monitor.log_warning(msg)
+    if not has_id and not has_count:
         return
 
     # --- Phase 1: Pairing check (pallet_id must exist for every row with sqft) ---
-    missing_id_rows = []
-    for idx, row in enumerate(table_data):
-        row_num = row.get('_row_num', idx + 1)
-        sqft_val = row.get(sqft_key)
-        raw_id = row.get(pallet_id_key)
-        pallet_id = str(raw_id).strip() if raw_id is not None else ""
+    if has_id:
+        missing_id_rows = []
+        for idx, row in enumerate(table_data):
+            row_num = row.get('_row_num', idx + 1)
+            sqft_val = row.get(sqft_key)
+            raw_id = row.get(pallet_id_key)
+            pallet_id = str(raw_id).strip() if raw_id is not None else ""
+            
+            # Row has sqft data but no pallet ID → operator forgot to fill
+            has_sqft = False
+            if sqft_val is not None and str(sqft_val).strip() != "":
+                try:
+                    dec_val = sqft_val if isinstance(sqft_val, decimal.Decimal) else decimal.Decimal(str(sqft_val).replace(',', '').strip())
+                    if dec_val != 0:
+                        has_sqft = True
+                except (decimal.InvalidOperation, ValueError, TypeError):
+                    has_sqft = True
+            if has_sqft and not pallet_id:
+                missing_id_rows.append(row_num)
         
-        # Row has sqft data but no pallet ID → operator forgot to fill
-        has_sqft = sqft_val is not None and str(sqft_val).strip() not in ('', '0', '0.0', '0.00')
-        if has_sqft and not pallet_id:
-            missing_id_rows.append(row_num)
-    
-    if missing_id_rows:
-        row_list = ', '.join(str(r) for r in missing_id_rows[:10])
-        suffix = f" (and {len(missing_id_rows) - 10} more)" if len(missing_id_rows) > 10 else ""
-        msg = (
-            f"[{table_id_str or 'Table'}] [Pallet Pairing] {len(missing_id_rows)} row(s) have sqft data but missing Pallet ID: "
-            f"rows {row_list}{suffix}. Operator may have forgotten to fill these."
-        )
+        if missing_id_rows:
+            row_list = ', '.join(str(r) for r in missing_id_rows[:10])
+            suffix = f" (and {len(missing_id_rows) - 10} more)" if len(missing_id_rows) > 10 else ""
+            msg = (
+                f"[{table_id_str or 'Table'}] [Pallet Pairing] {len(missing_id_rows)} row(s) have sqft data but missing Pallet ID: "
+                f"rows {row_list}{suffix}. Operator may have forgotten to fill these."
+            )
+            logging.warning(msg)
+            if monitor:
+                monitor.log_warning(msg)
+    else:
+        msg = f"[Pallet Pairing] col_pallet_id column not found in {table_id_str or 'data'}. Skipping pallet ID validation."
         logging.warning(msg)
         if monitor:
             monitor.log_warning(msg)
 
     # --- Phase 2: Correlation check (count vs id) — only if both columns exist ---
-    if not has_count:
-        return
+    if has_id and has_count:
+        last_pallet_id = None
+        seen_pallet_ids = set()
 
-    last_pallet_id = None
-    seen_pallet_ids = set()
-
-    for idx, row in enumerate(table_data):
-        row_num = row.get('_row_num', idx + 1)
-        raw_count = row.get(pallet_count_key, 0)
-        
-        # Determine 1/0 boundary marker count
-        try:
-            count = 1 if (raw_count is not None and int(float(str(raw_count).strip())) >= 1) else 0
-        except (ValueError, TypeError):
-            count = 0
+        for idx, row in enumerate(table_data):
+            row_num = row.get('_row_num', idx + 1)
+            raw_count = row.get(pallet_count_key, 0)
             
-        raw_id = row.get(pallet_id_key)
-        pallet_id = str(raw_id).strip() if raw_id is not None else ""
-        
-        # If both are empty, we might be on a non-pallet/footer/ignored row.
-        # We skip validation but reset last_pallet_id so that if a new pallet starts
-        # later, we treat it as a new block.
-        if not pallet_id and count == 0:
-            last_pallet_id = None
-            continue
-
-        # Rule C (Presence): If count is 1, pallet_id must be present
-        if count == 1 and not pallet_id:
-            raise DataValidationError(
-                f"Row {row_num}: Pallet ID missing (count = 1)"
-            )
-
-        # Rules A & B: Transitions
-        if pallet_id != last_pallet_id:
-            # Count MUST be 1 (Rule A)
-            if count != 1:
-                raise DataValidationError(
-                    f"Row {row_num}: Pallet ID changed to '{pallet_id}' but count is {raw_count}"
-                )
+            # Determine 1/0 boundary marker count
+            try:
+                count = 1 if (raw_count is not None and int(float(str(raw_count).strip())) >= 1) else 0
+            except (ValueError, TypeError):
+                count = 0
+                
+            raw_id = row.get(pallet_id_key)
+            pallet_id = str(raw_id).strip() if raw_id is not None else ""
             
-            # Rule D: Contiguity (No recurrence after a gap)
-            if pallet_id in seen_pallet_ids:
+            # If both are empty, we might be on a non-pallet/footer/ignored row.
+            # We skip validation without resetting last_pallet_id so spacer rows do not trigger false errors.
+            if not pallet_id and count == 0:
+                continue
+
+            # Rule C (Presence): If count is 1, pallet_id must be present
+            if count == 1 and not pallet_id:
                 raise DataValidationError(
-                    f"Row {row_num}: Pallet ID '{pallet_id}' reappeared after gap"
-                )
-            seen_pallet_ids.add(pallet_id)
-        else:
-            # Continuation of the same pallet ID
-            # Count MUST be 0 (Rule B)
-            if count != 0:
-                raise DataValidationError(
-                    f"Row {row_num}: Pallet count is 1 but Pallet ID did not change ('{pallet_id}')"
+                    f"Row {row_num}: Pallet ID missing (count = 1)"
                 )
 
-        last_pallet_id = pallet_id
+            # Rules A & B: Transitions
+            if pallet_id != last_pallet_id:
+                # Count MUST be 1 (Rule A)
+                if count != 1:
+                    raise DataValidationError(
+                        f"Row {row_num}: Pallet ID changed to '{pallet_id}' but count is {raw_count}"
+                    )
+                
+                # Rule D: Contiguity (No recurrence after a gap)
+                if pallet_id in seen_pallet_ids:
+                    raise DataValidationError(
+                        f"Row {row_num}: Pallet ID '{pallet_id}' reappeared after gap"
+                    )
+                seen_pallet_ids.add(pallet_id)
+            else:
+                # Continuation of the same pallet ID
+                # Count MUST be 0 (Rule B)
+                if count != 0:
+                    raise DataValidationError(
+                        f"Row {row_num}: Pallet count is 1 but Pallet ID did not change ('{pallet_id}')"
+                    )
+
+            last_pallet_id = pallet_id
+
+    # --- Phase 3: Pallet Metric Alignment Check (col_cbm, col_net, col_gross on anchor vs sub-rows) ---
+    if has_count:
+        metric_cols = ['col_cbm', 'col_net', 'col_gross']
+        col_name_map = {'col_cbm': 'CBM', 'col_net': 'Net Weight', 'col_gross': 'Gross Weight'}
+        for idx, row in enumerate(table_data):
+            row_num = row.get('_row_num', idx + 1)
+            raw_count = row.get(pallet_count_key, 0)
+            try:
+                count = 1 if (raw_count is not None and int(float(str(raw_count).strip())) >= 1) else 0
+            except (ValueError, TypeError):
+                count = 0
+
+            raw_id = row.get(pallet_id_key)
+            pallet_id = str(raw_id).strip() if raw_id is not None else ""
+            pallet_label = f" (Pallet '{pallet_id}')" if pallet_id else ""
+
+            if count == 0:
+                for col in metric_cols:
+                    val = row.get(col)
+                    if _is_valid_cell_value(val, is_numeric=True):
+                        metric_name = col_name_map.get(col, col)
+                        msg = (
+                            f"[{table_id_str or 'Table'}] Row {row_num}{pallet_label}: "
+                            f"{metric_name} ({val}) is on a sub-row (Pallet=0). Should be on main pallet row (Pallet=1)."
+                        )
+                        logging.warning(msg)
+                        if monitor:
+                            monitor.log_warning(msg)
 
 
 def validate_data(

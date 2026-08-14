@@ -83,9 +83,9 @@ export default {
             <div v-if="store.proactiveWarnings && store.proactiveWarnings.length > 0" class="warning-panel mb-6">
                 <div class="warning-header flex items-center gap-2 mb-3">
                     <span class="warning-icon text-xl">⚠️</span>
-                    <h3 class="m-0 text-amber-700 text-base">Template Structural Warnings</h3>
+                    <h3 class="m-0 text-amber-400 font-bold text-base">Template Structural Warnings</h3>
                 </div>
-                <ul class="m-0 pl-6 text-amber-800 text-sm">
+                <ul class="m-0 pl-6 text-slate-200 text-sm">
                     <li v-for="(msg, idx) in store.proactiveWarnings" :key="idx" class="mb-2 leading-snug">
                         {{ msg }}
                     </li>

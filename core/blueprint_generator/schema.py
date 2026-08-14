@@ -11,6 +11,7 @@ NOTE: Additional column definitions are loaded dynamically from
 load time. Add new system columns there instead of hardcoding here.
 """
 
+import copy
 import json
 import logging
 import re
@@ -136,14 +137,26 @@ class BlueprintSchema:
         This accepts a plain dict (caller's responsibility to get it from DB/file).
         """
         # Reset COLUMNS to the base set
-        cls.COLUMNS = dict(cls._BASE_COLUMNS)
+        cls.COLUMNS = copy.deepcopy(cls._BASE_COLUMNS)
 
         # Fallback to empty dict if mapping_config is empty
         if not mapping_config:
             mapping_config = {}
 
         try:
-            col_defs = mapping_config.get("shipping_header_map", {})
+            col_defs = mapping_config.get("shipping_header_map")
+            if col_defs is None:
+                try:
+                    from core.database.db_manager import get_global_mapping_config
+                    db_config = get_global_mapping_config()
+                    col_defs = db_config.get("shipping_header_map", {})
+                except Exception as e:
+                    logger.warning(f"Failed loading DB mapping config in BlueprintSchema: {e}")
+                    col_defs = {}
+
+            if not isinstance(col_defs, dict):
+                col_defs = {}
+
             loaded = 0
             for col_id, props in col_defs.items():
                 # Skip metadata keys like 'comment'
@@ -156,7 +169,8 @@ class BlueprintSchema:
                 
                 # Merge dynamic keywords/formatting into existing base columns
                 if col_id in cls.COLUMNS:
-                    cls.COLUMNS[col_id].keywords = keywords
+                    if keywords:
+                        cls.COLUMNS[col_id].keywords = keywords
                     if excel_format != "@":
                         cls.COLUMNS[col_id].excel_format = excel_format
                     if width != 15.0:
@@ -227,7 +241,7 @@ class BlueprintSchema:
 
 
 # Initialize COLUMNS to base columns
-BlueprintSchema.COLUMNS = dict(BlueprintSchema._BASE_COLUMNS)
+BlueprintSchema.COLUMNS = copy.deepcopy(BlueprintSchema._BASE_COLUMNS)
 
 # Load configuration from database to initialize sheet categories and baseline columns at import time safely
 try:

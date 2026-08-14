@@ -149,6 +149,7 @@ def load_and_update_mappings():
     - 'header_text_mappings': explicit text → col_id overrides (e.g. template headers)
     """
     try:
+        TARGET_HEADERS_MAP.clear()
         from core.database.db_manager import get_global_mapping_config
         data = get_global_mapping_config()
 

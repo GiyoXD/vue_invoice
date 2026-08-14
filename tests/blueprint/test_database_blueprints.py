@@ -425,6 +425,24 @@ def test_mapping_service_get_and_update(db):
     assert db_kws["po"] == "col_po"
     assert db_kws["qty"] == "col_qty_pcs"
 
+    # Reassign keyword to another column (reassign 'po' to 'col_item' and 'qty' to 'col_po')
+    service.update_mappings("shipping_header_map", {"po": "col_item", "qty": "col_po"})
+    db_kws = {kw.keyword: kw.col_id for kw in db.query(GlobalMapColumnKeyword).all()}
+    assert db_kws["po"] == "col_item"
+    assert db_kws["qty"] == "col_po"
+
+    # Test nested dict format: {col_id: {'keywords': [...]}}
+    service.update_mappings("shipping_header_map", {
+        "col_order": {"keywords": ["po", "order_id"]},
+        "col_price": {"keywords": ["unit_price", "rate"]}
+    })
+    db_kws = {kw.keyword: kw.col_id for kw in db.query(GlobalMapColumnKeyword).all()}
+    assert db_kws["po"] == "col_order"
+    assert db_kws["order_id"] == "col_order"
+    assert db_kws["unit_price"] == "col_price"
+    assert db_kws["rate"] == "col_price"
+    assert "qty" not in db_kws
+
     # 2. Test footer_label_mappings delta
     service.update_mappings("footer_label_mappings", {"TOTAL": "Footer Keyword", "SUBTOTAL": "Footer Keyword"})
     assert db.query(GlobalMapFooterLabelKeyword).count() == 2
@@ -459,6 +477,42 @@ def test_mapping_service_get_and_update(db):
     assert "Item No" not in overrides
     assert overrides["P.O."] == "col_qty_pcs"
     assert overrides["Description"] == "col_desc"
+
+
+def test_mapping_service_crud_and_delta(db):
+    """
+    Verify mapping service CRUD and delta operations, including reassigning keywords across columns
+    in flat and nested formats without UniqueConstraint failures.
+    """
+    from core.services.mapping_service import MappingService
+    from core.database.models.global_map import GlobalMapColumn, GlobalMapColumnKeyword
+
+    # Clear tables
+    db.query(GlobalMapColumnKeyword).delete()
+    db.query(GlobalMapColumn).delete()
+    db.commit()
+
+    service = MappingService(db)
+
+    # 1. Initial flat creation
+    service.update_mappings("shipping_header_map", {"keyword_a": "col_1", "keyword_b": "col_2"})
+    assert db.query(GlobalMapColumnKeyword).count() == 2
+
+    # 2. Reassign keyword_a from col_1 to col_2, and move keyword_b from col_2 to col_1
+    service.update_mappings("shipping_header_map", {"keyword_a": "col_2", "keyword_b": "col_1"})
+    kws = {kw.keyword: kw.col_id for kw in db.query(GlobalMapColumnKeyword).all()}
+    assert kws["keyword_a"] == "col_2"
+    assert kws["keyword_b"] == "col_1"
+
+    # 3. Update using nested structure and move keyword_a to col_3
+    service.update_mappings("shipping_header_map", {
+        "col_3": {"keywords": ["keyword_a", "keyword_c"]},
+        "col_1": {"keywords": ["keyword_b"]}
+    })
+    kws = {kw.keyword: kw.col_id for kw in db.query(GlobalMapColumnKeyword).all()}
+    assert kws["keyword_a"] == "col_3"
+    assert kws["keyword_c"] == "col_3"
+    assert kws["keyword_b"] == "col_1"
 
 
 def test_mapping_config_cache(db):
@@ -590,6 +644,145 @@ def test_blueprint_service_operations(db):
     success = service.delete_blueprint("SERVTEST", "KH")
     assert success is True
     assert service.view_blueprint("SERVTEST", "KH") is None
+
+
+def test_mapping_service_whitespace_handling(db):
+    """
+    Verify mapping updates safely strip leading/trailing whitespaces and ignore empty keys.
+    """
+    from core.services.mapping_service import MappingService
+    from core.database.db_manager import (
+        GlobalMapColumn, GlobalMapColumnKeyword, GlobalMapSheet,
+        GlobalMapFooterLabelKeyword, GlobalMapHeaderTextMapping
+    )
+
+    db.query(GlobalMapHeaderTextMapping).delete()
+    db.query(GlobalMapSheet).delete()
+    db.query(GlobalMapColumnKeyword).delete()
+    db.query(GlobalMapColumn).delete()
+    db.query(GlobalMapFooterLabelKeyword).delete()
+    db.commit()
+
+    service = MappingService(db)
+
+    # 1. footer_label_mappings with whitespace and empty/ignored keys
+    service.update_mappings("footer_label_mappings", {
+        "  TOTAL  ": "Footer Keyword",
+        "": "Footer Keyword",
+        "   ": "Footer Keyword",
+        "keywords": "Footer Keyword",
+        "SUBTOTAL ": "Footer Keyword"
+    })
+    footers = {f.keyword for f in db.query(GlobalMapFooterLabelKeyword).all()}
+    assert footers == {"TOTAL", "SUBTOTAL"}
+
+    # 2. sheet_mappings with whitespace and empty strings
+    service.update_mappings("sheet_mappings", {
+        " Invoice ": " aggregation ",
+        "  ": " processed_tables ",
+        "Packing List  ": "processed_tables"
+    })
+    sheets = {s.sheet_name: s.processing_type for s in db.query(GlobalMapSheet).all()}
+    assert sheets == {"Invoice": "aggregation", "Packing List": "processed_tables"}
+
+    # 3. header_text_mappings with whitespace and empty strings
+    service.update_mappings("header_text_mappings", {
+        " P.O. No ": " col_po ",
+        "   ": "col_po",
+        "Item ": "  ",
+        " Description  ": "col_desc"
+    })
+    overrides = {o.raw_text: o.canonical_col_id for o in db.query(GlobalMapHeaderTextMapping).all()}
+    assert overrides == {"P.O. No": "col_po", "Description": "col_desc"}
+
+    # 4. shipping_header_map with whitespace
+    service.update_mappings("shipping_header_map", {
+        " col_po ": {"keywords": [" po_num ", "  ", "purchase_order "]},
+        " col_item ": [" item_no ", ""]
+    })
+    db_kws = {(kw.col_id, kw.keyword) for kw in db.query(GlobalMapColumnKeyword).all()}
+    assert ("col_po", "po_num") in db_kws
+    assert ("col_po", "purchase_order") in db_kws
+    assert ("col_item", "item_no") in db_kws
+    assert len(db_kws) == 3
+
+
+def test_mapping_shared_keywords_and_reassignment(db):
+    """
+    Verify keywords can be shared across or migrated between columns safely.
+    """
+    from core.services.mapping_service import MappingService
+    from core.database.db_manager import (
+        GlobalMapColumn, GlobalMapColumnKeyword, GlobalMapHeaderTextMapping
+    )
+
+    db.query(GlobalMapHeaderTextMapping).delete()
+    db.query(GlobalMapColumnKeyword).delete()
+    db.query(GlobalMapColumn).delete()
+    db.commit()
+
+    service = MappingService(db)
+
+    # Initial mapping with shared / distinct keywords
+    service.update_mappings("shipping_header_map", {
+        "col_po": {"keywords": ["po", "order_id"]},
+        "col_ref": {"keywords": ["ref_no", "order_ref"]}
+    })
+    assert db.query(GlobalMapColumnKeyword).count() == 4
+
+    # Move 'order_id' from col_po to col_ref and add new keyword
+    service.update_mappings("shipping_header_map", {
+        "col_po": {"keywords": ["po"]},
+        "col_ref": {"keywords": ["ref_no", "order_ref", "order_id"]}
+    })
+    kws = {kw.keyword: kw.col_id for kw in db.query(GlobalMapColumnKeyword).all()}
+    assert kws["order_id"] == "col_ref"
+    assert kws["po"] == "col_po"
+    assert len(kws) == 4
+
+
+def test_in_memory_state_reload_purges_zombies(db):
+    """
+    Verify TARGET_HEADERS_MAP and BlueprintSchema in-memory states are purged of old/zombie aliases after mapping update.
+    """
+    from core.services.mapping_service import MappingService
+    from core.data_parser.config import TARGET_HEADERS_MAP
+    from core.blueprint_generator.schema import BlueprintSchema
+    from core.database.db_manager import (
+        GlobalMapColumn, GlobalMapColumnKeyword, GlobalMapHeaderTextMapping
+    )
+
+    db.query(GlobalMapHeaderTextMapping).delete()
+    db.query(GlobalMapColumnKeyword).delete()
+    db.query(GlobalMapColumn).delete()
+    db.commit()
+
+    service = MappingService(db)
+
+    # Step 1: Initial mapping update with an alias
+    service.update_mappings("header_text_mappings", {"OLD_PO_ALIAS": "col_po"})
+    service.update_mappings("shipping_header_map", {"col_po": {"keywords": ["old_kw_po"]}})
+
+    # Verify initial in-memory state
+    assert "OLD_PO_ALIAS" in TARGET_HEADERS_MAP.get("col_po", [])
+    assert "old_kw_po" in TARGET_HEADERS_MAP.get("col_po", [])
+    assert "old_kw_po" in BlueprintSchema.COLUMNS["col_po"].keywords
+
+    # Step 2: Replace mappings completely with new aliases/keywords
+    service.update_mappings("header_text_mappings", {"NEW_PO_ALIAS": "col_po"})
+    service.update_mappings("shipping_header_map", {"col_po": {"keywords": ["new_kw_po"]}})
+
+    # Verify old aliases are PURGED (no zombies) and new ones present
+    po_headers = TARGET_HEADERS_MAP.get("col_po", [])
+    assert "OLD_PO_ALIAS" not in po_headers, "Zombie alias OLD_PO_ALIAS was not purged from TARGET_HEADERS_MAP!"
+    assert "old_kw_po" not in po_headers, "Zombie keyword old_kw_po was not purged from TARGET_HEADERS_MAP!"
+    assert "NEW_PO_ALIAS" in po_headers
+    assert "new_kw_po" in po_headers
+
+    # Verify BlueprintSchema is also reloaded without zombie keywords
+    assert "old_kw_po" not in BlueprintSchema.COLUMNS["col_po"].keywords
+    assert "new_kw_po" in BlueprintSchema.COLUMNS["col_po"].keywords
+
 
 
 

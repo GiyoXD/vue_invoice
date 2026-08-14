@@ -65,69 +65,94 @@ class MappingService:
 
         try:
             if mapping_type == "shipping_header_map":
-                # Flat UI format: {keyword: col_id}
-                existing_kws = self.db.query(GlobalMapColumnKeyword).all()
-                existing_map = {kw.keyword: kw for kw in existing_kws}
-                
-                # Ensure parent columns exist
-                unique_cols = set(mappings.values())
+                # Extract target (col_id, keyword) pairs supporting flat {kw: col_id} and nested {col_id: {'keywords': [...]}}
+                target_pairs = set()
+                for k, v in mappings.items():
+                    if isinstance(v, dict):
+                        col_id = str(k).strip()
+                        kws = v.get("keywords", [])
+                        if isinstance(kws, (list, tuple, set)):
+                            for kw in kws:
+                                kw_str = str(kw).strip() if kw is not None else ""
+                                if kw_str and col_id:
+                                    target_pairs.add((col_id, kw_str))
+                        elif isinstance(kws, str):
+                            kw_str = kws.strip()
+                            if kw_str and col_id:
+                                target_pairs.add((col_id, kw_str))
+                    elif isinstance(v, (list, tuple, set)):
+                        col_id = str(k).strip()
+                        for kw in v:
+                            kw_str = str(kw).strip() if kw is not None else ""
+                            if kw_str and col_id:
+                                target_pairs.add((col_id, kw_str))
+                    elif isinstance(v, str):
+                        col_id = v.strip()
+                        kw_str = str(k).strip()
+                        if kw_str and col_id:
+                            target_pairs.add((col_id, kw_str))
+
+                # Ensure parent columns exist for all unique col_ids in target pairs
+                unique_cols = {col_id for col_id, _ in target_pairs}
                 for col_id in unique_cols:
                     col_exists = self.db.query(GlobalMapColumn).filter_by(col_id=col_id).first()
                     if not col_exists:
                         self.db.add(GlobalMapColumn(col_id=col_id, excel_format="@"))
-                
-                # Deletes: keyword exists in DB but not in mappings
-                for kw_text, kw_obj in existing_map.items():
-                    if kw_text not in mappings:
+                self.db.flush()
+
+                # Query existing GlobalMapColumnKeyword and build map {(kw.col_id, kw.keyword): kw}
+                existing_kws = self.db.query(GlobalMapColumnKeyword).all()
+                existing_map = {(kw.col_id, kw.keyword): kw for kw in existing_kws}
+
+                # Delete any existing row whose (col_id, keyword) is not in target pairs
+                for pair, kw_obj in existing_map.items():
+                    if pair not in target_pairs:
                         self.db.delete(kw_obj)
-                
-                # Adds and Updates
-                for kw_text, col_id in mappings.items():
-                    if kw_text not in existing_map:
+                self.db.flush()
+
+                # Add GlobalMapColumnKeyword(col_id=col_id, keyword=kw_text) for any pair in target pairs not in existing
+                for col_id, kw_text in target_pairs:
+                    if (col_id, kw_text) not in existing_map:
                         self.db.add(GlobalMapColumnKeyword(col_id=col_id, keyword=kw_text))
-                    elif existing_map[kw_text].col_id != col_id:
-                        existing_map[kw_text].col_id = col_id
                 
             elif mapping_type == "footer_label_mappings":
                 existing_footers = self.db.query(GlobalMapFooterLabelKeyword).all()
-                existing_set = {f.keyword for f in existing_footers}
-                new_set = {k.strip() for k in mappings.keys() if k.strip()}
+                existing_map = {f.keyword: f for f in existing_footers}
+                existing_set = set(existing_map.keys())
+                new_set = {str(k).strip() for k in mappings.keys() if str(k).strip() and k != "keywords"}
                 
                 # Deletes
                 for kw in (existing_set - new_set):
-                    f_item = self.db.query(GlobalMapFooterLabelKeyword).filter_by(keyword=kw).first()
-                    if f_item:
-                        self.db.delete(f_item)
+                    self.db.delete(existing_map[kw])
                 
                 # Adds
                 for kw in (new_set - existing_set):
                     self.db.add(GlobalMapFooterLabelKeyword(keyword=kw))
                 
             elif mapping_type in ("sheet_classifications", "sheet_mappings"):
+                clean_mappings = {str(k).strip(): str(v).strip() for k, v in mappings.items() if str(k).strip()}
                 existing_sheets = self.db.query(GlobalMapSheet).all()
                 existing_map = {s.sheet_name: s for s in existing_sheets}
                 
                 # Deletes
                 for sheet_name, sheet_obj in existing_map.items():
-                    if sheet_name not in mappings:
+                    if sheet_name not in clean_mappings:
                         self.db.delete(sheet_obj)
                 
                 # Adds and Updates
-                for sheet_name, proc_type in mappings.items():
-                    clean_name = sheet_name.strip()
-                    if not clean_name:
-                        continue
-                    if clean_name not in existing_map:
-                        self.db.add(GlobalMapSheet(sheet_name=clean_name, processing_type=proc_type))
-                    elif existing_map[clean_name].processing_type != proc_type:
-                        existing_map[clean_name].processing_type = proc_type
+                for sheet_name, proc_type in clean_mappings.items():
+                    if sheet_name not in existing_map:
+                        self.db.add(GlobalMapSheet(sheet_name=sheet_name, processing_type=proc_type))
+                    elif existing_map[sheet_name].processing_type != proc_type:
+                        existing_map[sheet_name].processing_type = proc_type
                         
             elif mapping_type == "header_text_mappings":
+                clean_mappings = {str(k).strip(): str(v).strip() for k, v in mappings.items() if str(k).strip() and str(v).strip()}
                 existing_overrides = self.db.query(GlobalMapHeaderTextMapping).all()
                 existing_map = {o.raw_text: o for o in existing_overrides}
                 
                 # Ensure parent columns exist
-                unique_cols = set(mappings.values())
+                unique_cols = set(clean_mappings.values())
                 for col_id in unique_cols:
                     col_exists = self.db.query(GlobalMapColumn).filter_by(col_id=col_id).first()
                     if not col_exists:
@@ -135,18 +160,15 @@ class MappingService:
                 
                 # Deletes
                 for raw_text, override_obj in existing_map.items():
-                    if raw_text not in mappings:
+                    if raw_text not in clean_mappings:
                         self.db.delete(override_obj)
                 
                 # Adds and Updates
-                for raw_text, col_id in mappings.items():
-                    clean_text = raw_text.strip()
-                    if not clean_text:
-                        continue
-                    if clean_text not in existing_map:
-                        self.db.add(GlobalMapHeaderTextMapping(raw_text=clean_text, canonical_col_id=col_id))
-                    elif existing_map[clean_text].canonical_col_id != col_id:
-                        existing_map[clean_text].canonical_col_id = col_id
+                for raw_text, col_id in clean_mappings.items():
+                    if raw_text not in existing_map:
+                        self.db.add(GlobalMapHeaderTextMapping(raw_text=raw_text, canonical_col_id=col_id))
+                    elif existing_map[raw_text].canonical_col_id != col_id:
+                        existing_map[raw_text].canonical_col_id = col_id
             
             self.db.commit()
             mapping_cache.invalidate()

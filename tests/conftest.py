@@ -85,6 +85,15 @@ def db():
         session.rollback()
         session.close()
         test_engine.dispose()
+        if master_db_path.exists():
+            shutil.copy2(master_db_path, TEST_DB_PATH)
+        else:
+            init_db()
+        reset_session = TestSessionLocal()
+        try:
+            MappingService(reset_session).reload_dynamic_state()
+        finally:
+            reset_session.close()
         mapping_cache.invalidate()
 
 

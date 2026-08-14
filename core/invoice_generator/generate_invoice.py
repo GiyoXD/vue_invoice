@@ -291,10 +291,36 @@ def _prepare_workbooks(ctx: GeneratorContext):
         DeepSheetBuilder.build(ctx.output_workbook, ctx.invoice_data)
     except Exception as e:
         logger.error(f"DeepSheet injection failed: {e}", exc_info=True)
+        raise
+
+
+def _check_discount_in_invoice_data(invoice_data: Any) -> bool:
+    """Scans invoice_data structurally for any row dict where 'col_level' contains '折扣'."""
+    if not invoice_data:
+        return False
+    
+    stack = [invoice_data]
+    while stack:
+        curr = stack.pop()
+        if isinstance(curr, dict):
+            col_level_val = curr.get('col_level')
+            if col_level_val is not None and '折扣' in str(col_level_val):
+                return True
+            for v in curr.values():
+                if isinstance(v, (dict, list)):
+                    stack.append(v)
+        elif isinstance(curr, list):
+            for item in curr:
+                if isinstance(item, (dict, list)):
+                    stack.append(item)
+    return False
 
 
 def _process_sheets(ctx: GeneratorContext, session: GenerationSession):
     """Stage 3: Iterate and process each configured sheet."""
+    if _check_discount_in_invoice_data(ctx.invoice_data):
+        logger.warning("Warning: '折扣' (discount) detected in col_level during invoice generation.")
+
     sheets_config = ctx.config_loader.get_sheets_to_process()
     sheets_to_process = [s for s in sheets_config if s in ctx.output_workbook.sheetnames]
     

@@ -6,7 +6,7 @@ from ..validation import DataValidationError
 from core.utils.pipeline_monitor import PipelineMonitor
 
 _convert_to_decimal = DataConverter.convert_to_decimal
-CBM_DECIMAL_PLACES = decimal.Decimal('0.0001')
+CBM_DECIMAL_PLACES = decimal.Decimal('0.01')
 DEFAULT_DIST_PRECISION = decimal.Decimal('0.0001')
 
 # Custom exception for data processing errors.
