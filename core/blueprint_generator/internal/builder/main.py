@@ -159,10 +159,17 @@ class ConfigBuilder:
             },
             "footer": {
                 "bold": True,
-                "font_size": h_size, # Usually matches header
+                "font_size": h_size,
                 "font_name": h_name,
                 "border_style": "thin",
                 "row_height": float(sheet.row_heights.get("footer", 1))
+            },
+            "hs_code": {
+                "bold": True,
+                "font_size": d_size,
+                "font_name": d_name,
+                "border_style": "thin",
+                "row_height": float(sheet.row_heights.get("footer", sheet.row_heights.get("data", 1)))
             },
             "summary": {
                 "bold": True,
@@ -372,7 +379,7 @@ class ConfigBuilder:
                 "col_id": sheet.footer_info.hs_code_col_id or "col_po",
                 "value": sheet.footer_info.hs_code_text or "",
                 "colspan": sheet.footer_info.hs_code_colspan,
-                "style_context": "footer"
+                "style_context": "hs_code"
             }
         return None
 

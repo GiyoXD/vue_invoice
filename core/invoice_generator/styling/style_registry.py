@@ -174,6 +174,8 @@ class StyleRegistry:
                     target_context = "footer"
             elif target_context in ("data", "row", "body") and "data" in self.row_contexts:
                 target_context = "data"
+            elif target_context == "hs_code" and "footer" in self.row_contexts:
+                target_context = "footer"
 
         if target_context in self.row_contexts:
             context_style = self.row_contexts[target_context].to_dict()
@@ -221,6 +223,8 @@ class StyleRegistry:
     def has_context(self, context: str) -> bool:
         """Check if row context exists in registry."""
         if context in self.row_contexts:
+            return True
+        if context == "hs_code" and ("hs_code" in self.row_contexts or "footer" in self.row_contexts):
             return True
         if context in ("summary", "summary_value_only", "value_only") and ("summary" in self.row_contexts or "footer" in self.row_contexts):
             return True

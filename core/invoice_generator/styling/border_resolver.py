@@ -40,7 +40,7 @@ BORDER_PATTERNS: Dict[str, Optional[BorderStyle]] = {
 }
 
 # Contexts that always get full thin borders regardless of default_border mode
-FULL_BORDER_CONTEXTS = {"header", "footer"}
+FULL_BORDER_CONTEXTS = {"header", "footer", "hs_code"}
 NO_BORDER_CONTEXTS = {"summary", "grand_total"}
 VALUE_ONLY_CONTEXTS = {"value_only", "summary_value_only"}
 SUMMARY_CONTEXTS = NO_BORDER_CONTEXTS | VALUE_ONLY_CONTEXTS

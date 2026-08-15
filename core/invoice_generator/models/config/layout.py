@@ -93,7 +93,7 @@ class HSCodeConfigModel(BaseModel):
     col_id: str
     value: str
     colspan: int = 1
-    style_context: str = "footer"
+    style_context: str = "hs_code"
 
 class SheetLayoutModel(BaseModel):
     structure: StructureConfigModel
