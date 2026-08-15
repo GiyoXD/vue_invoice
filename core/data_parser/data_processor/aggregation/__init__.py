@@ -8,8 +8,6 @@ from .strategies import (
     perform_DAF_compounding,
 )
 from .summaries import (
-    calculate_weight_summary,
-    calculate_pallet_summary,
     calculate_footer_totals,
     format_aggregation_as_list,
 )

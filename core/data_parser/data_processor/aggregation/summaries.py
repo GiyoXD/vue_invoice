@@ -3,33 +3,6 @@ from typing import List, Dict, Any, Tuple
 from .reducers import decimal_sum_reducer, int_sum_reducer
 
 
-def calculate_weight_summary(processed_data: List[Dict[str, Any]]) -> Dict[str, decimal.Decimal]:
-    """Calculates the weight summary (Net Weight and Gross Weight)."""
-    summary = {'col_net': decimal.Decimal(0), 'col_gross': decimal.Decimal(0)}
-    if not processed_data:
-        return summary
-        
-    summary['col_net'] = decimal_sum_reducer([r.get('col_net') for r in processed_data])
-    summary['col_gross'] = decimal_sum_reducer([r.get('col_gross') for r in processed_data])
-    return summary
-
-
-def calculate_pallet_summary(processed_data: List[Dict[str, Any]]) -> int:
-    """Calculates the total pallet count for the table."""
-    total_pallets = 0
-    if not processed_data:
-        return 0
-        
-    for row in processed_data:
-        val = row.get('col_pallet_count')
-        if val is not None:
-            try:
-                total_pallets += int(float(str(val)))
-            except (ValueError, TypeError):
-                pass
-    return total_pallets
-
-
 def calculate_footer_totals(processed_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Calculates totals for footer fields based on processed data."""
     totals = {
