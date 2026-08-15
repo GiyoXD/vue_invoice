@@ -1,5 +1,6 @@
 import { useGeneratorStore } from '../../stores/generatorStore.js';
 import { storeToRefs } from 'pinia';
+import { computed } from 'vue';
 
 export default {
     name: 'ValidationStats',
@@ -7,8 +8,9 @@ export default {
         <!-- VALIDATION CARD -->
         <div class="bg-emerald-500/10 border border-emerald-500/30 shadow-2xl rounded-2xl p-6 mb-8 delay-100 fade-in" v-if="validationData && !isGenerating && !generationError">
             <div class="flex justify-between items-end mb-4 border-b border-emerald-500/20 pb-3">
-                <h3 class="text-emerald-400 m-0 text-lg font-bold">✅ Invoice Generated Successfully</h3>
-                <span class="text-xs text-emerald-400/70">{{ validationData.timestamp }}</span>
+                <h3 v-if="isGenerated" class="text-emerald-400 m-0 text-lg font-bold">✅ Invoice Generated Successfully</h3>
+                <h3 v-else class="text-sky-400 m-0 text-lg font-bold">📊 Processed Summary (Preview)</h3>
+                <span class="text-xs text-emerald-400/70">{{ formatTimestamp(validationData.metadata?.timestamp || validationData.timestamp) }}</span>
             </div>
 
             <!-- Redesigned Summary Panel (Concise and Spacious) -->
@@ -95,6 +97,7 @@ export default {
             validationData,
             isGenerating,
             generationError,
+            generationStatus,
             summaryStats,
             weightStats,
             recommendedTruckInfo,
@@ -104,18 +107,40 @@ export default {
             totalAmount
         } = storeToRefs(store);
 
+        const isGenerated = computed(() => generationStatus.value?.type === 'success');
+
         const formatNumber = (val) => {
             if (val === null || val === undefined || val === '') return '';
             const num = Number(val);
             if (isNaN(num)) return val;
-            if (Number.isInteger(num)) return num.toString();
-            return parseFloat(num.toFixed(4)).toString();
+            return num.toLocaleString('en-US', {
+                maximumFractionDigits: 4
+            });
+        };
+
+        const formatTimestamp = (ts) => {
+            if (!ts) return '';
+            try {
+                const d = new Date(ts);
+                if (isNaN(d.getTime())) return ts;
+                return d.toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            } catch {
+                return ts;
+            }
         };
 
         return {
             validationData,
             isGenerating,
             generationError,
+            isGenerated,
             summaryStats,
             weightStats,
             recommendedTruckInfo,
@@ -123,7 +148,8 @@ export default {
             maxStackingLayers,
             detectedPalletDims,
             totalAmount,
-            formatNumber
+            formatNumber,
+            formatTimestamp
         };
     }
 };

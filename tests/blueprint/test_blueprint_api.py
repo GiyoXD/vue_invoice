@@ -106,4 +106,52 @@ def test_unrecognized_sheets_detection(client, db):
     assert "unrecognized_sheets" in data
     assert "UnknownSheet123" in data["unrecognized_sheets"]
 
+def test_analyze_existing_template(client, db):
+    from api.routers.upload import get_source_folder
+    folder = get_source_folder(db)
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Invoice"
+    
+    ws.cell(row=3, column=1, value="Mark & No")
+    ws.cell(row=3, column=2, value="P.O. No.")
+    ws.cell(row=3, column=3, value="Quantity")
+    ws.cell(row=3, column=4, value="Unit Price")
+    ws.cell(row=3, column=5, value="Amount")
+    ws.cell(row=4, column=1, value="DES: COW LEATHER")
+    ws.cell(row=8, column=5, value="HS CODE: 4107.12.00")
+    ws.cell(row=10, column=2, value="TOTAL:")
+    ws.cell(row=10, column=5, value=50.0)
+    
+    dummy_filename = "test_existing_template.xlsx"
+    file_path = folder / dummy_filename
+    wb.save(file_path)
+    
+    try:
+        # Test valid existing template analysis
+        response = client.post(
+            "/api/template/analyze-existing",
+            json={"filename": dummy_filename, "ignore_missing_description": False}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "missing_headers" in data
+        assert "missing_footers" in data
+        assert "temp_filename" in data
+        
+        # Test 404 when file does not exist
+        response_404 = client.post(
+            "/api/template/analyze-existing",
+            json={"filename": "non_existent_file.xlsx"}
+        )
+        assert response_404.status_code == 404
+    finally:
+        if file_path.exists():
+            try:
+                file_path.unlink()
+            except Exception:
+                pass
+
+
     

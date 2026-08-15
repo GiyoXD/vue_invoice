@@ -5,13 +5,21 @@ import { recommendTruck } from '../utils/truck.js';
 export const useGeneratorStore = defineStore('generator', () => {
     // --- State ---
     const selectedFile = ref(null);
-    let rawFile = null; // Native file object reference
+    const rawFile = ref(null); // Native file object reference
     const isUploading = ref(false);
     const uploadStatus = ref(null);
     const uploadError = ref(null);
     const showUploadTraceback = ref(false);
     const ignoreTareError = ref(false);
     const ignoreCbmError = ref(false);
+
+    // Source Folder & File Selector State
+    const sourceFolderPath = ref('');
+    const availableFiles = ref([]);
+    const isLoadingFiles = ref(false);
+    const fileSearchQuery = ref('');
+    const selectedExistingFile = ref(null);
+    const isOpeningFile = ref(false);
 
     const processingComplete = ref(false);
     const identifier = ref('');
@@ -61,14 +69,18 @@ export const useGeneratorStore = defineStore('generator', () => {
     const isLookingUp = ref(false);
 
     // --- Computed properties ---
+    const hasRawFile = computed(() => !!rawFile.value);
+
     const isNetMode = computed(() => assetStatus.value?.pricing_mode === 'net');
 
     const hasVariants = computed(() => (assetStatus.value?.variants?.length || 0) > 0);
 
     const assetConfigName = computed(() => {
+        if (assetStatus.value?.blueprint_name) return assetStatus.value.blueprint_name;
         if (!assetStatus.value?.config_path) return 'Unknown';
         const path = assetStatus.value.config_path;
-        return path.split(/[\\/]/).pop() || 'Unknown';
+        const name = path.split(/[\\/]/).pop() || '';
+        return (name && name !== '.') ? name : (identifier.value || 'Database Configuration');
     });
 
     const summaryStats = computed(() => {
@@ -104,6 +116,15 @@ export const useGeneratorStore = defineStore('generator', () => {
         return { net, gross, cbm };
     });
 
+    const normalizeDimensionToMeters = (val) => {
+        if (val === null || val === undefined || isNaN(val)) return 0;
+        let num = parseFloat(val);
+        if (num <= 0) return 0;
+        if (num >= 100) return num / 1000; // mm -> m (e.g. 1200 -> 1.2, 1000 -> 1.0)
+        if (num >= 10) return num / 100;   // cm -> m (e.g. 120 -> 1.2, 100 -> 1.0)
+        return num; // already in meters (e.g. 1.2, 1.0)
+    };
+
     const detectedPalletDims = computed(() => {
         const data = validationData.value;
         if (!data) return { length: 1.2, width: 1.0 };
@@ -114,17 +135,14 @@ export const useGeneratorStore = defineStore('generator', () => {
             if (typeof cbmRaw === 'string' && cbmRaw.trim()) {
                 const parts = cbmRaw.split(/[xX*]/).map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
                 if (parts.length >= 2) {
-                    let dim1 = parts[0];
-                    let dim2 = parts[1];
-                    if (dim1 > 10) dim1 = dim1 / 100;
-                    if (dim2 > 10) dim2 = dim2 / 100;
-                    if (dim1 > 10) dim1 = dim1 / 10;
-                    if (dim2 > 10) dim2 = dim2 / 10;
-                    
-                    return {
-                        length: Math.max(dim1, dim2),
-                        width: Math.min(dim1, dim2)
-                    };
+                    const dim1 = normalizeDimensionToMeters(parts[0]);
+                    const dim2 = normalizeDimensionToMeters(parts[1]);
+                    if (dim1 > 0 && dim2 > 0) {
+                        return {
+                            length: Math.max(dim1, dim2),
+                            width: Math.min(dim1, dim2)
+                        };
+                    }
                 }
             }
         }
@@ -135,17 +153,14 @@ export const useGeneratorStore = defineStore('generator', () => {
                 if (typeof cbmRaw === 'string' && cbmRaw.trim()) {
                     const parts = cbmRaw.split(/[xX*]/).map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
                     if (parts.length >= 2) {
-                        let dim1 = parts[0];
-                        let dim2 = parts[1];
-                        if (dim1 > 10) dim1 = dim1 / 100;
-                        if (dim2 > 10) dim2 = dim2 / 100;
-                        if (dim1 > 10) dim1 = dim1 / 10;
-                        if (dim2 > 10) dim2 = dim2 / 10;
-                        
-                        return {
-                            length: Math.max(dim1, dim2),
-                            width: Math.min(dim1, dim2)
-                        };
+                        const dim1 = normalizeDimensionToMeters(parts[0]);
+                        const dim2 = normalizeDimensionToMeters(parts[1]);
+                        if (dim1 > 0 && dim2 > 0) {
+                            return {
+                                length: Math.max(dim1, dim2),
+                                width: Math.min(dim1, dim2)
+                            };
+                        }
                     }
                 }
             }
@@ -183,14 +198,8 @@ export const useGeneratorStore = defineStore('generator', () => {
             if (typeof cbmRaw === 'string' && cbmRaw.trim()) {
                 const parts = cbmRaw.split(/[xX*]/).map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
                 if (parts.length >= 2) {
-                    let dim1 = parts[0];
-                    let dim2 = parts[1];
-                    
-                    // Handle cm/mm conversions to meters if necessary
-                    if (dim1 > 10) dim1 = dim1 / 100;
-                    if (dim2 > 10) dim2 = dim2 / 100;
-                    if (dim1 > 10) dim1 = dim1 / 10;
-                    if (dim2 > 10) dim2 = dim2 / 10;
+                    const dim1 = normalizeDimensionToMeters(parts[0]);
+                    const dim2 = normalizeDimensionToMeters(parts[1]);
                     
                     // If any single horizontal dimension is >= 2.0 (e.g. 2.2m),
                     // or if both horizontal dimensions are > 1.1m (cannot fit side-by-side in 2.1m/2.2m truck):
@@ -206,25 +215,110 @@ export const useGeneratorStore = defineStore('generator', () => {
     // --- Watchers ---
     watch(validationData, (newData) => {
         if (newData) {
-            const desc = String(newData.footer_data?.grand_total?.col_desc || '').toUpperCase();
             const file = String(identifier.value || '').toUpperCase();
-            let isWide = desc.includes('LEATHER') || file.includes('JF') || file.includes('JLFTLT');
+            let isWide = file.includes('JF') || file.includes('JLFTLT');
+            const items = (newData.multi_table || newData.raw_data || []).flat();
             
             if (!isWide) {
-                const items = (newData.multi_table || newData.raw_data || []).flat();
-                if (detectWideCargoFromItems(items)) {
-                    isWide = true;
+                for (const item of items) {
+                    const d = String(item.col_desc || '').toUpperCase();
+                    if (d.includes('LEATHER')) {
+                        isWide = true;
+                        break;
+                    }
                 }
+            }
+            
+            if (!isWide && detectWideCargoFromItems(items)) {
+                isWide = true;
             }
             
             isWideCargo.value = isWide;
         }
     });
 
+    // --- Source Folder Actions ---
+    const fetchSourceFolder = async () => {
+        try {
+            const res = await fetch('/api/source-folder');
+            if (res.ok) {
+                const data = await res.json();
+                sourceFolderPath.value = data.folder_path || '';
+            }
+        } catch (err) {
+            console.error('Failed to fetch source folder:', err);
+        }
+    };
+
+    const updateSourceFolder = async (newPath) => {
+        if (!newPath || !newPath.trim()) return false;
+        try {
+            const res = await fetch('/api/source-folder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ folder_path: newPath.trim() })
+            });
+            const data = await res.json();
+            if (res.ok) {
+                sourceFolderPath.value = data.folder_path;
+                await fetchSourceFiles();
+                return true;
+            } else {
+                alert(`Error: ${data.error || 'Could not update source folder'}`);
+                return false;
+            }
+        } catch (err) {
+            console.error('Failed to update source folder:', err);
+            alert(`Error: ${err.message || 'Network error'}`);
+            return false;
+        }
+    };
+
+    const fetchSourceFiles = async () => {
+        isLoadingFiles.value = true;
+        try {
+            const res = await fetch('/api/source-files');
+            if (res.ok) {
+                const data = await res.json();
+                availableFiles.value = data.files || [];
+                if (data.folder_path) {
+                    sourceFolderPath.value = data.folder_path;
+                }
+            }
+        } catch (err) {
+            console.error('Failed to fetch source files:', err);
+        } finally {
+            isLoadingFiles.value = false;
+        }
+    };
+
+    const openSelectedInExcel = async (filename) => {
+        const target = filename || selectedExistingFile.value?.filename || selectedFile.value?.name;
+        if (!target) return;
+        isOpeningFile.value = true;
+        try {
+            const res = await fetch('/api/open-file', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ filename: target })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(`Failed to open file: ${data.error || 'Unknown error'}`);
+            }
+        } catch (err) {
+            console.error('Failed to open file:', err);
+            alert(`Error opening file: ${err.message}`);
+        } finally {
+            isOpeningFile.value = false;
+        }
+    };
+
     // --- Actions ---
     const setRawFile = (file) => {
-        rawFile = file || null;
+        rawFile.value = file || null;
         selectedFile.value = file ? { name: file.name } : null;
+        selectedExistingFile.value = null;
 
         // Reset state when new file is chosen
         uploadStatus.value = null;
@@ -241,6 +335,30 @@ export const useGeneratorStore = defineStore('generator', () => {
         refSourceStatus.value = null;
     };
 
+    const resetGeneratorState = () => {
+        selectedFile.value = null;
+        rawFile.value = null;
+        selectedExistingFile.value = null;
+        fileSearchQuery.value = '';
+        uploadStatus.value = null;
+        uploadError.value = null;
+        showUploadTraceback.value = false;
+        ignoreTareError.value = false;
+        ignoreCbmError.value = false;
+        validationData.value = null;
+        validationWarnings.value = [];
+        assetStatus.value = null;
+        processingComplete.value = false;
+        identifier.value = '';
+        jsonPath.value = '';
+        invoiceNo.value = '';
+        invoiceRef.value = '';
+        refSourceStatus.value = null;
+        priceAdjustments.value = [];
+        selectedVariants.value = [];
+        selectedTargets.value = [];
+    };
+
     const addAdjustment = () => {
         priceAdjustments.value.push({ description: '', value: '' });
     };
@@ -249,17 +367,64 @@ export const useGeneratorStore = defineStore('generator', () => {
         priceAdjustments.value.splice(index, 1);
     };
 
+    const applyUploadResult = (data) => {
+        uploadStatus.value = { type: 'success', message: 'File processed successfully!' };
+        identifier.value = data.identifier;
+        jsonPath.value = data.json_path;
+        invoiceNo.value = data.default_inv_no || '';
+
+        assetStatus.value = data.asset_status || null;
+
+        if (data.parsed_data) {
+            validationData.value = data.parsed_data;
+        }
+
+        if (data.asset_status?.variants?.length > 0) {
+            selectedVariants.value = data.asset_status.variants.map(v => v.suffix);
+            const suffixes = data.asset_status.variants.map(v => v.suffix);
+            if (suffixes.includes('_KH')) {
+                selectedTargets.value = ['KH_Standard'];
+            } else if (suffixes.includes('_VN')) {
+                selectedTargets.value = ['VN_Standard'];
+            } else {
+                const firstLoc = suffixes[0]?.replace('_', '') || 'Default';
+                selectedTargets.value = [`${firstLoc}_Standard`];
+            }
+        } else {
+            selectedTargets.value = ['Default_Standard'];
+        }
+
+        if (data.warnings && data.warnings.length > 0) {
+            validationWarnings.value = data.warnings;
+            uploadStatus.value = { type: 'warning', message: 'File processed successfully, but with data corrections.' };
+        } else {
+            validationWarnings.value = [];
+        }
+
+        processingComplete.value = true;
+    };
+
     const uploadFile = async () => {
-        if (!rawFile) return;
+        if (!rawFile.value) {
+            uploadError.value = {
+                message: 'No file selected for upload',
+                step: 'File Upload',
+                traceback: null
+            };
+            return;
+        }
 
         isUploading.value = true;
         uploadStatus.value = { type: 'info', message: 'Uploading and processing...' };
         uploadError.value = null;
+        processingComplete.value = false;
         validationData.value = null;
         validationWarnings.value = [];
+        globalUnitPrice.value = '';
+        priceAdjustments.value = [];
 
         const formData = new FormData();
-        formData.append('file', rawFile);
+        formData.append('file', rawFile.value);
         formData.append('ignore_tare', ignoreTareError.value);
         formData.append('ignore_cbm', ignoreCbmError.value);
 
@@ -272,36 +437,7 @@ export const useGeneratorStore = defineStore('generator', () => {
             const data = await response.json();
 
             if (response.ok) {
-                uploadStatus.value = { type: 'success', message: 'File processed successfully!' };
-                identifier.value = data.identifier;
-                jsonPath.value = data.json_path;
-                invoiceNo.value = data.default_inv_no || '';
-
-                assetStatus.value = data.asset_status || null;
-
-                if (data.asset_status?.variants?.length > 0) {
-                    selectedVariants.value = data.asset_status.variants.map(v => v.suffix);
-                    const suffixes = data.asset_status.variants.map(v => v.suffix);
-                    if (suffixes.includes('_KH')) {
-                        selectedTargets.value = ['KH_Standard'];
-                    } else if (suffixes.includes('_VN')) {
-                        selectedTargets.value = ['VN_Standard'];
-                    } else {
-                        const firstLoc = suffixes[0]?.replace('_', '') || 'Default';
-                        selectedTargets.value = [`${firstLoc}_Standard`];
-                    }
-                } else {
-                    selectedTargets.value = ['Default_Standard'];
-                }
-
-                if (data.warnings && data.warnings.length > 0) {
-                    validationWarnings.value = data.warnings;
-                    uploadStatus.value = { type: 'warning', message: 'File processed successfully, but with data corrections.' };
-                } else {
-                    validationWarnings.value = [];
-                }
-
-                processingComplete.value = true;
+                applyUploadResult(data);
             } else {
                 uploadError.value = {
                     message: data.error || 'Upload failed',
@@ -322,20 +458,83 @@ export const useGeneratorStore = defineStore('generator', () => {
         }
     };
 
+    const processExistingFile = async (filename) => {
+        if (!filename) return;
+        const targetFilename = typeof filename === 'object' ? filename.filename : filename;
+        
+        rawFile.value = null;
+        selectedFile.value = { name: targetFilename };
+        const matched = availableFiles.value.find(f => f.filename === targetFilename);
+        selectedExistingFile.value = matched || { filename: targetFilename };
+        
+        isUploading.value = true;
+        uploadStatus.value = { type: 'info', message: `Processing ${targetFilename}...` };
+        uploadError.value = null;
+        processingComplete.value = false;
+        validationData.value = null;
+        validationWarnings.value = [];
+        globalUnitPrice.value = '';
+        priceAdjustments.value = [];
+
+        try {
+            const response = await fetch('/api/process-existing', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    filename: targetFilename,
+                    ignore_tare: ignoreTareError.value,
+                    ignore_cbm: ignoreCbmError.value
+                })
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                applyUploadResult(data);
+            } else {
+                uploadError.value = {
+                    message: data.error || 'Processing failed',
+                    step: data.step || null,
+                    traceback: data.traceback || null
+                };
+                uploadStatus.value = null;
+            }
+        } catch (error) {
+            uploadError.value = {
+                message: error.message || 'Network error occurred',
+                step: null,
+                traceback: null
+            };
+            uploadStatus.value = null;
+        } finally {
+            isUploading.value = false;
+        }
+    };
+
+    const reloadCurrentFile = () => {
+        if (rawFile.value) {
+            uploadFile();
+        } else if (selectedExistingFile.value?.filename) {
+            processExistingFile(selectedExistingFile.value.filename);
+        } else if (selectedFile.value?.name) {
+            processExistingFile(selectedFile.value.name);
+        }
+    };
+
     const retryUpload = () => {
         uploadError.value = null;
         showUploadTraceback.value = false;
-        uploadFile();
+        reloadCurrentFile();
     };
 
     const ignoreTareAndRetry = () => {
         ignoreTareError.value = true;
-        uploadFile();
+        reloadCurrentFile();
     };
 
     const ignoreCbmAndRetry = () => {
         ignoreCbmError.value = true;
-        uploadFile();
+        reloadCurrentFile();
     };
 
     const validateAdjustments = () => {
@@ -596,12 +795,19 @@ export const useGeneratorStore = defineStore('generator', () => {
     return {
         // state
         selectedFile,
+        rawFile,
         isUploading,
         uploadStatus,
         uploadError,
         showUploadTraceback,
         ignoreTareError,
         ignoreCbmError,
+        sourceFolderPath,
+        availableFiles,
+        isLoadingFiles,
+        fileSearchQuery,
+        selectedExistingFile,
+        isOpeningFile,
         processingComplete,
         identifier,
         jsonPath,
@@ -638,6 +844,7 @@ export const useGeneratorStore = defineStore('generator', () => {
         isLookingUp,
 
         // computed
+        hasRawFile,
         isNetMode,
         hasVariants,
         assetConfigName,
@@ -649,6 +856,13 @@ export const useGeneratorStore = defineStore('generator', () => {
 
         // actions
         setRawFile,
+        fetchSourceFolder,
+        updateSourceFolder,
+        fetchSourceFiles,
+        openSelectedInExcel,
+        processExistingFile,
+        reloadCurrentFile,
+        resetGeneratorState,
         addAdjustment,
         removeAdjustment,
         uploadFile,

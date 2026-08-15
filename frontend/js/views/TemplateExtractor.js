@@ -36,6 +36,8 @@ export default {
         store.fetchOptions();
         store.fetchMappings();
         store.fetchFooterMappings();
+        store.fetchSourceFolder();
+        store.fetchSourceFiles();
 
         return { store };
     }

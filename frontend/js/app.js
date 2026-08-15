@@ -17,7 +17,7 @@ const App = {
         ExportDataView
     },
     template: `
-        <div class="max-w-[1600px] mx-auto px-6 py-6 fade-in h-screen flex flex-col">
+        <div class="max-w-[1600px] mx-auto px-6 py-6 fade-in min-h-screen flex flex-col">
             <!-- Navigation -->
             <div class="flex gap-4 p-4 bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl mb-8 overflow-x-auto custom-scrollbar flex-shrink-0 justify-center">
                 <button class="px-6 py-3 font-medium rounded-xl transition-all whitespace-nowrap" :class="currentView === 'home' ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-slate-700/50 hover:bg-slate-600/80 text-slate-300'" @click="currentView = 'home'">⚡ Generator</button>

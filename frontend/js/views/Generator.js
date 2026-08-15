@@ -1,4 +1,4 @@
-import FileUploader from '../components/generator/FileUploader.js';
+import FileUploader from '../components/generator/FileUploader.js?v=20260815';
 import InvoiceDetailsForm from '../components/generator/InvoiceDetailsForm.js';
 import ValidationStats from '../components/generator/ValidationStats.js';
 

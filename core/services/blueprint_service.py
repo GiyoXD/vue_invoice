@@ -1,6 +1,7 @@
 import json
 import logging
 import copy
+from pathlib import Path
 from typing import Dict, List, Optional, Any
 from sqlalchemy.orm import Session
 
@@ -101,6 +102,41 @@ class BlueprintService:
         except Exception as e:
             # Clean up intermediate file only on analysis failure
             TempFileStorage.delete_file(file_path)
+            raise e
+
+    def analyze_template_existing(self, filename: str, ignore_missing_description: bool = False) -> Dict[str, Any]:
+        from api.routers.upload import get_source_folder
+        folder = get_source_folder(self.db)
+        src_file_path = folder / Path(filename).name
+        if not src_file_path.exists() or not src_file_path.is_file():
+            raise FileNotFoundError(f"File not found in source folder: {filename}")
+        
+        file_path = TempFileStorage.get_temp_path(filename)
+        safe_filename = file_path.name
+        
+        if src_file_path.resolve() != file_path.resolve():
+            with open(src_file_path, "rb") as f_in:
+                TempFileStorage.save_file(f_in, file_path)
+            
+        try:
+            analysis_json_str = self.orchestrator.analyze_template(
+                file_path, legacy_format=True, ignore_missing_description=ignore_missing_description
+            )
+            analysis = json.loads(analysis_json_str)
+            
+            missing_headers, missing_footers = self._extract_legacy_missing_headers_and_footers(analysis)
+            
+            return {
+                "missing_headers": missing_headers,
+                "missing_footers": missing_footers,
+                "unrecognized_sheets": analysis.get("unrecognized_sheets", []),
+                "warnings": analysis.get("warnings", []),
+                "temp_filename": safe_filename,
+                "suggested_prefix": safe_filename.split('.')[0]
+            }
+        except Exception as e:
+            if src_file_path.resolve() != file_path.resolve():
+                TempFileStorage.delete_file(file_path)
             raise e
 
     def generate_blueprint(

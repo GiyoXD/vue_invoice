@@ -33,6 +33,10 @@ class TemplateNotesRequest(BaseModel):
     locale: str = "KH"
     notes: str
 
+class AnalyzeExistingTemplateRequest(BaseModel):
+    filename: str
+    ignore_missing_description: bool = False
+
 # --- Routes ---
 
 @router.post("/template/analyze")
@@ -47,6 +51,18 @@ def analyze_template(
         return res
     except Exception as e:
         logger.exception("Analyze template legacy failed")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@router.post("/template/analyze-existing")
+def analyze_existing_template(req: AnalyzeExistingTemplateRequest, db: Session = Depends(get_db)):
+    try:
+        service = BlueprintService(db)
+        res = service.analyze_template_existing(req.filename, req.ignore_missing_description)
+        return res
+    except FileNotFoundError as fe:
+        return JSONResponse(status_code=404, content={"error": str(fe)})
+    except Exception as e:
+        logger.exception("Analyze existing template failed")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @router.post("/template/generate")
