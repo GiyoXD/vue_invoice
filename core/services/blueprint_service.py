@@ -144,7 +144,7 @@ class BlueprintService:
         file_token: str,
         customer_code: str,
         locale: str,
-        mappings: Dict[str, str],
+        mappings: Dict[str, Any],
         footer_mappings: List[str],
         pricing_mode: str = "standard",
         ignore_missing_description: bool = False,
@@ -160,21 +160,56 @@ class BlueprintService:
             raise FileNotFoundError("Temporary template file expired or invalid. Please re-scan.")
             
         try:
+            # Extract raw header_text_mappings and fallback_mappings
+            header_text_mappings = {
+                k: (v.get("col_id") if isinstance(v, dict) else v)
+                for k, v in mappings.items()
+            } if mappings else {}
+
+            filtered_mappings = {
+                k: v for k, v in header_text_mappings.items()
+                if v and isinstance(v, str) and not str(v).startswith("col_unknown") and v != "col_unknown"
+            } if header_text_mappings else {}
+
+            fallback_mappings = {
+                v["col_id"]: v["fallback"]
+                for k, v in mappings.items()
+                if isinstance(v, dict) and v.get("col_id") and v.get("fallback")
+            } if mappings else {}
+
             # 1. Update/Merge Column and Footer mappings dynamically in global config in a single batch
-            if mappings or footer_mappings:
-                from core.database.db_manager import get_global_mapping_config, save_global_mapping_config
+            if filtered_mappings or footer_mappings:
+                from core.database.db_manager import (
+                    get_global_mapping_config, save_global_mapping_config,
+                    GlobalMapColumn
+                )
+
+                # Ensure any custom col_id in mappings is registered in GlobalMapColumn if not present
+                for col_id in set(filtered_mappings.values()):
+                    col_exists = self.db.query(GlobalMapColumn).filter_by(col_id=col_id).first()
+                    if not col_exists:
+                        self.db.add(GlobalMapColumn(col_id=col_id, excel_format="@"))
+                self.db.flush()
+
                 data = get_global_mapping_config(self.db)
                 updated = False
                 
-                if mappings:
-                    filtered_mappings = {k: v for k, v in mappings.items() if v and v != "col_unknown"}
-                    if filtered_mappings:
-                        if "header_text_mappings" not in data:
-                            data["header_text_mappings"] = {"mappings": {}}
-                        if "mappings" not in data["header_text_mappings"]:
-                            data["header_text_mappings"]["mappings"] = {}
-                        data["header_text_mappings"]["mappings"].update(filtered_mappings)
-                        updated = True
+                if filtered_mappings:
+                    if "header_text_mappings" not in data:
+                        data["header_text_mappings"] = {"mappings": {}}
+                    if "mappings" not in data["header_text_mappings"]:
+                        data["header_text_mappings"]["mappings"] = {}
+                    data["header_text_mappings"]["mappings"].update(filtered_mappings)
+
+                    if "shipping_header_map" not in data:
+                        data["shipping_header_map"] = {}
+                    for raw_kw, col_id in filtered_mappings.items():
+                        if col_id not in data["shipping_header_map"]:
+                            data["shipping_header_map"][col_id] = {
+                                "keywords": [raw_kw.lower()],
+                                "format": "@"
+                            }
+                    updated = True
 
                 if footer_mappings:
                     if "footer_label_mappings" not in data:
@@ -200,7 +235,8 @@ class BlueprintService:
             config_data, template_json_data, template_xlsx_bytes = self.orchestrator.generate_blueprint_bundle(
                 template_path=file_path,
                 custom_prefix=customer_code,
-                runtime_mappings=mappings,
+                runtime_mappings=filtered_mappings if filtered_mappings else None,
+                fallback_mappings=fallback_mappings if fallback_mappings else None,
                 bundle_dir_name=bundle_dir_name or None,
                 pricing_mode=pricing_mode,
                 ignore_missing_description=ignore_missing_description,

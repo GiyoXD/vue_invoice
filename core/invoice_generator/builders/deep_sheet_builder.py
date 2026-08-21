@@ -74,22 +74,29 @@ class DeepSheetBuilder:
                 logger.warning(f"Failed to parse date string '{inv_date}': {e}")
                 # Fallback: leave as string if parsing fails
 
-        # source 3: footer_data.grand_total for net/gross
+        # source 3: footer_data.grand_total for net/gross/amount
         net_val = ""
         gross_val = ""
-        footer_data = invoice_data.get('footer_data', {})
-        grand_total = footer_data.get('grand_total', {})
+        amount_val = ""
+        footer_data = invoice_data.get('footer_data') or {}
+        grand_total = footer_data.get('grand_total') or {}
         if grand_total:
-            net_val = grand_total.get('col_net', "")
-            gross_val = grand_total.get('col_gross', "")
+            raw_net = grand_total.get('col_net', "")
+            raw_gross = grand_total.get('col_gross', "")
+            raw_amount = grand_total.get('col_amount') if grand_total.get('col_amount') is not None else grand_total.get('amount', "")
+
             try:
-                if net_val: net_val = float(net_val)
+                if raw_net != "" and raw_net is not None: net_val = float(raw_net)
             except (ValueError, TypeError):
                 net_val = ""
             try:
-                if gross_val: gross_val = float(gross_val)
+                if raw_gross != "" and raw_gross is not None: gross_val = float(raw_gross)
             except (ValueError, TypeError):
                 gross_val = ""
+            try:
+                if raw_amount != "" and raw_amount is not None: amount_val = float(raw_amount)
+            except (ValueError, TypeError):
+                amount_val = ""
 
         # --- Write row-based layout (Col A = label, Col B = value) ---
         rows = [
@@ -98,6 +105,7 @@ class DeepSheetBuilder:
             ("date",       inv_date),
             ("net",        net_val),
             ("gross",      gross_val),
+            ("amount",     amount_val),
         ]
         for row_idx, (label, value) in enumerate(rows, 1):
             ws.cell(row=row_idx, column=1, value=label)
@@ -105,4 +113,4 @@ class DeepSheetBuilder:
             if label == "date" and isinstance(value, datetime):
                 cell.number_format = 'yyyy-mm-dd'
         
-        logger.info(f"Injected veryHidden '{SHEET_NAME}' with metadata: Inv={inv_no}, Ref={ref_no}, Date={inv_date}, Net={net_val}, Gross={gross_val}")
+        logger.info(f"Injected veryHidden '{SHEET_NAME}' with metadata: Inv={inv_no}, Ref={ref_no}, Date={inv_date}, Net={net_val}, Gross={gross_val}, Amount={amount_val}")

@@ -68,9 +68,10 @@ def get_global_mapping_config(db=None) -> dict:
         config["fallback_strategies"] = {}
         for s in strategies:
             val = s.strategy_value
-            if val.lower() == "true": val = True
-            elif val.lower() == "false": val = False
-            elif val.replace('.', '', 1).isdigit(): val = float(val) if '.' in val else int(val)
+            if val and val.lower() == "true":
+                val = True
+            elif val and val.lower() == "false":
+                val = False
             config["fallback_strategies"][s.strategy_key] = val
             
         mapping_cache.set(config)

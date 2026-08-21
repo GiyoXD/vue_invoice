@@ -39,6 +39,7 @@ class BlueprintGenerationOptions:
     dry_run: bool = False
     custom_prefix: Optional[str] = None
     runtime_mappings: Optional[Dict[str, str]] = None
+    fallback_mappings: Optional[Dict[str, str]] = None
     bundle_dir_name: Optional[str] = None
     pricing_mode: str = "standard"
     ignore_missing_description: bool = False
@@ -142,7 +143,9 @@ class BlueprintGenerator:
         
         # Step 2: Build bundle config
         self.logger.info("Building blueprint configuration...")
-        bundle = self._assemble_blueprint_bundle(analysis, options.pricing_mode, options.custom_prefix)
+        bundle = self._assemble_blueprint_bundle(
+            analysis, options.pricing_mode, options.custom_prefix, options.fallback_mappings
+        )
         
         # Step 2b: Validate Config Structure
         self.logger.info("Validating configuration structure...")
@@ -224,7 +227,7 @@ class BlueprintGenerator:
                     id_to_headers[child.id].add(child.header.strip().lower())
                     
             for col_id, headers in id_to_headers.items():
-                if len(headers) > 1 and not col_id.startswith("col_unknown") and col_id != "col_static":
+                if len(headers) > 1 and col_id and not str(col_id).startswith("col_unknown") and col_id != "col_static":
                     msg = f"Sheet '{sheet.name}': ID '{col_id}' is mapped to distinct headers {headers}"
                     self.logger.error(f"❌ MAPPING CONFLICT: {msg}")
                     conflict_details.append(msg)
@@ -233,10 +236,16 @@ class BlueprintGenerator:
             details_str = " | ".join(conflict_details)
             raise ValueError(f"Mapping conflicts detected: {details_str}. Please fix global mappings via the database or the template.")
 
-    def _assemble_blueprint_bundle(self, analysis: TemplateAnalysisResult, pricing_mode: str, custom_prefix: Optional[str]) -> Dict[str, Any]:
+    def _assemble_blueprint_bundle(
+        self,
+        analysis: TemplateAnalysisResult,
+        pricing_mode: str,
+        custom_prefix: Optional[str],
+        fallback_mappings: Optional[Dict[str, str]] = None
+    ) -> Dict[str, Any]:
         """Compile scanned template analysis into standard blueprint configuration dict."""
-        bundle = self.builder.build_config(analysis)
-        bundle["table_info"] = self._build_table_info(analysis)
+        bundle = self.builder.build_config(analysis, fallback_mappings=fallback_mappings)
+        bundle["table_info"] = self._build_table_info(analysis, fallback_mappings=fallback_mappings)
         
         effective_prefix = custom_prefix if custom_prefix else analysis.customer_code
         if "_meta" in bundle:
@@ -433,13 +442,20 @@ class BlueprintGenerator:
             self.logger.warning(f"   [Override Preservation] Could not merge old overrides: {e}")
             return None
     
-    def _build_table_info(self, analysis: TemplateAnalysisResult) -> Dict[str, Any]:
+    def _build_table_info(
+        self,
+        analysis: TemplateAnalysisResult,
+        fallback_mappings: Optional[Dict[str, str]] = None
+    ) -> Dict[str, Any]:
         """
         Build the table_info summary index from the analysis result.
         
         This is a flat summary of key template metadata for quick API access.
         """
         fallback_description = None
+        if fallback_mappings and fallback_mappings.get("col_desc"):
+            fallback_description = fallback_mappings["col_desc"]
+
         hs_code = None
 
         sheets_ordered = sorted(
@@ -454,6 +470,9 @@ class BlueprintGenerator:
                 hs_code = sheet.footer_info.hs_code_text
             if fallback_description and hs_code:
                 break
+
+        if not fallback_description:
+            fallback_description = self._load_mapping_config().get("fallback_strategies", {}).get("col_desc")
 
         return {
             "fallback_description": {"standard": fallback_description, "daf": fallback_description} if fallback_description else None,

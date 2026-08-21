@@ -42,15 +42,20 @@ class ConfigBuilder:
         ]
     }
     
-    def __init__(self):
+    def __init__(self, fallback_mappings: Optional[Dict[str, str]] = None):
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.fallback_mappings = fallback_mappings or {}
+        self._default_mapping_keys = set()
     
     @snitch
-    def build_config(self, analysis: TemplateAnalysisResult) -> Dict[str, Any]:
+    def build_config(self, analysis: TemplateAnalysisResult, fallback_mappings: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
         """
         Build complete bundle config from template analysis.
         Matches the confirmed Master Config structure (v2.1).
         """
+        if fallback_mappings is not None:
+            self.fallback_mappings = fallback_mappings
+            
         self.logger.info(f"Building blueprint config for {analysis.customer_code}")
         
         bundle = {
@@ -315,14 +320,40 @@ class ConfigBuilder:
         
         self.logger.info(f"  Mapping data flow for sheet '{sheet.name}' ({len(sheet.columns)} cols)...")
 
+        # Load global fallback strategies from DB
+        global_fallbacks = {}
+        try:
+            from core.database.db_manager import get_global_mapping_config
+            db_config = get_global_mapping_config()
+            if isinstance(db_config, dict):
+                global_fallbacks = db_config.get("fallback_strategies", {}) or {}
+        except Exception as e:
+            self.logger.debug(f"Could not load global fallback strategies from DB: {e}")
+            global_fallbacks = {}
+
         for col in all_columns:
             field_name = col.id
+            header_key = col.header.strip() if getattr(col, "header", None) else ""
             
             # Skip structural columns
             if col.id in ["col_static", "col_qty_header", "col_no"]:
                 self.logger.debug(f"    [Skipped]  {col.id} (Structural/Static)")
                 continue
             
+            fallback_val = None
+            if self.fallback_mappings:
+                if col.id in self.fallback_mappings:
+                    fallback_val = self.fallback_mappings[col.id]
+                elif header_key and header_key in self.fallback_mappings:
+                    fallback_val = self.fallback_mappings[header_key]
+                elif getattr(col, "header", None) and col.header in self.fallback_mappings:
+                    fallback_val = self.fallback_mappings[col.header]
+
+            if fallback_val is not None:
+                mappings[field_name] = {"fallback": fallback_val}
+                self.logger.info(f"    [Fallback] {col.id} fallback set to '{fallback_val}'")
+                continue
+
             if col.id == "col_desc" and sheet.static_content_hints:
                 dynamic_fallback = sheet.static_content_hints.get("description_fallback")
                 if dynamic_fallback:
@@ -333,6 +364,21 @@ class ConfigBuilder:
                         }
                     }
                     self.logger.info(f"    [Override] col_desc fallback set to '{dynamic_fallback}'")
+                    continue
+
+            # Check global fallback strategies from DB if column not already in mappings/overridden
+            if global_fallbacks:
+                g_fallback = None
+                if header_key and header_key in global_fallbacks:
+                    g_fallback = global_fallbacks[header_key]
+                elif getattr(col, "header", None) and col.header in global_fallbacks:
+                    g_fallback = global_fallbacks[col.header]
+                elif col.id in global_fallbacks:
+                    g_fallback = global_fallbacks[col.id]
+
+                if g_fallback is not None and g_fallback != "":
+                    mappings[field_name] = {"fallback": g_fallback}
+                    self.logger.info(f"    [Global Fallback] {col.id} fallback set to '{g_fallback}'")
                     continue
             
             # Skip columns already covered by defaults (no override to emit)

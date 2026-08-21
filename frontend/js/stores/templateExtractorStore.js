@@ -29,6 +29,8 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
     const activeMappingType = ref("header_text_mappings");
     const newMappingKey = ref("");
     const newMappingVal = ref("");
+    const newMappingCustomVal = ref("");
+    const newMappingFallback = ref("");
     const newMappingType = ref("aggregation");
     const footerKeywords = ref([]);
 
@@ -39,6 +41,8 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
     const allUnrecognizedSheets = ref([]); // Unrecognized sheet names
     const filePrefix = ref("");
     const userMappings = reactive({});
+    const userFallbacks = reactive({});
+    const userCustomMappings = reactive({});
     const confirmedHeaders = ref([]);
     const confirmedFooters = ref([]);
     const proactiveWarnings = ref([]); // warnings from analysis
@@ -174,7 +178,20 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
         try {
             const res = await fetch(`/api/blueprint/mappings?mapping_type=${activeMappingType.value}`);
             if (res.ok) {
-                globalMappings.value = await res.json();
+                const data = await res.json();
+                if (activeMappingType.value === 'header_text_mappings') {
+                    const normalized = {};
+                    for (const [k, v] of Object.entries(data)) {
+                        if (typeof v === 'object' && v !== null) {
+                            normalized[k] = { col_id: v.col_id || '', fallback: v.fallback || '' };
+                        } else {
+                            normalized[k] = { col_id: v || '', fallback: '' };
+                        }
+                    }
+                    globalMappings.value = normalized;
+                } else {
+                    globalMappings.value = data;
+                }
             }
         } catch (e) {
             console.error("Failed to fetch mappings", e);
@@ -198,7 +215,20 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
         const term = mappingSearch.value.toLowerCase();
         const result = {};
         for (const [key, val] of Object.entries(globalMappings.value)) {
-            if (key.toLowerCase().includes(term) || (typeof val === 'string' && val.toLowerCase().includes(term))) {
+            let matches = key.toLowerCase().includes(term);
+            if (!matches) {
+                if (typeof val === 'string' && val.toLowerCase().includes(term)) {
+                    matches = true;
+                } else if (typeof val === 'object' && val !== null) {
+                    if (val.col_id && String(val.col_id).toLowerCase().includes(term)) {
+                        matches = true;
+                    }
+                    if (val.fallback && String(val.fallback).toLowerCase().includes(term)) {
+                        matches = true;
+                    }
+                }
+            }
+            if (matches) {
                 result[key] = val;
             }
         }
@@ -220,7 +250,38 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
     };
 
     const updateMappingColId = (key, newColId) => {
-        globalMappings.value = { ...globalMappings.value, [key]: newColId };
+        if (activeMappingType.value === 'header_text_mappings') {
+            const current = globalMappings.value[key];
+            if (typeof current === 'object' && current !== null) {
+                globalMappings.value = {
+                    ...globalMappings.value,
+                    [key]: { ...current, col_id: newColId }
+                };
+            } else {
+                globalMappings.value = {
+                    ...globalMappings.value,
+                    [key]: { col_id: newColId, fallback: "" }
+                };
+            }
+        } else {
+            globalMappings.value = { ...globalMappings.value, [key]: newColId };
+        }
+    };
+
+    const updateMappingFallback = (key, newFallback) => {
+        const current = globalMappings.value[key];
+        const trimmedFallback = newFallback !== undefined && newFallback !== null ? newFallback.trim() : "";
+        if (typeof current === 'object' && current !== null) {
+            globalMappings.value = {
+                ...globalMappings.value,
+                [key]: { ...current, fallback: trimmedFallback }
+            };
+        } else {
+            globalMappings.value = {
+                ...globalMappings.value,
+                [key]: { col_id: current || "", fallback: trimmedFallback }
+            };
+        }
     };
 
     const deleteMapping = (key) => {
@@ -231,13 +292,58 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
         }
     };
 
+    const isSystemOption = (colId) => {
+        if (!colId) return false;
+        return systemOptions.value.some(o => o.id === colId);
+    };
+
+    const getMappingColId = (val) => {
+        if (typeof val === 'object' && val !== null) {
+            return val.col_id || '';
+        }
+        return val || '';
+    };
+
+    const getMappingSelectVal = (val) => {
+        const colId = getMappingColId(val);
+        if (!colId) return '__custom__';
+        return isSystemOption(colId) ? colId : '__custom__';
+    };
+
+    const onMappingSelectChange = (headerText, selectedVal) => {
+        if (selectedVal === '__custom__') {
+            const currentVal = globalMappings.value[headerText];
+            const currentId = getMappingColId(currentVal);
+            if (isSystemOption(currentId)) {
+                updateMappingColId(headerText, '');
+            }
+        } else {
+            updateMappingColId(headerText, selectedVal);
+        }
+    };
+
     const addNewMapping = () => {
-        if (newMappingKey.value && newMappingVal.value) {
-            globalMappings.value = {
-                ...globalMappings.value,
-                [newMappingKey.value]: newMappingVal.value
-            };
+        const key = newMappingKey.value ? newMappingKey.value.trim() : "";
+        let val = newMappingVal.value ? newMappingVal.value.trim() : "";
+        if (activeMappingType.value === 'header_text_mappings' && val === '__custom__') {
+            val = newMappingCustomVal.value ? newMappingCustomVal.value.trim() : "";
+        }
+        const fallback = newMappingFallback.value ? newMappingFallback.value.trim() : "";
+        if (key && val) {
+            if (activeMappingType.value === 'header_text_mappings') {
+                globalMappings.value = {
+                    ...globalMappings.value,
+                    [key]: fallback ? { col_id: val, fallback } : { col_id: val, fallback: "" }
+                };
+            } else {
+                globalMappings.value = {
+                    ...globalMappings.value,
+                    [key]: val
+                };
+            }
             newMappingKey.value = "";
+            newMappingFallback.value = "";
+            newMappingCustomVal.value = "";
             if (activeMappingType.value === 'sheet_mappings') {
                 newMappingVal.value = "";
             } else {
@@ -251,6 +357,8 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
         await fetchMappings();
         mappingStatusMessage.value = "";
         newMappingKey.value = "";
+        newMappingFallback.value = "";
+        newMappingCustomVal.value = "";
         
         if (type === 'sheet_mappings') {
             newMappingVal.value = "";
@@ -301,9 +409,17 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
         if (confirmedHeaders.value.includes(headerText)) {
             confirmedHeaders.value = confirmedHeaders.value.filter(h => h !== headerText);
         } else {
-            if (!userMappings[headerText]) {
+            const mappingVal = userMappings[headerText];
+            if (!mappingVal) {
                 alert("Please select a field first.");
                 return;
+            }
+            if (mappingVal === '__custom__') {
+                const customVal = userCustomMappings[headerText]?.trim();
+                if (!customVal) {
+                    alert("Please enter a custom column ID.");
+                    return;
+                }
             }
             confirmedHeaders.value.push(headerText);
         }
@@ -327,6 +443,11 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
         allUnrecognizedSheets.value = [];
         fileTokens.value = [];
         proactiveWarnings.value = [];
+        confirmedHeaders.value = [];
+        confirmedFooters.value = [];
+        Object.keys(userMappings).forEach(k => delete userMappings[k]);
+        Object.keys(userFallbacks).forEach(k => delete userFallbacks[k]);
+        Object.keys(userCustomMappings).forEach(k => delete userCustomMappings[k]);
 
         // Refresh footer mappings before analysis to prevent stale keywords
         await fetchFooterMappings();
@@ -445,7 +566,13 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
             const finalMappings = {};
             for (const [key, value] of Object.entries(userMappings)) {
                 if (confirmedHeaders.value.includes(key)) {
-                    finalMappings[key] = value;
+                    const resolvedColId = value === '__custom__' ? (userCustomMappings[key] || '').trim() : value;
+                    if (!resolvedColId) continue;
+                    if (userFallbacks[key] && userFallbacks[key].trim()) {
+                        finalMappings[key] = { col_id: resolvedColId, fallback: userFallbacks[key].trim() };
+                    } else {
+                        finalMappings[key] = resolvedColId;
+                    }
                 }
             }
 
@@ -542,6 +669,13 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
         for (const prop of Object.getOwnPropertyNames(userMappings)) {
             delete userMappings[prop];
         }
+        for (const prop of Object.getOwnPropertyNames(userFallbacks)) {
+            delete userFallbacks[prop];
+        }
+        for (const prop of Object.getOwnPropertyNames(userCustomMappings)) {
+            delete userCustomMappings[prop];
+        }
+        newMappingCustomVal.value = "";
         confirmedHeaders.value = [];
         confirmedFooters.value = [];
         allMissingFooters.value = [];
@@ -591,6 +725,8 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
         allMissingFooters,
         allUnrecognizedSheets,
         userMappings,
+        userFallbacks,
+        userCustomMappings,
         confirmedHeaders,
         confirmedFooters,
         toggleMapping,
@@ -607,12 +743,19 @@ export const useTemplateExtractorStore = defineStore('templateExtractor', () => 
         filteredMappings,
         updateMappingHeader,
         updateMappingColId,
+        updateMappingFallback,
         deleteMapping,
+        isSystemOption,
+        getMappingColId,
+        getMappingSelectVal,
+        onMappingSelectChange,
         saveMappings,
         activeMappingType,
         switchMappingType,
         newMappingKey,
         newMappingVal,
+        newMappingCustomVal,
+        newMappingFallback,
         newMappingType,
         addNewMapping,
         proactiveWarnings,

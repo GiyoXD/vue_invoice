@@ -30,7 +30,7 @@ class GenerateRequest(BaseModel):
     file_token: str
     customer_code: str # e.g. "CLW"
     locale: str = "KH"
-    mappings: Dict[str, str] = {} # {"Unknown Header": "col_remark"}
+    mappings: Dict[str, Any] = {} # {"Unknown Header": "col_remark"} or {"Unknown Header": {"col_id": "col_remark", "fallback": "..."}}
     footer_mappings: List[str] = []
     pricing_mode: str = "standard"  # 'standard' or 'net'
 

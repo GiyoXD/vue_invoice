@@ -39,14 +39,19 @@ export default {
             </div>
 
             <div v-else class="flex flex-col gap-2 mt-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                <div v-for="(headerText, index) in store.allMissingHeaders" :key="index" style="display: grid; grid-template-columns: 1fr 2fr auto; gap: 1rem; align-items: center;" class="bg-white/5 p-3 rounded-md">
+                <div v-for="(headerText, index) in store.allMissingHeaders" :key="index" style="display: grid; grid-template-columns: 1fr 2fr 2fr auto; gap: 1rem; align-items: center;" class="bg-white/5 p-3 rounded-md">
                     <div class="font-bold text-yellow-400 truncate" :title="headerText">"{{ headerText }}"</div>
-                    <select v-model="store.userMappings[headerText]" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" :disabled="store.confirmedHeaders.includes(headerText)">
-                        <option value="" disabled selected>Select a field...</option>
-                        <option v-for="opt in store.systemOptions" :value="opt.id" :key="opt.id">
-                            {{ opt.label }} ({{ opt.id }})
-                        </option>
-                    </select>
+                    <div class="flex flex-col gap-1 w-full">
+                        <select v-model="store.userMappings[headerText]" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" :disabled="store.confirmedHeaders.includes(headerText)">
+                            <option value="" disabled selected>Select a field...</option>
+                            <option v-for="opt in store.systemOptions" :value="opt.id" :key="opt.id">
+                                {{ opt.label }} ({{ opt.id }})
+                            </option>
+                            <option value="__custom__">+ Custom Column ID...</option>
+                        </select>
+                        <input v-if="store.userMappings[headerText] === '__custom__'" type="text" v-model="store.userCustomMappings[headerText]" placeholder="Enter custom col_id (e.g. po_number)" class="w-full bg-slate-900 border border-amber-500/50 rounded-lg px-3 py-1.5 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-xs font-mono" :disabled="store.confirmedHeaders.includes(headerText)" />
+                    </div>
+                    <input type="text" v-model="store.userFallbacks[headerText]" placeholder="Fallback text (optional, e.g. COW HIDE)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" :disabled="store.confirmedHeaders.includes(headerText)" />
                     <button 
                         @click="store.toggleMapping(headerText)"
                         :class="[store.confirmedHeaders.includes(headerText) ? 'btn-danger' : 'btn-success', 'btn-sm text-sm py-2 px-4 min-w-[90px] h-full whitespace-nowrap']">

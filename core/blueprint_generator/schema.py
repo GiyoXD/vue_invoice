@@ -184,11 +184,56 @@ class BlueprintSchema:
                     )
                     loaded += 1
 
+            # Also load any custom columns defined in header_text_mappings
+            header_mappings = mapping_config.get("header_text_mappings", {})
+            if isinstance(header_mappings, dict):
+                raw_map = header_mappings.get("mappings", header_mappings)
+                if isinstance(raw_map, dict):
+                    for raw_text, val in raw_map.items():
+                        col_id = None
+                        if isinstance(val, dict):
+                            col_id = val.get("col_id")
+                        elif isinstance(val, str):
+                            col_id = val
+                        
+                        if col_id and isinstance(col_id, str):
+                            col_id = col_id.strip()
+                            if col_id and not col_id.startswith("col_unknown") and col_id != "col_unknown":
+                                if col_id not in cls.COLUMNS:
+                                    cls.COLUMNS[col_id] = ColumnDefinition(
+                                        id=col_id,
+                                        keywords=[],
+                                        excel_format="@",
+                                        width=15.0
+                                    )
+                                    loaded += 1
+
+            # Also check GlobalMapColumn directly from database to guarantee all custom columns are known
+            try:
+                from core.database.models.global_map import GlobalMapColumn
+                from core.database.session import SessionLocal
+                session = SessionLocal()
+                try:
+                    db_columns = session.query(GlobalMapColumn).all()
+                    for c in db_columns:
+                        if c.col_id and c.col_id not in cls.COLUMNS and not c.col_id.startswith("col_unknown"):
+                            cls.COLUMNS[c.col_id] = ColumnDefinition(
+                                id=c.col_id,
+                                keywords=[kw.keyword.lower() for kw in c.keywords] if hasattr(c, "keywords") and c.keywords else [],
+                                excel_format=c.excel_format or "@",
+                                width=15.0
+                            )
+                            loaded += 1
+                finally:
+                    session.close()
+            except Exception as db_err:
+                logger.debug(f"[BlueprintSchema] Direct DB GlobalMapColumn check skipped: {db_err}")
+
             if loaded:
-                logger.info(f"[BlueprintSchema] Loaded {loaded} new column definition(s) from mapping_config.")
+                logger.info(f"[BlueprintSchema] Loaded {loaded} new column definition(s) from mapping_config/DB.")
 
         except Exception as e:
-            logger.exception("[BlueprintSchema] Failed to load shipping_header_map from mapping_config")
+            logger.exception("[BlueprintSchema] Failed to load dynamic columns from mapping_config")
             raise e
 
         # Load Sheet Classification Rules dynamically

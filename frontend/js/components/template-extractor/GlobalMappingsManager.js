@@ -36,8 +36,21 @@ export default {
                     </select>
                     <button class="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px]" @click.prevent="store.addNewMapping" :disabled="!store.newMappingKey || !store.newMappingVal">Add</button>
                 </div>
+                <div v-else-if="store.activeMappingType === 'header_text_mappings'" style="display: grid; grid-template-columns: 1.5fr 1.5fr 1.5fr auto; gap: 0.5rem; align-items: center;" class="mb-4 p-2 bg-emerald-500/5 border border-emerald-500/30 border-dashed rounded-md">
+                    <input type="text" v-model="store.newMappingKey" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="Original Text (e.g. Qty(SF))" />
+                    <div class="flex flex-col gap-1 w-full">
+                        <select v-model="store.newMappingVal" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all">
+                            <option value="" disabled selected>Select system field...</option>
+                            <option v-for="opt in store.systemOptions" :value="opt.id" :key="opt.id">{{ opt.label }} ({{ opt.id }})</option>
+                            <option value="__custom__">+ Custom Column ID (Type your own)...</option>
+                        </select>
+                        <input v-if="store.newMappingVal === '__custom__'" type="text" v-model="store.newMappingCustomVal" class="w-full bg-slate-900 border border-amber-500/50 rounded-lg px-3 py-1.5 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-xs font-mono" placeholder="Type custom col_id (e.g. custom_po)" />
+                    </div>
+                    <input type="text" v-model="store.newMappingFallback" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="Fallback Text (optional, e.g. COW HIDE)" />
+                    <button class="px-6 py-2 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed min-w-[100px]" @click.prevent="store.addNewMapping" :disabled="!store.newMappingKey || (store.newMappingVal === '__custom__' ? !store.newMappingCustomVal : !store.newMappingVal)">Add</button>
+                </div>
                 <div v-else style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: center;" class="mb-4 p-2 bg-emerald-500/5 border border-emerald-500/30 border-dashed rounded-md">
-                    <input type="text" v-model="store.newMappingKey" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" :placeholder="store.activeMappingType === 'shipping_header_map' ? 'New Keyword (e.g. PO)' : (store.activeMappingType === 'footer_label_mappings' ? 'New Footer Label (e.g. GRAND TOTAL)' : 'New Input Text (e.g. Qty(SF))')" />
+                    <input type="text" v-model="store.newMappingKey" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" :placeholder="store.activeMappingType === 'shipping_header_map' ? 'New Keyword (e.g. PO)' : 'New Footer Label (e.g. GRAND TOTAL)'" />
                     
                     <input v-if="store.activeMappingType === 'footer_label_mappings'" type="text" v-model="store.newMappingVal" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all" placeholder="Auto-filled" :disabled="true" />
                     <select v-else v-model="store.newMappingVal" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all">
@@ -56,9 +69,15 @@ export default {
                             <div>Classification</div>
                             <div class="w-20 text-center">Action</div>
                         </div>
+                        <div v-else-if="store.activeMappingType === 'header_text_mappings'" style="display: grid; grid-template-columns: 1.5fr 1.5fr 1.5fr auto; gap: 0.5rem; align-items: center;" class="font-bold p-2 border-b border-white/10">
+                            <div>Original Text (Excel)</div>
+                            <div>Mapped Target (System)</div>
+                            <div>Default Fallback (Optional)</div>
+                            <div class="w-20 text-center">Action</div>
+                        </div>
                         <div v-else style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: center;" class="font-bold p-2 border-b border-white/10">
-                            <div>{{ store.activeMappingType === 'shipping_header_map' ? 'Keyword' : (store.activeMappingType === 'footer_label_mappings' ? 'Footer Target Text' : 'Original Text (Excel)') }}</div>
-                            <div>{{ store.activeMappingType === 'shipping_header_map' ? 'Mapped Target (System)' : (store.activeMappingType === 'footer_label_mappings' ? 'Type' : 'Mapped Target (System)') }}</div>
+                            <div>{{ store.activeMappingType === 'shipping_header_map' ? 'Keyword' : 'Footer Target Text' }}</div>
+                            <div>{{ store.activeMappingType === 'shipping_header_map' ? 'Mapped Target (System)' : 'Type' }}</div>
                             <div class="w-20 text-center">Action</div>
                         </div>
                         
@@ -72,6 +91,26 @@ export default {
                                 </select>
                                 
                                 <button class="h-9 px-4 bg-red-500/80 hover:bg-red-500 text-white rounded cursor-pointer transition-colors w-full text-sm font-medium" @click="store.deleteMapping(sheetName)">Delete</button>
+                            </div>
+                        </template>
+                        <template v-else-if="store.activeMappingType === 'header_text_mappings'">
+                            <div v-for="(val, headerText) in store.filteredMappings" :key="headerText" style="display: grid; grid-template-columns: 1.5fr 1.5fr 1.5fr auto; gap: 0.5rem; align-items: center;" class="bg-white/5 p-2 rounded">
+                                <input type="text" :value="headerText" @change="store.updateMappingHeader(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" />
+                                
+                                <div class="flex flex-col gap-1 w-full">
+                                    <select :value="store.getMappingSelectVal(val)" @change="store.onMappingSelectChange(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm">
+                                        <option value="" disabled>Select system field...</option>
+                                        <option v-for="opt in store.systemOptions" :value="opt.id" :key="opt.id">
+                                            {{ opt.label }} ({{ opt.id }})
+                                        </option>
+                                        <option value="__custom__">+ Custom Column ID (Type your own)...</option>
+                                    </select>
+                                    <input v-if="store.getMappingSelectVal(val) === '__custom__'" type="text" :value="store.getMappingColId(val)" @input="store.updateMappingColId(headerText, $event.target.value)" placeholder="Type custom col_id..." class="w-full h-8 bg-slate-900 border border-amber-500/50 rounded px-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-xs font-mono" />
+                                </div>
+                                
+                                <input type="text" :value="typeof val === 'object' && val !== null ? (val.fallback || '') : ''" @change="store.updateMappingFallback(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" placeholder="Optional fallback" />
+                                
+                                <button class="h-9 px-4 bg-red-500/80 hover:bg-red-500 text-white rounded cursor-pointer transition-colors w-full text-sm font-medium" @click="store.deleteMapping(headerText)">Delete</button>
                             </div>
                         </template>
                         <template v-else>

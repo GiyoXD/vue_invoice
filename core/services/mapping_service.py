@@ -2,7 +2,8 @@ import logging
 from typing import Dict, Any, List
 from sqlalchemy.orm import Session
 from core.database.db_manager import (
-    get_global_mapping_config, save_global_mapping_config, GlobalMapSheet
+    get_global_mapping_config, save_global_mapping_config, GlobalMapSheet,
+    GlobalMapFallbackStrategy, GlobalMapHeaderTextMapping
 )
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,23 @@ class MappingService:
                 res_dict[s.sheet_name] = s.processing_type
             return res_dict
 
+        elif mapping_type == "fallback_strategies":
+            strategies = self.db.query(GlobalMapFallbackStrategy).all()
+            return {s.strategy_key: s.strategy_value for s in strategies}
+
+        elif mapping_type == "header_text_mappings":
+            overrides = self.db.query(GlobalMapHeaderTextMapping).all()
+            strategies = self.db.query(GlobalMapFallbackStrategy).all()
+            fallback_dict = {s.strategy_key: s.strategy_value for s in strategies}
+            res = {}
+            for override in overrides:
+                fb = fallback_dict.get(override.raw_text, fallback_dict.get(override.canonical_col_id, ""))
+                res[override.raw_text] = {
+                    "col_id": override.canonical_col_id,
+                    "fallback": fb if fb is not None else ""
+                }
+            return res
+
         return data.get(mapping_type, {}).get("mappings", {})
 
     def update_mappings(self, mapping_type: str, mappings: Dict[str, Any]) -> None:
@@ -60,7 +78,7 @@ class MappingService:
         """
         from core.database.db_manager import (
             GlobalMapColumn, GlobalMapColumnKeyword, GlobalMapHeaderTextMapping,
-            GlobalMapSheet, GlobalMapFooterLabelKeyword
+            GlobalMapSheet, GlobalMapFooterLabelKeyword, GlobalMapFallbackStrategy
         )
 
         try:
@@ -147,16 +165,42 @@ class MappingService:
                         existing_map[sheet_name].processing_type = proc_type
                         
             elif mapping_type == "header_text_mappings":
-                clean_mappings = {str(k).strip(): str(v).strip() for k, v in mappings.items() if str(k).strip() and str(v).strip()}
+                clean_mappings = {}
+                fallback_updates = {}
+                for k, v in mappings.items():
+                    raw_text = str(k).strip() if k is not None else ""
+                    if not raw_text:
+                        continue
+                    if isinstance(v, dict):
+                        col_id = str(v.get("col_id", "")).strip()
+                        if not col_id or col_id.startswith("col_unknown") or col_id == "col_unknown":
+                            continue
+                        if not col_id.startswith("col_"):
+                            col_id = f"col_{col_id}"
+                        col_id = col_id.replace(" ", "_").lower()
+                        clean_mappings[raw_text] = col_id
+                        if "fallback" in v:
+                            fb = v.get("fallback")
+                            fallback_updates[raw_text] = str(fb).strip() if fb is not None else ""
+                    else:
+                        col_id = str(v).strip() if v is not None else ""
+                        if not col_id or col_id.startswith("col_unknown") or col_id == "col_unknown":
+                            continue
+                        if not col_id.startswith("col_"):
+                            col_id = f"col_{col_id}"
+                        col_id = col_id.replace(" ", "_").lower()
+                        clean_mappings[raw_text] = col_id
+
                 existing_overrides = self.db.query(GlobalMapHeaderTextMapping).all()
                 existing_map = {o.raw_text: o for o in existing_overrides}
                 
-                # Ensure parent columns exist
-                unique_cols = set(clean_mappings.values())
+                # Ensure parent columns exist for any custom/new col_id
+                unique_cols = {c for c in clean_mappings.values() if c and not c.startswith("col_unknown")}
                 for col_id in unique_cols:
                     col_exists = self.db.query(GlobalMapColumn).filter_by(col_id=col_id).first()
                     if not col_exists:
                         self.db.add(GlobalMapColumn(col_id=col_id, excel_format="@"))
+                self.db.flush()
                 
                 # Deletes
                 for raw_text, override_obj in existing_map.items():
@@ -169,6 +213,47 @@ class MappingService:
                         self.db.add(GlobalMapHeaderTextMapping(raw_text=raw_text, canonical_col_id=col_id))
                     elif existing_map[raw_text].canonical_col_id != col_id:
                         existing_map[raw_text].canonical_col_id = col_id
+                self.db.flush()
+
+                # Manage Fallback Strategies for raw_text keys
+                existing_strategies = self.db.query(GlobalMapFallbackStrategy).all()
+                existing_strat_map = {s.strategy_key: s for s in existing_strategies}
+
+                # Delete fallback strategy if mapped header was deleted
+                for raw_text in existing_map.keys():
+                    if raw_text not in clean_mappings:
+                        strat_key = raw_text[:128]
+                        if strat_key in existing_strat_map:
+                            self.db.delete(existing_strat_map[strat_key])
+
+                # Update or delete fallback strategy for specified fallbacks
+                for raw_text, fb_val in fallback_updates.items():
+                    strat_key = raw_text[:128]
+                    if fb_val:
+                        if strat_key not in existing_strat_map:
+                            self.db.add(GlobalMapFallbackStrategy(strategy_key=strat_key, strategy_value=fb_val))
+                        elif existing_strat_map[strat_key].strategy_value != fb_val:
+                            existing_strat_map[strat_key].strategy_value = fb_val
+                    else:
+                        if strat_key in existing_strat_map:
+                            self.db.delete(existing_strat_map[strat_key])
+                        
+            elif mapping_type == "fallback_strategies":
+                clean_mappings = {str(k).strip(): str(v).strip() for k, v in mappings.items() if str(k).strip()}
+                existing_strategies = self.db.query(GlobalMapFallbackStrategy).all()
+                existing_map = {s.strategy_key: s for s in existing_strategies}
+                
+                # Deletes
+                for strat_key, strat_obj in existing_map.items():
+                    if strat_key not in clean_mappings:
+                        self.db.delete(strat_obj)
+                
+                # Adds and Updates
+                for strat_key, strat_val in clean_mappings.items():
+                    if strat_key not in existing_map:
+                        self.db.add(GlobalMapFallbackStrategy(strategy_key=strat_key, strategy_value=strat_val))
+                    elif existing_map[strat_key].strategy_value != strat_val:
+                        existing_map[strat_key].strategy_value = strat_val
             
             self.db.commit()
             mapping_cache.invalidate()
