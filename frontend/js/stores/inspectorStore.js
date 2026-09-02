@@ -9,73 +9,43 @@ export const useInspectorStore = defineStore('inspector', () => {
     const currentRun = ref(null);
     const existingInDb = ref(false);
     const isWideCargo = ref(false);
-    const maxStackingLayers = ref(3);
+    const maxStackingLayers = ref(2);
+    const loadingOrientation = ref('width');
 
     // Computed
     const inspectorData = computed(() => {
         return uploadedMetadata.value;
     });
 
-    const inspectorTotals = computed(() => {
-        const data = inspectorData.value;
-        const gt = data?.footer_data?.grand_total || {};
+    const normalizeDimensionToMeters = (val) => {
+        if (val === null || val === undefined || isNaN(val)) return 0;
+        const num = parseFloat(val);
+        if (num <= 0 || isNaN(num)) return 0;
+        return num; // input is always in meters
+    };
 
-        let adjustmentSum = 0;
-        if (data?.price_adjustment && Array.isArray(data.price_adjustment)) {
-            data.price_adjustment.forEach(adj => {
-                const val = Number(adj[1]);
-                if (isNaN(val)) {
-                    throw new Error(`Invalid price_adjustment value: "${adj[1]}" is not a number`);
-                }
-                adjustmentSum += val;
-            });
-        }
-
-        return {
-            pcs: gt.col_qty_pcs || 0,
-            sqft: gt.col_qty_sf || 0,
-            pallets: gt.col_pallet_count || 0,
-            net: gt.col_net || 0,
-            gross: gt.col_gross || 0,
-            cbm: gt.col_cbm || 0,
-            amount: Number(gt.col_amount || 0) + adjustmentSum
-        };
-    });
-
-    const detectedPalletDims = computed(() => {
-        const items = inspectorItems.value;
-        for (const item of items) {
-            const cbmRaw = item.col_cbm_raw || item.col_cbm;
-            if (typeof cbmRaw === 'string' && cbmRaw.trim()) {
-                const parts = cbmRaw.split(/[xX*]/).map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
+    const extractDimsFromItem = (item) => {
+        if (!item) return null;
+        const candidates = [item.col_cbm_raw, item.cbm_raw, item.col_cbm, item.cbm];
+        for (const candidate of candidates) {
+            if (typeof candidate === 'string' && (candidate.includes('*') || /[xX]/.test(candidate))) {
+                const parts = candidate.split(/[xX*]/).map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
                 if (parts.length >= 2) {
-                    let dim1 = parts[0];
-                    let dim2 = parts[1];
-                    if (dim1 > 10) dim1 = dim1 / 100;
-                    if (dim2 > 10) dim2 = dim2 / 100;
-                    if (dim1 > 10) dim1 = dim1 / 10;
-                    if (dim2 > 10) dim2 = dim2 / 10;
-                    
-                    return {
-                        length: Math.max(dim1, dim2),
-                        width: Math.min(dim1, dim2)
-                    };
+                    const dim1 = normalizeDimensionToMeters(parts[0]);
+                    const dim2 = normalizeDimensionToMeters(parts[1]);
+                    let dim3 = parts.length >= 3 ? normalizeDimensionToMeters(parts[2]) : null;
+                    if (dim1 > 0 && dim2 > 0) {
+                        return {
+                            length: Math.max(dim1, dim2),
+                            width: Math.min(dim1, dim2),
+                            height: dim3 || null
+                        };
+                    }
                 }
             }
         }
-        return { length: 1.2, width: 1.0 };
-    });
-
-    const recommendedTruckInfo = computed(() => {
-        const gross = inspectorTotals.value?.gross || 0;
-        const cbm = inspectorTotals.value?.cbm || 0;
-        const pallets = inspectorTotals.value?.pallets || 0;
-        return recommendTruck(gross, cbm, pallets, isWideCargo.value, {
-            maxStackingLayers: maxStackingLayers.value,
-            palletLength: detectedPalletDims.value.length,
-            palletWidth: detectedPalletDims.value.width
-        });
-    });
+        return null;
+    };
 
     const inspectorItems = computed(() => {
         const data = inspectorData.value;
@@ -99,27 +69,106 @@ export const useInspectorStore = defineStore('inspector', () => {
         return items;
     });
 
+    const inspectorTotals = computed(() => {
+        const data = inspectorData.value;
+        const gt = data?.footer_data?.grand_total || {};
+
+        let adjustmentSum = 0;
+        if (data?.price_adjustment && Array.isArray(data.price_adjustment)) {
+            data.price_adjustment.forEach(adj => {
+                const val = Number(adj[1]);
+                if (isNaN(val)) {
+                    throw new Error(`Invalid price_adjustment value: "${adj[1]}" is not a number`);
+                }
+                adjustmentSum += val;
+            });
+        }
+
+        const items = inspectorItems.value;
+        let pallets = Number(gt.col_pallet_count) || 0;
+        if (!pallets && items.length > 0) {
+            pallets = items.filter(it => !it.is_adjustment && extractDimsFromItem(it) !== null).length || items.filter(it => !it.is_adjustment).length;
+        }
+
+        return {
+            pcs: gt.col_qty_pcs || 0,
+            sqft: gt.col_qty_sf || 0,
+            pallets: pallets,
+            net: gt.col_net || 0,
+            gross: gt.col_gross || 0,
+            cbm: gt.col_cbm || 0,
+            amount: Number(gt.col_amount || 0) + adjustmentSum
+        };
+    });
+
+    const detectedPalletDims = computed(() => {
+        const items = inspectorItems.value;
+        let baseDims = null;
+        let maxHeight = 0;
+        for (const item of items) {
+            const dims = extractDimsFromItem(item);
+            if (dims) {
+                if (!baseDims) baseDims = dims;
+                if (dims.height && dims.height > maxHeight) {
+                    maxHeight = dims.height;
+                }
+            }
+        }
+        if (!baseDims) return null;
+        const { length, width } = baseDims;
+        return { length, width, height: maxHeight || null };
+    });
+
+    const recommendedTruckInfo = computed(() => {
+        const gross = inspectorTotals.value?.gross || 0;
+        const cbm = inspectorTotals.value?.cbm || 0;
+        const pallets = inspectorTotals.value?.pallets || 0;
+        const dims = detectedPalletDims.value;
+
+        if (!dims) {
+            return {
+                name: 'Missing Dimensions',
+                maxWeight: 0,
+                maxCbm: 0,
+                maxPallets: 0,
+                displayName: 'Missing Dims ⚠️',
+                description: 'Cannot recommend truck: Pallet dimensions (L×W) not found in data',
+                color: 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+            };
+        }
+
+        const items = inspectorItems.value;
+        let maxPalletWeight = 0;
+        let curPalletGross = 0;
+        for (const item of items) {
+            const count = Number(item.col_pallet_count);
+            const grossVal = Number(item.col_gross || item.gross || 0);
+            if (count > 0 && curPalletGross > 0) {
+                if (curPalletGross > maxPalletWeight) maxPalletWeight = curPalletGross;
+                curPalletGross = grossVal;
+            } else {
+                curPalletGross += grossVal;
+            }
+        }
+        if (curPalletGross > maxPalletWeight) maxPalletWeight = curPalletGross;
+
+        return recommendTruck(gross, cbm, pallets, isWideCargo.value, {
+            maxStackingLayers: maxStackingLayers.value,
+            loadingOrientation: loadingOrientation.value,
+            palletLength: dims.length,
+            palletWidth: dims.width,
+            palletHeight: dims.height,
+            maxPalletWeight
+        });
+    });
+
     const detectWideCargoFromItems = (items) => {
         if (!Array.isArray(items)) return false;
         for (const item of items) {
-            const cbmRaw = item.col_cbm_raw || item.col_cbm;
-            if (typeof cbmRaw === 'string' && cbmRaw.trim()) {
-                const parts = cbmRaw.split(/[xX*]/).map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
-                if (parts.length >= 2) {
-                    let dim1 = parts[0];
-                    let dim2 = parts[1];
-                    
-                    // Handle cm/mm conversions to meters if necessary
-                    if (dim1 > 10) dim1 = dim1 / 100;
-                    if (dim2 > 10) dim2 = dim2 / 100;
-                    if (dim1 > 10) dim1 = dim1 / 10;
-                    if (dim2 > 10) dim2 = dim2 / 10;
-                    
-                    // If any single horizontal dimension is >= 2.0 (e.g. 2.2m),
-                    // or if both horizontal dimensions are > 1.1m (cannot fit side-by-side in 2.1m/2.2m truck):
-                    if (dim1 >= 2.0 || dim2 >= 2.0 || (dim1 > 1.1 && dim2 > 1.1)) {
-                        return true;
-                    }
+            const dims = extractDimsFromItem(item);
+            if (dims) {
+                if (dims.length >= 2.0 || dims.width >= 2.0 || (dims.length > 1.1 && dims.width > 1.1)) {
+                    return true;
                 }
             }
         }
@@ -288,6 +337,7 @@ export const useInspectorStore = defineStore('inspector', () => {
         existingInDb,
         isWideCargo,
         maxStackingLayers,
+        loadingOrientation,
         detectedPalletDims,
         inspectorData,
         inspectorTotals,

@@ -56,7 +56,8 @@ export default {
 
                             <th class="p-2 text-right font-medium border-r border-slate-700/50">Net</th>
                             <th class="p-2 text-right font-medium border-r border-slate-700/50">Gross</th>
-                            <th class="p-2 text-right font-medium border-r border-slate-700/50">CBM</th>
+                            <th class="p-2 text-left font-medium border-r border-slate-700/50">Raw Dims</th>
+                            <th class="p-2 text-right font-medium border-r border-slate-700/50">CBM (m³)</th>
                             <th class="p-2 text-right font-medium border-r border-slate-700/50">Unit Price</th>
                             <th class="p-2 text-right font-medium">Amount</th>
                         </tr>
@@ -84,8 +85,11 @@ export default {
                             <td>
                                 <span v-if="!row.is_adjustment">{{ formatNumber(row.col_gross || row.gross) }}</span>
                             </td>
-                            <td>
-                                <span v-if="!row.is_adjustment">{{ formatNumber(row.col_cbm_raw || row.col_cbm || row.cbm) }}</span>
+                            <td class="font-mono text-xs text-slate-400">
+                                <span v-if="!row.is_adjustment">{{ row.col_cbm_raw || '' }}</span>
+                            </td>
+                            <td class="text-right font-medium text-teal-400">
+                                <span v-if="!row.is_adjustment">{{ formatNumber(row.col_cbm || row.cbm) }}</span>
                             </td>
                             <td>{{ formatNumber(row.col_unit_price || '') }}</td>
                             <td>{{ formatNumber(row.col_amount || row.amount) }}</td>

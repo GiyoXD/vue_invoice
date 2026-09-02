@@ -45,32 +45,57 @@ export default {
 
                 <!-- Recommended Truck -->
                 <div class="flex flex-col pl-6 min-w-[280px]">
-                    <div class="flex items-center justify-between gap-4">
+                    <div class="flex items-center gap-2">
                         <span class="text-xs font-medium text-slate-400 uppercase tracking-wider font-semibold">Recommended Truck</span>
-                        <span class="text-[10px] font-bold text-slate-400 select-none bg-slate-900 border border-slate-700/50 rounded px-1 py-0.5" v-if="store.detectedPalletDims && (store.detectedPalletDims.length !== 1.2 || store.detectedPalletDims.width !== 1.0)">
-                            {{ store.detectedPalletDims.length }}m × {{ store.detectedPalletDims.width }}m
+                        <span class="text-[10px] font-bold text-slate-300 select-none bg-slate-900 border border-slate-700/60 rounded px-1.5 py-0.5" v-if="store.detectedPalletDims">
+                            {{ store.detectedPalletDims.length }}m × {{ store.detectedPalletDims.width }}m<span v-if="store.detectedPalletDims.height"> × {{ store.detectedPalletDims.height }}m</span>
                         </span>
                     </div>
-                    <div class="flex items-center gap-2 mt-0.5">
+                    <div class="flex items-center gap-2.5 mt-1 flex-wrap">
                         <span v-if="store.recommendedTruckInfo" class="text-xs font-bold px-2.5 py-0.5 rounded-full border transition-all" :class="store.recommendedTruckInfo.color" :title="store.recommendedTruckInfo.description">
-                            {{ store.recommendedTruckInfo.displayName }}
+                            {{ store.recommendedTruckInfo.tier === 'optimal' ? '⭐ ' : '' }}{{ store.recommendedTruckInfo.displayName }}<span v-if="store.recommendedTruckInfo.utilization" class="text-[9px] opacity-80 ml-1 font-normal">({{ store.recommendedTruckInfo.utilization.lengthPct }}% len<span v-if="store.recommendedTruckInfo.utilization.heightPct">, {{ store.recommendedTruckInfo.utilization.heightPct }}% hgt</span>)</span>
                         </span>
                         <span v-else class="text-xs font-bold text-slate-500">—</span>
+
+                        <div v-if="store.recommendedTruckInfo?.alternatives" class="flex items-center gap-1.5">
+                            <span v-if="store.recommendedTruckInfo.alternatives.buffer" class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700 text-slate-300" :title="'Safe Buffer (+1 Size): ' + store.recommendedTruckInfo.alternatives.buffer.displayName">
+                                🛡️ Buffer: {{ store.recommendedTruckInfo.alternatives.buffer.name }}
+                            </span>
+                            <span v-if="store.recommendedTruckInfo.alternatives.tight" class="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-900 border border-slate-800 text-slate-500" :title="'Tight (-1 Size): ' + store.recommendedTruckInfo.alternatives.tight.displayName + (store.recommendedTruckInfo.alternatives.tight.reason ? ' (' + store.recommendedTruckInfo.alternatives.tight.reason + ')' : '')">
+                                ⚡ Tight: {{ store.recommendedTruckInfo.alternatives.tight.name }}
+                            </span>
+                        </div>
+
+                        <span class="text-slate-700 font-bold text-xs select-none">|</span>
                         
                         <div class="flex items-center gap-1.5 bg-slate-950 border border-slate-700/50 rounded px-1.5 py-0.5 select-none">
-                            <label class="flex items-center gap-1 cursor-pointer text-[10px] font-bold text-slate-400 uppercase tracking-wider hover:text-slate-200 transition-colors">
-                                <input type="checkbox" v-model="store.isWideCargo" accent-color="#10b981" class="rounded bg-slate-950 border-slate-850 w-3 h-3 cursor-pointer" />
-                                <span>Wide</span>
+                            <label 
+                                class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"
+                                title="Max Stacking Layers: Number of pallet tiers stacked vertically"
+                            >
+                                <span>Stack:</span>
+                                <select v-model="store.maxStackingLayers" class="bg-slate-950 text-slate-300 border-0 rounded px-0.5 py-0 text-[10px] font-bold cursor-pointer focus:ring-0 focus:outline-none">
+                                    <option :value="3" title="3 tiers high">3 Tiers (3x)</option>
+                                    <option :value="2" title="2 tiers high">2 Tiers (2x)</option>
+                                    <option :value="1" title="1 tier only (No stacking)">1 Tier (1x)</option>
+                                </select>
                             </label>
+                            <span v-if="store.recommendedTruckInfo?.safetyAlert" 
+                                  class="text-[10px] font-bold text-amber-300 bg-amber-950/80 border border-amber-600/60 rounded px-1.5 py-0.5 animate-pulse cursor-help select-none"
+                                  :title="store.recommendedTruckInfo.safetyAlert.message">
+                                {{ store.recommendedTruckInfo.safetyAlert.label }}
+                            </span>
                             
                             <span class="text-slate-700 font-bold text-[10px] select-none">|</span>
                             
-                            <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                                <span>Stack:</span>
-                                <select v-model="store.maxStackingLayers" class="bg-slate-950 text-slate-300 border-0 rounded px-0.5 py-0 text-[10px] font-bold cursor-pointer focus:ring-0 focus:outline-none">
-                                    <option :value="3">3x</option>
-                                    <option :value="2">2x</option>
-                                    <option :value="1">1x</option>
+                            <label 
+                                class="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1"
+                                title="Pallet Loading Orientation: Width-wise (long side spans width) vs Length-wise (long side runs along length)"
+                            >
+                                <span>Load:</span>
+                                <select v-model="store.loadingOrientation" class="bg-slate-950 text-slate-300 border-0 rounded px-0.5 py-0 text-[10px] font-bold cursor-pointer focus:ring-0 focus:outline-none">
+                                    <option value="width" title="Width-wise (long side spans truck width)">Width ↔</option>
+                                    <option value="length" title="Length-wise (long side runs along truck length)">Length ↕</option>
                                 </select>
                             </label>
                         </div>

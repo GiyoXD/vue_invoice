@@ -65,7 +65,8 @@ export const useGeneratorStore = defineStore('generator', () => {
     const showConflictConfirm = ref(false);
     const conflictMessage = ref('');
     const isWideCargo = ref(false);
-    const maxStackingLayers = ref(3);
+    const maxStackingLayers = ref(2);
+    const loadingOrientation = ref('width');
     const isLookingUp = ref(false);
 
     // --- Computed properties ---
@@ -118,65 +119,115 @@ export const useGeneratorStore = defineStore('generator', () => {
 
     const normalizeDimensionToMeters = (val) => {
         if (val === null || val === undefined || isNaN(val)) return 0;
-        let num = parseFloat(val);
-        if (num <= 0) return 0;
-        if (num >= 100) return num / 1000; // mm -> m (e.g. 1200 -> 1.2, 1000 -> 1.0)
-        if (num >= 10) return num / 100;   // cm -> m (e.g. 120 -> 1.2, 100 -> 1.0)
-        return num; // already in meters (e.g. 1.2, 1.0)
+        const num = parseFloat(val);
+        if (num <= 0 || isNaN(num)) return 0;
+        return num; // input is always in meters
     };
 
-    const detectedPalletDims = computed(() => {
-        const data = validationData.value;
-        if (!data) return { length: 1.2, width: 1.0 };
-        
-        const items = (data.multi_table || data.raw_data || []).flat();
-        for (const item of items) {
-            const cbmRaw = item.col_cbm_raw || item.col_cbm;
-            if (typeof cbmRaw === 'string' && cbmRaw.trim()) {
-                const parts = cbmRaw.split(/[xX*]/).map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
+    const extractDimsFromItem = (item) => {
+        if (!item) return null;
+        const candidates = [item.col_cbm_raw, item.cbm_raw, item.col_cbm, item.cbm];
+        for (const candidate of candidates) {
+            if (typeof candidate === 'string' && (candidate.includes('*') || /[xX]/.test(candidate))) {
+                const parts = candidate.split(/[xX*]/).map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
                 if (parts.length >= 2) {
                     const dim1 = normalizeDimensionToMeters(parts[0]);
                     const dim2 = normalizeDimensionToMeters(parts[1]);
+                    let dim3 = parts.length >= 3 ? normalizeDimensionToMeters(parts[2]) : null;
                     if (dim1 > 0 && dim2 > 0) {
                         return {
                             length: Math.max(dim1, dim2),
-                            width: Math.min(dim1, dim2)
+                            width: Math.min(dim1, dim2),
+                            height: dim3 || null
                         };
                     }
                 }
             }
         }
+        return null;
+    };
+
+    const detectedPalletDims = computed(() => {
+        const data = validationData.value;
+        if (!data) return null;
         
-        if (data.database_export?.packing_list_items) {
-            for (const item of data.database_export.packing_list_items) {
-                const cbmRaw = item.cbm_raw || item.col_cbm_raw || item.cbm || item.col_cbm;
-                if (typeof cbmRaw === 'string' && cbmRaw.trim()) {
-                    const parts = cbmRaw.split(/[xX*]/).map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
-                    if (parts.length >= 2) {
-                        const dim1 = normalizeDimensionToMeters(parts[0]);
-                        const dim2 = normalizeDimensionToMeters(parts[1]);
-                        if (dim1 > 0 && dim2 > 0) {
-                            return {
-                                length: Math.max(dim1, dim2),
-                                width: Math.min(dim1, dim2)
-                            };
-                        }
-                    }
+        const allItems = [
+            ...(data.multi_table || data.raw_data || []).flat(),
+            ...(data.database_export?.packing_list_items || [])
+        ];
+
+        let baseDims = null;
+        let maxHeight = 0;
+
+        for (const item of allItems) {
+            const dims = extractDimsFromItem(item);
+            if (dims) {
+                if (!baseDims) {
+                    baseDims = dims;
+                }
+                if (dims.height && dims.height > maxHeight) {
+                    maxHeight = dims.height;
                 }
             }
         }
-        
-        return { length: 1.2, width: 1.0 };
+
+        if (!baseDims) return null;
+
+        return {
+            length: baseDims.length,
+            width: baseDims.width,
+            height: maxHeight || null
+        };
     });
 
     const recommendedTruckInfo = computed(() => {
         const gross = weightStats.value?.gross || 0;
         const cbm = weightStats.value?.cbm || 0;
-        const pallets = summaryStats.value?.total_pallets || 0;
+        let pallets = summaryStats.value?.total_pallets || 0;
+        
+        const allItems = [
+            ...(validationData.value?.multi_table || validationData.value?.raw_data || []).flat(),
+            ...(validationData.value?.database_export?.packing_list_items || [])
+        ];
+        
+        if (!pallets && allItems.length > 0) {
+            pallets = allItems.filter(it => extractDimsFromItem(it) !== null).length || allItems.length;
+        }
+
+        const dims = detectedPalletDims.value;
+        if (!dims) {
+            return {
+                name: 'Missing Dimensions',
+                maxWeight: 0,
+                maxCbm: 0,
+                maxPallets: 0,
+                displayName: 'Missing Dims ⚠️',
+                description: 'Cannot recommend truck: Pallet dimensions (L×W) not found in data',
+                color: 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+            };
+        }
+
+        let maxPalletWeight = 0;
+        let curPalletGross = 0;
+        for (const item of allItems) {
+            const count = Number(item.col_pallet_count);
+            const grossVal = Number(item.col_gross || item.gross || 0);
+            if (count > 0 && curPalletGross > 0) {
+                if (curPalletGross > maxPalletWeight) maxPalletWeight = curPalletGross;
+                curPalletGross = grossVal;
+            } else {
+                curPalletGross += grossVal;
+            }
+        }
+        if (curPalletGross > maxPalletWeight) maxPalletWeight = curPalletGross;
+
         return recommendTruck(gross, cbm, pallets, isWideCargo.value, {
             maxStackingLayers: maxStackingLayers.value,
-            palletLength: detectedPalletDims.value.length,
-            palletWidth: detectedPalletDims.value.width
+            loadingOrientation: loadingOrientation.value,
+            palletLength: dims.length,
+            palletWidth: dims.width,
+            palletHeight: dims.height,
+            maxPalletWeight
         });
     });
 
@@ -194,18 +245,10 @@ export const useGeneratorStore = defineStore('generator', () => {
     const detectWideCargoFromItems = (items) => {
         if (!Array.isArray(items)) return false;
         for (const item of items) {
-            const cbmRaw = item.col_cbm_raw || item.col_cbm;
-            if (typeof cbmRaw === 'string' && cbmRaw.trim()) {
-                const parts = cbmRaw.split(/[xX*]/).map(p => parseFloat(p.trim())).filter(p => !isNaN(p));
-                if (parts.length >= 2) {
-                    const dim1 = normalizeDimensionToMeters(parts[0]);
-                    const dim2 = normalizeDimensionToMeters(parts[1]);
-                    
-                    // If any single horizontal dimension is >= 2.0 (e.g. 2.2m),
-                    // or if both horizontal dimensions are > 1.1m (cannot fit side-by-side in 2.1m/2.2m truck):
-                    if (dim1 >= 2.0 || dim2 >= 2.0 || (dim1 > 1.1 && dim2 > 1.1)) {
-                        return true;
-                    }
+            const dims = extractDimsFromItem(item);
+            if (dims) {
+                if (dims.length >= 2.0 || dims.width >= 2.0 || (dims.length > 1.1 && dims.width > 1.1)) {
+                    return true;
                 }
             }
         }
@@ -841,6 +884,7 @@ export const useGeneratorStore = defineStore('generator', () => {
         conflictMessage,
         isWideCargo,
         maxStackingLayers,
+        loadingOrientation,
         isLookingUp,
 
         // computed
