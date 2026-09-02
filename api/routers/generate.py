@@ -8,14 +8,16 @@ from typing import List, Optional, Any
 from pathlib import Path
 from core.system_config import sys_config
 from core.orchestrator import Orchestrator
+from core.invoice_generator.resolvers import InvoiceAssetResolver
 from core.data_parser.data_processor import (
     inject_net_weight_pricing, 
     aggregate_standard_by_po_item_price, 
     aggregate_custom_by_po_item,
     format_aggregation_as_list,
     aggregate_per_po_with_pallets,
-    calculate_footer_totals,
-    perform_DAF_compounding
+    perform_DAF_compounding,
+    calculate_all_footers,
+    format_footer_payload
 )
 
 router = APIRouter(prefix="/api", tags=["generate"])
@@ -113,19 +115,30 @@ def generate_invoice(request: GenerateRequest):
                 return JSONResponse(status_code=422, content={"error": "Missing footer_data or grand_total in parsed data. Cannot process pricing."})
             
             
+            from core.data_parser.config import resolve_customer_decimals
+            customer_decimals = resolve_customer_decimals(request.identifier)
+
             std_map = {}
             cust_map = {}
-            aggregate_standard_by_po_item_price(merged_data, std_map)
-            aggregate_custom_by_po_item(merged_data, cust_map)
+            aggregate_standard_by_po_item_price(merged_data, std_map, decimals_map=customer_decimals)
+            aggregate_custom_by_po_item(merged_data, cust_map, decimals_map=customer_decimals)
             
-            single = full_data.get("single_table", {})
+            single = full_data.get("single_table") or {}
             single["standard"] = format_aggregation_as_list(std_map, mode='standard')
             single["custom"] = format_aggregation_as_list(cust_map, mode='custom')
             
-            single["daf"] = perform_DAF_compounding(merged_data)
+            single["daf"] = perform_DAF_compounding(single["standard"], decimals_map=customer_decimals)
             
-            single["manifest_by_pallet_per_po"] = aggregate_per_po_with_pallets(merged_data)
+            single["manifest_by_pallet_per_po"] = aggregate_per_po_with_pallets(merged_data, decimals_map=customer_decimals)
             full_data["single_table"] = single
+            
+            footer_res = calculate_all_footers(
+                full_data.get("multi_table", []),
+                merged_data,
+                single["manifest_by_pallet_per_po"],
+                decimals_map=customer_decimals
+            )
+            full_data["footer_data"] = format_footer_payload(footer_res)
             
             logger.info(f"Net weight pricing: Recalculated all aggregations with unit_price={request.global_unit_price}")
         
@@ -134,7 +147,6 @@ def generate_invoice(request: GenerateRequest):
             import decimal
             import datetime
             import os
-            import shutil
 
             def custom_serializer(obj):
                 if isinstance(obj, decimal.Decimal):
@@ -172,7 +184,6 @@ def generate_invoice(request: GenerateRequest):
 
         if request.targets:
             # Resolve custom list of (variant, task)
-            from core.invoice_generator.resolvers import InvoiceAssetResolver
             resolver = InvoiceAssetResolver(
                 base_config_dir=sys_config.registry_dir,
                 base_template_dir=sys_config.templates_dir
@@ -215,7 +226,6 @@ def generate_invoice(request: GenerateRequest):
                 mode_tasks.append({"suffix": "_DAF", "daf_mode": True, "custom_mode": False, "name": "DAF Invoice"})
 
             variant_tasks = []
-            from core.invoice_generator.resolvers import InvoiceAssetResolver
             resolver = InvoiceAssetResolver(
                 base_config_dir=sys_config.registry_dir,
                 base_template_dir=sys_config.templates_dir

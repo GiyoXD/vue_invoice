@@ -9,9 +9,31 @@ from .reducers import (
 )
 
 
+def quantize_record(data_dict: Dict[str, Any], decimals_map: Optional[Dict[str, int]] = None) -> None:
+    """
+    Quantizes any Decimal field in data_dict in place using ROUND_HALF_UP.
+    Decimals are rounded according to decimals_map (defaults to 2 for any unspecified column).
+    """
+    if decimals_map is None:
+        decimals_map = {}
+    for col_id, val in list(data_dict.items()):
+        if isinstance(val, decimal.Decimal):
+            dec_places = decimals_map.get(col_id)
+            if dec_places is None or not isinstance(dec_places, int):
+                dec_places = 2
+            try:
+                data_dict[col_id] = val.quantize(
+                    decimal.Decimal(10) ** -dec_places,
+                    rounding=decimal.ROUND_HALF_UP
+                )
+            except Exception as e:
+                logging.warning(f"Failed to quantize column '{col_id}' with value {val} to {dec_places} decimals: {e}")
+
+
 def aggregate_standard_by_po_item_price(
     processed_data: List[Dict[str, Any]],
-    global_aggregation_map: Dict[Tuple[Any, Any, Optional[decimal.Decimal], Optional[str]], Dict[str, decimal.Decimal]]
+    global_aggregation_map: Dict[Tuple[Any, Any, Optional[decimal.Decimal], Optional[str]], Dict[str, decimal.Decimal]],
+    decimals_map: Optional[Dict[str, int]] = None
 ) -> Dict[Tuple[Any, Any, Optional[decimal.Decimal], Optional[str]], Dict[str, decimal.Decimal]]:
     """
     STANDARD Aggregation: Aggregates 'sqft' AND 'amount' values based on unique
@@ -20,6 +42,9 @@ def aggregate_standard_by_po_item_price(
     """
     prefix = "[aggregate_standard]"
     required_cols = ['col_po', 'col_item', 'col_unit_price', 'col_qty_sf', 'col_amount']
+
+    if decimals_map is None:
+        decimals_map = {"col_amount": 2, "col_qty_sf": 2, "col_net": 2, "col_cbm": 2}
 
     if not processed_data:
         logging.info(f"{prefix} No data rows found in this table. Global map unchanged.")
@@ -61,13 +86,28 @@ def aggregate_standard_by_po_item_price(
     aggregator = Aggregator(key_selector=standard_key_selector, reducers=reducers)
     aggregator.aggregate(processed_data, global_aggregation_map)
 
+    # Recalculate amount using sqft * price_dec, then quantize record
+    for (po, item, price_dec, desc), val_dict in global_aggregation_map.items():
+        if price_dec is not None:
+            try:
+                price = decimal.Decimal(str(price_dec)) if not isinstance(price_dec, decimal.Decimal) else price_dec
+                sqft = val_dict.get('col_qty_sf', decimal.Decimal(0))
+                if not isinstance(sqft, decimal.Decimal):
+                    sqft = decimal.Decimal(str(sqft))
+                val_dict['col_amount'] = sqft * price
+            except Exception as e:
+                logging.warning(f"{prefix} Failed to calculate amount for key ({po}, {item}, {price_dec}, {desc}): {e}")
+        quantize_record(val_dict, decimals_map)
+
     logging.info(f"{prefix} Finished processing rows.")
     return global_aggregation_map
 
 
+
 def aggregate_custom_by_po_item(
     processed_data: List[Dict[str, Any]],
-    global_custom_aggregation_map: Dict[Tuple[Any, Any, None, Optional[str]], Dict[str, decimal.Decimal]]
+    global_custom_aggregation_map: Dict[Tuple[Any, Any, None, Optional[str]], Dict[str, decimal.Decimal]],
+    decimals_map: Optional[Dict[str, int]] = None
 ) -> Dict[Tuple[Any, Any, None, Optional[str]], Dict[str, decimal.Decimal]]:
     """
     CUSTOM Aggregation: Aggregates 'sqft' and 'amount' values based on unique
@@ -115,11 +155,17 @@ def aggregate_custom_by_po_item(
     aggregator = Aggregator(key_selector=custom_key_selector, reducers=reducers)
     aggregator.aggregate(processed_data, global_custom_aggregation_map)
 
+    for val_dict in global_custom_aggregation_map.values():
+        quantize_record(val_dict, decimals_map)
+
     logging.info(f"{prefix} Finished processing rows.")
     return global_custom_aggregation_map
 
 
-def calculate_leather_summary(processed_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+def calculate_leather_summary(
+    processed_data: List[Dict[str, Any]],
+    decimals_map: Optional[Dict[str, int]] = None
+) -> Dict[str, Any]:
     """
     Calculates the leather summary (PCS, SQFT, Net, Gross, Pallet Count) per leather type.
     Iterates through rows to sum values for each leather type found in 'description' or 'desc'.
@@ -132,6 +178,8 @@ def calculate_leather_summary(processed_data: List[Dict[str, Any]]) -> Dict[str,
     }
 
     if not processed_data:
+        for l_data in summary.values():
+            quantize_record(l_data, decimals_map)
         return summary
 
     def leather_type_key_selector(row):
@@ -149,10 +197,17 @@ def calculate_leather_summary(processed_data: List[Dict[str, Any]]) -> Dict[str,
 
     aggregator = Aggregator(key_selector=leather_type_key_selector, reducers=reducers)
     aggregator.aggregate(processed_data, summary)
+
+    for l_data in summary.values():
+        quantize_record(l_data, decimals_map)
+
     return summary
 
 
-def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def aggregate_per_po_with_pallets(
+    processed_data: List[Dict[str, Any]],
+    decimals_map: Optional[Dict[str, int]] = None
+) -> List[Dict[str, Any]]:
     """
     Aggregates data by PO, Item, Unit Price, and Description (same as STANDARD aggregation),
     summing pallet, pcs, sqft, amount, net, gross, cbm.
@@ -195,7 +250,7 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
     # Convert to list of dicts
     result = []
     for (po, item, price, desc), data in agg_map.items():
-        result.append({
+        row_dict = {
             'col_po': po,
             'col_item': item,
             'col_unit_price': str(price) if price is not None else "",
@@ -208,7 +263,9 @@ def aggregate_per_po_with_pallets(processed_data: List[Dict[str, Any]]) -> List[
             'col_gross': data.get('col_gross'),
             'col_cbm': data.get('col_cbm'),
             'col_dc': data.get('col_dc', ""),
-        })
+        }
+        quantize_record(row_dict, decimals_map)
+        result.append(row_dict)
 
     # Sort by PO, Item, and unit price for consistent output (natural/numeric order)
     def natural_sort_key(val):
@@ -235,7 +292,8 @@ def perform_DAF_compounding(
     data: Union[List[Dict[str, Any]], List[List[Dict[str, Any]]]],
     daf_chunk_size: int = 2,
     daf_intra_separator: str = "/",
-    daf_inter_separator: str = "\n"
+    daf_inter_separator: str = "\n",
+    decimals_map: Optional[Dict[str, int]] = None
 ) -> Optional[FinalDAFResultType]:
     """
     Performs DAF Compounding directly from processed table rows or a list of tables.
@@ -272,9 +330,13 @@ def perform_DAF_compounding(
     # Handle empty input consistently -> returns default BUFFALO split dict
     if not rows:
         logging.warning(f"{prefix} Input rows list is empty. Returning default empty DAF groups.")
+        r1 = default_group_result()
+        r2 = default_group_result()
+        quantize_record(r1, decimals_map)
+        quantize_record(r2, decimals_map)
         return [
-            default_group_result(), # Buffalo group
-            default_group_result()  # Non-Buffalo group
+            r1, # Buffalo group
+            r2  # Non-Buffalo group
         ]
 
     # --- Check if any description data exists ---
@@ -330,13 +392,24 @@ def perform_DAF_compounding(
             is_buffalo = desc_str and "BUFFALO" in desc_str.upper()
 
             # Use new col_ keys for sums
-            sqft_sum = row.get('col_qty_sf', decimal.Decimal(0))
-            amount_sum = row.get('col_amount', decimal.Decimal(0))
-            net_sum = row.get('col_net', decimal.Decimal(0))
+            sqft_raw = row.get('col_qty_sf', decimal.Decimal(0))
+            amount_raw = row.get('col_amount', decimal.Decimal(0))
+            net_raw = row.get('col_net', decimal.Decimal(0))
 
-            if not isinstance(sqft_sum, decimal.Decimal): sqft_sum = decimal.Decimal(0)
-            if not isinstance(amount_sum, decimal.Decimal): amount_sum = decimal.Decimal(0)
-            if not isinstance(net_sum, decimal.Decimal): net_sum = decimal.Decimal(0)
+            try:
+                sqft_sum = decimal.Decimal(str(sqft_raw)) if sqft_raw is not None else decimal.Decimal(0)
+            except (decimal.InvalidOperation, ValueError):
+                sqft_sum = decimal.Decimal(0)
+
+            try:
+                amount_sum = decimal.Decimal(str(amount_raw)) if amount_raw is not None else decimal.Decimal(0)
+            except (decimal.InvalidOperation, ValueError):
+                amount_sum = decimal.Decimal(0)
+
+            try:
+                net_sum = decimal.Decimal(str(net_raw)) if net_raw is not None else decimal.Decimal(0)
+            except (decimal.InvalidOperation, ValueError):
+                net_sum = decimal.Decimal(0)
 
             if is_buffalo:
                 buffalo_pos.add(po_str)
@@ -371,6 +444,7 @@ def perform_DAF_compounding(
             'col_net': buffalo_net,
             'col_dc': format_chunks(sorted_buffalo_dcs, daf_chunk_size, daf_intra_separator, daf_inter_separator)
         }
+        quantize_record(buffalo_result, decimals_map)
         # Format NON-BUFFALO Group ("2")
         sorted_non_buffalo_pos = sorted(list(non_buffalo_pos))
         sorted_non_buffalo_items = sorted(list(non_buffalo_items))
@@ -385,6 +459,7 @@ def perform_DAF_compounding(
             'col_net': non_buffalo_net,
             'col_dc': format_chunks(sorted_non_buffalo_dcs, daf_chunk_size, daf_intra_separator, daf_inter_separator)
         }
+        quantize_record(non_buffalo_result, decimals_map)
         # Construct Final Result LIST for BUFFALO Split Case
         final_buffalo_split_result: FinalDAFResultType = [
             buffalo_result,
@@ -412,13 +487,24 @@ def perform_DAF_compounding(
             dc_str = str(dc_val).strip() if dc_val is not None else ""
 
             # Use new col_ keys
-            sqft_sum = row.get('col_qty_sf', decimal.Decimal(0))
-            amount_sum = row.get('col_amount', decimal.Decimal(0))
-            net_sum = row.get('col_net', decimal.Decimal(0))
+            sqft_raw = row.get('col_qty_sf', decimal.Decimal(0))
+            amount_raw = row.get('col_amount', decimal.Decimal(0))
+            net_raw = row.get('col_net', decimal.Decimal(0))
 
-            if not isinstance(sqft_sum, decimal.Decimal): sqft_sum = decimal.Decimal(0)
-            if not isinstance(amount_sum, decimal.Decimal): amount_sum = decimal.Decimal(0)
-            if not isinstance(net_sum, decimal.Decimal): net_sum = decimal.Decimal(0)
+            try:
+                sqft_sum = decimal.Decimal(str(sqft_raw)) if sqft_raw is not None else decimal.Decimal(0)
+            except (decimal.InvalidOperation, ValueError):
+                sqft_sum = decimal.Decimal(0)
+
+            try:
+                amount_sum = decimal.Decimal(str(amount_raw)) if amount_raw is not None else decimal.Decimal(0)
+            except (decimal.InvalidOperation, ValueError):
+                amount_sum = decimal.Decimal(0)
+
+            try:
+                net_sum = decimal.Decimal(str(net_raw)) if net_raw is not None else decimal.Decimal(0)
+            except (decimal.InvalidOperation, ValueError):
+                net_sum = decimal.Decimal(0)
 
             if po_str not in po_data_aggregation:
                 po_data_aggregation[po_str] = {
@@ -497,6 +583,7 @@ def perform_DAF_compounding(
                 'col_net': chunk_net_total,
                 'col_dc': formatted_dc_chunk
             }
+            quantize_record(chunk_result, decimals_map)
             chunk_index_str = str(i + 1)
             final_po_count_split_result.append(chunk_result)
             logging.debug(f"{prefix} Created output chunk {chunk_index_str}: {len(conceptual_po_chunk)} POs contributed totals, SQFT={chunk_sqft_total}, Amount={chunk_amount_total}, Net={chunk_net_total}")

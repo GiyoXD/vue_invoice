@@ -189,7 +189,8 @@ def distribute_values(
         for idx, row in enumerate(processed_data):
              if processed_col_values[idx] is not None:
                   if col_name in row:
-                       row[f"{col_name}_raw"] = row[col_name]
+                       if f"{col_name}_raw" not in row or row.get(f"{col_name}_raw") is None:
+                            row[f"{col_name}_raw"] = row[col_name]
                   row[col_name] = processed_col_values[idx]
 
     logging.info(f"{prefix} Value distribution processing COMPLETED for all requested columns.")

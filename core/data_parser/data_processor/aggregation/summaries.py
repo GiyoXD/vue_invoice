@@ -1,9 +1,13 @@
 import decimal
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 from .reducers import decimal_sum_reducer, int_sum_reducer
+from .strategies import quantize_record
 
 
-def calculate_footer_totals(processed_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+def calculate_footer_totals(
+    processed_data: List[Dict[str, Any]],
+    decimals_map: Optional[Dict[str, int]] = None
+) -> Dict[str, Any]:
     """Calculates totals for footer fields based on processed data."""
     totals = {
         "col_qty_pcs": 0,
@@ -17,6 +21,7 @@ def calculate_footer_totals(processed_data: List[Dict[str, Any]]) -> Dict[str, A
     }
     
     if not processed_data:
+        quantize_record(totals, decimals_map)
         return totals
 
     totals['col_qty_pcs'] = int_sum_reducer([r.get('col_qty_pcs') for r in processed_data])
@@ -29,6 +34,8 @@ def calculate_footer_totals(processed_data: List[Dict[str, Any]]) -> Dict[str, A
     p_cnt = int_sum_reducer([r.get('col_pallet_count') for r in processed_data])
     totals['col_pallet_count'] = p_cnt
     totals['multiple'] = "S" if p_cnt != 1 else ""
+
+    quantize_record(totals, decimals_map)
 
     return totals
 

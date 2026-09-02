@@ -14,5 +14,5 @@ from .aggregation import (
     format_aggregation_as_list,
     perform_DAF_compounding,
 )
-from .footer import calculate_all_footers
+from .footer import calculate_all_footers, format_footer_payload
 

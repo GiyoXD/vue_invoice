@@ -439,6 +439,8 @@ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[
                 else:
                     processed_value = cell_value
                 row_dict[canonical_name] = processed_value
+                if canonical_name == 'col_cbm' and cell_value is not None:
+                    row_dict['col_cbm_raw'] = cell_value.strip() if isinstance(cell_value, str) else cell_value
             
             # Additional logic to skip completely empty rows (optional but good practice)
             if any(v is not None and (not isinstance(v, str) or v.strip() != "") for v in row_dict.values()):

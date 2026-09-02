@@ -19,6 +19,7 @@ from .footer import build_footer
 from .summary import build_summary
 
 from core.utils.snitch import snitch
+from core.invoice_generator.utils.formula_formatter import extract_decimal_places
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +70,25 @@ class ConfigBuilder:
     
     def _build_meta(self, analysis: TemplateAnalysisResult) -> Dict[str, Any]:
         """Build _meta section."""
+        decimals_map: Dict[str, int] = {}
+        try:
+            for sheet in analysis.sheets:
+                all_cols = []
+                for col in sheet.columns:
+                    all_cols.append(col)
+                    if getattr(col, "children", None):
+                        all_cols.extend(col.children)
+                
+                for col in all_cols:
+                    col_id = getattr(col, "id", None)
+                    col_fmt = getattr(col, "format", None)
+                    if col_id and col_fmt:
+                        extracted = extract_decimal_places(col_fmt)
+                        if extracted is not None:
+                            decimals_map[col_id] = extracted
+        except Exception as e:
+            self.logger.error(f"Failed to extract column decimals: {e}", exc_info=True)
+
         return {
             "config_version": "2.2_strict_mode",
             "customer": analysis.customer_code,
@@ -78,6 +98,7 @@ class ConfigBuilder:
             "source_template": analysis.file_path,
             "generator": "blueprint_generator",
             "has_static_sheets": analysis.has_static_sheets,
+            "decimals": decimals_map,
             "data_preparation_module_hint": self._build_data_prep_hints()
         }
     

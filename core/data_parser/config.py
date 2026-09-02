@@ -1,6 +1,11 @@
 import json
 import os
 import re
+import logging
+from typing import Dict, Any, Optional
+from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 # --- File Configuration ---
@@ -202,3 +207,104 @@ def load_and_update_mappings():
 
 # Immediately call the function to update the map when this module is imported
 load_and_update_mappings()
+
+
+def resolve_customer_decimals(input_filename: Optional[str]) -> Dict[str, int]:
+    """
+    Attempts to resolve customer blueprint from database using customer prefix
+    extracted from filename (e.g. 'JF' from 'JF26024.xlsx').
+
+    Extracts '_meta.decimals' if present, or extracts from 'styling_bundle' using
+    'extract_decimal_places' from core.invoice_generator.utils.formula_formatter.
+
+    Fallback default: {"col_amount": 2, "col_qty_sf": 2, "col_unit_price": 2}.
+    """
+    fallback: Dict[str, int] = {"col_amount": 2, "col_qty_sf": 2, "col_unit_price": 2}
+    if not input_filename:
+        logger.debug("No input_filename provided for decimal resolution. Using fallback defaults.")
+        return fallback
+
+    try:
+        stem = Path(input_filename).stem
+
+        # Check for variant locale suffixes
+        locale = "KH"
+        for suffix in ["_KH", "_VN"]:
+            if suffix in stem.upper():
+                locale = suffix.lstrip('_')
+                break
+
+        clean_stem = re.sub(r'(_KH|_VN)$', '', stem, flags=re.IGNORECASE)
+        match = re.match(r'^([a-zA-Z\-_]+)', clean_stem)
+        prefix = match.group(1).rstrip('-_') if match else None
+
+        if not prefix:
+            logger.debug(f"Could not extract customer prefix from filename '{input_filename}'. Using fallback decimals.")
+            return fallback
+
+        from core.database.db_manager import SessionLocal
+        from core.database.repositories import BlueprintRepository
+        from core.invoice_generator.utils.formula_formatter import extract_decimal_places
+
+        db = SessionLocal()
+        config_data = None
+        try:
+            repo = BlueprintRepository(db)
+            row = repo.get_blueprint(prefix, locale)
+            if not row and locale != "KH":
+                row = repo.get_blueprint(prefix, "KH")
+            if not row:
+                variants = repo.get_customer_variants(prefix)
+                if variants:
+                    row = variants[0]
+            if row and row.config_json:
+                config_data = row.config_json
+        finally:
+            db.close()
+
+        if not config_data:
+            logger.debug(f"No blueprint config found in database for customer prefix '{prefix}'. Using fallback decimals.")
+            return fallback
+
+        decimals_result = dict(fallback)
+
+        # 1. Check _meta.decimals
+        meta_decimals = config_data.get("_meta", {}).get("decimals")
+        if isinstance(meta_decimals, dict) and meta_decimals:
+            for k, v in meta_decimals.items():
+                if isinstance(v, int):
+                    decimals_result[k] = v
+                elif isinstance(v, (float, str)) and str(v).isdigit():
+                    decimals_result[k] = int(v)
+            logger.debug(f"Resolved customer decimals from _meta.decimals for '{prefix}': {decimals_result}")
+            return decimals_result
+
+        # 2. Check styling_bundle
+        styling_bundle = config_data.get("styling_bundle", {})
+        extracted_any = False
+        if isinstance(styling_bundle, dict):
+            for sheet_name, sheet_cfg in styling_bundle.items():
+                if sheet_name.startswith("_") or sheet_name == "defaults":
+                    continue
+                if isinstance(sheet_cfg, dict):
+                    columns = sheet_cfg.get("columns", {})
+                    if isinstance(columns, dict):
+                        for col_id, col_props in columns.items():
+                            if isinstance(col_props, dict):
+                                fmt = col_props.get("format")
+                                if fmt:
+                                    dec = extract_decimal_places(fmt)
+                                    if dec is not None:
+                                        decimals_result[col_id] = dec
+                                        extracted_any = True
+
+        if extracted_any:
+            logger.debug(f"Resolved customer decimals from styling_bundle for '{prefix}': {decimals_result}")
+        else:
+            logger.debug(f"No decimal formats found in styling_bundle for '{prefix}'. Using fallback defaults.")
+
+        return decimals_result
+
+    except Exception as e:
+        logger.warning(f"Error resolving customer decimals for '{input_filename}': {e}")
+        return fallback

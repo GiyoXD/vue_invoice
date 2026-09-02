@@ -250,22 +250,38 @@ def main(
             if isinstance(table_data, list):
                 merged_processed_data.extend(table_data)
 
+        # Resolve customer decimal rounding configuration
+        customer_decimals = cfg.resolve_customer_decimals(input_filename)
+
         # Calculate normal aggregate per PO with pallets (group by PO + price)
         # We calculate this FIRST so we can use its accurate pallet count for the footer
-        normal_aggregate_per_po = data_processor.aggregate_per_po_with_pallets(merged_processed_data)
+        normal_aggregate_per_po = data_processor.aggregate_per_po_with_pallets(
+            merged_processed_data,
+            decimals_map=customer_decimals
+        )
         logging.info(f"Normal Aggregate Per PO: {len(normal_aggregate_per_po)} unique PO+price combinations")
 
         # --- Run Standard & Custom Aggregations ---
-        data_processor.aggregate_standard_by_po_item_price(merged_processed_data, global_standard_aggregation_results)
-        data_processor.aggregate_custom_by_po_item(merged_processed_data, global_custom_aggregation_results)
+        data_processor.aggregate_standard_by_po_item_price(
+            merged_processed_data,
+            global_standard_aggregation_results,
+            decimals_map=customer_decimals
+        )
+        data_processor.aggregate_custom_by_po_item(
+            merged_processed_data,
+            global_custom_aggregation_results,
+            decimals_map=customer_decimals
+        )
 
         # --- DAF Compounding ---
         logging.info(f"Performing DAF Compounding (Mode: {aggregation_mode_used})")
+        formatted_std_data = data_processor.format_aggregation_as_list(global_standard_aggregation_results, mode=aggregation_mode_used)
         global_DAF_compounded_result = data_processor.perform_DAF_compounding(
-            processed_tables,
+            formatted_std_data,
             daf_chunk_size=cfg.DAF_CHUNK_SIZE,
             daf_intra_separator=cfg.DAF_INTRA_CHUNK_SEPARATOR,
             daf_inter_separator=cfg.DAF_INTER_CHUNK_SEPARATOR,
+            decimals_map=customer_decimals
         )
         monitor.log_process_item("DAF Compounding", status="success")
 
@@ -273,7 +289,8 @@ def main(
         footer_results = data_processor.calculate_all_footers(
             processed_tables=processed_tables,
             merged_processed_data=merged_processed_data,
-            normal_aggregate_per_po=normal_aggregate_per_po
+            normal_aggregate_per_po=normal_aggregate_per_po,
+            decimals_map=customer_decimals
         )
 
 
