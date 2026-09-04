@@ -25,6 +25,7 @@ def init_db():
     Base.metadata.create_all(bind=engine)
 from core.database.repositories import (
     BlueprintRepository,
+    InvoiceRepository,
     get_global_mapping_config,
     save_global_mapping_config,
 )
@@ -51,6 +52,7 @@ __all__ = [
     "SystemSetting",
     "init_db",
     "BlueprintRepository",
+    "InvoiceRepository",
     "get_global_mapping_config",
     "save_global_mapping_config",
 ]

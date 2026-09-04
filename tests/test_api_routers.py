@@ -296,3 +296,209 @@ def test_api_process_existing_and_open(client, db, tmp_path, monkeypatch, sample
     assert response.json()["status"] == "success"
     assert len(opened_paths) == 1
 
+
+def test_api_generate_repeated_price_adjustment_does_not_stack(client, tmp_path, monkeypatch):
+    from core.invoice_generator.resolvers import InvoiceAssetResolver
+    import api.routers.generate as generate_router
+
+    # 1. Create a mock JSON at tmp_path / "test_adj.json"
+    test_adj_path = tmp_path / "test_adj.json"
+    mock_json_data = {
+        "metadata": {
+            "customer": "TEST",
+            "invoice_no": "INV-001"
+        },
+        "multi_table": [
+            [
+                {
+                    "col_po": "PO-001",
+                    "col_item": "ITEM-001",
+                    "col_desc": "Sample Item",
+                    "col_unit_price": 10.0,
+                    "col_qty_sf": 10.0,
+                    "col_amount": 100.0,
+                }
+            ]
+        ],
+        "single_table": {
+            "standard": [
+                {
+                    "col_po": "PO-001",
+                    "col_item": "ITEM-001",
+                    "col_desc": "Sample Item",
+                    "col_unit_price": 10.0,
+                    "col_qty_sf": 10.0,
+                    "col_amount": 100.0,
+                }
+            ],
+            "custom": [
+                {
+                    "col_po": "PO-001",
+                    "col_item": "ITEM-001",
+                    "col_desc": "Sample Item",
+                    "col_qty_sf": 10.0,
+                    "col_amount": 100.0,
+                }
+            ]
+        },
+        "footer_data": {
+            "grand_total": {
+                "col_amount": "100.0",
+                "col_qty_sf": "10.0",
+            },
+            "table_totals": [
+                {
+                    "col_amount": "100.0",
+                    "col_qty_sf": "10.0",
+                }
+            ]
+        }
+    }
+    with open(test_adj_path, "w", encoding="utf-8") as f:
+        json.dump(mock_json_data, f, indent=4)
+
+    # 2. Mock InvoiceAssetResolver.resolve_all_variants
+    monkeypatch.setattr(
+        InvoiceAssetResolver,
+        "resolve_all_variants",
+        lambda self, *args, **kwargs: [{"suffix": "", "config_path": "mock", "template_path": "mock"}]
+    )
+
+    # 3. Mock orchestrator.generate_invoices and generate_invoice
+    monkeypatch.setattr(
+        generate_router.orchestrator,
+        "generate_invoice",
+        lambda *args, **kwargs: [("test.xlsx", b"mock_content")]
+    )
+    monkeypatch.setattr(
+        generate_router.orchestrator,
+        "generate_invoices",
+        lambda *args, **kwargs: [("test.xlsx", b"mock_content")],
+        raising=False
+    )
+
+    # 4. Call client.post("/api/generate") with price_adjustment=[["Discount", -20.0]]
+    payload = {
+        "identifier": "test_adj",
+        "json_path": str(test_adj_path),
+        "invoice_no": "INV-001",
+        "invoice_date": "2026-09-03",
+        "price_adjustment": [["Discount", -20.0]],
+    }
+    res1 = client.post("/api/generate", json=payload)
+    assert res1.status_code == 200
+
+    with open(test_adj_path, "r", encoding="utf-8") as f:
+        persisted1 = json.load(f)
+    assert persisted1["footer_data"]["grand_total"]["col_amount"] == "80.0"
+
+    # 5. Call client.post("/api/generate") AGAIN with the same price_adjustment=[["Discount", -20.0]]
+    res2 = client.post("/api/generate", json=payload)
+    assert res2.status_code == 200
+
+    with open(test_adj_path, "r", encoding="utf-8") as f:
+        persisted2 = json.load(f)
+    assert persisted2["footer_data"]["grand_total"]["col_amount"] == "80.0"
+
+    # 6. Call client.post("/api/generate") with price_adjustment=None (clearing discount)
+    payload_clear = {
+        "identifier": "test_adj",
+        "json_path": str(test_adj_path),
+        "invoice_no": "INV-001",
+        "invoice_date": "2026-09-03",
+        "price_adjustment": None,
+    }
+    res3 = client.post("/api/generate", json=payload_clear)
+    assert res3.status_code == 200
+
+    with open(test_adj_path, "r", encoding="utf-8") as f:
+        persisted3 = json.load(f)
+    assert float(persisted3["footer_data"]["grand_total"]["col_amount"]) == 100.0
+    assert persisted3["footer_data"]["grand_total"]["col_amount"] in ["100.0", "100.00"]
+
+
+def test_api_generate_with_structured_targets(client, tmp_path, monkeypatch):
+    from core.invoice_generator.resolvers import InvoiceAssetResolver
+    import api.routers.generate as generate_router
+
+    test_json_path = tmp_path / "test_structured.json"
+    mock_json_data = {
+        "metadata": {
+            "customer": "TEST",
+            "invoice_no": "INV-001"
+        },
+        "multi_table": [
+            [
+                {
+                    "col_po": "PO-001",
+                    "col_item": "ITEM-001",
+                    "col_desc": "Sample Item",
+                    "col_unit_price": 10.0,
+                    "col_qty_sf": 10.0,
+                    "col_amount": 100.0,
+                }
+            ]
+        ],
+        "single_table": {
+            "standard": [
+                {
+                    "col_po": "PO-001",
+                    "col_item": "ITEM-001",
+                    "col_desc": "Sample Item",
+                    "col_unit_price": 10.0,
+                    "col_qty_sf": 10.0,
+                    "col_amount": 100.0,
+                }
+            ]
+        },
+        "footer_data": {
+            "grand_total": {
+                "col_amount": "100.0",
+                "col_qty_sf": "10.0",
+            },
+            "table_totals": [
+                {
+                    "col_amount": "100.0",
+                    "col_qty_sf": "10.0",
+                }
+            ]
+        }
+    }
+    with open(test_json_path, "w", encoding="utf-8") as f:
+        json.dump(mock_json_data, f, indent=4)
+
+    monkeypatch.setattr(
+        InvoiceAssetResolver,
+        "resolve_all_variants",
+        lambda self, *args, **kwargs: [{"suffix": "", "config_path": "mock", "template_path": "mock"}]
+    )
+
+    generated_tasks = []
+    def mock_generate_invoice(*args, **kwargs):
+        generated_tasks.append((args, kwargs))
+        return [("test.xlsx", b"mock_content")]
+
+    monkeypatch.setattr(
+        generate_router.orchestrator,
+        "generate_invoice",
+        mock_generate_invoice
+    )
+    monkeypatch.setattr(
+        generate_router.orchestrator,
+        "generate_invoices",
+        mock_generate_invoice,
+        raising=False
+    )
+
+    payload = {
+        "identifier": "test_structured",
+        "json_path": str(test_json_path),
+        "invoice_no": "INV-001",
+        "invoice_date": "2026-09-03",
+        "targets": [{"loc": "Default", "mode": "Standard"}],
+    }
+    res = client.post("/api/generate", json=payload)
+    assert res.status_code == 200
+    assert len(generated_tasks) >= 1
+
+

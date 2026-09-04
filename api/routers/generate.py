@@ -4,15 +4,18 @@ import tempfile
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Union, Dict
 from pathlib import Path
 from core.system_config import sys_config
 from core.orchestrator import Orchestrator
 from core.invoice_generator.resolvers import InvoiceAssetResolver
+from core.invoice_generator.utils.aggregation_modifier import apply_aggregation_adjustment
+from core.data_parser.config import resolve_customer_decimals
 from core.data_parser.data_processor import (
     inject_net_weight_pricing, 
     aggregate_standard_by_po_item_price, 
     aggregate_custom_by_po_item,
+    aggregate_by_item_merge_po,
     format_aggregation_as_list,
     aggregate_per_po_with_pallets,
     perform_DAF_compounding,
@@ -23,6 +26,10 @@ from core.data_parser.data_processor import (
 router = APIRouter(prefix="/api", tags=["generate"])
 logger = logging.getLogger(__name__)
 orchestrator = Orchestrator()
+
+class TargetItem(BaseModel):
+    loc: str
+    mode: str
 
 class GenerateRequest(BaseModel):
     identifier: str
@@ -35,7 +42,8 @@ class GenerateRequest(BaseModel):
     generate_daf: bool = False
     generate_kh: bool = False
     generate_vn: bool = False
-    targets: Optional[List[str]] = None
+    generate_item_merged: bool = False
+    targets: Optional[List[Union[TargetItem, Dict[str, Any]]]] = None
     price_adjustment: Optional[List[List[Any]]] = None
     global_unit_price: Optional[float] = None  # For 'net' pricing mode (shipping lists)
     pricing_net_weight: bool = False
@@ -82,10 +90,42 @@ def generate_invoice(request: GenerateRequest):
         full_data["invoice_info"]["col_inv_ref"] = request.invoice_ref
 
         # Price adjustments
-        from core.invoice_generator.utils.aggregation_modifier import apply_aggregation_adjustment
         price_adj = request.price_adjustment
-        if price_adj:
-            full_data = apply_aggregation_adjustment(full_data, price_adj)
+        if request.global_unit_price is None:
+            if price_adj or full_data.get("_adjusted"):
+                raw_multi = full_data.get("multi_table", [])
+                merged_data = []
+                for t in raw_multi:
+                    if isinstance(t, list):
+                        merged_data.extend(t)
+
+                customer_decimals = resolve_customer_decimals(request.identifier)
+                std_map = {}
+                cust_map = {}
+                aggregate_standard_by_po_item_price(merged_data, std_map, decimals_map=customer_decimals)
+                aggregate_custom_by_po_item(merged_data, cust_map, decimals_map=customer_decimals)
+
+                single = full_data.get("single_table") or {}
+                single["standard"] = format_aggregation_as_list(std_map, mode='standard')
+                single["custom"] = format_aggregation_as_list(cust_map, mode='custom')
+                single["manifest_by_pallet_per_po"] = aggregate_per_po_with_pallets(merged_data, decimals_map=customer_decimals)
+                full_data["single_table"] = single
+
+                footer_res = calculate_all_footers(raw_multi, merged_data, single["manifest_by_pallet_per_po"], decimals_map=customer_decimals)
+                full_data["footer_data"] = format_footer_payload(footer_res)
+                full_data["_adjusted"] = False
+                full_data["price_adjustment"] = []
+
+                if price_adj:
+                    full_data = apply_aggregation_adjustment(full_data, price_adj)
+
+                single = full_data.get("single_table") or {}
+                if "custom" in single and single["custom"]:
+                    single["daf"] = perform_DAF_compounding(single["custom"], decimals_map=customer_decimals)
+                    item_merged_map = {}
+                    aggregate_by_item_merge_po(single["custom"], item_merged_map, decimals_map=customer_decimals)
+                    single["item_merged"] = format_aggregation_as_list(item_merged_map, mode='item_merged')
+                    full_data["single_table"] = single
 
         # Net Weight Pricing Mode: inject computed columns if global_unit_price is provided
         if request.global_unit_price is not None:
@@ -99,9 +139,6 @@ def generate_invoice(request: GenerateRequest):
             raw_multi = full_data.get("multi_table", [])
             full_data["multi_table"] = inject_net_weight_pricing(raw_multi, request.global_unit_price)
             
-            # ALSO inject into raw_data because the database export (history.py) relies on it
-            if "raw_data" in full_data:
-                full_data["raw_data"] = inject_net_weight_pricing(full_data.get("raw_data", []), request.global_unit_price)
             
             # Since pricing was added, we MUST recalculate all aggregations from scratch
             # to ensure mathematical accuracy across Custom, Standard, and DAF modes.
@@ -114,8 +151,6 @@ def generate_invoice(request: GenerateRequest):
             if not footer_data or "grand_total" not in footer_data:
                 return JSONResponse(status_code=422, content={"error": "Missing footer_data or grand_total in parsed data. Cannot process pricing."})
             
-            
-            from core.data_parser.config import resolve_customer_decimals
             customer_decimals = resolve_customer_decimals(request.identifier)
 
             std_map = {}
@@ -127,11 +162,16 @@ def generate_invoice(request: GenerateRequest):
             single["standard"] = format_aggregation_as_list(std_map, mode='standard')
             single["custom"] = format_aggregation_as_list(cust_map, mode='custom')
             
-            single["daf"] = perform_DAF_compounding(single["standard"], decimals_map=customer_decimals)
+            # Cascade item_merged from custom
+            item_merged_map = {}
+            aggregate_by_item_merge_po(single["custom"], item_merged_map, decimals_map=customer_decimals)
+            single["item_merged"] = format_aggregation_as_list(item_merged_map, mode='item_merged')
+            
+            single["daf"] = perform_DAF_compounding(single["custom"], decimals_map=customer_decimals)
             
             single["manifest_by_pallet_per_po"] = aggregate_per_po_with_pallets(merged_data, decimals_map=customer_decimals)
             full_data["single_table"] = single
-            
+
             footer_res = calculate_all_footers(
                 full_data.get("multi_table", []),
                 merged_data,
@@ -139,6 +179,18 @@ def generate_invoice(request: GenerateRequest):
                 decimals_map=customer_decimals
             )
             full_data["footer_data"] = format_footer_payload(footer_res)
+            full_data["_adjusted"] = False
+            full_data["price_adjustment"] = []
+
+            if price_adj:
+                full_data = apply_aggregation_adjustment(full_data, price_adj)
+                single = full_data.get("single_table") or {}
+                if "custom" in single and single["custom"]:
+                    single["daf"] = perform_DAF_compounding(single["custom"], decimals_map=customer_decimals)
+                    item_merged_map = {}
+                    aggregate_by_item_merge_po(single["custom"], item_merged_map, decimals_map=customer_decimals)
+                    single["item_merged"] = format_aggregation_as_list(item_merged_map, mode='item_merged')
+                    full_data["single_table"] = single
             
             logger.info(f"Net weight pricing: Recalculated all aggregations with unit_price={request.global_unit_price}")
         
@@ -182,7 +234,7 @@ def generate_invoice(request: GenerateRequest):
 
         loop_tasks = []
 
-        if request.targets:
+        if request.targets is not None:
             # Resolve custom list of (variant, task)
             resolver = InvoiceAssetResolver(
                 base_config_dir=sys_config.registry_dir,
@@ -192,16 +244,22 @@ def generate_invoice(request: GenerateRequest):
             variant_map = {v["suffix"]: v for v in all_variants}
 
             modes_map = {
-                "Standard": {"suffix": "", "daf_mode": False, "custom_mode": False, "name": "Standard Invoice"},
-                "Custom": {"suffix": "_Custom", "daf_mode": False, "custom_mode": True, "name": "Custom Invoice"},
-                "DAF": {"suffix": "_DAF", "daf_mode": True, "custom_mode": False, "name": "DAF Invoice"}
+                "Standard": {"suffix": "", "daf_mode": False, "custom_mode": False, "item_merged_mode": False, "name": "Standard Invoice"},
+                "Custom": {"suffix": "_Custom", "daf_mode": False, "custom_mode": True, "item_merged_mode": False, "name": "Custom Invoice"},
+                "DAF": {"suffix": "_DAF", "daf_mode": True, "custom_mode": False, "item_merged_mode": False, "name": "DAF Invoice"},
+                "Item_Merged": {"suffix": "_ItemMerged", "daf_mode": False, "custom_mode": False, "item_merged_mode": True, "name": "Item-Merged Invoice"}
             }
 
             for t in request.targets:
-                parts = t.split("_")
-                if len(parts) != 2:
+                if isinstance(t, TargetItem):
+                    loc, mode = t.loc, t.mode
+                elif isinstance(t, dict):
+                    loc, mode = t.get("loc"), t.get("mode")
+                else:
                     continue
-                loc, mode = parts
+
+                if not loc or not mode or mode not in modes_map:
+                    continue
 
                 variant_suffix = f"_{loc}" if loc != "Default" else ""
                 variant = variant_map.get(variant_suffix)
@@ -219,11 +277,13 @@ def generate_invoice(request: GenerateRequest):
             # Fallback to cartesian product
             mode_tasks = []
             if request.generate_standard:
-                mode_tasks.append({"suffix": "", "daf_mode": False, "custom_mode": False, "name": "Standard Invoice"})
+                mode_tasks.append({"suffix": "", "daf_mode": False, "custom_mode": False, "item_merged_mode": False, "name": "Standard Invoice"})
             if request.generate_custom:
-                mode_tasks.append({"suffix": "_Custom", "daf_mode": False, "custom_mode": True, "name": "Custom Invoice"})
+                mode_tasks.append({"suffix": "_Custom", "daf_mode": False, "custom_mode": True, "item_merged_mode": False, "name": "Custom Invoice"})
             if request.generate_daf:
-                mode_tasks.append({"suffix": "_DAF", "daf_mode": True, "custom_mode": False, "name": "DAF Invoice"})
+                mode_tasks.append({"suffix": "_DAF", "daf_mode": True, "custom_mode": False, "item_merged_mode": False, "name": "DAF Invoice"})
+            if request.generate_item_merged:
+                mode_tasks.append({"suffix": "_ItemMerged", "daf_mode": False, "custom_mode": False, "item_merged_mode": True, "name": "Item-Merged Invoice"})
 
             variant_tasks = []
             resolver = InvoiceAssetResolver(
@@ -264,6 +324,7 @@ def generate_invoice(request: GenerateRequest):
                     gen_options = GenerationOptions(
                         daf_mode=task["daf_mode"],
                         custom_mode=task["custom_mode"],
+                        item_merged_mode=task.get("item_merged_mode", False),
                         enable_auto_fit=request.auto_fit,
                         split_sheets=request.split_sheets,
                         return_bytes=True,
