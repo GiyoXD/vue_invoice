@@ -162,6 +162,71 @@ def aggregate_custom_by_po_item(
     return global_custom_aggregation_map
 
 
+def aggregate_by_item_merge_po(
+    processed_data: List[Dict[str, Any]],
+    global_item_aggregation_map: Dict[Tuple[Any], Dict[str, Any]],
+    decimals_map: Optional[Dict[str, int]] = None
+) -> Dict[Tuple[Any], Dict[str, Any]]:
+    """
+    ITEM_MERGED Aggregation: Aggregates values based on unique col_item,
+    merging unique POs into a 'col_po' string joined by ' / '.
+    Reducers:
+      - col_qty_sf, col_amount, col_net, col_cbm: decimal_sum_reducer
+      - col_qty_pcs, col_pallet_count: int_sum_reducer
+      - col_dc, col_desc: first_non_empty_reducer
+      - col_po: po_merge_reducer
+    Updates the global_item_aggregation_map in place and returns it.
+    """
+    prefix = "[aggregate_by_item_merge_po]"
+    if not processed_data:
+        logging.info(f"{prefix} No data rows found in this table. Global item aggregation map remains unchanged.")
+        return global_item_aggregation_map
+
+    # Key selector returns (item_key,)
+    def item_key_selector(row):
+        item_val = row.get('col_item')
+        item_key = str(item_val).strip() if isinstance(item_val, str) else item_val
+        item_key = item_key if item_key is not None else "<MISSING_ITEM>"
+        return (item_key,)
+
+    def po_merge_reducer(values: List[Any]) -> str:
+        unique_pos = set()
+        for val in values:
+            if val is None:
+                continue
+            val_str = str(val).strip()
+            if not val_str:
+                continue
+            for part in val_str.split(" / "):
+                p = part.strip()
+                if p:
+                    unique_pos.add(p)
+        return " / ".join(sorted(unique_pos)) if unique_pos else ""
+
+    reducers = {
+        'col_qty_sf': ('col_qty_sf', decimal_sum_reducer),
+        'col_amount': ('col_amount', decimal_sum_reducer),
+        'col_net': ('col_net', decimal_sum_reducer),
+        'col_cbm': ('col_cbm', decimal_sum_reducer),
+        'col_qty_pcs': ('col_qty_pcs', int_sum_reducer),
+        'col_pallet_count': ('col_pallet_count', int_sum_reducer),
+        'col_dc': ('col_dc', first_non_empty_reducer),
+        'col_desc': ('col_desc', first_non_empty_reducer),
+        'col_po': ('col_po', po_merge_reducer),
+    }
+
+    aggregator = Aggregator(key_selector=item_key_selector, reducers=reducers)
+    aggregator.aggregate(processed_data, global_item_aggregation_map)
+
+    for val_dict in global_item_aggregation_map.values():
+        if 'col_po' not in val_dict or val_dict['col_po'] is None:
+            val_dict['col_po'] = ""
+        quantize_record(val_dict, decimals_map)
+
+    logging.info(f"{prefix} Finished processing rows.")
+    return global_item_aggregation_map
+
+
 def calculate_leather_summary(
     processed_data: List[Dict[str, Any]],
     decimals_map: Optional[Dict[str, int]] = None
@@ -314,6 +379,7 @@ def perform_DAF_compounding(
                     rows.extend(table)
         else:
             rows = data
+    rows = [r for r in rows if isinstance(r, dict)]
 
     # Helper function for creating a default empty group result
     def default_group_result() -> DAFCompoundingResult:
@@ -384,8 +450,8 @@ def perform_DAF_compounding(
             desc_val = row.get('col_desc')
             dc_val = row.get('col_dc')
 
-            po_str = str(po_val).strip() if po_val is not None else "<MISSING_PO>"
-            item_str = str(item_val).strip() if item_val is not None else "<MISSING_ITEM>"
+            po_str = str(po_val).strip() if po_val is not None else ""
+            item_str = str(item_val).strip() if item_val is not None else ""
             desc_str = str(desc_val).strip() if desc_val is not None else ""
             dc_str = str(dc_val).strip() if dc_val is not None else ""
 
@@ -396,32 +462,41 @@ def perform_DAF_compounding(
             amount_raw = row.get('col_amount', decimal.Decimal(0))
             net_raw = row.get('col_net', decimal.Decimal(0))
 
-            try:
-                sqft_sum = decimal.Decimal(str(sqft_raw)) if sqft_raw is not None else decimal.Decimal(0)
-            except (decimal.InvalidOperation, ValueError):
-                sqft_sum = decimal.Decimal(0)
+            if isinstance(sqft_raw, decimal.Decimal):
+                sqft_sum = sqft_raw
+            else:
+                try:
+                    sqft_sum = decimal.Decimal(str(sqft_raw)) if sqft_raw is not None else decimal.Decimal(0)
+                except (decimal.InvalidOperation, ValueError):
+                    sqft_sum = decimal.Decimal(0)
 
-            try:
-                amount_sum = decimal.Decimal(str(amount_raw)) if amount_raw is not None else decimal.Decimal(0)
-            except (decimal.InvalidOperation, ValueError):
-                amount_sum = decimal.Decimal(0)
+            if isinstance(amount_raw, decimal.Decimal):
+                amount_sum = amount_raw
+            else:
+                try:
+                    amount_sum = decimal.Decimal(str(amount_raw)) if amount_raw is not None else decimal.Decimal(0)
+                except (decimal.InvalidOperation, ValueError):
+                    amount_sum = decimal.Decimal(0)
 
-            try:
-                net_sum = decimal.Decimal(str(net_raw)) if net_raw is not None else decimal.Decimal(0)
-            except (decimal.InvalidOperation, ValueError):
-                net_sum = decimal.Decimal(0)
+            if isinstance(net_raw, decimal.Decimal):
+                net_sum = net_raw
+            else:
+                try:
+                    net_sum = decimal.Decimal(str(net_raw)) if net_raw is not None else decimal.Decimal(0)
+                except (decimal.InvalidOperation, ValueError):
+                    net_sum = decimal.Decimal(0)
 
             if is_buffalo:
-                buffalo_pos.add(po_str)
-                buffalo_items.add(item_str)
-                buffalo_descriptions.add(desc_str)
+                if po_str and po_str != "<MISSING_PO>": buffalo_pos.add(po_str)
+                if item_str and item_str != "<MISSING_ITEM>": buffalo_items.add(item_str)
+                if desc_str: buffalo_descriptions.add(desc_str)
                 if dc_str: buffalo_dcs.add(dc_str)
                 buffalo_sqft += sqft_sum
                 buffalo_amount += amount_sum
                 buffalo_net += net_sum
             else:
-                non_buffalo_pos.add(po_str)
-                non_buffalo_items.add(item_str)
+                if po_str and po_str != "<MISSING_PO>": non_buffalo_pos.add(po_str)
+                if item_str and item_str != "<MISSING_ITEM>": non_buffalo_items.add(item_str)
                 if desc_str: non_buffalo_descriptions.add(desc_str)
                 if dc_str: non_buffalo_dcs.add(dc_str)
                 non_buffalo_sqft += sqft_sum
@@ -431,10 +506,10 @@ def perform_DAF_compounding(
         logging.debug(f"{prefix} Finished processing entries for BUFFALO split.")
 
         # Format BUFFALO Group ("1")
-        sorted_buffalo_pos = sorted(list(buffalo_pos))
-        sorted_buffalo_items = sorted(list(buffalo_items))
+        sorted_buffalo_pos = sorted([p for p in buffalo_pos if p and p != "<MISSING_PO>"])
+        sorted_buffalo_items = sorted([it for it in buffalo_items if it and it != "<MISSING_ITEM>"])
         sorted_buffalo_descriptions = sorted([d for d in buffalo_descriptions if d])
-        sorted_buffalo_dcs = sorted(list(buffalo_dcs))
+        sorted_buffalo_dcs = sorted([dc for dc in buffalo_dcs if dc])
         buffalo_result: DAFCompoundingResult = {
             'col_po': format_chunks(sorted_buffalo_pos, daf_chunk_size, daf_intra_separator, daf_inter_separator),
             'col_item': format_chunks(sorted_buffalo_items, daf_chunk_size, daf_intra_separator, daf_inter_separator),
@@ -446,10 +521,10 @@ def perform_DAF_compounding(
         }
         quantize_record(buffalo_result, decimals_map)
         # Format NON-BUFFALO Group ("2")
-        sorted_non_buffalo_pos = sorted(list(non_buffalo_pos))
-        sorted_non_buffalo_items = sorted(list(non_buffalo_items))
+        sorted_non_buffalo_pos = sorted([p for p in non_buffalo_pos if p and p != "<MISSING_PO>"])
+        sorted_non_buffalo_items = sorted([it for it in non_buffalo_items if it and it != "<MISSING_ITEM>"])
         sorted_non_buffalo_descriptions = sorted([d for d in non_buffalo_descriptions if d])
-        sorted_non_buffalo_dcs = sorted(list(non_buffalo_dcs))
+        sorted_non_buffalo_dcs = sorted([dc for dc in non_buffalo_dcs if dc])
         non_buffalo_result: DAFCompoundingResult = {
             'col_po': format_chunks(sorted_non_buffalo_pos, daf_chunk_size, daf_intra_separator, daf_inter_separator),
             'col_item': format_chunks(sorted_non_buffalo_items, daf_chunk_size, daf_intra_separator, daf_inter_separator),
@@ -482,8 +557,10 @@ def perform_DAF_compounding(
             item_val = row.get('col_item')
             dc_val = row.get('col_dc')
 
-            po_str = str(po_val).strip() if po_val is not None else "<MISSING_PO>"
-            item_str = str(item_val).strip() if item_val is not None else "<MISSING_ITEM>"
+            po_str = str(po_val).strip() if po_val is not None else ""
+            if not po_str:
+                po_str = "<MISSING_PO>"
+            item_str = str(item_val).strip() if item_val is not None else ""
             dc_str = str(dc_val).strip() if dc_val is not None else ""
 
             # Use new col_ keys
@@ -491,20 +568,29 @@ def perform_DAF_compounding(
             amount_raw = row.get('col_amount', decimal.Decimal(0))
             net_raw = row.get('col_net', decimal.Decimal(0))
 
-            try:
-                sqft_sum = decimal.Decimal(str(sqft_raw)) if sqft_raw is not None else decimal.Decimal(0)
-            except (decimal.InvalidOperation, ValueError):
-                sqft_sum = decimal.Decimal(0)
+            if isinstance(sqft_raw, decimal.Decimal):
+                sqft_sum = sqft_raw
+            else:
+                try:
+                    sqft_sum = decimal.Decimal(str(sqft_raw)) if sqft_raw is not None else decimal.Decimal(0)
+                except (decimal.InvalidOperation, ValueError):
+                    sqft_sum = decimal.Decimal(0)
 
-            try:
-                amount_sum = decimal.Decimal(str(amount_raw)) if amount_raw is not None else decimal.Decimal(0)
-            except (decimal.InvalidOperation, ValueError):
-                amount_sum = decimal.Decimal(0)
+            if isinstance(amount_raw, decimal.Decimal):
+                amount_sum = amount_raw
+            else:
+                try:
+                    amount_sum = decimal.Decimal(str(amount_raw)) if amount_raw is not None else decimal.Decimal(0)
+                except (decimal.InvalidOperation, ValueError):
+                    amount_sum = decimal.Decimal(0)
 
-            try:
-                net_sum = decimal.Decimal(str(net_raw)) if net_raw is not None else decimal.Decimal(0)
-            except (decimal.InvalidOperation, ValueError):
-                net_sum = decimal.Decimal(0)
+            if isinstance(net_raw, decimal.Decimal):
+                net_sum = net_raw
+            else:
+                try:
+                    net_sum = decimal.Decimal(str(net_raw)) if net_raw is not None else decimal.Decimal(0)
+                except (decimal.InvalidOperation, ValueError):
+                    net_sum = decimal.Decimal(0)
 
             if po_str not in po_data_aggregation:
                 po_data_aggregation[po_str] = {
@@ -517,7 +603,7 @@ def perform_DAF_compounding(
             po_data_aggregation[po_str]['sqft_total'] += sqft_sum # type: ignore
             po_data_aggregation[po_str]['amount_total'] += amount_sum # type: ignore
             po_data_aggregation[po_str]['net_total'] += net_sum # type: ignore
-            po_data_aggregation[po_str]['items'].add(item_str) # type: ignore
+            if item_str and item_str != "<MISSING_ITEM>": po_data_aggregation[po_str]['items'].add(item_str) # type: ignore
             if dc_str: po_data_aggregation[po_str]['dcs'].add(dc_str) # type: ignore
 
         if not po_data_aggregation:
@@ -569,9 +655,9 @@ def perform_DAF_compounding(
             sorted_chunk_dcs = sorted(list(chunk_dcs))
 
             # Step 4: Format the collected POs, Items, and DCs using desired format (size 2)
-            formatted_po_chunk = format_chunks(po_list_for_formatting, daf_chunk_size, daf_intra_separator, daf_inter_separator)
-            formatted_item_chunk = format_chunks(sorted_chunk_items, daf_chunk_size, daf_intra_separator, daf_inter_separator)
-            formatted_dc_chunk = format_chunks(sorted_chunk_dcs, daf_chunk_size, daf_intra_separator, daf_inter_separator)
+            formatted_po_chunk = format_chunks([p for p in po_list_for_formatting if p and p != "<MISSING_PO>"], daf_chunk_size, daf_intra_separator, daf_inter_separator)
+            formatted_item_chunk = format_chunks([it for it in sorted_chunk_items if it and it != "<MISSING_ITEM>"], daf_chunk_size, daf_intra_separator, daf_inter_separator)
+            formatted_dc_chunk = format_chunks([dc for dc in sorted_chunk_dcs if dc], daf_chunk_size, daf_intra_separator, daf_inter_separator)
 
             # Create the result dictionary for this chunk index
             chunk_result: DAFCompoundingResult = {

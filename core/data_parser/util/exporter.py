@@ -5,7 +5,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 from .serializer import Serializer
 from .. import data_processor
@@ -29,7 +29,8 @@ def export_invoice_data(
     global_custom_aggregation_results: Dict,
     normal_aggregate_per_po: List[Dict[str, Any]],
     global_DAF_compounded_result: Any,
-    warnings: List[str]
+    warnings: List[str],
+    global_item_merged_aggregation_results: Optional[Dict] = None
 ) -> Path:
     """
     Constructs the final JSON payload from the processed invoice data,
@@ -51,6 +52,7 @@ def export_invoice_data(
         normal_aggregate_per_po (List[Dict[str, Any]]): Aggregated manifest partitioned by PO & price with accurate pallet ranges.
         global_DAF_compounded_result (Any): Compounded DAF manifest groupings.
         warnings (List[str]): Run-time processing warnings.
+        global_item_merged_aggregation_results (Optional[Dict]): Aggregations grouped by Item & Description with merged POs.
 
     Returns:
         Path: The absolute path to the successfully written and verified JSON output file.
@@ -77,6 +79,7 @@ def export_invoice_data(
         "single_table": {
             "standard": data_processor.format_aggregation_as_list(global_standard_aggregation_results, mode='standard'),
             "custom": data_processor.format_aggregation_as_list(global_custom_aggregation_results, mode='custom'),
+            "item_merged": data_processor.format_aggregation_as_list(global_item_merged_aggregation_results or {}, mode='item_merged'),
             "manifest_by_pallet_per_po": normal_aggregate_per_po,
             "daf": global_DAF_compounded_result
         }

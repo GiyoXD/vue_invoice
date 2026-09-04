@@ -3,6 +3,7 @@ from .engine import Aggregator
 from .strategies import (
     aggregate_standard_by_po_item_price,
     aggregate_custom_by_po_item,
+    aggregate_by_item_merge_po,
     aggregate_per_po_with_pallets,
     calculate_leather_summary,
     perform_DAF_compounding,

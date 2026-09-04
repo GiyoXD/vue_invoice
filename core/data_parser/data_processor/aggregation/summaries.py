@@ -73,7 +73,25 @@ def format_aggregation_as_list(
                 row_dict['col_po'] = str(key_tuple[0]) if len(key_tuple) > 0 else ""
                 row_dict['col_item'] = str(key_tuple[1]) if len(key_tuple) > 1 else ""
 
+        elif mode == 'item_merged':
+            row_dict['col_item'] = str(key_tuple[0]) if len(key_tuple) > 0 and key_tuple[0] is not None else ""
+            row_dict['col_desc'] = str(values.get('col_desc') or "")
+
         row_dict.update(values)
+        if mode == 'item_merged':
+            # Ensure row_dict.update(values) does not overwrite col_item if key_tuple[0] is present
+            if len(key_tuple) > 0 and key_tuple[0] is not None:
+                row_dict['col_item'] = str(key_tuple[0])
+            if not row_dict.get('col_desc'):
+                row_dict['col_desc'] = str(values.get('col_desc') or "")
+            try:
+                amt = float(row_dict.get('col_amount', 0.0))
+                sf = float(row_dict.get('col_qty_sf', 0.0))
+                if sf > 0:
+                    row_dict['col_unit_price'] = str(round(amt / sf, 4))
+            except (ValueError, TypeError):
+                pass
+
         flattened_list.append(row_dict)
         
     return flattened_list

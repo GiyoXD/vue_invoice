@@ -102,6 +102,7 @@ def main(
         # Global definitions
         global_standard_aggregation_results: Dict[Tuple[Any, Any, Optional[decimal.Decimal], Optional[str]], Dict[str, decimal.Decimal]] = {}
         global_custom_aggregation_results: Dict[Tuple[Any, Any, Optional[str], None], Dict[str, decimal.Decimal]] = {}
+        global_item_merged_aggregation_results: Dict[Tuple[Any, Optional[str]], Dict[str, Any]] = {}
         global_DAF_compounded_result: Optional[FinalDAFResultType] = None
         aggregation_mode_used = "standard"
 
@@ -273,17 +274,25 @@ def main(
             decimals_map=customer_decimals
         )
 
-        # --- DAF Compounding ---
-        logging.info(f"Performing DAF Compounding (Mode: {aggregation_mode_used})")
-        formatted_std_data = data_processor.format_aggregation_as_list(global_standard_aggregation_results, mode=aggregation_mode_used)
+        # --- DAF & Item-Merged Compounding (Mode: custom) ---
+        logging.info(f"Performing DAF & Item-Merged Compounding (Mode: custom)")
+        formatted_custom_data = data_processor.format_aggregation_as_list(global_custom_aggregation_results, mode='custom')
         global_DAF_compounded_result = data_processor.perform_DAF_compounding(
-            formatted_std_data,
+            formatted_custom_data,
             daf_chunk_size=cfg.DAF_CHUNK_SIZE,
             daf_intra_separator=cfg.DAF_INTRA_CHUNK_SEPARATOR,
             daf_inter_separator=cfg.DAF_INTER_CHUNK_SEPARATOR,
             decimals_map=customer_decimals
         )
         monitor.log_process_item("DAF Compounding", status="success")
+
+        global_item_merged_aggregation_results = {}
+        data_processor.aggregate_by_item_merge_po(
+            formatted_custom_data,
+            global_item_merged_aggregation_results,
+            decimals_map=customer_decimals
+        )
+        monitor.log_process_item("Item Merged Compounding", status="success")
 
         # --- Calculate Footer & Add-on Data ---
         footer_results = data_processor.calculate_all_footers(
@@ -309,6 +318,7 @@ def main(
             weight_summary_addon=footer_results["weight_summary_addon"],
             global_standard_aggregation_results=global_standard_aggregation_results,
             global_custom_aggregation_results=global_custom_aggregation_results,
+            global_item_merged_aggregation_results=global_item_merged_aggregation_results,
             normal_aggregate_per_po=normal_aggregate_per_po,
             global_DAF_compounded_result=global_DAF_compounded_result,
             warnings=monitor.warnings
