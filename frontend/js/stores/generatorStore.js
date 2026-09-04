@@ -152,7 +152,7 @@ export const useGeneratorStore = defineStore('generator', () => {
         if (!data) return null;
         
         const allItems = [
-            ...(data.multi_table || data.raw_data || []).flat(),
+            ...(data.multi_table || []).flat(),
             ...(data.database_export?.packing_list_items || [])
         ];
 
@@ -186,7 +186,7 @@ export const useGeneratorStore = defineStore('generator', () => {
         let pallets = summaryStats.value?.total_pallets || 0;
         
         const allItems = [
-            ...(validationData.value?.multi_table || validationData.value?.raw_data || []).flat(),
+            ...(validationData.value?.multi_table || []).flat(),
             ...(validationData.value?.database_export?.packing_list_items || [])
         ];
         
@@ -260,7 +260,7 @@ export const useGeneratorStore = defineStore('generator', () => {
         if (newData) {
             const file = String(identifier.value || '').toUpperCase();
             let isWide = file.includes('JF') || file.includes('JLFTLT');
-            const items = (newData.multi_table || newData.raw_data || []).flat();
+            const items = (newData.multi_table || []).flat();
             
             if (!isWide) {
                 for (const item of items) {
@@ -629,13 +629,27 @@ export const useGeneratorStore = defineStore('generator', () => {
                 await lookupRefFromSheets(true);
             }
 
+            const targetsPayload = selectedTargets.value.map(t => {
+                if (typeof t === 'object' && t !== null && t.loc && t.mode) {
+                    return t;
+                }
+                const str = String(t || '');
+                for (const m of ['Item_Merged', 'Standard', 'Custom', 'DAF']) {
+                    const suffix = `_${m}`;
+                    if (str.endsWith(suffix)) {
+                        return { loc: str.slice(0, -suffix.length), mode: m };
+                    }
+                }
+                return { loc: str, mode: 'Standard' };
+            });
+
             const basePayload = {
                 identifier: identifier.value,
                 json_path: jsonPath.value,
                 invoice_no: invoiceNo.value,
                 invoice_date: invoiceDate.value,
                 invoice_ref: invoiceRef.value,
-                targets: selectedTargets.value,
+                targets: targetsPayload,
                 generate_standard: includeStandard.value,
                 generate_custom: includeCustom.value,
                 generate_daf: includeDAF.value,

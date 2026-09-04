@@ -89,6 +89,10 @@ export default {
                                 <input type="checkbox" :value="v.suffix.replace('_', '') + '_DAF'" v-model="selectedTargets" accent-color="#3b82f6" class="rounded bg-slate-950 border-slate-800 w-4 h-4 cursor-pointer" />
                                 <span>DAF Mode</span>
                             </label>
+                            <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-300 uppercase tracking-wide">
+                                <input type="checkbox" :value="v.suffix.replace('_', '') + '_Item_Merged'" v-model="selectedTargets" accent-color="#3b82f6" class="rounded bg-slate-950 border-slate-800 w-4 h-4 cursor-pointer" />
+                                <span>Item-Merged</span>
+                            </label>
                         </div>
                     </div>
                 </div>
@@ -109,6 +113,10 @@ export default {
                         <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-300 uppercase tracking-wide">
                             <input type="checkbox" value="Default_DAF" v-model="selectedTargets" accent-color="#3b82f6" class="rounded bg-slate-950 border-slate-800 w-4 h-4 cursor-pointer" />
                             <span>DAF Mode</span>
+                        </label>
+                        <label class="flex items-center gap-2 cursor-pointer text-xs font-semibold text-slate-300 uppercase tracking-wide">
+                            <input type="checkbox" value="Default_Item_Merged" v-model="selectedTargets" accent-color="#3b82f6" class="rounded bg-slate-950 border-slate-800 w-4 h-4 cursor-pointer" />
+                            <span>Item-Merged</span>
                         </label>
                     </div>
                 </div>

@@ -54,16 +54,21 @@ export const useInspectorStore = defineStore('inspector', () => {
         let items = [];
 
         if (data.price_adjustment && Array.isArray(data.price_adjustment)) {
-            data.price_adjustment.forEach(adj => {
+            for (const adj of data.price_adjustment) {
+                if (!adj) continue;
+                const desc = Array.isArray(adj) ? adj[0] : (adj.col_desc ?? adj.description ?? 'Adjustment');
+                const rawAmt = Array.isArray(adj) ? adj[1] : (adj.amount ?? adj.col_amount ?? 0);
+                const numAmt = Number(rawAmt);
+                if (isNaN(numAmt)) continue;
                 items.push({
-                    col_desc: adj[0],
-                    col_amount: adj[1],
+                    col_desc: desc,
+                    col_amount: numAmt,
                     is_adjustment: true
                 });
-            });
+            }
         }
 
-        const mainItems = (data.multi_table || data.raw_data || []).flat();
+        const mainItems = (data.multi_table || []).flat();
         items = items.concat(mainItems);
 
         return items;
@@ -75,13 +80,13 @@ export const useInspectorStore = defineStore('inspector', () => {
 
         let adjustmentSum = 0;
         if (data?.price_adjustment && Array.isArray(data.price_adjustment)) {
-            data.price_adjustment.forEach(adj => {
-                const val = Number(adj[1]);
-                if (isNaN(val)) {
-                    throw new Error(`Invalid price_adjustment value: "${adj[1]}" is not a number`);
-                }
-                adjustmentSum += val;
-            });
+            for (const adj of data.price_adjustment) {
+                if (!adj) continue;
+                const rawAmt = Array.isArray(adj) ? adj[1] : (adj.amount ?? adj.col_amount ?? 0);
+                const numAmt = Number(rawAmt);
+                if (isNaN(numAmt)) continue;
+                adjustmentSum += numAmt;
+            }
         }
 
         const items = inspectorItems.value;
@@ -90,6 +95,17 @@ export const useInspectorStore = defineStore('inspector', () => {
             pallets = items.filter(it => !it.is_adjustment && extractDimsFromItem(it) !== null).length || items.filter(it => !it.is_adjustment).length;
         }
 
+        const rawItems = (data?.multi_table || []).flat();
+        const rawSum = rawItems.reduce((acc, it) => acc + (Number(it.col_amount) || 0), 0);
+        const gtAmount = Number(gt.col_amount || 0);
+
+        const isAlreadyAdjusted = Boolean(
+            data?._adjusted ||
+            gt?._adjusted ||
+            (data?.price_adjustment && data?._adjusted) ||
+            (adjustmentSum !== 0 && rawSum > 0 && Math.abs(gtAmount - (rawSum + adjustmentSum)) < 0.01)
+        );
+
         return {
             pcs: gt.col_qty_pcs || 0,
             sqft: gt.col_qty_sf || 0,
@@ -97,7 +113,7 @@ export const useInspectorStore = defineStore('inspector', () => {
             net: gt.col_net || 0,
             gross: gt.col_gross || 0,
             cbm: gt.col_cbm || 0,
-            amount: Number(gt.col_amount || 0) + adjustmentSum
+            amount: isAlreadyAdjusted ? gtAmount : gtAmount + adjustmentSum
         };
     });
 
@@ -181,14 +197,14 @@ export const useInspectorStore = defineStore('inspector', () => {
             const desc = String(newData.footer_data?.grand_total?.col_desc || '').toUpperCase();
             const file = String(newData.output_file || '').toUpperCase();
             let isWide = desc.includes('LEATHER') || file.includes('JF') || file.includes('JLFTLT');
-            
+
             if (!isWide) {
-                const items = (newData.multi_table || newData.raw_data || []).flat();
+                const items = (newData.multi_table || []).flat();
                 if (detectWideCargoFromItems(items)) {
                     isWide = true;
                 }
             }
-            
+
             isWideCargo.value = isWide;
         }
     });
