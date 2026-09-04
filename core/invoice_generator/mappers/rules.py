@@ -5,8 +5,9 @@ from .models import MappingContext
 
 def get_fallback_value(
     mapping_rule: Dict[str, Any],
-    DAF_mode: bool,
-    custom_mode: bool
+    DAF_mode: bool = False,
+    custom_mode: bool = False,
+    item_merged_mode: bool = False
 ) -> Optional[Any]:
     """Resolves fallback value based on execution flags."""
     if not isinstance(mapping_rule, dict):
@@ -14,7 +15,17 @@ def get_fallback_value(
 
     fallback_config = mapping_rule.get('fallback')
     if isinstance(fallback_config, dict):
-        if DAF_mode and 'daf' in fallback_config:
+        if item_merged_mode:
+            if 'item_merged' in fallback_config:
+                return fallback_config['item_merged']
+            elif 'custom' in fallback_config:
+                return fallback_config['custom']
+            elif 'standard' in fallback_config:
+                return fallback_config['standard']
+            elif 'default' in fallback_config:
+                return fallback_config['default']
+            return None
+        elif DAF_mode and 'daf' in fallback_config:
             return fallback_config['daf']
         elif custom_mode and 'custom' in fallback_config:
             return fallback_config['custom']
@@ -32,11 +43,12 @@ def apply_fallback(
     row_dict: Dict[str, Any],
     target_id: str,
     mapping_rule: Dict[str, Any],
-    DAF_mode: bool,
-    custom_mode: bool
+    DAF_mode: bool = False,
+    custom_mode: bool = False,
+    item_merged_mode: bool = False
 ):
     """Applies fallback value based on execution flags."""
-    val = get_fallback_value(mapping_rule, DAF_mode, custom_mode)
+    val = get_fallback_value(mapping_rule, DAF_mode, custom_mode, item_merged_mode)
     if val is not None:
         row_dict[target_id] = val
 
@@ -64,8 +76,9 @@ def parse_formula_def(formula_def: Union[str, Dict[str, Any]]) -> Optional[Dict[
 
 def resolve_mode_formula(
     rule: Dict[str, Any],
-    DAF_mode: bool,
-    custom_mode: bool
+    DAF_mode: bool = False,
+    custom_mode: bool = False,
+    item_merged_mode: bool = False
 ) -> Optional[Union[str, Dict[str, Any]]]:
     """Resolves formula for current mode."""
     formula_config = rule.get('formula')
@@ -73,11 +86,17 @@ def resolve_mode_formula(
         return None
 
     if isinstance(formula_config, dict):
-        if custom_mode and 'custom' in formula_config:
+        if item_merged_mode:
+            if 'item_merged' in formula_config:
+                return formula_config['item_merged']
+            elif 'custom' in formula_config:
+                return formula_config['custom']
+            return None
+        elif custom_mode and 'custom' in formula_config:
             return formula_config['custom']
         elif DAF_mode and 'daf' in formula_config:
             return formula_config['daf']
-        elif not custom_mode and not DAF_mode and 'standard' in formula_config:
+        elif not custom_mode and not DAF_mode and not item_merged_mode and 'standard' in formula_config:
             return formula_config['standard']
         return None
 
@@ -105,15 +124,23 @@ class RuleEngine:
             row_dict[target_id] = mapping_rule["static_value"]
             return
 
+        item_merged_mode = getattr(context, 'item_merged_mode', False)
+
         apply_fallback(
             row_dict=row_dict,
             target_id=target_id,
             mapping_rule=mapping_rule,
             DAF_mode=context.DAF_mode,
-            custom_mode=context.custom_mode
+            custom_mode=context.custom_mode,
+            item_merged_mode=item_merged_mode
         )
 
-        formula = resolve_mode_formula(mapping_rule, DAF_mode=context.DAF_mode, custom_mode=context.custom_mode)
+        formula = resolve_mode_formula(
+            mapping_rule,
+            DAF_mode=context.DAF_mode,
+            custom_mode=context.custom_mode,
+            item_merged_mode=item_merged_mode
+        )
         if formula is not None:
             parsed = parse_formula_def(formula)
             if parsed:

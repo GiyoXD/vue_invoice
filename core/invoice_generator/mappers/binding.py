@@ -45,6 +45,7 @@ class TableBinding:
         options = {
             'DAF_mode': context_config.get('DAF_mode', False),
             'custom_mode': context_config.get('custom_mode', False),
+            'item_merged_mode': context_config.get('item_merged_mode', False),
             'pricing_net_weight': context_config.get('pricing_net_weight', False),
             **context_config.get('options', {})
         }

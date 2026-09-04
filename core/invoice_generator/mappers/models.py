@@ -25,6 +25,7 @@ class MappingContext:
     sheet_layout: Optional[Any] = None
     DAF_mode: bool = False
     custom_mode: bool = False
+    item_merged_mode: bool = False
     static_payload: Dict[str, Any] = field(default_factory=dict)
     pricing_net_weight: bool = False
     footer_data: Dict[str, Any] = field(default_factory=dict)
@@ -53,6 +54,7 @@ class MappingContext:
             sheet_layout=sheet_layout,
             DAF_mode=context_config.get('DAF_mode', False),
             custom_mode=context_config.get('custom_mode', False),
+            item_merged_mode=context_config.get('item_merged_mode', False),
             static_payload=raw_static or {},
             pricing_net_weight=context_config.get('pricing_net_weight', False),
             footer_data=data_config.get('footer_data', {})

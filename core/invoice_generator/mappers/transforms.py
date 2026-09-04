@@ -74,10 +74,31 @@ def _build_row_dict(
     static_value_map: Dict[str, Any],
     DAF_mode: bool,
     custom_mode: bool,
-    pricing_net_weight: bool = False
+    pricing_net_weight: bool = False,
+    item_merged_mode: bool = False
 ) -> Dict[str, Any]:
     """Build a single row dictionary by applying mapping rules, formulas, fallbacks, and static values."""
     row_dict = {}
+
+    is_standard = not DAF_mode and not custom_mode and not item_merged_mode
+    price_adjustment_applied = False
+    if is_standard:
+        if isinstance(source_container, dict) and (source_container.get('_price_adjusted') or source_container.get('_adjusted')):
+            price_adjustment_applied = True
+        else:
+            qty_key = 'col_net' if pricing_net_weight else 'col_qty_sf'
+            src_amt = _get_value_from_source(source_container, 'col_amount', dynamic_mapping_rules.get('col_amount'), row_idx)
+            src_qty = _get_value_from_source(source_container, qty_key, dynamic_mapping_rules.get(qty_key), row_idx)
+            src_up = _get_value_from_source(source_container, 'col_unit_price', dynamic_mapping_rules.get('col_unit_price'), row_idx)
+            if src_amt is not None and src_qty is not None and src_up is not None:
+                try:
+                    a = float(src_amt)
+                    q = float(src_qty)
+                    u = float(src_up)
+                    if q > 0 and abs(a - (q * u)) > 0.005:
+                        price_adjustment_applied = True
+                except (ValueError, TypeError):
+                    pass
 
     for source_key, rule in dynamic_mapping_rules.items():
         if not isinstance(rule, dict):
@@ -93,7 +114,36 @@ def _build_row_dict(
         if val is not None:
             row_dict[target_id] = val
 
-        mode_formula = resolve_mode_formula(rule, DAF_mode, custom_mode)
+        # If mode is standard and price_adjustment was applied:
+        # Check if rule has standard formula on col_amount ({col_qty_sf} * {col_unit_price}).
+        # Check if source_container.get('col_amount') is already explicitly present.
+        # Preserve the exact scalar col_amount so =SUM() in Excel adds up to the exact adjusted sum.
+        if target_id == 'col_amount' and is_standard and price_adjustment_applied:
+            amount_in_source = _get_value_from_source(source_container, 'col_amount', rule, row_idx)
+            if amount_in_source is not None:
+                row_dict[target_id] = amount_in_source
+                continue
+
+        # If mode is standard and price_adjustment was applied:
+        # col_unit_price formula can be computed as {col_amount} / {col_qty_sf}
+        if target_id == 'col_unit_price' and is_standard and price_adjustment_applied:
+            qty_chk = _get_value_from_source(source_container, 'col_net' if pricing_net_weight else 'col_qty_sf', None, row_idx)
+            try:
+                has_qty = float(qty_chk) > 0 if qty_chk is not None else False
+            except (ValueError, TypeError):
+                has_qty = False
+            if has_qty:
+                up_formula = "{col_amount} / {col_net}" if pricing_net_weight else "{col_amount} / {col_qty_sf}"
+                parsed_formula = parse_formula_def(up_formula)
+                if parsed_formula:
+                    row_dict[target_id] = {
+                        'type': 'formula',
+                        'template': parsed_formula['template'],
+                        'inputs': parsed_formula.get('inputs', [])
+                    }
+                    continue
+
+        mode_formula = resolve_mode_formula(rule, DAF_mode, custom_mode, item_merged_mode)
         if mode_formula:
             if pricing_net_weight and re.search(r'\{\s*col_qty_sf\s*\}', mode_formula):
                 mode_formula = re.sub(r'\{\s*col_qty_sf\s*\}', '{col_net}', mode_formula)
@@ -110,10 +160,10 @@ def _build_row_dict(
 
         if row_dict.get(target_id) in [None, ""]:
             if source_key == 'col_desc':
-                po_val = _get_value_from_source(source_container, 'col_po', row_idx)
+                po_val = _get_value_from_source(source_container, 'col_po', None, row_idx)
                 if not po_val:
                     continue
-            apply_fallback(row_dict, target_id, rule, DAF_mode, custom_mode)
+            apply_fallback(row_dict, target_id, rule, DAF_mode, custom_mode, item_merged_mode)
 
     for col_id, static_val in static_value_map.items():
         row_dict[col_id] = static_val
@@ -133,9 +183,17 @@ def prepare_data_rows(
     DAF_mode: bool,
     custom_mode: bool,
     parent_column_ids: List[str],
-    pricing_net_weight: bool = False
+    pricing_net_weight: bool = False,
+    item_merged_mode: bool = False,
+    options: Optional[Dict[str, Any]] = None,
+    context: Optional[Any] = None
 ) -> Tuple[List[Dict[str, Any]], int]:
     """Prepare formatted data rows for table rendering."""
+    if options:
+        item_merged_mode = options.get('item_merged_mode', item_merged_mode)
+    elif context:
+        item_merged_mode = getattr(context, 'item_merged_mode', item_merged_mode)
+
     data_rows = []
 
     if isinstance(data_source, dict):
@@ -153,7 +211,8 @@ def prepare_data_rows(
                 static_value_map=static_value_map,
                 DAF_mode=DAF_mode,
                 custom_mode=custom_mode,
-                pricing_net_weight=pricing_net_weight
+                pricing_net_weight=pricing_net_weight,
+                item_merged_mode=item_merged_mode
             )
             data_rows.append(row_dict)
     elif isinstance(data_source, list):
@@ -167,12 +226,56 @@ def prepare_data_rows(
                     static_value_map=static_value_map,
                     DAF_mode=DAF_mode,
                     custom_mode=custom_mode,
-                    pricing_net_weight=pricing_net_weight
+                    pricing_net_weight=pricing_net_weight,
+                    item_merged_mode=item_merged_mode
                 )
                 data_rows.append(row_dict)
 
     num_data_rows = len(data_rows)
     return data_rows, num_data_rows
+
+
+def resolve_table_data(
+    data_source_type: str = "aggregation",
+    data_source: Any = None,
+    dynamic_mapping_rules: Optional[Dict[str, Any]] = None,
+    column_id_map: Optional[Dict[str, int]] = None,
+    idx_to_header_map: Optional[Dict[int, str]] = None,
+    desc_col_idx: int = -1,
+    num_static_labels: int = 0,
+    static_value_map: Optional[Dict[str, Any]] = None,
+    DAF_mode: bool = False,
+    custom_mode: bool = False,
+    parent_column_ids: Optional[List[str]] = None,
+    pricing_net_weight: bool = False,
+    item_merged_mode: bool = False,
+    options: Optional[Dict[str, Any]] = None,
+    context: Optional[Any] = None,
+    **kwargs
+) -> Tuple[List[Dict[str, Any]], int]:
+    """Resolves and prepares table data rows, respecting item_merged_mode and execution flags."""
+    if options:
+        item_merged_mode = options.get('item_merged_mode', item_merged_mode)
+    elif context:
+        item_merged_mode = getattr(context, 'item_merged_mode', item_merged_mode)
+
+    return prepare_data_rows(
+        data_source_type=data_source_type,
+        data_source=data_source,
+        dynamic_mapping_rules=dynamic_mapping_rules or {},
+        column_id_map=column_id_map or {},
+        idx_to_header_map=idx_to_header_map or {},
+        desc_col_idx=desc_col_idx,
+        num_static_labels=num_static_labels,
+        static_value_map=static_value_map or {},
+        DAF_mode=DAF_mode,
+        custom_mode=custom_mode,
+        parent_column_ids=parent_column_ids or [],
+        pricing_net_weight=pricing_net_weight,
+        item_merged_mode=item_merged_mode,
+        options=options,
+        context=context
+    )
 
 
 def resolve_static_placeholders(
@@ -291,6 +394,7 @@ def extract_summaries(
 __all__ = [
     "extract_table_data",
     "prepare_data_rows",
+    "resolve_table_data",
     "resolve_static_placeholders",
     "populate_static_content",
     "format_pallet_counts",

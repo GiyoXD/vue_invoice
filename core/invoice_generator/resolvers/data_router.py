@@ -27,6 +27,21 @@ def get_data_source_for_type(
             logger.debug(f"Resolver: Found multi_table data for '{data_source_type}'")
             return multi_table_group
     
+    # --- DAF mode routing ---
+    if data_source_type == "daf":
+        if "daf" in single_table_group:
+            logger.debug("Resolver: Found 'daf' in single_table")
+            return single_table_group["daf"]
+        elif "aggregation_DAF" in single_table_group:
+            logger.debug("Resolver: Found 'aggregation_DAF' in single_table")
+            return single_table_group["aggregation_DAF"]
+
+    # --- Item Merged mode routing ---
+    if data_source_type == "item_merged":
+        if "item_merged" in single_table_group:
+            logger.debug("Resolver: Found 'item_merged' in single_table")
+            return single_table_group["item_merged"]
+
     # --- Single-table: direct key lookup (mode already resolved by config) ---
     if data_source_type in single_table_group:
         logger.debug(f"Resolver: Found '{data_source_type}' in single_table")

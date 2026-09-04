@@ -67,6 +67,7 @@ def run_invoice_generation(req: InvoiceGenerationRequest):
     monitor_args = {
         "DAF": opts.daf_mode,
         "custom": opts.custom_mode,
+        "item_merged": opts.item_merged_mode,
         "input_data_file": str(input_data_path),
         "configdir": str(config_dir)
     }
@@ -143,6 +144,8 @@ class GeneratorContext:
     def daf_mode(self): return self.options.daf_mode
     @property
     def custom_mode(self): return self.options.custom_mode
+    @property
+    def item_merged_mode(self): return self.options.item_merged_mode
     @property
     def enable_auto_fit(self): return self.options.enable_auto_fit
     @property
@@ -341,6 +344,7 @@ def _process_sheets(ctx: GeneratorContext, session: GenerationSession):
             if proc_args:
                 if getattr(proc_args, 'DAF', False): mode = "daf"
                 elif getattr(proc_args, 'custom', False): mode = "custom"
+                elif getattr(proc_args, 'item_merged', False): mode = "item_merged"
             ds_type = ctx.config_loader.get_data_source_type(sheet_name, mode=mode)
             
             if not ds_type:
@@ -426,6 +430,7 @@ def main():
     parser.add_argument("--template", help="Explicit path to template file")
     parser.add_argument("--DAF", action="store_true", help="DAF mode")
     parser.add_argument("--custom", action="store_true", help="Custom mode")
+    parser.add_argument("--item-merged", action="store_true", help="Item Merged mode")
     parser.add_argument("--no-auto-fit", action="store_true", help="Disable auto-fit column dimensions")
     parser.add_argument("--split-sheets", action="store_true", help="Split output workbook into individual files per sheet")
     parser.add_argument("--debug", action="store_true", help="Debug logging")
@@ -461,6 +466,7 @@ def main():
         cli_options = GenerationOptions(
             daf_mode=args.DAF,
             custom_mode=args.custom,
+            item_merged_mode=args.item_merged,
             enable_auto_fit=not args.no_auto_fit,
             split_sheets=args.split_sheets
         )

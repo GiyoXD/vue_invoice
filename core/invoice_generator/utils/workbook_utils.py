@@ -253,12 +253,15 @@ def get_mode_suffix(ctx) -> str:
     Returns:
         ' DAF' if daf_mode is active,
         ' Custom' if custom_mode is active,
+        ' ItemMerged' if item_merged_mode is active,
         '' for standard mode.
     """
-    if ctx.daf_mode:
+    if getattr(ctx, 'daf_mode', False):
         return " DAF"
-    elif ctx.custom_mode:
+    elif getattr(ctx, 'custom_mode', False):
         return " Custom"
+    elif getattr(ctx, 'item_merged_mode', False):
+        return " ItemMerged"
     return ""
 
 

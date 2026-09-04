@@ -7,6 +7,7 @@ class GenerationOptions:
     """Encapsulates all generation mode flags and output options."""
     daf_mode: bool = False
     custom_mode: bool = False
+    item_merged_mode: bool = False
     enable_auto_fit: bool = True
     split_sheets: bool = False
     return_bytes: bool = False
@@ -21,6 +22,10 @@ class GenerationOptions:
     @property
     def custom(self) -> bool:
         return self.custom_mode
+
+    @property
+    def item_merged(self) -> bool:
+        return self.item_merged_mode
 
 @dataclass
 class InvoicePathConfig:

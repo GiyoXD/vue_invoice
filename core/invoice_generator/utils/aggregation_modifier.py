@@ -3,40 +3,101 @@ from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
 
+def _is_discount_row(row: Dict[str, Any]) -> bool:
+    """Check if a row is a discount row."""
+    if row.get("is_discount"):
+        return True
+    col_level = str(row.get("col_level", ""))
+    if "折扣" in col_level:
+        return True
+    try:
+        if float(row.get("col_amount", 0)) <= 0:
+            return True
+    except (ValueError, TypeError):
+        pass
+    return False
+
+
+def _is_ghost_row(row: Dict[str, Any]) -> bool:
+    """Check if a row is an empty Buffalo ghost row (col_amount == 0 and col_qty_sf == 0)."""
+    try:
+        amt = float(row.get("col_amount", 0))
+        qty = float(row.get("col_qty_sf", 0))
+        return amt == 0 and qty == 0
+    except (ValueError, TypeError):
+        return False
+
+
 def _apply_to_row_list(rows, adjustment_value: float) -> None:
     """
-    Helper: distribute adjustment_value across a list of row dicts
+    Helper: distribute adjustment_value pro-rata across eligible rows
     that contain 'col_amount', updating 'col_unit_price' when possible.
+    Discount rows and empty ghost rows are excluded.
     """
-    if not rows:
+    if not rows or adjustment_value == 0:
         return
 
-    per_row_adj = round(adjustment_value / len(rows), 3)
-    total_added = 0.0
+    # Filter out empty Buffalo ghost rows (col_amount == 0 and col_qty_sf == 0)
+    candidate_rows = [r for r in rows if isinstance(r, dict) and "col_amount" in r and not _is_ghost_row(r)]
+    if not candidate_rows:
+        return
 
-    for i, row in enumerate(rows):
-        if "col_amount" not in row:
+    # Filter eligible primary rows: rows that are NOT discount rows, and have float(row['col_amount']) > 0
+    eligible_rows = []
+    for r in candidate_rows:
+        if _is_discount_row(r):
             continue
         try:
-            current_val = float(row["col_amount"])
-
-            if i == len(rows) - 1:
-                # Last row takes remainder to avoid rounding drift
-                final_chunk = adjustment_value - total_added
-                row["col_amount"] = str(round(current_val + final_chunk, 3))
-            else:
-                row["col_amount"] = str(round(current_val + per_row_adj, 3))
-                total_added += per_row_adj
-
-            if "col_qty_sf" in row and "col_unit_price" in row:
-                try:
-                    qty = float(row["col_qty_sf"])
-                    if qty > 0:
-                        row["col_unit_price"] = str(round(float(row["col_amount"]) / qty, 4))
-                except Exception:
-                    pass
+            if float(r["col_amount"]) > 0:
+                eligible_rows.append(r)
         except (ValueError, TypeError):
             continue
+
+    # If no eligible rows found, fall back to all rows with float(row['col_amount']) != 0
+    if not eligible_rows:
+        for r in candidate_rows:
+            try:
+                if float(r["col_amount"]) != 0:
+                    eligible_rows.append(r)
+            except (ValueError, TypeError):
+                continue
+
+    if not eligible_rows:
+        return
+
+    # Calculate total eligible amount
+    sum_eligible = sum(float(r["col_amount"]) for r in eligible_rows)
+    if sum_eligible <= 0:
+        return
+
+    total_added = 0.0
+    n = len(eligible_rows)
+
+    for i, row in enumerate(eligible_rows):
+        current_val = float(row["col_amount"])
+        if i == n - 1:
+            # Last eligible row gets remainder to prevent rounding drift
+            share = round(adjustment_value - total_added, 3)
+        else:
+            share = round(adjustment_value * (current_val / sum_eligible), 3)
+            total_added += share
+
+        row["col_amount"] = str(round(current_val + share, 3))
+        row["_price_adjusted"] = True
+
+        qty = 0.0
+        if "col_qty_sf" in row:
+            try:
+                qty = float(row["col_qty_sf"])
+            except (ValueError, TypeError):
+                qty = 0.0
+        if qty == 0.0 and "col_net" in row:
+            try:
+                qty = float(row["col_net"])
+            except (ValueError, TypeError):
+                qty = 0.0
+        if qty > 0 and "col_unit_price" in row:
+            row["col_unit_price"] = str(round(float(row["col_amount"]) / qty, 4))
 
 
 def apply_aggregation_adjustment(json_data: Dict[str, Any], price_adjustments: List[List[Any]]) -> Dict[str, Any]:
@@ -75,6 +136,8 @@ def apply_aggregation_adjustment(json_data: Dict[str, Any], price_adjustments: L
     if total_adjustment == 0:
         return json_data
 
+    json_data["_adjusted"] = True
+
     # 1. Modify all tables in single_table (Aggregated views)
     if "single_table" in json_data:
         single_table = json_data["single_table"]
@@ -94,6 +157,7 @@ def apply_aggregation_adjustment(json_data: Dict[str, Any], price_adjustments: L
             try:
                 curr_tot = float(footer["grand_total"]["col_amount"])
                 footer["grand_total"]["col_amount"] = str(round(curr_tot + total_adjustment, 3))
+                footer["grand_total"]["_adjusted"] = True
             except (ValueError, TypeError):
                 pass
                 

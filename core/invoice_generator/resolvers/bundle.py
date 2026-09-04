@@ -38,6 +38,7 @@ class BundleResolver:
         if self.args:
             if getattr(self.args, 'DAF', False): mode = "daf"
             elif getattr(self.args, 'custom', False): mode = "custom"
+            elif getattr(self.args, 'item_merged', False): mode = "item_merged"
         
         # Resolve data source type — supports both string and per-mode dict
         raw_source = self._sheet_config.get('data_source', 'aggregation')

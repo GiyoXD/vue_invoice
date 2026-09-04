@@ -70,6 +70,13 @@ def test_get_mode_suffix_standard_mode():
     assert result == ""
 
 
+def test_get_mode_suffix_item_merged_mode():
+    ctx = SimpleNamespace(daf_mode=False, custom_mode=False, item_merged_mode=True)
+    result = get_mode_suffix(ctx)
+    assert result == " ItemMerged"
+
+
+
 # --- Tests for count_layout_columns (Mocking class methods) ---
 
 def test_count_layout_columns_with_children():

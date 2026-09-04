@@ -39,13 +39,15 @@ class TableDataMapper:
         pricing_net_weight: bool = False,
         footer_data: Optional[Dict[str, Any]] = None,
         context: Optional[MappingContext] = None,
-        binding: Optional[TableBinding] = None
+        binding: Optional[TableBinding] = None,
+        item_merged_mode: bool = False
     ):
         if binding is None:
             if context is not None:
                 options = {
                     'DAF_mode': context.DAF_mode,
                     'custom_mode': context.custom_mode,
+                    'item_merged_mode': getattr(context, 'item_merged_mode', False),
                     'pricing_net_weight': context.pricing_net_weight
                 }
                 binding = TableBinding(
@@ -61,6 +63,7 @@ class TableDataMapper:
                 options = {
                     'DAF_mode': DAF_mode,
                     'custom_mode': custom_mode,
+                    'item_merged_mode': item_merged_mode,
                     'pricing_net_weight': pricing_net_weight
                 }
                 binding = TableBinding(
@@ -81,6 +84,7 @@ class TableDataMapper:
             sheet_layout=binding.sheet_layout,
             DAF_mode=binding.options.get('DAF_mode', False),
             custom_mode=binding.options.get('custom_mode', False),
+            item_merged_mode=binding.options.get('item_merged_mode', False),
             static_payload=binding.static_payload,
             pricing_net_weight=binding.options.get('pricing_net_weight', False),
             footer_data=binding.footer_data
@@ -125,6 +129,7 @@ class TableDataMapper:
         DAF_mode = self.binding.options.get('DAF_mode', False)
         custom_mode = self.binding.options.get('custom_mode', False)
         pricing_net_weight = self.binding.options.get('pricing_net_weight', False)
+        item_merged_mode = self.binding.options.get('item_merged_mode', False)
 
         column_id_map = {}
         column_map = {}
@@ -149,7 +154,7 @@ class TableDataMapper:
 
         # 1. Resolve description fallback string
         desc_rule = parsed['dynamic_mapping_rules'].get('col_desc', {})
-        desc_fallback_str = get_fallback_value(desc_rule, DAF_mode, custom_mode) or ""
+        desc_fallback_str = get_fallback_value(desc_rule, DAF_mode, custom_mode, item_merged_mode) or ""
 
         # 2. Replace placeholders in static payload
         resolved_static_payload = resolve_static_placeholders(
@@ -173,7 +178,8 @@ class TableDataMapper:
             DAF_mode=DAF_mode,
             custom_mode=custom_mode,
             parent_column_ids=parent_column_ids,
-            pricing_net_weight=pricing_net_weight
+            pricing_net_weight=pricing_net_weight,
+            item_merged_mode=item_merged_mode
         )
 
         # 4. Populate resolved static payload into data rows
@@ -237,6 +243,7 @@ class TableDataMapper:
         args = context_config.get('args')
         DAF_mode = args.DAF if args and hasattr(args, 'DAF') else False
         custom_mode = args.custom if args and hasattr(args, 'custom') else False
+        item_merged_mode = args.item_merged if args and hasattr(args, 'item_merged') else False
         
         invoice_data = context_config.get('invoice_data') or {}
         metadata = invoice_data.get('metadata')
@@ -249,6 +256,7 @@ class TableDataMapper:
                 **context_config,
                 'DAF_mode': DAF_mode,
                 'custom_mode': custom_mode,
+                'item_merged_mode': item_merged_mode,
                 'pricing_net_weight': metadata.get('pricing_net_weight', False)
             },
             layout_config=layout_config

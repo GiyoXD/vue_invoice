@@ -4,6 +4,7 @@ from .rules import parse_mapping_rules, RuleEngine, apply_fallback, parse_formul
 from .transforms import (
     extract_table_data,
     prepare_data_rows,
+    resolve_table_data,
     resolve_static_placeholders,
     populate_static_content,
     format_pallet_counts,
@@ -20,6 +21,7 @@ __all__ = [
     "MappingContext",
     "TableBinding",
     "prepare_data_rows",
+    "resolve_table_data",
     "resolve_static_placeholders",
     "populate_static_content",
     "extract_summaries",
