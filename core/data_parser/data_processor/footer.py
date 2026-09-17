@@ -23,7 +23,7 @@ def calculate_all_footers(
     merged_processed_data = merged_processed_data or []
     normal_aggregate_per_po = normal_aggregate_per_po or []
 
-    from .aggregation import (
+    from .single_table import (
         calculate_leather_summary,
         calculate_footer_totals,
     )

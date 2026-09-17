@@ -438,8 +438,40 @@ class TestDataParserRefactor(unittest.TestCase):
         self.assertEqual(pallet_agg[0].get("col_dc"), "DC-NORTH")
 
         daf_res = data_processor.perform_DAF_compounding(data)
+        self.assertEqual(len(daf_res), 1)
+        self.assertEqual(daf_res[0].get("col_dc"), "DC-NORTH")
+        self.assertEqual(daf_res[0].get("material_type"), "normal")
+
+    def test_perform_daf_compounding_mixed_materials(self):
+        data = [
+            {
+                "col_po": "PO1",
+                "col_item": "ITEM1",
+                "col_desc": "BUFFALO LEATHER",
+                "col_qty_sf": Decimal("50.0"),
+                "col_amount": Decimal("500.0"),
+                "col_net": Decimal("100.0"),
+                "col_dc": "DC-NORTH"
+            },
+            {
+                "col_po": "PO2",
+                "col_item": "ITEM2",
+                "col_desc": "COW LEATHER",
+                "col_qty_sf": Decimal("30.0"),
+                "col_amount": Decimal("300.0"),
+                "col_net": Decimal("60.0"),
+                "col_dc": "DC-SOUTH"
+            }
+        ]
+        daf_res = data_processor.perform_DAF_compounding(data)
         self.assertEqual(len(daf_res), 2)
-        self.assertEqual(daf_res[1].get("col_dc"), "DC-NORTH")
+        self.assertEqual(daf_res[0]["material_type"], "buffalo")
+        self.assertEqual(daf_res[1]["material_type"], "normal")
+
+    def test_perform_daf_compounding_empty_rows(self):
+        daf_res = data_processor.perform_DAF_compounding([])
+        self.assertEqual(len(daf_res), 1)
+        self.assertEqual(daf_res[0]["col_qty_sf"], Decimal(0))
 
     def test_validate_col_level_discount(self):
         from unittest.mock import MagicMock
@@ -604,5 +636,239 @@ class TestDataParserRefactor(unittest.TestCase):
         self.assertTrue(any("[Table 1] Row 2: CBM (0.75) is on a sub-row (Pallet=0). Should be on main pallet row (Pallet=1)." in msg for msg in warning_calls))
 
 
+class TestAggregationEntryPoints(unittest.TestCase):
+
+    def setUp(self):
+        self.raw_data = [
+            {
+                "col_po": "PO1",
+                "col_item": "ITEM1",
+                "col_unit_price": Decimal("2.00"),
+                "col_qty_sf": Decimal("100"),
+                "col_amount": Decimal("200"),
+                "col_desc": "BUFFALO LEATHER",
+                "col_net": Decimal("50"),
+                "col_cbm": Decimal("1.2"),
+                "col_dc": "DC-NORTH"
+            },
+            {
+                "col_po": "PO1",
+                "col_item": "ITEM1",
+                "col_unit_price": Decimal("2.00"),
+                "col_qty_sf": Decimal("50"),
+                "col_amount": Decimal("100"),
+                "col_desc": "BUFFALO LEATHER",
+                "col_net": Decimal("25"),
+                "col_cbm": Decimal("0.6"),
+                "col_dc": "DC-NORTH"
+            }
+        ]
+
+    def test_execute_strategy_standard_and_custom(self):
+        # Standard: default list
+        res_std = data_processor.execute_strategy('standard', self.raw_data)
+        self.assertIsInstance(res_std, list)
+        self.assertEqual(len(res_std), 1)
+        self.assertEqual(res_std[0]['col_po'], "PO1")
+        self.assertEqual(res_std[0]['col_item'], "ITEM1")
+        self.assertEqual(res_std[0]['col_qty_sf'], Decimal("150.00"))
+        self.assertEqual(res_std[0]['col_amount'], Decimal("300.00"))
+
+        # Standard: return_raw=True
+        res_std_raw = data_processor.execute_strategy('standard', self.raw_data, return_raw=True)
+        self.assertIsInstance(res_std_raw, dict)
+        std_key = ("PO1", "ITEM1", Decimal("2.00"), "BUFFALO LEATHER")
+        self.assertIn(std_key, res_std_raw)
+        self.assertEqual(res_std_raw[std_key]['col_qty_sf'], Decimal("150.00"))
+        self.assertEqual(res_std_raw[std_key]['col_amount'], Decimal("300.00"))
+
+        # Custom: default list
+        res_cust = data_processor.execute_strategy('custom', self.raw_data)
+        self.assertIsInstance(res_cust, list)
+        self.assertEqual(len(res_cust), 1)
+        self.assertEqual(res_cust[0]['col_po'], "PO1")
+        self.assertEqual(res_cust[0]['col_item'], "ITEM1")
+        self.assertEqual(res_cust[0]['col_qty_sf'], Decimal("150.00"))
+        self.assertEqual(res_cust[0]['col_amount'], Decimal("300.00"))
+
+        # Custom: return_raw=True
+        res_cust_raw = data_processor.execute_strategy('custom', self.raw_data, return_raw=True)
+        self.assertIsInstance(res_cust_raw, dict)
+        cust_key = ("PO1", "ITEM1", None, "BUFFALO LEATHER")
+        self.assertIn(cust_key, res_cust_raw)
+        self.assertEqual(res_cust_raw[cust_key]['col_qty_sf'], Decimal("150.00"))
+        self.assertEqual(res_cust_raw[cust_key]['col_amount'], Decimal("300.00"))
+
+        # Item merged from raw data
+        res_merged_raw = data_processor.execute_strategy('item_merged', self.raw_data)
+        self.assertIsInstance(res_merged_raw, list)
+        self.assertEqual(len(res_merged_raw), 1)
+        self.assertEqual(res_merged_raw[0]['col_item'], "ITEM1")
+        self.assertEqual(res_merged_raw[0]['col_po'], "PO1")
+        self.assertEqual(res_merged_raw[0]['col_qty_sf'], Decimal("150.00"))
+
+        # Item merged from pre-aggregated custom list
+        res_merged_cust = data_processor.execute_strategy('item_merged', res_cust)
+        self.assertIsInstance(res_merged_cust, list)
+        self.assertEqual(len(res_merged_cust), 1)
+        self.assertEqual(res_merged_cust[0]['col_item'], "ITEM1")
+        self.assertEqual(res_merged_cust[0]['col_po'], "PO1")
+        self.assertEqual(res_merged_cust[0]['col_qty_sf'], Decimal("150.00"))
+
+    def test_execute_strategy_case_insensitivity_and_aliases(self):
+        # 'STANDARD' uppercase
+        res_std = data_processor.execute_strategy('STANDARD', self.raw_data)
+        self.assertIsInstance(res_std, list)
+        self.assertEqual(len(res_std), 1)
+
+        # 'custom' lowercase
+        res_cust = data_processor.execute_strategy('custom', self.raw_data)
+        self.assertIsInstance(res_cust, list)
+        self.assertEqual(len(res_cust), 1)
+
+        # 'pallets' and 'manifest_by_pallet_per_po'
+        res_pallets = data_processor.execute_strategy('pallets', self.raw_data)
+        res_manifest = data_processor.execute_strategy('manifest_by_pallet_per_po', self.raw_data)
+        self.assertIsInstance(res_pallets, list)
+        self.assertIsInstance(res_manifest, list)
+        self.assertEqual(res_pallets, res_manifest)
+
+        # 'daf' (and case insensitive 'DAF')
+        res_daf = data_processor.execute_strategy('daf', self.raw_data)
+        res_daf_upper = data_processor.execute_strategy('DAF', self.raw_data)
+        self.assertIsInstance(res_daf, list)
+        self.assertEqual(res_daf, res_daf_upper)
+
+        # 'leather_summary'
+        res_leather = data_processor.execute_strategy('leather_summary', self.raw_data)
+        self.assertIsInstance(res_leather, dict)
+        self.assertIn('BUFFALO', res_leather)
+        self.assertIn('COW', res_leather)
+        self.assertEqual(res_leather['BUFFALO']['col_qty_sf'], Decimal('150.00'))
+
+    def test_execute_strategy_invalid_name(self):
+        with self.assertRaises(ValueError) as ctx:
+            data_processor.execute_strategy('non_existent_strategy', self.raw_data)
+        self.assertIn("Unknown aggregation strategy", str(ctx.exception))
+
+    def test_run_aggregation_pipeline(self):
+        pipeline_data = [
+            {
+                "col_po": "PO1",
+                "col_item": "ITEM1",
+                "col_unit_price": Decimal("2.00"),
+                "col_qty_sf": Decimal("100"),
+                "col_amount": Decimal("200"),
+                "col_desc": "BUFFALO LEATHER",
+                "col_net": Decimal("50"),
+                "col_cbm": Decimal("1.2"),
+                "col_dc": "DC1"
+            },
+            {
+                "col_po": "PO2",
+                "col_item": "ITEM2",
+                "col_unit_price": Decimal("3.00"),
+                "col_qty_sf": Decimal("50"),
+                "col_amount": Decimal("150"),
+                "col_desc": "COW LEATHER",
+                "col_net": Decimal("25"),
+                "col_cbm": Decimal("0.8"),
+                "col_dc": "DC2"
+            }
+        ]
+        res = data_processor.run_aggregation_pipeline(pipeline_data)
+        expected_keys = {"standard", "custom", "manifest_by_pallet_per_po", "daf", "item_merged"}
+        self.assertEqual(set(res.keys()), expected_keys)
+        self.assertEqual(len(res["standard"]), 2)
+        self.assertEqual(len(res["custom"]), 2)
+        self.assertEqual(len(res["manifest_by_pallet_per_po"]), 2)
+        self.assertEqual(len(res["item_merged"]), 2)
+        self.assertGreaterEqual(len(res["daf"]), 1)
+
+        # Empty input: []
+        res_empty = data_processor.run_aggregation_pipeline([])
+        self.assertEqual(set(res_empty.keys()), expected_keys)
+        self.assertEqual(res_empty["standard"], [])
+        self.assertEqual(res_empty["custom"], [])
+        self.assertEqual(res_empty["manifest_by_pallet_per_po"], [])
+        self.assertEqual(res_empty["item_merged"], [])
+        self.assertEqual(len(res_empty["daf"]), 1)
+        self.assertEqual(res_empty["daf"][0]["material_type"], "normal")
+        self.assertEqual(res_empty["daf"][0]["col_qty_sf"], Decimal("0.00"))
+
+    def test_daf_explicit_arguments(self):
+        daf_data = [
+            {"col_po": "PO1", "col_item": "ITEM1", "col_unit_price": Decimal("2.00"), "col_qty_sf": Decimal("10"), "col_amount": Decimal("20"), "col_desc": "BUFFALO 1", "col_net": Decimal("5"), "col_cbm": Decimal("0.1"), "col_dc": "DC1"},
+            {"col_po": "PO2", "col_item": "ITEM2", "col_unit_price": Decimal("2.00"), "col_qty_sf": Decimal("10"), "col_amount": Decimal("20"), "col_desc": "BUFFALO 2", "col_net": Decimal("5"), "col_cbm": Decimal("0.1"), "col_dc": "DC2"},
+            {"col_po": "PO3", "col_item": "ITEM3", "col_unit_price": Decimal("2.00"), "col_qty_sf": Decimal("10"), "col_amount": Decimal("20"), "col_desc": "BUFFALO 3", "col_net": Decimal("5"), "col_cbm": Decimal("0.1"), "col_dc": "DC3"},
+        ]
+        decimals_map = {"col_qty_sf": 3, "col_amount": 3, "col_net": 3}
+
+        # 1. run_aggregation_pipeline with explicit arguments
+        res1 = data_processor.run_aggregation_pipeline(
+            daf_data,
+            decimals_map=decimals_map,
+            chunk_size=2,
+            item_separator=" - ",
+            line_separator=" | ",
+        )
+        self.assertIn(" - ", res1["daf"][0]["col_po"])
+        self.assertIn(" | ", res1["daf"][0]["col_po"])
+        self.assertEqual(res1["daf"][0]["col_po"], "PO1 - PO2 | PO3")
+        self.assertEqual(res1["daf"][0]["col_item"], "ITEM1 - ITEM2 | ITEM3")
+        self.assertEqual(res1["daf"][0]["col_qty_sf"], Decimal("30.000"))
+
+        # 2. execute_strategy 'daf' with explicit arguments
+        strat_res = data_processor.execute_strategy(
+            'daf',
+            daf_data,
+            decimals_map=decimals_map,
+            chunk_size=2,
+            item_separator=" ; ",
+            line_separator=" // ",
+        )
+        self.assertEqual(strat_res[0]["col_po"], "PO1 ; PO2 // PO3")
+        self.assertEqual(strat_res[0]["col_qty_sf"], Decimal("30.000"))
+
+        # 3. Direct perform_DAF_compounding with explicit arguments
+        direct_res = data_processor.perform_DAF_compounding(
+            daf_data,
+            chunk_size=2,
+            item_separator=" / ",
+            line_separator="\n",
+            decimals_map=decimals_map,
+        )
+        self.assertEqual(direct_res[0]["col_po"], "PO1 / PO2\nPO3")
+        self.assertEqual(direct_res[0]["col_qty_sf"], Decimal("30.000"))
+
+        # 4. Empty string separators
+        direct_empty = data_processor.perform_DAF_compounding(
+            daf_data,
+            chunk_size=2,
+            item_separator="",
+            line_separator="",
+        )
+        self.assertEqual(direct_empty[0]["col_po"], "PO1PO2PO3")
+        self.assertEqual(direct_empty[0]["col_item"], "ITEM1ITEM2ITEM3")
+
+        # 5. Invalid chunk_size fallback to 2
+        direct_zero = data_processor.perform_DAF_compounding(
+            daf_data,
+            chunk_size=0,
+            item_separator="/",
+            line_separator="\n",
+        )
+        self.assertEqual(direct_zero[0]["col_po"], "PO1/PO2\nPO3")
+
+        direct_neg = data_processor.perform_DAF_compounding(
+            daf_data,
+            chunk_size=-1,
+            item_separator="/",
+            line_separator="\n",
+        )
+        self.assertEqual(direct_neg[0]["col_po"], "PO1/PO2\nPO3")
+
+
 if __name__ == '__main__':
     unittest.main()
+

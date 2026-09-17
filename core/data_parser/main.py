@@ -20,7 +20,7 @@ from . import config as cfg
 from .excel_handler import ExcelHandler
 from . import sheet_parser
 from . import data_processor # Includes all processing functions
-from .data_processor.aggregation.strategies import FinalDAFResultType
+from .data_processor.single_table import FinalDAFResultType
 from .validation import DataValidationError, validate_data
 from .util.exporter import export_invoice_data
 
@@ -276,13 +276,13 @@ def main(
 
         # --- DAF & Item-Merged Compounding (Mode: custom) ---
         logging.info(f"Performing DAF & Item-Merged Compounding (Mode: custom)")
-        formatted_custom_data = data_processor.format_aggregation_as_list(global_custom_aggregation_results, mode='custom')
+        formatted_custom_data = data_processor.format_aggregation_as_list(global_custom_aggregation_results)
         global_DAF_compounded_result = data_processor.perform_DAF_compounding(
             formatted_custom_data,
-            daf_chunk_size=cfg.DAF_CHUNK_SIZE,
-            daf_intra_separator=cfg.DAF_INTRA_CHUNK_SEPARATOR,
-            daf_inter_separator=cfg.DAF_INTER_CHUNK_SEPARATOR,
-            decimals_map=customer_decimals
+            chunk_size=cfg.DAF_CHUNK_SIZE,
+            item_separator=cfg.DAF_INTRA_CHUNK_SEPARATOR,
+            line_separator=cfg.DAF_INTER_CHUNK_SEPARATOR,
+            decimals_map=customer_decimals,
         )
         monitor.log_process_item("DAF Compounding", status="success")
 
