@@ -96,7 +96,7 @@ def _matches_any_pattern(value: Any, patterns: Union[str, List[str]]) -> bool:
     for pattern in patterns_list:
         for val_str in value_strs:
             try:
-                if re.match(pattern, val_str):
+                if re.match(pattern, val_str, re.IGNORECASE):
                     # If any pattern matches, we return True immediately
                     return True
             except re.error as e:
@@ -139,6 +139,8 @@ def _score_cell(canonical_name: str, data_value: Any, row_num: int, col_num: int
         if patterns_to_check:
             if _matches_any_pattern(data_value, patterns_to_check):
                 score = 15
+            elif data_value is None or (isinstance(data_value, str) and not data_value.strip()):
+                score = 1
             else:
                 # Pattern was defined but data FAILED — hard reject.
                 logging.debug(
@@ -156,7 +158,7 @@ def _score_cell(canonical_name: str, data_value: Any, row_num: int, col_num: int
     if score == 0:
         if data_value is None or (isinstance(data_value, str) and not data_value.strip()):
             score = 1
-        else:
+        elif not used_strict_value_check:
             allowed_types = EXPECTED_HEADER_DATA_TYPES.get(canonical_name, ['string', 'numeric'])
             if 'string' in allowed_types:
                 score = 1
@@ -485,6 +487,8 @@ def find_all_header_rows(sheet, search_pattern, row_range, col_range, start_afte
         )
 
         for r_idx in range(start_row, max_row_to_search + 1):
+            if r_idx + 1 > sheet.max_row:
+                continue
             tick("find_all_header_rows", sub="rows_scanned")
             # Reuse the smart logic that checks for multiple mapped columns
             potential_mapping, score, header_text_matches = _process_row(sheet, r_idx)
