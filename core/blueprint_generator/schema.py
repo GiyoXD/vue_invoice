@@ -35,9 +35,12 @@ class BlueprintSchema:
     """Central registry of blueprint schema and definitions."""
 
     # 1. Sheet Classification Rules (Loaded dynamically)
-    AGGREGATION_SHEETS: Set[str] = set()
-    PROCESSED_TABLES_SHEETS: Set[str] = set()
-    ALLOWED_SEARCH_SHEETS: Set[str] = set()
+    _BASE_AGGREGATION_SHEETS: Set[str] = {"invoice", "inv", "commercial", "contract", "summary_packing_list", "summary packing list"}
+    _BASE_PROCESSED_TABLES_SHEETS: Set[str] = {"packing list", "packing", "pl", "delivery note", "detail_packing_list", "shipping list"}
+
+    AGGREGATION_SHEETS: Set[str] = set(_BASE_AGGREGATION_SHEETS)
+    PROCESSED_TABLES_SHEETS: Set[str] = set(_BASE_PROCESSED_TABLES_SHEETS)
+    ALLOWED_SEARCH_SHEETS: Set[str] = set(_BASE_AGGREGATION_SHEETS | _BASE_PROCESSED_TABLES_SHEETS)
 
     # Global column scan limit to prevent infinite loops on malformed sheets with ghost columns (e.g. 16384)
     MAX_SCAN_COLUMN: int = 50
@@ -79,6 +82,11 @@ class BlueprintSchema:
     # Pre-built keyword index: {keyword_lower: ColumnDefinition}
     # Built once by _rebuild_keyword_index(), called after _load_from_config()
     _KEYWORD_INDEX: Dict[str, 'ColumnDefinition'] = {}
+    _loaded_config_sig = None
+
+    @classmethod
+    def reset_cache(cls):
+        cls._loaded_config_sig = None
 
     @classmethod
     def get_column_by_keyword(cls, header_text: str) -> Optional[ColumnDefinition]:
@@ -121,7 +129,7 @@ class BlueprintSchema:
                 # First keyword wins (hardcoded takes priority since loaded first)
                 if keyword not in cls._KEYWORD_INDEX:
                     cls._KEYWORD_INDEX[keyword] = col_def
-        logger.info(f"[BlueprintSchema] Keyword index built: {len(cls._KEYWORD_INDEX)} entries.")
+        logger.debug(f"[BlueprintSchema] Keyword index built: {len(cls._KEYWORD_INDEX)} entries.")
 
     @classmethod
     def get_format_for_id(cls, col_id: str) -> str:
@@ -131,17 +139,35 @@ class BlueprintSchema:
         return "@"
 
     @classmethod
-    def load_dynamic_columns(cls, mapping_config: Dict) -> None:
+    def _get_config_fingerprint(cls, mapping_config: Dict) -> tuple:
+        if not isinstance(mapping_config, dict):
+            return ()
+        sh_map = mapping_config.get("shipping_header_map") or {}
+        ht_map = mapping_config.get("header_text_mappings") or {}
+        raw_map = ht_map.get("mappings", ht_map) if isinstance(ht_map, dict) else {}
+        agg = tuple(sorted(mapping_config.get("aggregation_sheets") or []))
+        proc = tuple(sorted(mapping_config.get("processed_tables_sheets") or []))
+        sh_items = tuple(
+            sorted((k, tuple(v.get("keywords") or [])) for k, v in sh_map.items() if isinstance(v, dict))
+        ) if isinstance(sh_map, dict) else ()
+        ht_count = len(raw_map) if isinstance(raw_map, dict) else 0
+        return (sh_items, ht_count, agg, proc)
+
+    @classmethod
+    def load_dynamic_columns(cls, mapping_config: Dict, force: bool = False) -> None:
         """
         Merge column definitions from the provided mapping_config dict into COLUMNS.
         This accepts a plain dict (caller's responsibility to get it from DB/file).
         """
+        if not mapping_config:
+            return
+        sig = cls._get_config_fingerprint(mapping_config)
+        if not force and cls._loaded_config_sig == sig and bool(cls._KEYWORD_INDEX):
+            return
+        cls._loaded_config_sig = sig
+
         # Reset COLUMNS to the base set
         cls.COLUMNS = copy.deepcopy(cls._BASE_COLUMNS)
-
-        # Fallback to empty dict if mapping_config is empty
-        if not mapping_config:
-            mapping_config = {}
 
         try:
             col_defs = mapping_config.get("shipping_header_map")
@@ -208,29 +234,8 @@ class BlueprintSchema:
                                     )
                                     loaded += 1
 
-            # Also check GlobalMapColumn directly from database to guarantee all custom columns are known
-            try:
-                from core.database.models.global_map import GlobalMapColumn
-                from core.database.session import SessionLocal
-                session = SessionLocal()
-                try:
-                    db_columns = session.query(GlobalMapColumn).all()
-                    for c in db_columns:
-                        if c.col_id and c.col_id not in cls.COLUMNS and not c.col_id.startswith("col_unknown"):
-                            cls.COLUMNS[c.col_id] = ColumnDefinition(
-                                id=c.col_id,
-                                keywords=[kw.keyword.lower() for kw in c.keywords] if hasattr(c, "keywords") and c.keywords else [],
-                                excel_format=c.excel_format or "@",
-                                width=15.0
-                            )
-                            loaded += 1
-                finally:
-                    session.close()
-            except Exception as db_err:
-                logger.debug(f"[BlueprintSchema] Direct DB GlobalMapColumn check skipped: {db_err}")
-
             if loaded:
-                logger.info(f"[BlueprintSchema] Loaded {loaded} new column definition(s) from mapping_config/DB.")
+                logger.debug(f"[BlueprintSchema] Loaded {loaded} new column definition(s) from mapping_config.")
 
         except Exception as e:
             logger.exception("[BlueprintSchema] Failed to load dynamic columns from mapping_config")
@@ -239,25 +244,25 @@ class BlueprintSchema:
         # Load Sheet Classification Rules dynamically
         aggregation_sheets = mapping_config.get("aggregation_sheets")
         if aggregation_sheets is not None:
-            cls.AGGREGATION_SHEETS = set(aggregation_sheets)
+            cls.AGGREGATION_SHEETS = set(aggregation_sheets) | cls._BASE_AGGREGATION_SHEETS
         else:
             try:
                 from core.database.db_manager import get_global_mapping_config
                 db_config = get_global_mapping_config()
-                cls.AGGREGATION_SHEETS = set(db_config.get("aggregation_sheets", []))
+                cls.AGGREGATION_SHEETS = set(db_config.get("aggregation_sheets", [])) | cls._BASE_AGGREGATION_SHEETS
             except Exception:
-                pass
+                cls.AGGREGATION_SHEETS = set(cls._BASE_AGGREGATION_SHEETS)
 
         processed_tables_sheets = mapping_config.get("processed_tables_sheets")
         if processed_tables_sheets is not None:
-            cls.PROCESSED_TABLES_SHEETS = set(processed_tables_sheets)
+            cls.PROCESSED_TABLES_SHEETS = set(processed_tables_sheets) | cls._BASE_PROCESSED_TABLES_SHEETS
         else:
             try:
                 from core.database.db_manager import get_global_mapping_config
                 db_config = get_global_mapping_config()
-                cls.PROCESSED_TABLES_SHEETS = set(db_config.get("processed_tables_sheets", []))
+                cls.PROCESSED_TABLES_SHEETS = set(db_config.get("processed_tables_sheets", [])) | cls._BASE_PROCESSED_TABLES_SHEETS
             except Exception:
-                pass
+                cls.PROCESSED_TABLES_SHEETS = set(cls._BASE_PROCESSED_TABLES_SHEETS)
 
         cls.ALLOWED_SEARCH_SHEETS = cls.AGGREGATION_SHEETS | cls.PROCESSED_TABLES_SHEETS
 

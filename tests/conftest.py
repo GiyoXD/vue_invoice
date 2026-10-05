@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 # 1. Setup test database engine and session before importing the app
 import core.database.db_manager as db_manager
 
-TEST_DB_PATH = Path("database/test_invoice_registry.db")
+TEST_DB_PATH = Path("storage/db/test_invoice_registry.db")
+TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
 # Force using the test database engine and session local
 test_engine = create_engine(
@@ -23,9 +24,19 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
 
-# Override the engine and SessionLocal in db_manager
+# Override the engine and SessionLocal in db_manager and session
 db_manager.engine = test_engine
 db_manager.SessionLocal = TestSessionLocal
+import core.database.session as db_session
+db_session.engine = test_engine
+db_session.SessionLocal = TestSessionLocal
+
+_db_mutated = False
+
+@event.listens_for(test_engine, "commit")
+def _on_test_engine_commit(conn):
+    global _db_mutated
+    _db_mutated = True
 
 from api.main import app
 from core.database.db_manager import init_db, get_db
@@ -42,7 +53,7 @@ def setup_test_db():
             pass
         
     # Copy the master database to the test database location to initialize with seeded data
-    master_db_path = Path("database/invoice_registry.db")
+    master_db_path = Path("storage/db/invoice_registry.db")
     if master_db_path.exists():
         shutil.copy2(master_db_path, TEST_DB_PATH)
     else:
@@ -63,38 +74,36 @@ def setup_test_db():
 
 @pytest.fixture(scope="function", autouse=True)
 def db():
-    """Provides a database session for testing and resets the database from the master file before execution."""
-    # Dispose engine to ensure no locked connections on Windows
-    test_engine.dispose()
-    
-    # Reset test db from master db file before running test
-    master_db_path = Path("database/invoice_registry.db")
-    if master_db_path.exists():
-        shutil.copy2(master_db_path, TEST_DB_PATH)
-    else:
-        init_db()
-        
-    # Invalidate mapping cache to ensure test isolation
-    mapping_cache.invalidate()
-    
-    session = TestSessionLocal()
-    try:
-        MappingService(session).reload_dynamic_state()
-        yield session
-    finally:
-        session.rollback()
-        session.close()
-        test_engine.dispose()
+    """Provides a database session for testing and resets the database if modified by test."""
+    master_db_path = Path("storage/db/invoice_registry.db")
+    if not TEST_DB_PATH.exists():
         if master_db_path.exists():
             shutil.copy2(master_db_path, TEST_DB_PATH)
         else:
             init_db()
-        reset_session = TestSessionLocal()
-        try:
-            MappingService(reset_session).reload_dynamic_state()
-        finally:
-            reset_session.close()
-        mapping_cache.invalidate()
+
+    global _db_mutated
+    _db_mutated = False
+    session = TestSessionLocal()
+    try:
+        yield session
+    finally:
+        session.rollback()
+        session.close()
+        if _db_mutated:
+            mapping_cache.invalidate()
+            test_engine.dispose()
+            if master_db_path.exists():
+                shutil.copy2(master_db_path, TEST_DB_PATH)
+            else:
+                init_db()
+            reset_session = TestSessionLocal()
+            try:
+                MappingService(reset_session).reload_dynamic_state(force=True)
+            finally:
+                reset_session.close()
+            mapping_cache.invalidate()
+            _db_mutated = False
 
 
 @pytest.fixture(scope="function")
@@ -123,7 +132,7 @@ def test_kh_config() -> dict:
             
     import sqlite3
     import json
-    conn = sqlite3.connect("database/invoice_registry.db")
+    conn = sqlite3.connect("storage/db/invoice_registry.db")
     cursor = conn.cursor()
     row = cursor.execute("SELECT config_json FROM blueprints WHERE customer_code = 'test' AND locale = 'KH'").fetchone()
     conn.close()
@@ -143,7 +152,7 @@ def test_kh_template() -> dict:
             
     import sqlite3
     import json
-    conn = sqlite3.connect("database/invoice_registry.db")
+    conn = sqlite3.connect("storage/db/invoice_registry.db")
     cursor = conn.cursor()
     row = cursor.execute("SELECT template_json FROM blueprints WHERE customer_code = 'test' AND locale = 'KH'").fetchone()
     conn.close()

@@ -265,7 +265,7 @@ class MappingService:
         # Reload mappings in-memory immediately so changes take effect
         self.reload_dynamic_state()
 
-    def reload_dynamic_state(self, data: dict = None) -> None:
+    def reload_dynamic_state(self, data: dict = None, force: bool = True) -> None:
         """Reload parsed alias indexing and schema headers dynamically without server restart."""
         try:
             if data is None:
@@ -279,6 +279,6 @@ class MappingService:
             _sp_module._ALIAS_REVERSE_LOOKUP = _build_alias_lookup()
             
             from core.blueprint_generator.schema import BlueprintSchema
-            BlueprintSchema.load_dynamic_columns(data)
+            BlueprintSchema.load_dynamic_columns(data, force=force)
         except Exception as e:
             logger.warning(f"Could not automatically reload mappings: {e}")

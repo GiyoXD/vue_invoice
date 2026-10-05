@@ -12,17 +12,17 @@ class InMemoryCache:
         self._lock = threading.Lock()
 
     def get(self) -> Optional[Any]:
-        """Retrieve copy of cached data if it exists and has not expired."""
+        """Retrieve cached data if it exists and has not expired."""
         with self._lock:
             now = time.time()
             if self._data is not None and (now - self._timestamp) < self.ttl:
-                return copy.deepcopy(self._data)
+                return self._data
             return None
 
     def set(self, data: Any) -> None:
-        """Store copy of data and record timestamp."""
+        """Store data and record timestamp."""
         with self._lock:
-            self._data = copy.deepcopy(data)
+            self._data = data
             self._timestamp = time.time()
 
     def invalidate(self) -> None:
