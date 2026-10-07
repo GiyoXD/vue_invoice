@@ -95,7 +95,7 @@ class LayoutBuilder:
         """
         Orchestrates all builders in the correct sequence.
         """
-        logger.info(f"Building layout for sheet '{self.sheet_name}'")
+        logger.debug(f"Building layout for sheet '{self.sheet_name}'")
         logger.debug(f"Reading from template, writing to output worksheet")
         
         # Calculate header boundaries for template state capture
@@ -104,7 +104,7 @@ class LayoutBuilder:
         if self.layout_state:
             # Use top-level layout state allocator if available
             table_header_row = self.layout_state.next_free_row
-            logger.info(f"Using layout_state.next_free_row for table_header_row: {table_header_row}")
+            logger.debug(f"Using layout_state.next_free_row for table_header_row: {table_header_row}")
         else:
             table_header_row = header_row
 
@@ -112,15 +112,15 @@ class LayoutBuilder:
         
         # 3. Template State Capture
         if self.template_state_builder:
-            logger.info(f"Using pre-captured template state (multi-table optimization)")
+            logger.debug(f"Using pre-captured template state (multi-table optimization)")
         elif self.template_json_config and self.sheet_name in self.template_json_config:
-            logger.info(f"Using JSON-based template state for sheet '{self.sheet_name}'")
+            logger.debug(f"Using JSON-based template state for sheet '{self.sheet_name}'")
             try:
                 sheet_layout_json = self.template_json_config[self.sheet_name]
                 self.template_state_builder = JsonTemplateStateBuilder(
                     sheet_layout_data=sheet_layout_json
                 )
-                logger.info(f"JSON Template loaded: Header ends {self.template_state_builder.header_end_row}, Footer starts {self.template_state_builder.template_footer_start_row}")
+                logger.debug(f"JSON Template loaded: Header ends {self.template_state_builder.header_end_row}, Footer starts {self.template_state_builder.template_footer_start_row}")
                 
             except Exception as e:
                 logger.critical(f"CRITICAL: JsonTemplateStateBuilder failed for '{self.sheet_name}': {e}", exc_info=True)
@@ -230,7 +230,7 @@ class LayoutBuilder:
         
         # 5b. NOW restore template header - AFTER table is built
         if not self.skip_template_header_restoration:
-            logger.info(f"Restoring template header AFTER table build (correct column alignment)")
+            logger.debug(f"Restoring template header AFTER table build (correct column alignment)")
             try:
                 actual_num_cols = self.grid.num_columns
                 
@@ -247,7 +247,7 @@ class LayoutBuilder:
                         layout_state=self.layout_state,
                         column_index_mapping=self.column_index_mapping
                     )
-                    logger.info(f"Template header restored successfully with {actual_num_cols} columns")
+                    logger.debug(f"Template header restored successfully with {actual_num_cols} columns")
             except Exception as e:
                 logger.error(f"Failed to restore template header after table build: {e}", exc_info=True)
                 return False
@@ -255,7 +255,7 @@ class LayoutBuilder:
             logger.debug(f"Skipping template header restoration")
         
         # 6b. Apply static column widths
-        logger.info("Applying static config widths (auto-fit disabled)")
+        logger.debug("Applying static config widths (auto-fit disabled)")
         try:
             col_id_to_idx = self.grid.column_mapping
             widths = {}
@@ -281,7 +281,7 @@ class LayoutBuilder:
         except Exception as e:
             logger.error(f"Failed to apply static column widths: {e}", exc_info=True)
  
-        logger.info(f"Layout built successfully for sheet '{self.sheet_name}'")
+        logger.debug(f"Layout built successfully for sheet '{self.sheet_name}'")
         return True
 
     def inject_images(self, stamp_cell: Optional[str] = None, signature_cell: Optional[str] = None):
@@ -312,7 +312,7 @@ class LayoutBuilder:
         try:
             img = Image(str(path))
             self.worksheet.add_image(img, cell_address)
-            logger.info(f"Injected image '{image_path}' at {cell_address}")
+            logger.debug(f"Injected image '{image_path}' at {cell_address}")
             return True
         except Exception as e:
             logger.warning(f"Failed to inject image '{image_path}' at {cell_address}: {e}")
@@ -347,7 +347,7 @@ class LayoutBuilder:
             size = XDRPositiveSize2D(img_w_emu, img_h_emu)
             img.anchor = OneCellAnchor(_from=marker, ext=size)
             self.worksheet.add_image(img)
-            logger.info(f"Injected image '{image_path}' with offset ({col_offset_px}px, {row_offset_px}px) at {cell_address}")
+            logger.debug(f"Injected image '{image_path}' with offset ({col_offset_px}px, {row_offset_px}px) at {cell_address}")
             return True
         except Exception as e:
             logger.warning(f"Failed to inject image with offset '{image_path}' at {cell_address}: {e}")

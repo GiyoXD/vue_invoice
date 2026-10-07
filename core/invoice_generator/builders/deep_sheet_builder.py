@@ -113,4 +113,4 @@ class DeepSheetBuilder:
             if label == "date" and isinstance(value, datetime):
                 cell.number_format = 'yyyy-mm-dd'
         
-        logger.info(f"Injected veryHidden '{SHEET_NAME}' with metadata: Inv={inv_no}, Ref={ref_no}, Date={inv_date}, Net={net_val}, Gross={gross_val}, Amount={amount_val}")
+        logger.debug(f"Injected veryHidden '{SHEET_NAME}' with metadata: Inv={inv_no}, Ref={ref_no}, Date={inv_date}, Net={net_val}, Gross={gross_val}, Amount={amount_val}")

@@ -141,7 +141,7 @@ class PrintAreaConfig:
 
         # Set the print area
         worksheet.print_area = print_area
-        logger.info(f"Set print area for '{worksheet.title}': {print_area}")
+        logger.debug(f"Set print area for '{worksheet.title}': {print_area}")
 
     def _find_data_boundaries(self, worksheet: Worksheet) -> Tuple[int, int, int, int]:
         """

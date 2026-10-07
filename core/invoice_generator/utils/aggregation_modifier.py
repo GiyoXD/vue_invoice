@@ -83,7 +83,6 @@ def _apply_to_row_list(rows, adjustment_value: float) -> None:
             total_added += share
 
         row["col_amount"] = str(round(current_val + share, 3))
-        row["_price_adjusted"] = True
 
         qty = 0.0
         if "col_qty_sf" in row:
@@ -136,8 +135,6 @@ def apply_aggregation_adjustment(json_data: Dict[str, Any], price_adjustments: L
     if total_adjustment == 0:
         return json_data
 
-    json_data["_adjusted"] = True
-
     # 1. Modify all tables in single_table (Aggregated views)
     if "single_table" in json_data:
         single_table = json_data["single_table"]
@@ -157,7 +154,6 @@ def apply_aggregation_adjustment(json_data: Dict[str, Any], price_adjustments: L
             try:
                 curr_tot = float(footer["grand_total"]["col_amount"])
                 footer["grand_total"]["col_amount"] = str(round(curr_tot + total_adjustment, 3))
-                footer["grand_total"]["_adjusted"] = True
             except (ValueError, TypeError):
                 pass
                 

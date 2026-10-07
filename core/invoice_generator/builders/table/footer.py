@@ -41,7 +41,7 @@ class TableFooterBuilder(TableSectionBuilder):
 
 
     def build(self) -> None:
-        logger.info(f"[FooterBuilder] build() called (declarative refactored engine)")
+        logger.debug(f"[FooterBuilder] build() called (declarative refactored engine)")
         if self.footer_config is None or not self.footer_config.rows:
             raise ValueError("[FooterBuilder] CANNOT BUILD FOOTER - Invalid config")
 
@@ -56,7 +56,7 @@ class TableFooterBuilder(TableSectionBuilder):
 
 
             self.grid.advance_row(rows_rendered)
-            logger.info(f"[FooterBuilder] COMPLETE - generated {rows_rendered} rows")
+            logger.debug(f"[FooterBuilder] COMPLETE - generated {rows_rendered} rows")
 
         except Exception as e:
             logger.error(f"[FooterBuilder] FATAL ERROR during footer generation: {e}")

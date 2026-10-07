@@ -225,7 +225,7 @@ class SheetProcessor(ABC):
             resolved_data = table_resolver.resolve()
             layout_config['resolved_data'] = resolved_data
             
-            logger.info(f"Successfully resolved table data for table '{table_key or 'default'}' using TableDataMapper")
+            logger.debug(f"Successfully resolved table data for table '{table_key or 'default'}' using TableDataMapper")
             return True
         except Exception as e:
             logger.error(f"Error resolving table data: {e}")
@@ -384,8 +384,8 @@ class SheetProcessor(ABC):
                 actual_num_cols = last_grid.num_columns if last_grid else None
                 column_index_mapping = getattr(last_grid, 'column_index_mapping', None) if last_grid else None
                 
-                logger.info(f"--- RESTORING TEMPLATE FOOTER ---")
-                logger.info(f"footer_start_row: {current_row}")
+                logger.debug(f"--- RESTORING TEMPLATE FOOTER ---")
+                logger.debug(f"footer_start_row: {current_row}")
                 
                 gen_mode = "standard"
                 if self.args:
@@ -400,7 +400,7 @@ class SheetProcessor(ABC):
                     layout_state=getattr(self, 'layout_state', None),
                     column_index_mapping=column_index_mapping
                 )
-                logger.info("Template footer restored successfully")
+                logger.debug("Template footer restored successfully")
             except Exception as e:
                 logger.error(f"Failed to restore template footer: {e}", exc_info=True)
         else:

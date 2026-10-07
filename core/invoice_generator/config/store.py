@@ -40,7 +40,7 @@ class ConfigStore:
         else:
             self.template_json_config = template_data
             
-        logger.info(f"ConfigStore initialized successfully. Version: {self.version}")
+        logger.debug(f"ConfigStore initialized successfully. Version: {self.version}")
         
     def get_sheets_to_process(self) -> List[str]:
         """Get list of sheets to process."""

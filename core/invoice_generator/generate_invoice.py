@@ -73,7 +73,7 @@ def run_invoice_generation(req: InvoiceGenerationRequest):
     }
 
     with GenerationSession(output_path, args=monitor_args, input_data=ctx.invoice_data) as session:
-        logger.info("=== Starting Invoice Generation (Orchestrated) ===")
+        logger.debug("=== Starting Invoice Generation (Orchestrated) ===")
         
         # 3. Execution Pipeline
         try:
@@ -104,7 +104,7 @@ def run_invoice_generation(req: InvoiceGenerationRequest):
                 if ctx.output_workbook: ctx.output_workbook.close()
                 return output_files
             else:
-                logger.info("Saving workbook to in-memory buffer")
+                logger.debug("Saving workbook to in-memory buffer")
                 buffer = io.BytesIO()
                 ctx.output_workbook.save(buffer)
                 if ctx.output_workbook: ctx.output_workbook.close()
@@ -222,7 +222,7 @@ def _prepare_workbooks(ctx: GeneratorContext):
     """Stage 2: Load Template and Build Output Workbook."""
     ctx.output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    logger.info(f"Initializing clean output workbook (JSON-only mode)")
+    logger.debug(f"Initializing clean output workbook (JSON-only mode)")
     
     # REQUIRED: Load JSON template config
     json_config = ctx.config_loader.get_template_json_config()
@@ -239,21 +239,21 @@ def _prepare_workbooks(ctx: GeneratorContext):
 
     if template_xlsx_bytes:
         try:
-            logger.info("Loading output workbook directly from template xlsx bytes")
+            logger.debug("Loading output workbook directly from template xlsx bytes")
             ctx.output_workbook = openpyxl.load_workbook(BytesIO(template_xlsx_bytes))
         except Exception as e:
             logger.warning(f"Failed to load output workbook from template bytes: {e}")
             ctx.output_workbook = None
     elif template_path and Path(template_path).exists():
         try:
-            logger.info(f"Loading output workbook directly from template path: {template_path}")
+            logger.debug(f"Loading output workbook directly from template path: {template_path}")
             ctx.output_workbook = openpyxl.load_workbook(template_path)
         except Exception as e:
             logger.warning(f"Failed to load output workbook from template path: {e}")
             ctx.output_workbook = None
 
     if ctx.output_workbook is None:
-        logger.info("Initializing clean output workbook (scratch fallback)")
+        logger.debug("Initializing clean output workbook (scratch fallback)")
         ctx.output_workbook = openpyxl.Workbook()
         default_ws = ctx.output_workbook.active
         if default_ws:
@@ -265,7 +265,7 @@ def _prepare_workbooks(ctx: GeneratorContext):
         if sheet_name in ctx.output_workbook.sheetnames:
             ctx.output_workbook.remove(ctx.output_workbook[sheet_name])
         ctx.output_workbook.create_sheet(sheet_name)
-        logger.info(f"Initialized fresh dynamic sheet '{sheet_name}' from JSON template")
+        logger.debug(f"Initialized fresh dynamic sheet '{sheet_name}' from JSON template")
 
     # Reorder sheets so dynamic JSON sheets come first, followed by static template sheets
     sheet_map = {ws.title: ws for ws in ctx.output_workbook.worksheets}
@@ -280,7 +280,7 @@ def _prepare_workbooks(ctx: GeneratorContext):
     ctx.output_workbook._sheets = reordered_sheets
     if ctx.output_workbook.worksheets:
         ctx.output_workbook.active = 0
-    logger.info(f"Reordered sheet tabs: {[ws.title for ws in ctx.output_workbook.worksheets]}")
+    logger.debug(f"Reordered sheet tabs: {[ws.title for ws in ctx.output_workbook.worksheets]}")
         
     # WARNING: template_workbook is aliased to output_workbook (same object).
     # No processor currently reads from template_workbook, so this is safe.

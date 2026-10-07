@@ -33,7 +33,7 @@ class MultiTableProcessor(SheetProcessor):
         """
         Executes the logic for processing a multi-table sheet using LayoutBuilder.
         """
-        logger.info(f"Processing sheet '{self.sheet_name}' as multi-table/packing list")
+        logger.debug(f"Processing sheet '{self.sheet_name}' as multi-table/packing list")
         
         # 1. Resolve Data
         all_tables_data, table_keys = self._resolve_all_tables_data()
@@ -44,7 +44,7 @@ class MultiTableProcessor(SheetProcessor):
         # self.is_global_unique_desc is already calculated by BaseProcessor
         self.allow_col_desc_merge = True # Authority flag to enable/disable the feature entirely
         
-        logger.info(f"MultiTableProcessor: Global Unique Description Flag: {self.is_global_unique_desc}")
+        logger.debug(f"MultiTableProcessor: Global Unique Description Flag: {self.is_global_unique_desc}")
 
         # 2. Capture Template State
         template_state_builder = self._capture_template_state()
@@ -67,7 +67,7 @@ class MultiTableProcessor(SheetProcessor):
             is_first_table = (i == 0)
             is_last_table = (i == len(table_keys) - 1)
             
-            logger.info(f"Processing table '{table_key}' ({i+1}/{len(table_keys)})")
+            logger.debug(f"Processing table '{table_key}' ({i+1}/{len(table_keys)})")
             
             layout_builder = self._build_table_layout(
                 layout_state=layout_state,
@@ -128,7 +128,7 @@ class MultiTableProcessor(SheetProcessor):
         # 7. Restore Template Footer
         self._restore_template_footer(template_state_builder, current_row, last_grid)
         
-        logger.info(f"Successfully processed {len(table_keys)} tables for sheet '{self.sheet_name}'.")
+        logger.debug(f"Successfully processed {len(table_keys)} tables for sheet '{self.sheet_name}'.")
         return True
 
     def _resolve_all_tables_data(self) -> Tuple[Optional[List], List]:
@@ -148,17 +148,17 @@ class MultiTableProcessor(SheetProcessor):
             return None, []
 
         table_keys = [str(i) for i in range(len(all_tables_data))]
-        logger.info(f"Found {len(table_keys)} tables to process")
+        logger.debug(f"Found {len(table_keys)} tables to process")
         return all_tables_data, table_keys
 
     def _capture_template_state(self):
         """Captures template state (header/footer) for reuse."""
-        logger.info(f"[MultiTableProcessor] Capturing template state for reuse")
+        logger.debug(f"[MultiTableProcessor] Capturing template state for reuse")
         
         # Check for JSON config - this is now REQUIRED
         json_config = self.config_loader.get_template_json_config()
         if json_config and self.sheet_name in json_config:
-            logger.info(f"Using JSON-based template state")
+            logger.debug(f"Using JSON-based template state")
             try:
                 sheet_layout_json = json_config[self.sheet_name]
                 template_state_builder = JsonTemplateStateBuilder(

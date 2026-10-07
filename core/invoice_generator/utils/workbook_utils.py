@@ -167,7 +167,7 @@ def inject_unknown_sheets(ctx):
     unknown_sheets = [s for s in source_wb.sheetnames if s not in configured_sheets]
 
     if not unknown_sheets:
-        logger.info("[Unknown Sheets] No unknown sheets to inject.")
+        logger.debug("[Unknown Sheets] No unknown sheets to inject.")
         source_wb.close()
         return
 
@@ -222,12 +222,12 @@ def count_layout_columns(config_loader, sheet_name: str) -> Optional[int]:
 
 def apply_print_settings(ctx):
     """Apply print area and page setup to all configured sheets."""
-    logger.info("Applying Print Area & Page Setup...")
+    logger.debug("Applying Print Area & Page Setup...")
     configured_sheets = set(ctx.config_loader.get_sheets_to_process())
 
     for sheet in ctx.output_workbook.sheetnames:
         if sheet not in configured_sheets:
-            logger.info(f"Skipping print setup for unconfigured sheet '{sheet}'")
+            logger.debug(f"Skipping print setup for unconfigured sheet '{sheet}'")
             continue
 
         try:

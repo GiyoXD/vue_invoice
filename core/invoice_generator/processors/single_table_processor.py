@@ -75,5 +75,5 @@ class SingleTableProcessor(SheetProcessor):
             last_grid=layout_builder.grid
         )
 
-        logger.info(f"Successfully filled table data/footer for sheet '{self.sheet_name}'")
+        logger.debug(f"Successfully filled table data/footer for sheet '{self.sheet_name}'")
         return True

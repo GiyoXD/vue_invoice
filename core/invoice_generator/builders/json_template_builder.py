@@ -7,6 +7,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.utils.cell import coordinate_from_string, column_index_from_string
 from core.blueprint_generator.internal.scanner.models import TemplateLayout, ZoneBoundaries
 from core.models.cell import UnitRow, UnitCell, TemplateMerge
+from core.invoice_generator.utils.formula_formatter import shift_formula_coordinates
 
 # Utils
 
@@ -66,7 +67,7 @@ class JsonTemplateStateBuilder:
         Parses the JSON layout data into TemplateLayout model and calculates boundaries.
         All row/cell/style data lives in self.layout_obj — no intermediate dicts.
         """
-        logger.info("[JsonTemplateStateBuilder] Parsing Layout Data")
+        logger.debug("[JsonTemplateStateBuilder] Parsing Layout Data")
         
         # Initialize TemplateLayout from dict
         self.layout_obj = TemplateLayout.from_dict(self.layout_data)
@@ -236,7 +237,10 @@ class JsonTemplateStateBuilder:
 
     def restore_rows(self, ws: Worksheet, rows: List[UnitRow],
                      start_row: int, mode: str = "standard",
-                     layout_state: Optional[Any] = None):
+                     layout_state: Optional[Any] = None,
+                     row_offset: int = 0,
+                     original_footer_start: int = 0,
+                     header_end_row: int = 0):
         """
         Unified restoration: writes a list of UnitRow model objects to a worksheet.
         
@@ -250,6 +254,9 @@ class JsonTemplateStateBuilder:
             start_row: The worksheet row to map relative_index=0 onto.
             mode: Generation mode for resolving mode-dependent values ('standard', 'daf', 'custom').
             layout_state: Optional layout state tracking occupied/merged cells.
+            row_offset: Number of rows shifted due to data expansion.
+            original_footer_start: Original footer starting row in template.
+            header_end_row: Ending row of header in template.
         """
         for row in rows:
             actual_row = start_row + row.relative_index
@@ -269,7 +276,15 @@ class JsonTemplateStateBuilder:
                 if cell.value is not None:
                     resolved = self._resolve_mode_value(cell.value, mode)
                     if resolved is not None:
-                        target.value = resolved
+                        if isinstance(resolved, str) and resolved.startswith('=') and row_offset != 0:
+                            target.value = shift_formula_coordinates(
+                                resolved,
+                                row_offset=row_offset,
+                                header_end_row=header_end_row,
+                                original_footer_start_row=original_footer_start
+                            )
+                        else:
+                            target.value = resolved
                 
                 # Style
                 if cell.style:
@@ -337,7 +352,7 @@ class JsonTemplateStateBuilder:
             layout_state: Optional layout state tracking occupied/merged cells.
             column_index_mapping: Optional template to physical column mapping index.
         """
-        logger.info(f"[JsonTemplateStateBuilder] Restoring Header to '{target_worksheet.title}' (mode={mode})")
+        logger.debug(f"[JsonTemplateStateBuilder] Restoring Header to '{target_worksheet.title}' (mode={mode})")
         
         rows = self.layout_obj.header_rows
         if column_index_mapping:
@@ -347,7 +362,7 @@ class JsonTemplateStateBuilder:
         
 
 
-    def restore_template_footer(self, target_worksheet: Worksheet, footer_start_row: int, actual_num_cols: int = None, mode: str = "standard", layout_state: Optional[Any] = None, column_index_mapping: Optional[Dict[int, Optional[int]]] = None):
+    def restore_footer(self, target_worksheet: Worksheet, footer_start_row: int, actual_num_cols: int = None, mode: str = "standard", layout_state: Optional[Any] = None, column_index_mapping: Optional[Dict[int, Optional[int]]] = None):
         """
         Restores the template footer content at a specific starting row.
         
@@ -359,7 +374,11 @@ class JsonTemplateStateBuilder:
             layout_state: Optional layout state tracking occupied/merged cells.
             column_index_mapping: Optional template to physical column mapping index.
         """
-        logger.info(f"[JsonTemplateStateBuilder] Restoring Footer to '{target_worksheet.title}' at row {footer_start_row} (mode={mode})")
+        if isinstance(actual_num_cols, str) and mode == "standard":
+            mode = actual_num_cols
+            actual_num_cols = None
+
+        logger.debug(f"[JsonTemplateStateBuilder] Restoring Footer to '{target_worksheet.title}' at row {footer_start_row} (mode={mode})")
         
         if not self.layout_obj.footer_rows:
             logger.warning(f"[JsonTemplateStateBuilder] Template footer rows is empty for '{target_worksheet.title}'.")
@@ -369,7 +388,22 @@ class JsonTemplateStateBuilder:
         if column_index_mapping:
             rows = translate_template_rows(rows, column_index_mapping)
         
-        self.restore_rows(target_worksheet, rows, start_row=footer_start_row, mode=mode, layout_state=layout_state)
+        row_offset = 0
+        orig_start = getattr(self.layout_obj, "original_footer_start_row", None)
+        header_end = self.header_end_row
+        if orig_start and orig_start > 0 and footer_start_row > 0:
+            row_offset = footer_start_row - orig_start
+
+        self.restore_rows(
+            target_worksheet,
+            rows,
+            start_row=footer_start_row,
+            mode=mode,
+            layout_state=layout_state,
+            row_offset=row_offset,
+            original_footer_start=orig_start or 0,
+            header_end_row=header_end if header_end and header_end > 0 else 0
+        )
 
         if rows:
             max_offset = max(
@@ -390,6 +424,9 @@ class JsonTemplateStateBuilder:
                             layout_state.record_restored_cell(r, c)
                             if cell.merge:
                                 layout_state.record_restored_cell(r + cell.merge.row_span - 1, cell.merge.max_col)
+
+    # Alias for backwards compatibility
+    restore_template_footer = restore_footer
 
     # --- Value Resolution ---
 

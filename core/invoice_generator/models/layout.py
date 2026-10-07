@@ -89,7 +89,7 @@ class SheetLayoutState:
         self.column_mapping = column_mapping
         self.style_registry = style_registry
         self.dimension_registry = dimension_registry
-        logger.info(f"SheetLayoutState bound to sheet '{worksheet.title if worksheet else 'None'}' with {len(column_mapping)} column mappings")
+        logger.debug(f"SheetLayoutState bound to sheet '{worksheet.title if worksheet else 'None'}' with {len(column_mapping)} column mappings")
 
     def resolve_column(self, col_id_or_idx: Union[str, int]) -> Optional[int]:
         """Resolves a column ID or direct index to a physical 1-based index."""

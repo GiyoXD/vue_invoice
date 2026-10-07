@@ -90,6 +90,8 @@ class StyleRegistry:
         self.sheet_styling = sheet_styling
         self.columns: Dict[str, ColumnStyle] = {}
         self.row_contexts: Dict[str, RowContextStyle] = {}
+        self._warned_missing_context: set = set()
+        self._warned_missing_props: set = set()
         
         self._load_columns()
         self._load_row_contexts()
@@ -155,13 +157,10 @@ class StyleRegistry:
         # 1. Get column base style (WHAT: format, alignment)
         if col_id in self.columns:
             col_style = self.columns[col_id].to_dict()
-            logger.debug(f"Column '{col_id}' style dict: {col_style}")
             merged_style.update({k: v for k, v in col_style.items() if v is not None})
-            logger.debug(f"After column merge: {merged_style}")
         else:
             merged_style.setdefault('alignment', 'center')
             merged_style.setdefault('format', '@')
-            logger.debug(f"Column '{col_id}' not found in StyleRegistry, using default alignment/format")
         
         # 2. Merge row context style (HOW: emphasis, decoration)
         # Only merge properties that are NOT column-owned.
@@ -183,35 +182,23 @@ class StyleRegistry:
                 if value is not None and key not in COLUMN_OWNED and key not in merged_style:
                     merged_style[key] = value
         else:
-            logger.warning(f"❌ Row context '{context}' not found in StyleRegistry!")
-            logger.warning(f"   Available contexts: {list(self.row_contexts.keys())}")
-            logger.warning(f"   Please add context definition to config with: bold, font_size, font_name, etc.")
-        
-        # 3. Apply overrides (special cases - can override anything)
+            if context not in self._warned_missing_context:
+                self._warned_missing_context.add(context)
+                logger.debug(f"Row context '{context}' not found in StyleRegistry (available: {list(self.row_contexts.keys())})")
+
+        # Apply overrides
         if overrides:
             merged_style.update(overrides)
-        
-        # 4. STRICT VALIDATION: Verify all required properties exist
-        sheet_name = getattr(self.sheet_styling, 'sheet_name', 'Sheet')
-        required_props = {
-            'alignment': f"Add 'alignment' to styling_bundle.{sheet_name}.columns.{col_id}",
-            'format': f"Add 'format' to styling_bundle.{sheet_name}.columns.{col_id}",
-            'font_name': f"Add 'font_name' to styling_bundle.{sheet_name}.row_contexts.{context}",
-            'font_size': f"Add 'font_size' to styling_bundle.{sheet_name}.row_contexts.{context}"
-        }
-        
-        missing_props = []
-        for prop, instruction in required_props.items():
-            if prop not in merged_style or merged_style[prop] is None:
-                missing_props.append(prop)
-                logger.warning(f"❌ StyleRegistry.get_style(col_id='{col_id}', context='{context}'): Missing required '{prop}'")
-                logger.warning(f"   → {instruction}")
-        
+
+        # Strict validation check - log once per (col_id, context, missing) at debug level
+        required_props = ('alignment', 'format', 'font_name', 'font_size')
+        missing_props = [p for p in required_props if p not in merged_style or merged_style[p] is None]
         if missing_props:
-            logger.error(f"BROKEN INCOMPLETE STYLE: col_id='{col_id}', context='{context}' - missing {missing_props}")
-            logger.error(f"   → Merged style keys: {list(merged_style.keys())}")
-            logger.error(f"   → This will cause CellStyler to skip applying this style!")
-        
+            cache_key = (col_id, context, tuple(sorted(missing_props)))
+            if cache_key not in self._warned_missing_props:
+                self._warned_missing_props.add(cache_key)
+                logger.debug(f"StyleRegistry: col_id='{col_id}', context='{context}' missing {missing_props} (using fallback)")
+
         return merged_style
     
 

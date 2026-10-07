@@ -53,7 +53,7 @@ class TableBuilder:
 
         self.layout_state = layout_state
 
-        logger.info(f"[TableBuilder] Building table at row {start_row}")
+        logger.debug(f"[TableBuilder] Building table at row {start_row}")
         
         # 1. Resolve columns (DAF/custom filters & index mappings)
         bundled_columns, column_mapping, column_colspan = self._resolve_columns()

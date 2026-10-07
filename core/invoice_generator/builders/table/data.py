@@ -120,4 +120,4 @@ class DataTableBuilderStyler(TableSectionBuilder):
         # Advance grid row pointer
         self.grid.advance_row(actual_rows_to_process)
         self.grid.mark_section_end("data")
-        logger.info(f"DataTableBuilder completed: {actual_rows_to_process} data rows generated")
+        logger.debug(f"DataTableBuilder completed: {actual_rows_to_process} data rows generated")

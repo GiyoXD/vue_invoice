@@ -42,7 +42,7 @@ class HeaderBuilderStyler(TableSectionBuilder):
         
         # Convert bundled columns to internal format
         if parsed_columns:
-            logger.info(f"Using BUNDLED config (columns={len(parsed_columns)})")
+            logger.debug(f"Using BUNDLED config (columns={len(parsed_columns)})")
             self.header_layout_config = self._convert_bundled_columns(parsed_columns)
             logger.debug(f"Converted to {len(self.header_layout_config)} header cells")
         else:
