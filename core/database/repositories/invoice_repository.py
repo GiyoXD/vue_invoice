@@ -3,8 +3,8 @@ import csv
 import logging
 import datetime
 import math
-from typing import Optional, List, Union
-from sqlalchemy import Numeric, Float, Integer, Boolean, DateTime, Date
+from typing import Optional, List, Union, Any
+from sqlalchemy import Numeric, Float
 from sqlalchemy.orm import Session
 from core.database.models import ProcessedData, InvoiceItem
 from core.utils.clock import ICT, now as ict_now
@@ -12,13 +12,12 @@ from core.utils.clock import ICT, now as ict_now
 logger = logging.getLogger(__name__)
 
 
-def _to_float(val) -> float:
+def _to_float(val: Any) -> float:
+    """Convert value to float, handling currency symbols, commas, and parentheses for negatives."""
     if val is None or isinstance(val, bool):
         return 0.0
     if isinstance(val, (int, float)):
-        if math.isnan(val) or math.isinf(val):
-            return 0.0
-        return float(val)
+        return 0.0 if math.isnan(val) or math.isinf(val) else float(val)
     try:
         clean = str(val).strip()
         is_negative = False
@@ -39,7 +38,8 @@ def _to_float(val) -> float:
         return 0.0
 
 
-def _to_str(val) -> str:
+def _to_str(val: Any) -> str:
+    """Convert value to stripped string, returning empty string for None, NaN, null."""
     if val is None:
         return ""
     if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
@@ -48,6 +48,58 @@ def _to_str(val) -> str:
     if s.lower() in ("none", "nan", "null"):
         return ""
     return s
+
+
+def _to_datetime(val: Any, default_now: bool = False) -> Optional[datetime.datetime]:
+    """Convert input to timezone-aware (ICT) datetime, or None / ict_now()."""
+    if val is None:
+        return ict_now() if default_now else None
+    if isinstance(val, datetime.datetime):
+        return val.astimezone(ICT) if val.tzinfo is not None else val.replace(tzinfo=ICT)
+    if isinstance(val, datetime.date):
+        return datetime.datetime.combine(val, datetime.time.min, tzinfo=ICT)
+    try:
+        s = str(val).strip()
+        if not s or s.lower() in ("none", "nan", "null"):
+            return ict_now() if default_now else None
+        dt = datetime.datetime.fromisoformat(s)
+        return dt.astimezone(ICT) if dt.tzinfo is not None else dt.replace(tzinfo=ICT)
+    except Exception:
+        return ict_now() if default_now else None
+
+
+def _parse_filter_date(
+    val: Optional[Union[str, datetime.date, datetime.datetime]],
+    is_end_date: bool = False,
+    param_name: str = "date",
+) -> Optional[datetime.datetime]:
+    """
+    Parse a filter date parameter into a timezone-aware (ICT) datetime.
+    For end_date with date-only input, adds 1 day for inclusive filtering (< end_dt).
+    Raises ValueError on invalid date format.
+    """
+    if val is None:
+        return None
+
+    if isinstance(val, str):
+        s = val.strip()
+        if not s:
+            return None
+        try:
+            dt = datetime.datetime.fromisoformat(s)
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Invalid {param_name} format '{val}': {e}")
+        if is_end_date and len(s) <= 10:
+            dt += datetime.timedelta(days=1)
+        return dt.astimezone(ICT) if dt.tzinfo is not None else dt.replace(tzinfo=ICT)
+    elif isinstance(val, datetime.datetime):
+        return val.astimezone(ICT) if val.tzinfo is not None else val.replace(tzinfo=ICT)
+    elif isinstance(val, datetime.date):
+        dt = datetime.datetime.combine(val, datetime.time.min, tzinfo=ICT)
+        if is_end_date:
+            dt += datetime.timedelta(days=1)
+        return dt
+    return None
 
 
 class InvoiceRepository:
@@ -168,89 +220,64 @@ class InvoiceRepository:
         self, invoice_id: str, row: Union[dict, list, tuple], is_adjustment: int = 0
     ) -> InvoiceItem:
         """
-        Dynamically map a dictionary row or list/tuple adjustment to an InvoiceItem instance
-        using SQLAlchemy model reflection on InvoiceItem.__table__.columns.
+        Map a dictionary row or list/tuple adjustment directly to an InvoiceItem instance.
         """
         if isinstance(row, (list, tuple)) and len(row) >= 2:
             row = {
                 "col_desc": _to_str(row[0]),
-                "description": _to_str(row[0]),
                 "col_amount": _to_float(row[1]),
-                "amount": _to_float(row[1]),
             }
             is_adj = 1
         elif not isinstance(row, dict):
             row = {}
             is_adj = 0
         else:
-            if isinstance(is_adjustment, str):
-                is_adj = 1 if is_adjustment.strip().lower() in ("1", "true", "yes") else 0
-            else:
-                is_adj = 1 if bool(is_adjustment) else 0
+            def _parse_adj(v) -> int:
+                if isinstance(v, str):
+                    return 1 if v.strip().lower() in ("1", "true", "yes") else 0
+                return 1 if bool(v) else 0
 
+            is_adj = _parse_adj(is_adjustment)
             if not is_adj and "is_adjustment" in row:
-                raw_adj = row.get("is_adjustment")
-                if isinstance(raw_adj, str):
-                    is_adj = 1 if raw_adj.strip().lower() in ("1", "true", "yes") else 0
-                else:
-                    is_adj = 1 if bool(raw_adj) else 0
+                is_adj = _parse_adj(row.get("is_adjustment"))
 
-        item_kwargs = {}
-        for col in InvoiceItem.__table__.columns:
-            if col.name in ("id", "invoice_id", "is_adjustment", "timestamp"):
-                continue
+        desc_raw = row.get("col_desc")
+        if (desc_raw is None or (isinstance(desc_raw, str) and not desc_raw.strip())) and is_adj:
+            desc_raw = row.get("description")
 
-            val = row.get(col.name)
-            if col.name == "col_cbm_raw" and (val is None or str(val).strip() == ""):
-                val = row.get("col_cbm")
-            if is_adj:
-                if col.name == "col_desc" and (val is None or str(val).strip() == ""):
-                    val = row.get("description")
-                if col.name == "col_amount" and (val is None or str(val).strip() == ""):
-                    val = row.get("amount")
+        amount_raw = row.get("col_amount")
+        if (amount_raw is None or (isinstance(amount_raw, str) and not amount_raw.strip())) and is_adj:
+            amount_raw = row.get("amount")
 
-            if isinstance(col.type, (Float, Numeric)):
-                item_kwargs[col.name] = _to_float(val)
-            elif isinstance(col.type, Integer):
-                item_kwargs[col.name] = int(_to_float(val))
-            elif isinstance(col.type, Boolean):
-                item_kwargs[col.name] = bool(val) if val is not None else False
-            elif isinstance(col.type, (DateTime, Date)):
-                if isinstance(val, (datetime.datetime, datetime.date)):
-                    item_kwargs[col.name] = val
-                elif isinstance(val, str) and val.strip():
-                    try:
-                        item_kwargs[col.name] = datetime.datetime.fromisoformat(val.strip())
-                    except Exception:
-                        item_kwargs[col.name] = None
-                else:
-                    item_kwargs[col.name] = None
-            else:
-                item_kwargs[col.name] = _to_str(val)
-
-        ts = row.get("timestamp")
-        if isinstance(ts, str):
-            try:
-                ts_parsed = datetime.datetime.fromisoformat(ts.strip())
-                if ts_parsed.tzinfo is None:
-                    ts = ts_parsed.replace(tzinfo=ICT)
-                else:
-                    ts = ts_parsed
-            except Exception:
-                ts = ict_now()
-        elif isinstance(ts, datetime.date) and not isinstance(ts, datetime.datetime):
-            ts = datetime.datetime.combine(ts, datetime.time.min, tzinfo=ICT)
-        elif isinstance(ts, datetime.datetime):
-            if ts.tzinfo is None:
-                ts = ts.replace(tzinfo=ICT)
-        else:
-            ts = ict_now()
+        cbm_raw = row.get("col_cbm_raw")
+        if cbm_raw is None or (isinstance(cbm_raw, str) and not cbm_raw.strip()):
+            cbm_raw = row.get("col_cbm")
 
         return InvoiceItem(
             invoice_id=invoice_id,
             is_adjustment=is_adj,
-            timestamp=ts,
-            **item_kwargs,
+            timestamp=_to_datetime(row.get("timestamp"), default_now=True),
+            col_dc=_to_str(row.get("col_dc")),
+            col_po=_to_str(row.get("col_po")),
+            col_production_order_no=_to_str(row.get("col_production_order_no")),
+            col_production_date=_to_str(row.get("col_production_date")),
+            col_line_no=_to_str(row.get("col_line_no")),
+            col_direction=_to_str(row.get("col_direction")),
+            col_item=_to_str(row.get("col_item")),
+            col_reference_code=_to_str(row.get("col_reference_code")),
+            col_desc=_to_str(desc_raw),
+            col_level=_to_str(row.get("col_level")),
+            col_grade=_to_str(row.get("col_grade")),
+            col_qty_pcs=_to_float(row.get("col_qty_pcs")),
+            col_qty_sf=_to_float(row.get("col_qty_sf")),
+            col_pallet_count=_to_float(row.get("col_pallet_count")),
+            col_pallet_no=_to_str(row.get("col_pallet_no")),
+            col_net=_to_float(row.get("col_net")),
+            col_gross=_to_float(row.get("col_gross")),
+            col_cbm_raw=_to_str(cbm_raw),
+            col_hs_code=_to_str(row.get("col_hs_code")),
+            col_unit_price=_to_float(row.get("col_unit_price")),
+            col_amount=_to_float(amount_raw),
         )
 
     def save_invoice_items(
@@ -262,7 +289,7 @@ class InvoiceRepository:
     ) -> int:
         """
         If delete_existing, delete InvoiceItem where invoice_id == filename.
-        Add each item dict as an InvoiceItem record using dynamic reflection.
+        Add each item dict as an InvoiceItem record.
         Add all, commit (or flush if commit=False), return count of items added.
         """
         clean_filename = str(filename).strip() if filename is not None else ""
@@ -308,24 +335,18 @@ class InvoiceRepository:
         if not clean_filename:
             raise ValueError("Invalid filename")
 
-        if not isinstance(data, dict):
-            raise ValueError(f"Missing footer_data or grand_total in invoice data for '{clean_filename}'")
-
-        footer_data = data.get("footer_data")
-        if not footer_data or not isinstance(footer_data, dict) or not isinstance(footer_data.get("grand_total"), dict):
+        footer_data = data.get("footer_data") if isinstance(data, dict) else None
+        grand_total = footer_data.get("grand_total") if isinstance(footer_data, dict) else None
+        if not grand_total or not isinstance(grand_total, dict):
             raise ValueError(f"Missing footer_data or grand_total in invoice data for '{clean_filename}'")
 
         try:
-            grand_total = footer_data.get("grand_total")
-
             total_pallets = _to_float(grand_total.get("col_pallet_count", 0))
             total_sqft = _to_float(grand_total.get("col_qty_sf", 0))
             total_net = _to_float(grand_total.get("col_net", 0))
-            gt_amount = (
-                grand_total.get("col_amount")
-                if grand_total.get("col_amount") is not None
-                else grand_total.get("amount", 0)
-            )
+            gt_amount = grand_total.get("col_amount")
+            if gt_amount is None or (isinstance(gt_amount, str) and not gt_amount.strip()):
+                gt_amount = grand_total.get("amount", 0)
             total_amount = _to_float(gt_amount)
 
             self.db.query(InvoiceItem).filter(InvoiceItem.invoice_id == clean_filename).delete(
@@ -333,50 +354,19 @@ class InvoiceRepository:
             )
 
             items_to_add: List[InvoiceItem] = []
-            item_count = 0
-
-            multi_table = data.get("multi_table")
-            has_multi = False
-            if isinstance(multi_table, list) and multi_table:
-                for sub in multi_table:
-                    if isinstance(sub, list) and len(sub) > 0:
-                        has_multi = True
-                        break
-                    elif isinstance(sub, dict):
-                        has_multi = True
-                        break
-
-            if has_multi:
-                source_tables = multi_table
-            else:
-                source_tables = []
-
-            for entry in source_tables:
-                if isinstance(entry, list):
-                    for row in entry:
+            for table in data.get("multi_table") or []:
+                if isinstance(table, list):
+                    for row in table:
                         if isinstance(row, dict):
                             items_to_add.append(self._row_to_invoice_item(clean_filename, row, is_adjustment=0))
-                            item_count += 1
-                elif isinstance(entry, dict):
-                    items_to_add.append(self._row_to_invoice_item(clean_filename, entry, is_adjustment=0))
-                    item_count += 1
 
+            item_count = len(items_to_add)
             if item_count == 0 and "item_count" in grand_total:
                 item_count = int(_to_float(grand_total.get("item_count", 0)))
 
-            price_adjustments = data.get("price_adjustment") or []
-            if isinstance(price_adjustments, list):
-                for adj in price_adjustments:
-                    if isinstance(adj, dict):
-                        items_to_add.append(self._row_to_invoice_item(clean_filename, adj, is_adjustment=1))
-                    elif isinstance(adj, (list, tuple)) and len(adj) >= 2:
-                        adj_dict = {
-                            "col_desc": _to_str(adj[0]),
-                            "description": _to_str(adj[0]),
-                            "col_amount": _to_float(adj[1]),
-                            "amount": _to_float(adj[1]),
-                        }
-                        items_to_add.append(self._row_to_invoice_item(clean_filename, adj_dict, is_adjustment=1))
+            for adj in data.get("price_adjustment") or []:
+                if isinstance(adj, (dict, list, tuple)):
+                    items_to_add.append(self._row_to_invoice_item(clean_filename, adj, is_adjustment=1))
 
             if items_to_add:
                 self.db.add_all(items_to_add)
@@ -412,43 +402,13 @@ class InvoiceRepository:
         Raises ValueError if invalid date strings are provided.
         """
         query = self.db.query(InvoiceItem)
-        if start_date:
-            if isinstance(start_date, str):
-                s = start_date.strip()
-                if s:
-                    try:
-                        start_dt = datetime.datetime.fromisoformat(s)
-                    except Exception as e:
-                        raise ValueError(f"Invalid start_date format '{start_date}': {e}")
-                    if start_dt.tzinfo is None:
-                        start_dt = start_dt.replace(tzinfo=ICT)
-                    query = query.filter(InvoiceItem.timestamp >= start_dt)
-            elif isinstance(start_date, datetime.datetime):
-                dt = start_date if start_date.tzinfo is not None else start_date.replace(tzinfo=ICT)
-                query = query.filter(InvoiceItem.timestamp >= dt)
-            elif isinstance(start_date, datetime.date):
-                start_dt = datetime.datetime.combine(start_date, datetime.time.min, tzinfo=ICT)
-                query = query.filter(InvoiceItem.timestamp >= start_dt)
+        start_dt = _parse_filter_date(start_date, is_end_date=False, param_name="start_date")
+        if start_dt is not None:
+            query = query.filter(InvoiceItem.timestamp >= start_dt)
 
-        if end_date:
-            if isinstance(end_date, str):
-                s = end_date.strip()
-                if s:
-                    try:
-                        end_dt = datetime.datetime.fromisoformat(s)
-                    except Exception as e:
-                        raise ValueError(f"Invalid end_date format '{end_date}': {e}")
-                    if len(s) <= 10:
-                        end_dt += datetime.timedelta(days=1)
-                    if end_dt.tzinfo is None:
-                        end_dt = end_dt.replace(tzinfo=ICT)
-                    query = query.filter(InvoiceItem.timestamp < end_dt)
-            elif isinstance(end_date, datetime.datetime):
-                dt = end_date if end_date.tzinfo is not None else end_date.replace(tzinfo=ICT)
-                query = query.filter(InvoiceItem.timestamp < dt)
-            elif isinstance(end_date, datetime.date):
-                end_dt = datetime.datetime.combine(end_date, datetime.time.min, tzinfo=ICT) + datetime.timedelta(days=1)
-                query = query.filter(InvoiceItem.timestamp < end_dt)
+        end_dt = _parse_filter_date(end_date, is_end_date=True, param_name="end_date")
+        if end_dt is not None:
+            query = query.filter(InvoiceItem.timestamp < end_dt)
 
         return query.order_by(InvoiceItem.timestamp.desc(), InvoiceItem.invoice_id).all()
 
