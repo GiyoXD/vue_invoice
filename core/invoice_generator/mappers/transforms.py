@@ -1,169 +1,101 @@
-import ast
-import re
 import logging
-from typing import Any, Dict, List, Optional, Tuple, Union
-from .rules import apply_fallback, parse_formula_def, resolve_mode_formula
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from .models import InvoiceMode
+from .rules import (
+    apply_fallback,
+    get_fallback_value,
+    parse_formula_def,
+    parse_mapping_rules,
+    resolve_mode_formula,
+)
+from .source_normalizer import normalize_source_to_rows, extract_cell_value
 
 logger = logging.getLogger(__name__)
 
 
-def extract_table_data(data_source: Any, data_source_type: str) -> Any:
-    """Extract table data for processing, resolving stringified tuple keys if present."""
-    if data_source is None:
-        return None
-    
-    if data_source_type in ['processed_tables', 'processed_tables_multi']:
-        return data_source
-    
-    if isinstance(data_source, dict):
-        new_data = {}
-        for k, v in data_source.items():
-            if isinstance(k, str) and k.startswith('(') and k.endswith(')'):
-                try:
-                    clean_k = re.sub(r"Decimal\((['\"])(.*?)\1\)", r"\2", k)
-                    new_key = ast.literal_eval(clean_k)
-                    new_data[new_key] = v
-                except (ValueError, SyntaxError):
-                    new_data[k] = v
-            else:
-                new_data[k] = v
-        return new_data
-
-    return data_source
 
 
-def _get_value_from_source(
-    source_container: Any,
-    rule_key: str,
-    rule: Optional[Dict[str, Any]] = None,
-    row_idx: Optional[int] = None
-) -> Any:
-    """Extract a value from data source using explicit column/field mapping or rule_key."""
-    if not isinstance(source_container, dict):
+def _resolve_formula_for_rule(
+    rule: Dict[str, Any],
+    inv_mode: InvoiceMode
+) -> Optional[Dict[str, Any]]:
+    mode_formula = resolve_mode_formula(rule, invoice_format=inv_mode.invoice_format)
+    if not mode_formula:
         return None
 
-    lookup_keys = []
-    if isinstance(rule, dict):
-        for k in ['column', 'field', 'source', 'key']:
-            mapped_key = rule.get(k)
-            if mapped_key and mapped_key not in lookup_keys:
-                lookup_keys.append(mapped_key)
-    if rule_key and rule_key not in lookup_keys:
-        lookup_keys.append(rule_key)
+    if inv_mode.pricing_net_weight:
+        if isinstance(mode_formula, str):
+            mode_formula = mode_formula.replace('{col_qty_sf}', '{col_net}')
+        elif isinstance(mode_formula, dict):
+            mode_formula = dict(mode_formula)
+            # If template has raw {col_qty_sf}, replace it
+            if 'template' in mode_formula and isinstance(mode_formula['template'], str):
+                mode_formula['template'] = mode_formula['template'].replace('{col_qty_sf}', '{col_net}')
+            # If inputs list exists, update input token
+            if 'inputs' in mode_formula and isinstance(mode_formula['inputs'], list):
+                mode_formula['inputs'] = [
+                    'col_net' if inp == 'col_qty_sf' else inp
+                    for inp in mode_formula['inputs']
+                ]
 
-    for key in lookup_keys:
-        if row_idx is not None:
-            col_data = source_container.get(key)
-            if isinstance(col_data, list) and row_idx < len(col_data):
-                val = col_data[row_idx]
-                if val not in [None, ""]:
-                    return val
-            elif col_data not in [None, ""] and not isinstance(col_data, list):
-                return col_data
-        elif key in source_container and source_container[key] not in [None, ""]:
-            return source_container[key]
-
+    parsed_formula = parse_formula_def(mode_formula)
+    if parsed_formula:
+        inputs = parsed_formula.get('inputs', [])
+        return {
+            'type': 'formula',
+            'template': parsed_formula['template'],
+            'inputs': inputs
+        }
     return None
 
 
-def _build_row_dict(
-    source_container: Any,
-    row_idx: Optional[int],
+def _resolve_fallback_for_rule(
+    row_dict: Dict[str, Any],
+    source_key: str,
+    target_id: str,
+    rule: Dict[str, Any],
+    row: Dict[str, Any],
     dynamic_mapping_rules: Dict[str, Any],
-    parent_column_ids: List[str],
-    static_value_map: Dict[str, Any],
-    DAF_mode: bool,
-    custom_mode: bool,
-    pricing_net_weight: bool = False,
-    item_merged_mode: bool = False
-) -> Dict[str, Any]:
-    """Build a single row dictionary by applying mapping rules, formulas, fallbacks, and static values."""
-    row_dict = {}
+    inv_mode: InvoiceMode
+) -> None:
+    if row_dict.get(target_id) in [None, ""]:
+        if source_key == 'col_desc':
+            po_rule = dynamic_mapping_rules.get('col_po')
+            po_val = extract_cell_value(row, 'col_po', po_rule)
+            if po_val in [None, ""]:
+                return
+        apply_fallback(row_dict, target_id, rule, invoice_format=inv_mode.invoice_format)
 
-    is_standard = not DAF_mode and not custom_mode and not item_merged_mode
-    price_adjustment_applied = False
-    if is_standard:
-        if isinstance(source_container, dict) and (source_container.get('_price_adjusted') or source_container.get('_adjusted')):
-            price_adjustment_applied = True
-        else:
-            qty_key = 'col_net' if pricing_net_weight else 'col_qty_sf'
-            src_amt = _get_value_from_source(source_container, 'col_amount', dynamic_mapping_rules.get('col_amount'), row_idx)
-            src_qty = _get_value_from_source(source_container, qty_key, dynamic_mapping_rules.get(qty_key), row_idx)
-            src_up = _get_value_from_source(source_container, 'col_unit_price', dynamic_mapping_rules.get('col_unit_price'), row_idx)
-            if src_amt is not None and src_qty is not None and src_up is not None:
-                try:
-                    a = float(src_amt)
-                    q = float(src_qty)
-                    u = float(src_up)
-                    if q > 0 and abs(a - (q * u)) > 0.005:
-                        price_adjustment_applied = True
-                except (ValueError, TypeError):
-                    pass
+
+def _build_row_dict(
+    row: Dict[str, Any],
+    dynamic_mapping_rules: Optional[Dict[str, Any]] = None,
+    static_value_map: Optional[Dict[str, Any]] = None,
+    inv_mode: Optional[InvoiceMode] = None
+) -> Dict[str, Any]:
+    if inv_mode is None:
+        inv_mode = InvoiceMode()
+    dynamic_mapping_rules = dynamic_mapping_rules or {}
+    static_value_map = static_value_map or {}
+    row_dict: Dict[str, Any] = {}
 
     for source_key, rule in dynamic_mapping_rules.items():
-        if not isinstance(rule, dict):
+        if not isinstance(rule, dict) or not source_key:
             continue
 
         target_id = source_key
-        if not target_id:
-            continue
-        if target_id in parent_column_ids:
-            continue
-
-        val = _get_value_from_source(source_container, source_key, rule, row_idx)
+        val = extract_cell_value(row, source_key, rule)
         if val is not None:
             row_dict[target_id] = val
 
-        # If mode is standard and price_adjustment was applied:
-        # Check if rule has standard formula on col_amount ({col_qty_sf} * {col_unit_price}).
-        # Check if source_container.get('col_amount') is already explicitly present.
-        # Preserve the exact scalar col_amount so =SUM() in Excel adds up to the exact adjusted sum.
-        if target_id == 'col_amount' and is_standard and price_adjustment_applied:
-            amount_in_source = _get_value_from_source(source_container, 'col_amount', rule, row_idx)
-            if amount_in_source is not None:
-                row_dict[target_id] = amount_in_source
-                continue
+        formula = _resolve_formula_for_rule(rule, inv_mode)
+        if formula:
+            row_dict[target_id] = formula
+            continue
 
-        # If mode is standard and price_adjustment was applied:
-        # col_unit_price formula can be computed as {col_amount} / {col_qty_sf}
-        if target_id == 'col_unit_price' and is_standard and price_adjustment_applied:
-            qty_chk = _get_value_from_source(source_container, 'col_net' if pricing_net_weight else 'col_qty_sf', None, row_idx)
-            try:
-                has_qty = float(qty_chk) > 0 if qty_chk is not None else False
-            except (ValueError, TypeError):
-                has_qty = False
-            if has_qty:
-                up_formula = "{col_amount} / {col_net}" if pricing_net_weight else "{col_amount} / {col_qty_sf}"
-                parsed_formula = parse_formula_def(up_formula)
-                if parsed_formula:
-                    row_dict[target_id] = {
-                        'type': 'formula',
-                        'template': parsed_formula['template'],
-                        'inputs': parsed_formula.get('inputs', [])
-                    }
-                    continue
-
-        mode_formula = resolve_mode_formula(rule, DAF_mode, custom_mode, item_merged_mode)
-        if mode_formula:
-            if pricing_net_weight and re.search(r'\{\s*col_qty_sf\s*\}', mode_formula):
-                mode_formula = re.sub(r'\{\s*col_qty_sf\s*\}', '{col_net}', mode_formula)
-                
-            parsed_formula = parse_formula_def(mode_formula)
-            if parsed_formula:
-                inputs = parsed_formula.get('inputs', [])
-                row_dict[target_id] = {
-                    'type': 'formula',
-                    'template': parsed_formula['template'],
-                    'inputs': inputs
-                }
-                continue
-
-        if row_dict.get(target_id) in [None, ""]:
-            if source_key == 'col_desc':
-                po_val = _get_value_from_source(source_container, 'col_po', None, row_idx)
-                if not po_val:
-                    continue
-            apply_fallback(row_dict, target_id, rule, DAF_mode, custom_mode, item_merged_mode)
+        _resolve_fallback_for_rule(
+            row_dict, source_key, target_id, rule, row, dynamic_mapping_rules, inv_mode
+        )
 
     for col_id, static_val in static_value_map.items():
         row_dict[col_id] = static_val
@@ -172,110 +104,29 @@ def _build_row_dict(
 
 
 def prepare_data_rows(
-    data_source_type: str,
     data_source: Any,
-    dynamic_mapping_rules: Dict[str, Any],
-    column_id_map: Dict[str, int],
-    idx_to_header_map: Dict[int, str],
-    desc_col_idx: int,
-    num_static_labels: int,
-    static_value_map: Dict[str, Any],
-    DAF_mode: bool,
-    custom_mode: bool,
-    parent_column_ids: List[str],
-    pricing_net_weight: bool = False,
-    item_merged_mode: bool = False,
-    options: Optional[Dict[str, Any]] = None,
-    context: Optional[Any] = None
-) -> Tuple[List[Dict[str, Any]], int]:
-    """Prepare formatted data rows for table rendering."""
-    if options:
-        item_merged_mode = options.get('item_merged_mode', item_merged_mode)
-    elif context:
-        item_merged_mode = getattr(context, 'item_merged_mode', item_merged_mode)
-
-    data_rows = []
-
-    if isinstance(data_source, dict):
-        num_rows = 0
-        for val in data_source.values():
-            if isinstance(val, list):
-                num_rows = max(num_rows, len(val))
-                    
-        for r_idx in range(num_rows):
-            row_dict = _build_row_dict(
-                source_container=data_source,
-                row_idx=r_idx,
-                dynamic_mapping_rules=dynamic_mapping_rules,
-                parent_column_ids=parent_column_ids,
-                static_value_map=static_value_map,
-                DAF_mode=DAF_mode,
-                custom_mode=custom_mode,
-                pricing_net_weight=pricing_net_weight,
-                item_merged_mode=item_merged_mode
-            )
-            data_rows.append(row_dict)
-    elif isinstance(data_source, list):
-        for item in data_source:
-            if isinstance(item, dict):
-                row_dict = _build_row_dict(
-                    source_container=item,
-                    row_idx=None,
-                    dynamic_mapping_rules=dynamic_mapping_rules,
-                    parent_column_ids=parent_column_ids,
-                    static_value_map=static_value_map,
-                    DAF_mode=DAF_mode,
-                    custom_mode=custom_mode,
-                    pricing_net_weight=pricing_net_weight,
-                    item_merged_mode=item_merged_mode
-                )
-                data_rows.append(row_dict)
-
-    num_data_rows = len(data_rows)
-    return data_rows, num_data_rows
-
-
-def resolve_table_data(
-    data_source_type: str = "aggregation",
-    data_source: Any = None,
     dynamic_mapping_rules: Optional[Dict[str, Any]] = None,
-    column_id_map: Optional[Dict[str, int]] = None,
-    idx_to_header_map: Optional[Dict[int, str]] = None,
-    desc_col_idx: int = -1,
-    num_static_labels: int = 0,
     static_value_map: Optional[Dict[str, Any]] = None,
-    DAF_mode: bool = False,
-    custom_mode: bool = False,
-    parent_column_ids: Optional[List[str]] = None,
-    pricing_net_weight: bool = False,
-    item_merged_mode: bool = False,
-    options: Optional[Dict[str, Any]] = None,
-    context: Optional[Any] = None,
-    **kwargs
+    mode: Optional[Union[InvoiceMode, str, Dict[str, Any]]] = None,
 ) -> Tuple[List[Dict[str, Any]], int]:
-    """Resolves and prepares table data rows, respecting item_merged_mode and execution flags."""
-    if options:
-        item_merged_mode = options.get('item_merged_mode', item_merged_mode)
-    elif context:
-        item_merged_mode = getattr(context, 'item_merged_mode', item_merged_mode)
+    if isinstance(mode, InvoiceMode):
+        inv_mode = mode
+    elif isinstance(mode, str):
+        inv_mode = InvoiceMode(invoice_format=mode)
+    else:
+        inv_mode = InvoiceMode.from_dict(mode)
+    normalized_rows = normalize_source_to_rows(data_source)
+    data_rows = []
+    for row in normalized_rows:
+        row_dict = _build_row_dict(
+            row=row,
+            dynamic_mapping_rules=dynamic_mapping_rules,
+            static_value_map=static_value_map,
+            inv_mode=inv_mode
+        )
+        data_rows.append(row_dict)
 
-    return prepare_data_rows(
-        data_source_type=data_source_type,
-        data_source=data_source,
-        dynamic_mapping_rules=dynamic_mapping_rules or {},
-        column_id_map=column_id_map or {},
-        idx_to_header_map=idx_to_header_map or {},
-        desc_col_idx=desc_col_idx,
-        num_static_labels=num_static_labels,
-        static_value_map=static_value_map or {},
-        DAF_mode=DAF_mode,
-        custom_mode=custom_mode,
-        parent_column_ids=parent_column_ids or [],
-        pricing_net_weight=pricing_net_weight,
-        item_merged_mode=item_merged_mode,
-        options=options,
-        context=context
-    )
+    return data_rows, len(data_rows)
 
 
 def resolve_static_placeholders(
@@ -305,10 +156,13 @@ def populate_static_content(
     static_payload: Dict[str, Any]
 ) -> None:
     """Populate resolved static payload into data rows."""
-    if not static_payload or 'col_static' not in static_payload:
+    if data_rows is None or not static_payload or 'col_static' not in static_payload:
         return
 
-    static_values = static_payload['col_static']
+    static_values = static_payload.get('col_static')
+    if not static_values:
+        return
+
     static_col_id = 'col_static'
     
     if static_values:
@@ -326,7 +180,7 @@ def format_pallet_counts(
     pallet_col_id: Optional[str]
 ) -> None:
     """Carries non-empty values forward across rows for vertical cell merging."""
-    if num_data_rows <= 0 or not pallet_col_id:
+    if not data_rows or num_data_rows <= 0 or not pallet_col_id:
         return
 
     carry_value = None
@@ -338,65 +192,68 @@ def format_pallet_counts(
             row[pallet_col_id] = carry_value
 
 
-def extract_summaries(
+def transform_table_data(
     data_source: Any,
-    footer_data: Dict[str, Any],
-    table_key: Optional[str] = None
-) -> Tuple[Optional[Dict[str, Any]], Optional[Dict[str, Any]], Optional[int]]:
-    """Extract leather_summary, weight_summary, and pallet_summary_total."""
-    leather_summary = None
-    weight_summary = None
-    pallet_summary_total = None
-    
-    if isinstance(data_source, dict):
-        leather_summary = data_source.get('leather_summary')
-        if not leather_summary and footer_data and 'add_ons' in footer_data:
-            leather_summary = footer_data['add_ons'].get('leather_summary_addon')
-        
-        weight_summary = data_source.get('weight_summary')
-        if not weight_summary and footer_data and 'add_ons' in footer_data:
-            weight_summary = footer_data['add_ons'].get('weight_summary_addon')
-    elif isinstance(data_source, list):
-        if footer_data and 'add_ons' in footer_data:
-            leather_summary = footer_data['add_ons'].get('leather_summary_addon')
-            weight_summary = footer_data['add_ons'].get('weight_summary_addon')
-            
-    if footer_data:
-        if 'grand_total' in footer_data and 'col_pallet_count' in footer_data['grand_total'] and table_key is None:
-            pallet_summary_total = int(footer_data['grand_total']['col_pallet_count'])
-        
-        if pallet_summary_total is None and 'table_totals' in footer_data:
-            table_totals = footer_data['table_totals']
-            idx = 0
-            if table_key is not None:
-                try:
-                    idx = int(table_key)
-                except ValueError:
-                    idx = 0
-            if isinstance(table_totals, list) and 0 <= idx < len(table_totals):
-                tbl_footer = table_totals[idx]
-                if 'col_pallet_count' in tbl_footer:
-                    pallet_summary_total = int(tbl_footer['col_pallet_count'])
-            elif isinstance(table_totals, dict):
-                key = str(table_key) if table_key is not None else next(iter(table_totals.keys()), "")
-                first_val = table_totals.get(key, next(iter(table_totals.values()), {}))
-                if 'col_pallet_count' in first_val:
-                    pallet_summary_total = int(first_val['col_pallet_count'])
-                    
-    if pallet_summary_total is None and isinstance(data_source, dict):
-        pallet_summary_total = data_source.get('pallet_summary_total')
-        if pallet_summary_total is not None:
-            logger.warning(f"Using legacy pallet_summary_total from data_source: {pallet_summary_total}")
-            
-    return leather_summary, weight_summary, pallet_summary_total
+    mapping_rules: Dict[str, Any],
+    static_payload: Optional[Dict[str, Any]] = None,
+    mode: Optional[Union[InvoiceMode, str, Dict[str, Any]]] = None,
+    target_columns: Optional[Iterable[str]] = None
+) -> Tuple[List[Dict[str, Any]], int]:
+    """Main entry point for table data transformation pipeline."""
+    mapping_rules = mapping_rules or {}
+    static_payload = static_payload or {}
+
+    if isinstance(mode, InvoiceMode):
+        inv_mode = mode
+    elif isinstance(mode, str):
+        inv_mode = InvoiceMode(invoice_format=mode)
+    else:
+        inv_mode = InvoiceMode.from_dict(mode)
+
+    target_cols = {target_columns} if isinstance(target_columns, str) else (set(target_columns) if target_columns else set())
+
+    parsed = parse_mapping_rules(
+        mapping_rules=mapping_rules,
+        target_columns=target_cols
+    )
+
+    desc_rule = parsed['dynamic_mapping_rules'].get('col_desc', {})
+    desc_fallback_str = get_fallback_value(desc_rule, invoice_format=inv_mode.invoice_format) or ""
+
+    resolved_static = resolve_static_placeholders(
+        static_payload=static_payload,
+        desc_fallback_str=str(desc_fallback_str)
+    )
+
+    data_rows, num_data_rows = prepare_data_rows(
+        data_source=data_source,
+        dynamic_mapping_rules=parsed['dynamic_mapping_rules'],
+        static_value_map=parsed['static_value_map'],
+        mode=inv_mode
+    )
+
+    populate_static_content(
+        data_rows=data_rows,
+        static_payload=resolved_static
+    )
+
+    pallet_col_id = 'col_pallet_count' if ('col_pallet_count' in target_cols or (not target_cols and 'col_pallet_count' in parsed['dynamic_mapping_rules'])) else None
+    if pallet_col_id:
+        format_pallet_counts(
+            data_rows=data_rows,
+            num_data_rows=num_data_rows,
+            pallet_col_id=pallet_col_id
+        )
+
+    return data_rows, num_data_rows
 
 
 __all__ = [
-    "extract_table_data",
     "prepare_data_rows",
-    "resolve_table_data",
     "resolve_static_placeholders",
     "populate_static_content",
     "format_pallet_counts",
-    "extract_summaries"
+    "transform_table_data",
 ]
+
+

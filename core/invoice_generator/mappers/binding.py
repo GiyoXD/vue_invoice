@@ -1,40 +1,36 @@
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Union
-from .transforms import extract_table_data
+from typing import Any, Dict, List, Optional
+from .models import InvoiceMode
+from .source_normalizer import normalize_source_to_rows
 
 
 @dataclass
 class TableBinding:
     """
-    Unified container binding pre-extracted data, mapping rules, sheet layout, and generic options for a single table.
-    Enables single-input mapping ("Unify First, Map Second").
+    Unified container binding normalized data, mapping rules, sheet layout, and mode for a single table.
+    Acts as the boundary gate for mappers ("Unify First, Map Second").
     """
-    data: Any = None
+    data: List[Dict[str, Any]] = field(default_factory=list)
     mapping_rules: Dict[str, Any] = field(default_factory=dict)
     sheet_layout: Optional[Any] = None
     static_payload: Dict[str, Any] = field(default_factory=dict)
     footer_data: Dict[str, Any] = field(default_factory=dict)
-    data_source_type: str = "aggregation"
-    options: Dict[str, Any] = field(default_factory=dict)
+    mode: InvoiceMode = field(default_factory=InvoiceMode)
 
     @classmethod
     def from_bundles(
         cls,
-        data_config: Dict[str, Any],
-        context_config: Dict[str, Any],
+        data_config: Optional[Dict[str, Any]] = None,
+        context_config: Optional[Dict[str, Any]] = None,
         layout_config: Optional[Dict[str, Any]] = None
     ) -> "TableBinding":
-        """
-        Factory method to resolve and unify data, rules, layout, and options from configuration bundles.
-        """
+        """The official gate: ingests raw bundles, normalizes rows, and resolves mode."""
+        data_config = data_config or {}
+        context_config = context_config or {}
         sheet_layout = None
         if layout_config:
             from core.invoice_generator.models.config.layout import SheetLayoutModel
             sheet_layout = SheetLayoutModel.model_validate(layout_config.get('sheet_config', {}) or layout_config)
-
-        data_source_type = data_config.get('data_source_type', 'aggregation')
-        raw_data = data_config.get('data_source')
-        table_data = extract_table_data(raw_data, data_source_type)
 
         raw_static = (
             (layout_config and layout_config.get('static_payload')) or
@@ -42,28 +38,16 @@ class TableBinding:
             {}
         )
 
-        options = {
-            'DAF_mode': context_config.get('DAF_mode', False),
-            'custom_mode': context_config.get('custom_mode', False),
-            'item_merged_mode': context_config.get('item_merged_mode', False),
-            'pricing_net_weight': context_config.get('pricing_net_weight', False),
-            **context_config.get('options', {})
-        }
-
         return cls(
-            data=table_data,
-            mapping_rules=data_config.get('mapping_rules', {}) or {},
+            data=normalize_source_to_rows(data_config.get('data_source')),
+            mapping_rules=data_config.get('mapping_rules') or {},
             sheet_layout=sheet_layout,
-            static_payload=raw_static or {},
-            footer_data=data_config.get('footer_data', {}) or {},
-            data_source_type=data_source_type,
-            options=options
+            static_payload=dict(raw_static),
+            footer_data=data_config.get('footer_data') or {},
+            mode=InvoiceMode.from_context(context_config)
         )
 
     def resolve(self) -> "ResolvedTableData":
-        """
-        Executes resolution pipeline by delegating to TableDataMapper.
-        """
+        """Executes resolution pipeline by delegating to TableDataMapper."""
         from .mapper import TableDataMapper
         return TableDataMapper(binding=self).resolve()
-

@@ -48,7 +48,7 @@ def test_load_and_validate_bundle_config():
     assert columns[1].header == "P.O. Nº"
 
 def test_load_and_validate_master_config():
-    config_path = Path(__file__).parent.parent.parent / "database" / "blueprints" / "mapper" / "master_config.json"
+    config_path = Path(__file__).parent.parent.parent / "storage" / "blueprints" / "mapper" / "master_config.json"
     assert config_path.exists(), f"Config file not found at: {config_path}"
     with open(config_path, "r", encoding="utf-8") as f:
         config_data = json.load(f)
