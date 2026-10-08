@@ -96,12 +96,28 @@ class ConfigValidator:
         """Helper to validate individual sheet configurations (Deprecated/Unused for now but kept for ref)."""
         pass
 
+def _validate_col(cid, header, allowed_ids) -> None:
+    is_valid_custom = (
+        isinstance(cid, str)
+        and cid.startswith("col_")
+        and not cid.startswith("col_unknown")
+        and len(cid.strip()) > 4
+    )
+    if not (cid in allowed_ids or is_valid_custom):
+        raise ValueError(
+            f"Blueprint Verification Failed: Column '{header}' has Invalid ID '{cid}'. "
+            f"It must be one of: {sorted(list(allowed_ids))} or a valid custom 'col_*' ID."
+        )
+
+
 class BlueprintLogicValidator:
     """
     Validates the 'Business Logic' and 'Content' of blueprints during generation.
     Strictly enforces rules (like known column IDs).
     """
-    
+
+    _validate_col = staticmethod(_validate_col)
+
     @staticmethod
     def verify_strict_mode(sheet_analysis) -> None:
         """
@@ -112,20 +128,7 @@ class BlueprintLogicValidator:
 
         allowed_ids = set(BlueprintSchema.COLUMNS.keys())
         
-        for col in sheet_analysis.columns:
-            # 1. Verify Parent Column ID
-            if col.id not in allowed_ids and not str(col.id or "").startswith("col_unknown_"):
-                raise ValueError(
-                    f"Blueprint Verification Failed: Column '{col.header}' has Invalid ID '{col.id}'. "
-                    f"It must be one of: {sorted(list(allowed_ids))}. "
-                    "Please update BlueprintSchema or fix the input template mapping."
-                )
-            
-            # 2. Verify Child Column ID
-            if col.children:
-                for child in col.children:
-                    if child.id not in allowed_ids and not str(child.id or "").startswith("col_unknown_"):
-                        raise ValueError(
-                            f"Blueprint Verification Failed: Child Column '{child.header}' has Invalid ID '{child.id}'. "
-                            f"It must be one of: {sorted(list(allowed_ids))}."
-                        )
+        for col in (sheet_analysis.columns or []):
+            _validate_col(col.id, col.header, allowed_ids)
+            for child in (col.children or []):
+                _validate_col(child.id, child.header, allowed_ids)

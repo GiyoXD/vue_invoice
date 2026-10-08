@@ -44,9 +44,7 @@ def get_global_mapping_config(db=None) -> dict:
         
         # 3. Load header text mappings
         header_maps = db.query(GlobalMapHeaderTextMapping).all()
-        config["header_text_mappings"] = {
-            "mappings": {hm.raw_text: hm.canonical_col_id for hm in header_maps}
-        }
+        config["header_text_mappings"] = {hm.raw_text: hm.canonical_col_id for hm in header_maps}
         
         # 4. Load shipping header map (columns + keywords)
         columns = db.query(GlobalMapColumn).all()
@@ -85,6 +83,10 @@ def get_global_mapping_config(db=None) -> dict:
             db.close()
 
 def save_global_mapping_config(data: dict, db=None) -> None:
+    header_mappings = data.get("header_text_mappings", {})
+    if isinstance(header_mappings, dict) and "mappings" in header_mappings and isinstance(header_mappings["mappings"], dict) and "col_id" not in header_mappings["mappings"]:
+        raise ValueError("Legacy nested 'mappings' in header_text_mappings. Fail fast: payload must be flat {header: col_id}.")
+
     close_session = False
     if db is None:
         db = SessionLocal()
@@ -153,13 +155,16 @@ def save_global_mapping_config(data: dict, db=None) -> None:
                 
         # 5. Insert header text mappings (overrides)
         # We only write overrides pointing to column IDs that exist in the columns list
-        header_mappings = data.get("header_text_mappings", {}).get("mappings", {})
+        header_mappings = data.get("header_text_mappings", {})
+        header_mappings = header_mappings if isinstance(header_mappings, dict) else {}
         for raw, canonical in header_mappings.items():
             raw_clean = raw.strip()
             if not raw_clean:
                 continue
-            if canonical in shipping_map:
-                db.add(GlobalMapHeaderTextMapping(raw_text=raw_clean, canonical_col_id=canonical))
+            col_id = canonical.get("col_id", "") if isinstance(canonical, dict) else canonical
+            col_id = str(col_id).strip() if col_id is not None else ""
+            if col_id and col_id in shipping_map:
+                db.add(GlobalMapHeaderTextMapping(raw_text=raw_clean, canonical_col_id=col_id))
                 
         # 6. Insert footer label mappings
         footer_kws = data.get("footer_label_mappings", {}).get("keywords", [])

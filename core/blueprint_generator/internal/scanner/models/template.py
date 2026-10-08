@@ -20,6 +20,7 @@ class TemplateLayout:
     header_images: List[Dict[str, Any]] = field(default_factory=list)
     footer_images: List[Dict[str, Any]] = field(default_factory=list)
     col_widths: Dict[str, float] = field(default_factory=dict)
+    original_footer_start_row: Optional[int] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -27,7 +28,8 @@ class TemplateLayout:
             "footer_rows": [r.to_dict() for r in self.footer_rows],
             "header_images": self.header_images,
             "footer_images": self.footer_images,
-            "col_widths": self.col_widths
+            "col_widths": self.col_widths,
+            "original_footer_start_row": self.original_footer_start_row
         }
 
     @classmethod
@@ -39,5 +41,6 @@ class TemplateLayout:
             footer_rows=[UnitRow.from_dict(r) for r in d.get("footer_rows", [])],
             header_images=d.get("header_images", []),
             footer_images=d.get("footer_images", []),
-            col_widths=d.get("col_widths", {})
+            col_widths=d.get("col_widths", {}),
+            original_footer_start_row=d.get("original_footer_start_row")
         )

@@ -35,7 +35,7 @@ class SheetManager:
             # Extract header text mappings from config
             header_mappings = None
             if mapping_config and isinstance(mapping_config, dict):
-                header_mappings = mapping_config.get('header_text_mappings', {}).get('mappings', {})
+                header_mappings = mapping_config.get('header_text_mappings', {})
 
             # 1. Detect boundaries
             boundaries = self.boundary_detector.detect_boundaries(
@@ -74,8 +74,10 @@ class SheetManager:
                 sheet_name, boundaries, table_layout, data_source, static_layout, merged_hints
             )
             
+        except ValueError:
+            raise
         except Exception as e:
-            self.logger.error(f"    Error analyzing {sheet_name}: {e}")
+            self.logger.error(f"Failed to analyze sheet {sheet_name}: {e}")
             return None
 
     def _build_sheet_analysis(self, sheet_name: str, boundaries: Any, table_layout: Any,

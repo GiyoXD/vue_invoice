@@ -172,13 +172,17 @@ class BlueprintService:
             } if header_text_mappings else {}
 
             fallback_mappings = {
-                v["col_id"]: v["fallback"]
+                str(v["col_id"]).strip(): str(v["fallback"]).strip()
                 for k, v in mappings.items()
-                if isinstance(v, dict) and v.get("col_id") and v.get("fallback")
+                if isinstance(v, dict)
+                and v.get("col_id")
+                and not str(v.get("col_id")).startswith("col_unknown")
+                and v.get("fallback") is not None
+                and str(v.get("fallback")).strip() != ""
             } if mappings else {}
 
-            # 1. Update/Merge Column and Footer mappings dynamically in global config in a single batch
-            if filtered_mappings or footer_mappings:
+            # 1. Update/Merge Column, Footer, and Fallback mappings dynamically in global config in a single batch
+            if filtered_mappings or footer_mappings or fallback_mappings:
                 from core.database.db_manager import (
                     get_global_mapping_config, save_global_mapping_config,
                     GlobalMapColumn
@@ -195,11 +199,9 @@ class BlueprintService:
                 updated = False
                 
                 if filtered_mappings:
-                    if "header_text_mappings" not in data:
-                        data["header_text_mappings"] = {"mappings": {}}
-                    if "mappings" not in data["header_text_mappings"]:
-                        data["header_text_mappings"]["mappings"] = {}
-                    data["header_text_mappings"]["mappings"].update(filtered_mappings)
+                    if "header_text_mappings" not in data or not isinstance(data["header_text_mappings"], dict):
+                        data["header_text_mappings"] = {}
+                    data["header_text_mappings"].update(filtered_mappings)
 
                     if "shipping_header_map" not in data:
                         data["shipping_header_map"] = {}
@@ -219,6 +221,12 @@ class BlueprintService:
                         if fm not in existing_footers:
                             existing_footers.append(fm)
                     data["footer_label_mappings"]["keywords"] = existing_footers
+                    updated = True
+
+                if fallback_mappings:
+                    if "fallback_strategies" not in data:
+                        data["fallback_strategies"] = {}
+                    data["fallback_strategies"].update(fallback_mappings)
                     updated = True
 
                 if updated:
@@ -262,6 +270,9 @@ class BlueprintService:
                 "message": f"Blueprint generated and saved to database for {customer_code}"
             }
             
+        except Exception:
+            self.db.rollback()
+            raise
         finally:
             # Clean up the uploaded Excel file now that the blueprint is generated/failed
             TempFileStorage.delete_file(file_path)

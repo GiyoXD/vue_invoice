@@ -303,7 +303,7 @@ def test_save_global_mapping_config_upserts(db):
         "shipping_header_map": {
             "col_po": {"keywords": ["my_po"], "format": "@"}
         },
-        "header_text_mappings": {"mappings": {"Purchase Order": "col_po"}},
+        "header_text_mappings": {"Purchase Order": "col_po"},
         "footer_label_mappings": {"keywords": ["MY TOTAL"]},
         "fallback_strategies": {"my_strategy": True}
     }
@@ -337,7 +337,7 @@ def test_save_global_mapping_config_upserts(db):
     assert "my_invoice" in config["aggregation_sheets"]
     assert "my_pl" in config["processed_tables_sheets"]
     assert config["shipping_header_map"]["col_po"]["keywords"] == ["my_po"]
-    assert config["header_text_mappings"]["mappings"] == {"Purchase Order": "col_po"}
+    assert config["header_text_mappings"] == {"Purchase Order": "col_po"}
 
 def test_mapping_foreign_key_constraint(db):
     from core.database.db_manager import GlobalMapColumn, GlobalMapHeaderTextMapping
@@ -784,6 +784,9 @@ def test_in_memory_state_reload_purges_zombies(db):
     assert "new_kw_po" in BlueprintSchema.COLUMNS["col_po"].keywords
 
 
-
-
-
+def test_save_global_mapping_config_fails_fast_on_nested_mappings(db):
+    import pytest
+    from core.database.repositories.global_map_repository import save_global_mapping_config
+    invalid_config = {"header_text_mappings": {"mappings": {"PO": "col_po"}}}
+    with pytest.raises(ValueError, match="Legacy nested 'mappings'"):
+        save_global_mapping_config(invalid_config, db)

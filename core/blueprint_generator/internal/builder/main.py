@@ -222,7 +222,7 @@ class ConfigBuilder:
             self._default_mapping_keys = set(
                 master_defaults.get('data_flow', {}).get('mappings', {}).keys()
             )
-            self.logger.info(f"  [Defaults] Loaded {len(self._default_mapping_keys)} default mappings from master_config")
+            self.logger.debug(f"  [Defaults] Loaded {len(self._default_mapping_keys)} default mappings from master_config")
         else:
             self._default_mapping_keys = set()
         
@@ -339,7 +339,7 @@ class ConfigBuilder:
         for col in sheet.columns:
             all_columns.extend(col.children)
         
-        self.logger.info(f"  Mapping data flow for sheet '{sheet.name}' ({len(sheet.columns)} cols)...")
+        self.logger.debug(f"  Mapping data flow for sheet '{sheet.name}' ({len(sheet.columns)} cols)...")
 
         # Load global fallback strategies from DB
         global_fallbacks = {}
@@ -378,12 +378,7 @@ class ConfigBuilder:
             if col.id == "col_desc" and sheet.static_content_hints:
                 dynamic_fallback = sheet.static_content_hints.get("description_fallback")
                 if dynamic_fallback:
-                    mappings[field_name] = {
-                        "fallback": {
-                            "standard": dynamic_fallback,
-                            "daf": dynamic_fallback
-                        }
-                    }
+                    mappings[field_name] = {"fallback": dynamic_fallback}
                     self.logger.info(f"    [Override] col_desc fallback set to '{dynamic_fallback}'")
                     continue
 

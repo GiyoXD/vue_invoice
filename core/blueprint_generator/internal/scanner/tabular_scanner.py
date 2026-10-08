@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Dict, List, Any, Optional, Tuple
 from collections import Counter
 from openpyxl.worksheet.worksheet import Worksheet
@@ -31,6 +32,17 @@ class _ColumnScanner:
         self.data_start_row = data_start_row
         self.mapping_config = mapping_config
         self.logger = logger
+
+        htm = (self.mapping_config or {}).get('header_text_mappings')
+        if isinstance(htm, dict) and "mappings" in htm and isinstance(htm["mappings"], dict) and "col_id" not in htm["mappings"]:
+            raise ValueError("Legacy nested 'mappings' in header_text_mappings. Fail fast: payload must be flat {header: col_id}.")
+        self.header_mappings = htm if isinstance(htm, dict) else {}
+        self._normalized_header_mappings = {}
+        for k, v in self.header_mappings.items():
+            if isinstance(k, str) and v and isinstance(v, (str, dict)):
+                norm_k = " ".join(re.sub(r'[\r\n\t]+|(?:\\[rnt])+', ' ', k).split()).lower()
+                if norm_k:
+                    self._normalized_header_mappings[norm_k] = v
 
     def _get_merged_header_ranges(self) -> Tuple[List[Any], List[Any]]:
         """Get merged ranges starting at or overlapping the header row."""
@@ -165,21 +177,27 @@ class _ColumnScanner:
 
     def determine_column_id(self, header_text: str, col_index: int) -> str:
         """Determine column ID from header text using Config first, then Rules."""
+        if not header_text or not isinstance(header_text, str):
+            return f"col_unknown_{col_index}"
+
         header_text_stripped = header_text.strip()
-        
-        if self.mapping_config:
-            mappings = self.mapping_config.get('header_text_mappings', {}).get('mappings', {})
-            if header_text_stripped in mappings:
-                return mappings[header_text_stripped]
-                
-            for mapped_header, mapped_id in mappings.items():
-                if mapped_header.strip().lower() == header_text_stripped.lower():
-                    return mapped_id
+        norm_cell = " ".join(re.sub(r'[\r\n\t]+|(?:\\[rnt])+', ' ', header_text_stripped).split()).lower()
+        mapped_val = self.header_mappings.get(header_text_stripped) or self._normalized_header_mappings.get(norm_cell)
+        if mapped_val is not None:
+            res_id = mapped_val.get("col_id") if isinstance(mapped_val, dict) else mapped_val
+            if res_id:
+                return str(res_id).strip()
+
+        for mk, mv in self.header_mappings.items():
+            if isinstance(mk, str) and mk.strip().lower() == header_text_stripped.lower():
+                res_id = mv.get("col_id") if isinstance(mv, dict) else mv
+                if res_id:
+                    return str(res_id).strip()
 
         col_def = BlueprintSchema.get_column_by_keyword(header_text)
         if col_def:
             return col_def.id
-        
+
         return f"col_unknown_{col_index}"
     
     def determine_format(self, col_id: str) -> str:
@@ -250,7 +268,7 @@ class _ColumnScanner:
         columns = []
         
         merged_ranges, all_merges_at_header = self._get_merged_header_ranges()
-        safe_max = min(self.worksheet.max_column + 1, BlueprintSchema.MAX_SCAN_COLUMN)
+        safe_max = min(self.worksheet.max_column, BlueprintSchema.MAX_SCAN_COLUMN) + 1
         
         col_iter = iter(range(1, safe_max))
         for col in col_iter:

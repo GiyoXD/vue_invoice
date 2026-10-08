@@ -138,21 +138,21 @@ class BlueprintGenerator:
         self._print_analysis_summary(analysis)
         
         # Step 1b: Validate column mapping conflicts
-        self.logger.info("Validating column mappings for conflicts...")
+        self.logger.debug("Validating column mappings for conflicts...")
         self._validate_column_mappings(analysis)
         
         # Step 2: Build bundle config
-        self.logger.info("Building blueprint configuration...")
+        self.logger.debug("Building blueprint configuration...")
         bundle = self._assemble_blueprint_bundle(
             analysis, options.pricing_mode, options.custom_prefix, options.fallback_mappings
         )
         
         # Step 2b: Validate Config Structure
-        self.logger.info("Validating configuration structure...")
+        self.logger.debug("Validating configuration structure...")
         self._validate_bundle_structure(bundle)
         
         # Step 3: Compile layout and clean template assets
-        self.logger.info("Sanitizing Excel template...")
+        self.logger.debug("Sanitizing Excel template...")
         template_json_data, template_xlsx_bytes = self._compile_template_assets(
             wb, analysis, path, options.existing_template_json
         )
@@ -202,11 +202,13 @@ class BlueprintGenerator:
             
         if runtime_mappings:
             self.logger.info(f"   Using {len(runtime_mappings)} runtime column mappings: {runtime_mappings}")
-            if "header_text_mappings" not in mapping_config:
-                mapping_config["header_text_mappings"] = {"mappings": {}}
-            if "mappings" not in mapping_config["header_text_mappings"]:
-                 mapping_config["header_text_mappings"]["mappings"] = {}
-            mapping_config["header_text_mappings"]["mappings"].update(runtime_mappings)
+            htm = mapping_config.get("header_text_mappings")
+            if isinstance(htm, dict) and "mappings" in htm and isinstance(htm["mappings"], dict):
+                htm["mappings"].update(runtime_mappings)
+            elif isinstance(htm, dict):
+                htm.update(runtime_mappings)
+            else:
+                mapping_config["header_text_mappings"] = dict(runtime_mappings)
             
         return mapping_config
 
@@ -472,24 +474,18 @@ class BlueprintGenerator:
                 break
 
         if not fallback_description:
-            fallback_description = self._load_mapping_config().get("fallback_strategies", {}).get("col_desc")
+            fallback_description = (self._load_mapping_config().get("fallback_strategies") or {}).get("col_desc")
 
         return {
-            "fallback_description": {"standard": fallback_description, "daf": fallback_description} if fallback_description else None,
+            "fallback_description": fallback_description,
             "hs_code": hs_code
         }
 
     def _print_analysis_summary(self, analysis: TemplateAnalysisResult):
         """Print summary of template analysis."""
-        self.logger.info(f"\n   Customer Code: {analysis.customer_code}")
-        self.logger.info(f"   Sheets found: {len(analysis.sheets)}")
-        
+        self.logger.info(f"Blueprint analysis: '{analysis.customer_code}' ({len(analysis.sheets)} sheet(s))")
         for sheet in analysis.sheets:
-            self.logger.info(f"\n   [{sheet.name}]")
-            self.logger.info(f"      Header row: {sheet.header_row}")
-            self.logger.info(f"      Data source: {sheet.data_source}")
-            self.logger.info(f"      Columns: {len(sheet.columns)}")
-            
+            self.logger.info(f"  [{sheet.name}] Header row: {sheet.header_row}, Columns: {len(sheet.columns)}")
             for col in sheet.columns:
                 children_info = f" ({len(col.children)} children)" if col.children else ""
-                self.logger.info(f"         - {col.id}: '{col.header}'{children_info}")
+                self.logger.debug(f"    - {col.id}: '{col.header}'{children_info}")

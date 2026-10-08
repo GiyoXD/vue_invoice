@@ -144,7 +144,9 @@ class BlueprintSchema:
             return ()
         sh_map = mapping_config.get("shipping_header_map") or {}
         ht_map = mapping_config.get("header_text_mappings") or {}
-        raw_map = ht_map.get("mappings", ht_map) if isinstance(ht_map, dict) else {}
+        if isinstance(ht_map, dict) and "mappings" in ht_map and isinstance(ht_map["mappings"], dict) and "col_id" not in ht_map["mappings"]:
+            raise ValueError("Legacy nested 'mappings' in header_text_mappings. Fail fast: payload must be flat {header: col_id}.")
+        raw_map = ht_map if isinstance(ht_map, dict) else {}
         agg = tuple(sorted(mapping_config.get("aggregation_sheets") or []))
         proc = tuple(sorted(mapping_config.get("processed_tables_sheets") or []))
         sh_items = tuple(
@@ -212,9 +214,10 @@ class BlueprintSchema:
 
             # Also load any custom columns defined in header_text_mappings
             header_mappings = mapping_config.get("header_text_mappings", {})
-            if isinstance(header_mappings, dict):
-                raw_map = header_mappings.get("mappings", header_mappings)
-                if isinstance(raw_map, dict):
+            if isinstance(header_mappings, dict) and "mappings" in header_mappings and isinstance(header_mappings["mappings"], dict) and "col_id" not in header_mappings["mappings"]:
+                raise ValueError("Legacy nested 'mappings' in header_text_mappings. Fail fast: payload must be flat {header: col_id}.")
+            raw_map = header_mappings if isinstance(header_mappings, dict) else {}
+            if isinstance(raw_map, dict):
                     for raw_text, val in raw_map.items():
                         col_id = None
                         if isinstance(val, dict):

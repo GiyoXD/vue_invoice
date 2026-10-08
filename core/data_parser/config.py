@@ -159,14 +159,19 @@ def load_and_update_mappings():
         data = get_global_mapping_config()
 
         # --- Source 1: header_text_mappings (explicit text → col_id) ---
-        mappings = data.get('header_text_mappings', {}).get('mappings', {})
+        raw_htm = data.get('header_text_mappings', {})
+        if isinstance(raw_htm, dict) and "mappings" in raw_htm and isinstance(raw_htm["mappings"], dict) and "col_id" not in raw_htm["mappings"]:
+            raise ValueError("Legacy nested 'mappings' in header_text_mappings. Fail fast: payload must be flat {header: col_id}.")
+        mappings = raw_htm if isinstance(raw_htm, dict) else {}
         for header, canonical in mappings.items():
-            target_canonical = canonical
-            if target_canonical in TARGET_HEADERS_MAP:
-                if header not in TARGET_HEADERS_MAP[target_canonical]:
-                    TARGET_HEADERS_MAP[target_canonical].append(header)
-            else:
-                TARGET_HEADERS_MAP[target_canonical] = [header]
+            target_canonical = canonical.get("col_id") if isinstance(canonical, dict) else canonical
+            target_canonical = str(target_canonical).strip() if target_canonical is not None else ""
+            if target_canonical:
+                if target_canonical in TARGET_HEADERS_MAP:
+                    if header not in TARGET_HEADERS_MAP[target_canonical]:
+                        TARGET_HEADERS_MAP[target_canonical].append(header)
+                else:
+                    TARGET_HEADERS_MAP[target_canonical] = [header]
 
         # --- Source 2: shipping_header_map (col_id → {keywords}) ---
         # Reverse the keywords into TARGET_HEADERS_MAP entries.
@@ -180,6 +185,25 @@ def load_and_update_mappings():
                         TARGET_HEADERS_MAP[col_id].append(keyword)
                 else:
                     TARGET_HEADERS_MAP[col_id] = [keyword]
+
+        # Ensure default keywords for Chinese & English headers are added if not present
+        default_keywords = {
+            'col_desc': ['产品名称', '品名', 'PRODUCT', 'DESCRIPTION', 'DESC'],
+            'col_item': ['ITEM NO.', 'ITEM NO', 'ITEM', '货号', '项目'],
+            'col_po': ['PO NO.', 'PO NO', 'PO', '采购单号', '订单号'],
+            'col_pallet_count': ['PALLET', '托数', '拖数', '件数', 'PALLETS'],
+            'col_net': ['NW', 'N.W.', 'NET WEIGHT', '净重'],
+            'col_gross': ['GW', 'G.W.', 'GROSS WEIGHT', '毛重'],
+            'col_cbm': ['CBM', '体积', 'M3'],
+            'col_unit_price': ['单价 USD', '单价', 'UNIT PRICE', 'PRICE'],
+            'col_amount': ['金额', '总价', 'AMOUNT', 'TOTAL AMOUNT'],
+        }
+        for col_id, kws in default_keywords.items():
+            if col_id not in TARGET_HEADERS_MAP:
+                TARGET_HEADERS_MAP[col_id] = []
+            for kw in kws:
+                if kw not in TARGET_HEADERS_MAP[col_id]:
+                    TARGET_HEADERS_MAP[col_id].append(kw)
 
         # --- Rebuild HEADER_IDENTIFICATION_PATTERN from core anchor keywords ---
         # We combine keywords from multiple essential columns to guarantee we catch any header row.
@@ -199,7 +223,23 @@ def load_and_update_mappings():
         # If we found keywords, build the pattern; otherwise fallback
         if escaped:
             HEADER_IDENTIFICATION_PATTERN = r"(" + "|".join(escaped) + r")"
-        
+
+        # Call sheet_parser.refresh_alias_lookup() if available
+        try:
+            import sys
+            if 'core.data_parser.sheet_parser' in sys.modules:
+                sp = sys.modules['core.data_parser.sheet_parser']
+                if hasattr(sp, 'refresh_alias_lookup'):
+                    sp.refresh_alias_lookup()
+            else:
+                from core.data_parser import sheet_parser
+                if hasattr(sheet_parser, 'refresh_alias_lookup'):
+                    sheet_parser.refresh_alias_lookup()
+        except Exception:
+            pass
+
+    except ValueError:
+        raise
     except json.JSONDecodeError:
         print("Warning: Could not decode mapping_config.json. Check for syntax errors. Using default TARGET_HEADERS_MAP.")
     except Exception as e:

@@ -69,7 +69,7 @@ def test_generator_build_table_info():
     analysis.sheets = [sheet_inv, sheet_pl]
     
     table_info = generator._build_table_info(analysis)
-    assert table_info["fallback_description"]["standard"] == "MOCK DESC"
+    assert table_info["fallback_description"] == "MOCK DESC"
     assert table_info["hs_code"] == "HS 4107"
 
 
@@ -240,9 +240,7 @@ def test_tabular_scanner_parent_header_override():
     # Use mapping config mapping Quantity(SF) to col_qty_sf to check override
     mapping_config = {
         "header_text_mappings": {
-            "mappings": {
-                "Quantity(SF)": "col_qty_sf"
-            }
+            "Quantity(SF)": "col_qty_sf"
         }
     }
     
@@ -301,5 +299,15 @@ def test_tabular_scanner_skip_vertically_merged_columns_for_font_info():
     assert layout.header_font["name"] == "Times New Roman"
     assert layout.header_font["size"] == 12
     assert layout.header_font["bold"] is True
+
+
+def test_tabular_scanner_fails_fast_on_nested_mappings():
+    import pytest
+    from openpyxl import Workbook
+    from core.blueprint_generator.internal.scanner.tabular_scanner import scan_columns
+    ws = Workbook().active
+    nested_config = {"header_text_mappings": {"mappings": {"PO": "col_po"}}}
+    with pytest.raises(ValueError, match="Legacy nested 'mappings'"):
+        scan_columns(ws, header_row=1, data_start_row=2, mapping_config=nested_config)
 
 

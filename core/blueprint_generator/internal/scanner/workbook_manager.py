@@ -43,9 +43,6 @@ class WorkbookManager:
         
         self.logger.info(f"Scanning template: {path.name} (customer: {customer_code})")
         
-        if mapping_config:
-            BlueprintSchema.load_dynamic_columns(mapping_config)
-        
         if workbook is None:
              self.logger.debug("Loading workbook from disk...")
              workbook = openpyxl.load_workbook(template_path, data_only=False)

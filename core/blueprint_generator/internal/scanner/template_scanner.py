@@ -37,6 +37,8 @@ class TemplateScanner:
         
         layout.header_rows = self._capture_header_rows(worksheet, boundaries, safe_max_column)
         layout.footer_rows = self._capture_footer_rows(worksheet, boundaries, safe_max_column, sheet_name)
+        ref_footer = boundaries.footer_end_row if getattr(boundaries, "footer_end_row", None) else boundaries.footer_row
+        layout.original_footer_start_row = (ref_footer + 1) if ref_footer else None
         
         # Capture column widths up to safe_max_column
         col_widths = {}
@@ -116,7 +118,7 @@ class TemplateScanner:
             )
             return []
 
-        end_delete = boundaries.footer_row
+        end_delete = boundaries.footer_end_row if getattr(boundaries, "footer_end_row", None) else boundaries.footer_row
         start_delete = boundaries.header_row
         
         self.logger.info(f"    Capturing footer data (Rows {end_delete + 1} to EOF)")
