@@ -302,7 +302,6 @@ def main(
             table_footer_data=footer_results["table_footer_data"],
             grand_total_footer=footer_results["grand_total_footer"],
             leather_summary=footer_results["leather_summary"],
-            weight_summary_addon=footer_results["weight_summary_addon"],
             global_standard_aggregation_results=global_standard_aggregation_results,
             global_custom_aggregation_results=global_custom_aggregation_results,
             global_item_merged_aggregation_results=global_item_merged_aggregation_results,

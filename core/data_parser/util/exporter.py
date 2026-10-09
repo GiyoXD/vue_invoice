@@ -24,7 +24,6 @@ def export_invoice_data(
     table_footer_data: List[Dict[str, Any]],
     grand_total_footer: Dict[str, Any],
     leather_summary: Dict[str, Any],
-    weight_summary_addon: Dict[str, Any],
     global_standard_aggregation_results: Dict,
     global_custom_aggregation_results: Dict,
     normal_aggregate_per_po: List[Dict[str, Any]],
@@ -46,7 +45,6 @@ def export_invoice_data(
         table_footer_data (List[Dict[str, Any]]): Summed/footer values per table.
         grand_total_footer (Dict[str, Any]): Overall grand totals for all columns.
         leather_summary (Dict[str, Any]): Summary statistics (pallet count, weight) by leather type.
-        weight_summary_addon (Dict[str, Any]): Merged weight totals across all tables.
         global_standard_aggregation_results (Dict): Aggregations using PO + Item + Price standard groupings.
         global_custom_aggregation_results (Dict): Aggregations using PO + Item custom groupings.
         normal_aggregate_per_po (List[Dict[str, Any]]): Aggregated manifest partitioned by PO & price with accurate pallet ranges.
@@ -64,8 +62,8 @@ def export_invoice_data(
             "worksheet_name": actual_sheet_name,
             "DAF_compounding_input_mode": aggregation_mode_used,
             "DAF_chunk_size": cfg.DAF_CHUNK_SIZE,
-            "DAF_intra_separator": cfg.DAF_INTRA_CHUNK_SEPARATOR.encode('unicode_escape').decode('utf-8'),
-            "DAF_inter_separator": cfg.DAF_INTER_CHUNK_SEPARATOR.encode('unicode_escape').decode('utf-8'),
+            "DAF_intra_separator": cfg.DAF_INTRA_CHUNK_SEPARATOR,
+            "DAF_inter_separator": cfg.DAF_INTER_CHUNK_SEPARATOR,
             "timestamp": datetime.datetime.now().isoformat(),
             "warnings": warnings
         },
@@ -95,15 +93,16 @@ def export_invoice_data(
         logger.error(f"An unexpected error occurred during JSON generation: {e}", exc_info=True)
         raise e
 
-    logger.info(f"Generated JSON output structure successfully ({len(json_output_string)} chars).")
+    logger.debug(f"Generated JSON output structure successfully ({len(json_output_string)} chars).")
 
     # 3. Determine target filename & path
     json_output_filename = f"{input_stem}.json"
     output_json_path = output_dir / json_output_filename
-    logger.info(f"Determined output JSON path: {output_json_path}")
+    logger.debug(f"Determined output JSON path: {output_json_path}")
 
     # 4. Atomic Write with post-write verification
     try:
+        output_json_path.parent.mkdir(parents=True, exist_ok=True)
         temp_fd, temp_path = tempfile.mkstemp(
             suffix='.json.tmp', dir=str(output_json_path.parent)
         )
