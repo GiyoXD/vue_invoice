@@ -16,13 +16,11 @@ def normalize_pallet_count(table_data: List[Dict[str, Any]]) -> List[Dict[str, A
     if not has_pallet:
         return table_data
     
-    is_xy_format = False
-    for row in table_data:
-        v = row.get(pallet_key)
-        if v is not None and str(v).strip():
-            if re.match(r'^\d+-\d+$', str(v).strip()):
-                is_xy_format = True
-            break
+    is_xy_format = any(
+        bool(re.match(r'^\d+-\d+$', str(row.get(pallet_key)).strip()))
+        for row in table_data
+        if row.get(pallet_key) is not None and str(row.get(pallet_key)).strip()
+    )
     
     normalized_count = 0
     
@@ -55,7 +53,7 @@ def normalize_pallet_count(table_data: List[Dict[str, Any]]) -> List[Dict[str, A
                 except (ValueError, TypeError):
                     row[pallet_key] = 0
     else:
-        logging.info(f"{prefix} Normalizing plain pallet values to 1/0...")
+        logging.debug(f"{prefix} Normalizing plain pallet values to 1/0...")
         for row in table_data:
             raw_val = row.get(pallet_key)
             if raw_val is None or not str(raw_val).strip():
@@ -94,8 +92,6 @@ def format_pallet_counts_to_xy(
         table_pallet_count = 0
         
         for row in table_data:
-            if not isinstance(row, dict):
-                continue
             val = row.get(pallet_col_id, 0)
             try:
                 numeric_val = int(float(val)) if val is not None else 0

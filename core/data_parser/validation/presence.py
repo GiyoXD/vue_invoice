@@ -132,8 +132,6 @@ def validate_col_level_discount(
 
     discount_rows = []
     for idx, row in enumerate(table_data):
-        if not isinstance(row, dict):
-            continue
         val = row.get('col_level')
         if val is not None:
             try:
@@ -150,18 +148,26 @@ def validate_col_level_discount(
             monitor.log_warning(msg)
 
 
+check_discount_in_col_level = validate_col_level_discount
+
+
 def validate_table_data_presence(
     current_table_data: List[Dict[str, Any]], 
     table_id_str: str, 
     column_mapping: Dict[str, str], 
-    monitor: Optional[Any] = None
+    monitor: Optional[Any] = None,
+    parser_mode: str = "standard"
 ):
     """
     Validates that required columns exist in headers and contain valid values across rows.
     """
     validate_col_level_discount(current_table_data, table_id_str, monitor=monitor)
 
-    ALWAYS_REQUIRED = ['col_po', 'col_item', 'col_qty_pcs', 'col_net', 'col_gross', 'col_cbm']
+    if parser_mode == "summary":
+        ALWAYS_REQUIRED = ['col_po', 'col_item', 'col_net']
+    else:
+        ALWAYS_REQUIRED = ['col_po', 'col_item', 'col_qty_pcs', 'col_net', 'col_gross', 'col_cbm']
+    STRICT_ALL_ROWS_COLS = ['col_po', 'col_item', 'col_qty_pcs', 'col_qty_sf', 'col_unit_price', 'col_amount']
     PRICING_COLUMNS = ['col_amount', 'col_unit_price', 'col_qty_sf']
 
     if not current_table_data:
@@ -186,7 +192,6 @@ def validate_table_data_presence(
         raise DataValidationError(err_msg)
 
     # Validate all rows for critical identifiers, qty & pricing columns
-    STRICT_ALL_ROWS_COLS = ['col_po', 'col_item', 'col_qty_pcs', 'col_qty_sf', 'col_unit_price', 'col_amount']
     check_all_cols = [c for c in STRICT_ALL_ROWS_COLS if c in column_mapping]
 
     for row in current_table_data:

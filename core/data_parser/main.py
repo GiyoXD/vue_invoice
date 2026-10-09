@@ -21,6 +21,7 @@ from .excel_handler import ExcelHandler
 from . import sheet_parser
 from . import data_processor # Includes all processing functions
 from .data_processor.single_table import FinalDAFResultType
+from core.models import InvoiceRow
 from .validation import DataValidationError, validate_data
 from .util.exporter import export_invoice_data
 
@@ -50,7 +51,8 @@ def main(
     input_filename_override: str = None,
     output_dir_override: str = None,
     ignore_tare_warning: bool = False,
-    ignore_cbm_warning: bool = False
+    ignore_cbm_warning: bool = False,
+    parser_mode: str = "standard"
 ) -> Tuple[Path, str]:
     """
     Main entry point for the invoice automation process.
@@ -70,7 +72,7 @@ def main(
     # WRAP EXECUTION
     with PipelineMonitor(monitor_output_path, step_name="Data Parser") as monitor:
         start_time = time.time()
-        logging.info("--- Starting Invoice Automation ---")
+        logging.debug("--- Starting Invoice Automation ---")
         monitor.update_logs("input_file", input_name) # Record inputs
 
         # -------------------------------------------------------------
@@ -95,9 +97,8 @@ def main(
         
         # ... [Rest of logic continues largely unchanged but inside this block] ...
         
-        # CHANGED: processed_tables is now a list of tables, where each table is a list of row dicts
-        processed_tables: List[List[Dict[str, Any]]] = []
-        all_tables_data: List[List[Dict[str, Any]]] = []
+        processed_tables: List[List[InvoiceRow]] = []
+        all_tables_data: List[List[InvoiceRow]] = []
 
         # Global definitions
         global_standard_aggregation_results: Dict[Tuple[Any, Any, Optional[decimal.Decimal], Optional[str]], Dict[str, decimal.Decimal]] = {}
@@ -125,7 +126,8 @@ def main(
         
         # --- PROCESSING STEPS ---
         try:
-            logging.info(f"Loading workbook from: {input_filepath}")
+            source_name = getattr(input_filepath, 'name', 'in-memory buffer') if hasattr(input_filepath, 'read') else str(input_filepath)
+            logging.debug(f"Loading workbook: {source_name}")
             handler = ExcelHandler(input_filepath)
             sheet = handler.load_sheet(sheet_name=cfg.SHEET_NAME, data_only=True)
             if sheet is None: raise RuntimeError(f"Failed to load sheet from '{input_filepath}'.")
@@ -133,7 +135,7 @@ def main(
             actual_sheet_name = sheet.title
             
             # Header Detection
-            smart_result = sheet_parser.find_and_map_smart_headers(sheet)
+            smart_result = sheet_parser.find_and_map_smart_headers(sheet, parser_mode=parser_mode)
             if not smart_result: 
                  err = RuntimeError("Smart header detection failed.")
                  monitor.log_process_item("Header Detection", status="error", error=err)
@@ -144,7 +146,7 @@ def main(
             # --- Validate Required Columns ---
             # col_pallet_count is required for correct distribution of net, gross, and CBM values.
             # Without it, distribution bleeds across pallet boundaries producing silently wrong data.
-            if 'col_pallet_count' not in column_mapping:
+            if parser_mode != "summary" and 'col_pallet_count' not in column_mapping:
                 err = DataValidationError(
                     "Required column 'col_pallet_count' was not found in the worksheet headers. "
                     "Please add a pallet count column (e.g. 'PALLET', '拖数', '件数', '托数') to the source Excel. "
@@ -158,22 +160,23 @@ def main(
                 sheet=sheet,
                 search_pattern=cfg.HEADER_IDENTIFICATION_PATTERN,
                 row_range=(header_row + 1, sheet.max_row),
-                col_range=(cfg.HEADER_SEARCH_COL_RANGE[0], cfg.HEADER_SEARCH_COL_RANGE[1])
+                col_range=(cfg.HEADER_SEARCH_COL_RANGE[0], cfg.HEADER_SEARCH_COL_RANGE[1]),
+                parser_mode=parser_mode
             )
             all_header_rows = [header_row] + additional_header_rows
             monitor.update_logs("tables_found", len(all_header_rows))
             
-            all_tables_data = sheet_parser.extract_multiple_tables(sheet, all_header_rows, column_mapping)
+            all_tables_data = sheet_parser.extract_multiple_tables(sheet, all_header_rows, column_mapping, parser_mode=parser_mode)
 
             # Removed raw_tables_snapshot to avoid deepcopy overhead. Raw values are now saved in-place.
             # --- 5. Process Each Table (Instrumented) ---
-            logging.info(f"--- Starting Data Processing Loop for {len(all_tables_data)} Extracted Table(s) ---")
+            logging.debug(f"--- Starting Data Processing Loop for {len(all_tables_data)} Extracted Table(s) ---")
             
             for table_index, current_table_data in enumerate(all_tables_data):
                 table_id_str = f"Table {table_index + 1}"
                 
-                # Check for empty/invalid data (must be a non-empty list of dicts)
-                if not isinstance(current_table_data, list) or not current_table_data:
+                # Check for empty/invalid data
+                if not current_table_data:
                      monitor.log_warning(f"{table_id_str} is empty or invalid. Skipping.")
                      processed_tables.append([])
                      continue
@@ -186,14 +189,17 @@ def main(
                 data_normalized = data_after_cbm
 
                 # --- 5.1: Validate Presence of Essential Data ---
-                validate_data(data_normalized, table_id_str, column_mapping, monitor=monitor, phase='presence')
+                validate_data(data_normalized, table_id_str, column_mapping, monitor=monitor, phase='presence', parser_mode=parser_mode)
                 
                 try:
                     # 5b. Distribute
-                    try:
+                    if parser_mode == "summary":
+                        processed_tables.append(data_normalized)
+                        data_for_aggregation = data_normalized
+                    else:
                         # 5b.1 Strict Validation: Gross Weight MUST NOT be smaller than Net Weight (Before Distribution)
                         # This throws a DataValidationError if any single cell is inconsistent in the source data.
-                        validate_data(data_normalized, table_id_str, column_mapping, monitor=monitor, phase='integrity', ignore_tare_warning=ignore_tare_warning)
+                        validate_data(data_normalized, table_id_str, column_mapping, monitor=monitor, phase='integrity', ignore_tare_warning=ignore_tare_warning, parser_mode=parser_mode)
 
                         data_after_distribution = data_processor.distribute_values(data_normalized, cfg.COLUMNS_TO_DISTRIBUTE, cfg.DISTRIBUTION_BASIS_COLUMN)
                         
@@ -204,29 +210,18 @@ def main(
                             column_mapping,
                             monitor=monitor,
                             phase='cbm_proportion',
-                            ignore_cbm_warning=ignore_cbm_warning
+                            ignore_cbm_warning=ignore_cbm_warning,
+                            parser_mode=parser_mode
                         )
                         
                         processed_tables.append(data_after_distribution)
                         data_for_aggregation = data_after_distribution
-                    except DataValidationError as ve:
-                        # Hard stop for validation errors (propagates to API)
-                        raise ve
-                    except Exception as distrib_e:
-                        # Log but continue with fallback for non-critical distribution errors
-                        monitor.log_warning(f"{table_id_str}: Distribution failed ({distrib_e}). Using raw/CBM data.")
-                        processed_tables.append(data_after_cbm)
-                        data_for_aggregation = data_after_cbm
                     
                     monitor.log_process_item(table_id_str, status="success")
-                except DataValidationError as ve:
-                    # User-facing validation errors MUST stop the whole process immediately.
-                    # Reraise so it hits the outer catch-all and orchestrator.
-                    raise ve
                 except Exception as table_e:
-                    # Log failure for this specific table but continue loop for general errors
+                    # Log failure for this specific table and fail fast (do not swallow or export partial invoice)
                     monitor.log_process_item(table_id_str, status="error", error=table_e)
-                    processed_tables.append([]) # Append empty to preserve indexing if needed
+                    raise table_e
 
         except Exception as e:
             # Catch-all for the main Loading/Parsing/Extraction block
@@ -236,20 +231,19 @@ def main(
 
 
         # --- 7. Output / Further Steps ---
-        logging.info(f"Final processed data structure contains {len(processed_tables)} table(s).")
-        logging.info(f"Primary aggregation mode used for DAF Compounding: {aggregation_mode_used.upper()}")
+        logging.debug(f"Final processed data structure contains {len(processed_tables)} table(s).")
+        logging.debug(f"Primary aggregation mode used for DAF Compounding: {aggregation_mode_used.upper()}")
 
 
 
 
         # --- Calculate Add-on Data (Leather Summary) ---
-        logging.info("--- Calculating Add-on Data ---")
+        logging.debug("--- Calculating Add-on Data ---")
         
         # Calculate grand total (merged across all tables)
-        merged_processed_data: List[Dict[str, Any]] = []
+        merged_processed_data: List[InvoiceRow] = []
         for table_data in processed_tables:
-            if isinstance(table_data, list):
-                merged_processed_data.extend(table_data)
+            merged_processed_data.extend(table_data)
 
         # Resolve customer decimal rounding configuration
         customer_decimals = cfg.resolve_customer_decimals(input_filename)
@@ -260,7 +254,7 @@ def main(
             merged_processed_data,
             decimals_map=customer_decimals
         )
-        logging.info(f"Normal Aggregate Per PO: {len(normal_aggregate_per_po)} unique PO+price combinations")
+        logging.debug(f"Normal Aggregate Per PO: {len(normal_aggregate_per_po)} unique PO+price combinations")
 
         # --- Run Standard & Custom Aggregations ---
         data_processor.aggregate_standard_by_po_item_price(
@@ -275,7 +269,7 @@ def main(
         )
 
         # --- DAF & Item-Merged Compounding (Mode: custom) ---
-        logging.info(f"Performing DAF & Item-Merged Compounding (Mode: custom)")
+        logging.debug(f"Performing DAF & Item-Merged Compounding (Mode: custom)")
         formatted_custom_data = data_processor.format_aggregation_as_list(global_custom_aggregation_results)
         global_DAF_compounded_result = data_processor.perform_DAF_compounding(
             formatted_custom_data,
@@ -324,7 +318,7 @@ def main(
             warnings=monitor.warnings
         )
 
-        logging.info(f"📁 Processed file: {input_filename}")
+        logging.debug(f"📁 Processed file: {input_filename}")
 
         # --- Profiler Report (non-invasive) ---
         loop_profiler.report(title=f"Sheet Parser Profiler — {input_filename}")

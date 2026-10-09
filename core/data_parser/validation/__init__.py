@@ -5,6 +5,7 @@ from .presence import (
     validate_table_data_presence,
     validate_no_duplicate_amount_columns,
     validate_col_level_discount,
+    check_discount_in_col_level,
 )
 from .weight import validate_weight_integrity
 from .cbm import validate_cbm_pcs_proportion
@@ -16,6 +17,7 @@ __all__ = [
     "validate_table_data_presence",
     "validate_no_duplicate_amount_columns",
     "validate_col_level_discount",
+    "check_discount_in_col_level",
     "validate_weight_integrity",
     "validate_cbm_pcs_proportion",
     "verify_pallet_integrity",

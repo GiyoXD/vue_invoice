@@ -9,6 +9,7 @@ from .cell import (
     UnitRow,
 )
 from .grid import Grid
+from .invoice_row import InvoiceRow
 
 __all__ = [
     "FontStyle",
@@ -20,4 +21,6 @@ __all__ = [
     "UnitCell",
     "UnitRow",
     "Grid",
+    "InvoiceRow",
 ]
+

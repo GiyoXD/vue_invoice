@@ -19,15 +19,19 @@ class Serializer:
             return float(obj)
         elif isinstance(obj, set):  # Convert set to list
             return list(obj)
+        elif hasattr(obj, "to_dict"):
+            return obj.to_dict()
         raise TypeError(f"Object of type {obj.__class__.__name__} is not JSON serializable")
 
     @classmethod
     def _stringify_keys_recursively(cls, data: Any) -> Any:
         """Recursively converts tuple keys in dicts to strings and handles non-serializable types."""
+        if hasattr(data, "to_dict"):
+            data = data.to_dict()
         if isinstance(data, dict):
             # Convert all keys to string, including tuple keys
             return {str(k): cls._stringify_keys_recursively(v) for k, v in data.items()}
-        elif isinstance(data, list):
+        elif isinstance(data, (list, tuple)):
             return [cls._stringify_keys_recursively(item) for item in data]
         elif data is None:
             return None  # JSON null

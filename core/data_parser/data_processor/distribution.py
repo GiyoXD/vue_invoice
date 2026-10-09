@@ -27,18 +27,16 @@ def inject_net_weight_pricing(tables: List[List[Dict[str, Any]]], global_unit_pr
         if not isinstance(table, list):
             continue
         for row in table:
-            if not isinstance(row, dict):
-                continue
             net_val = row.get('col_net')
             if net_val is not None:
                 net_dec = _convert_to_decimal(net_val)
                 if net_dec is not None and net_dec > 0:
-                    row['col_unit_price'] = float(price)
-                    row['col_amount'] = float((net_dec * price).quantize(
+                    row['col_unit_price'] = price
+                    row['col_amount'] = (net_dec * price).quantize(
                         decimal.Decimal('0.01'), rounding=decimal.ROUND_HALF_UP
-                    ))
+                    )
                     if row.get('col_qty_sf') is None:
-                        row['col_qty_sf'] = 0.0
+                        row['col_qty_sf'] = decimal.Decimal('0.00')
                     injected_count += 1
 
     logging.info(f"{prefix} Injected unit_price={price} into {injected_count} rows across {len(tables)} tables.")
@@ -96,7 +94,7 @@ def distribute_values(
     logging.debug(f"{prefix} Pre-converted basis values (first 10): {basis_values_dec[:10]}")
 
     for col_name in valid_columns_to_distribute:
-        logging.info(f"{prefix} Processing column for distribution: '{col_name}'")
+        logging.debug(f"{prefix} Processing column for distribution: '{col_name}'")
 
         # Values already Decimal from normalization — read directly
         current_col_values_dec: List[Optional[decimal.Decimal]] = [

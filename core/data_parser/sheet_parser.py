@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Tuple, Any, Union
 from openpyxl.worksheet.worksheet import Worksheet
 from openpyxl.utils import get_column_letter
 from decimal import Decimal, InvalidOperation
+from core.models import InvoiceRow
 from . import data_processor
 
 # --- Loop Profiler (non-invasive measurement) ---
@@ -46,13 +47,25 @@ def _build_alias_lookup() -> Dict[str, List[str]]:
 _ALIAS_REVERSE_LOOKUP = _build_alias_lookup()
 
 
+def refresh_alias_lookup():
+    """Rebuild and reassign _ALIAS_REVERSE_LOOKUP from updated TARGET_HEADERS_MAP."""
+    global _ALIAS_REVERSE_LOOKUP
+    _ALIAS_REVERSE_LOOKUP = _build_alias_lookup()
+
+
 # --- NEW: Helper functions for smart validation ---
 
 def _is_numeric(value: Any) -> bool:
-    """Helper to check if a value is a number."""
+    """Helper to check if a value is a number or numeric string."""
     if value is None:
         return False
-    return isinstance(value, (int, float, Decimal))
+    if isinstance(value, (int, float, Decimal)):
+        return True
+    try:
+        float(str(value).replace(',', '').strip())
+        return True
+    except (ValueError, TypeError):
+        return False
 
 def _is_string_like(value: Any) -> bool:
     """Helper to check if a value is a non-empty string or a number."""
@@ -109,7 +122,7 @@ def _matches_any_pattern(value: Any, patterns: Union[str, List[str]]) -> bool:
 
 # --- SMART HEADER DETECTION (3-function decomposition) ---
 
-def _score_cell(canonical_name: str, data_value: Any, row_num: int, col_num: int) -> Optional[int]:
+def _score_cell(canonical_name: str, data_value: Any, row_num: int, col_num: int, parser_mode: str = "standard") -> Optional[int]:
     """
     Score a single cell's data value against a candidate canonical column name.
     
@@ -125,8 +138,21 @@ def _score_cell(canonical_name: str, data_value: Any, row_num: int, col_num: int
     score = 0
     used_strict_value_check = False
 
+    # Summary Mode Overrides for CBM (numeric) and pallet count (> 0)
+    if parser_mode == "summary":
+        if canonical_name == "col_cbm" and _is_numeric(data_value):
+            score = 15
+        elif canonical_name == "col_pallet_count" and _is_numeric(data_value):
+            try:
+                if float(str(data_value).replace(',', '').strip()) > 0:
+                    score = 25
+            except (ValueError, TypeError):
+                pass
+        if score > 0:
+            return score
+
     # Priority 1: Exact value check (e.g. col_pallet_count must be 1)
-    allowed_values = EXPECTED_HEADER_VALUES.get(canonical_name)
+    allowed_values = EXPECTED_HEADER_VALUES.get(canonical_name) if parser_mode != "summary" else None
     if allowed_values is not None:
         used_strict_value_check = True
         processed_data_value = int(data_value) if isinstance(data_value, str) and data_value.isdigit() else data_value
@@ -136,6 +162,8 @@ def _score_cell(canonical_name: str, data_value: Any, row_num: int, col_num: int
     # Priority 2: Pattern or type check
     if not used_strict_value_check:
         patterns_to_check = EXPECTED_HEADER_PATTERNS.get(canonical_name)
+        if parser_mode == "summary" and canonical_name in ("col_cbm", "col_pallet_count"):
+            patterns_to_check = None
         if patterns_to_check:
             if _matches_any_pattern(data_value, patterns_to_check):
                 score = 15
@@ -167,7 +195,7 @@ def _score_cell(canonical_name: str, data_value: Any, row_num: int, col_num: int
 
 
 @loop_profiler.watch("_process_row")
-def _process_row(sheet: Worksheet, row_num: int) -> Tuple[Dict[str, str], int, int]:
+def _process_row(sheet: Worksheet, row_num: int, parser_mode: str = "standard") -> Tuple[Dict[str, str], int, int]:
     """
     Process a single row: scan all columns, score candidates, resolve ties.
     
@@ -193,7 +221,7 @@ def _process_row(sheet: Worksheet, row_num: int) -> Tuple[Dict[str, str], int, i
             candidate_canonicals = _ALIAS_REVERSE_LOOKUP.get(header_value, [])
             tick("_process_row", sub="alias_lookups")
             for canonical_name in candidate_canonicals:
-                score = _score_cell(canonical_name, data_value, row_num, col_num)
+                score = _score_cell(canonical_name, data_value, row_num, col_num, parser_mode=parser_mode)
                 if score is not None and score > 0:
                     col_scores.append({'score': score, 'name': canonical_name})
                     header_text_columns.add(col_num)
@@ -326,7 +354,7 @@ def _process_row(sheet: Worksheet, row_num: int) -> Tuple[Dict[str, str], int, i
 
 
 @loop_profiler.watch("find_and_map_smart_headers")
-def find_and_map_smart_headers(sheet: Worksheet) -> Optional[Tuple[int, Dict[str, str]]]:
+def find_and_map_smart_headers(sheet: Worksheet, parser_mode: str = "standard") -> Optional[Tuple[int, Dict[str, str]]]:
     """
     Finds and maps headers using a scoring system. Evaluates all rows in the
     search range and selects the one with the highest cumulative score.
@@ -338,9 +366,6 @@ def find_and_map_smart_headers(sheet: Worksheet) -> Optional[Tuple[int, Dict[str
     Returns:
         Tuple of (header_row_number, column_mapping) or None if no valid row found.
     """
-    prefix = "[find_and_map_smart_headers]"
-    logging.info(f"{prefix} Starting best-fit header search...")
-
     best_result: Optional[Tuple[int, Dict[str, str]]] = None
     highest_row_score = 0
 
@@ -349,17 +374,14 @@ def find_and_map_smart_headers(sheet: Worksheet) -> Optional[Tuple[int, Dict[str
             continue
 
         tick("find_and_map_smart_headers", sub="rows_scanned")
-        potential_mapping, current_row_score, _ = _process_row(sheet, row_num)
-
-        logging.debug(f"{prefix} Row {row_num} | Score: {current_row_score} | Mapping: {potential_mapping}")
+        potential_mapping, current_row_score, _ = _process_row(sheet, row_num, parser_mode=parser_mode)
 
         if len(potential_mapping) >= 3 and current_row_score > highest_row_score:
             highest_row_score = current_row_score
             best_result = (row_num, potential_mapping)
-            logging.info(f"{prefix} New best candidate row at {row_num} with score {highest_row_score}.")
 
     if best_result:
-        logging.info(f"{prefix} SUCCESS: Header row confirmed at {best_result[0]} with score {highest_row_score}.")
+        logging.info(f"[find_and_map_smart_headers] Header row confirmed at {best_result[0]} (score {highest_row_score})")
         
         # --- VALIDATE DUPLICATE COL_AMOUNT ---
         from .validation import validate_no_duplicate_amount_columns
@@ -367,12 +389,12 @@ def find_and_map_smart_headers(sheet: Worksheet) -> Optional[Tuple[int, Dict[str
         
         return best_result
 
-    logging.error(f"{prefix} FAILED: No row passed smart validation.")
+    logging.error("[find_and_map_smart_headers] FAILED: No row passed smart validation.")
     return None
 
 
 @loop_profiler.watch("extract_multiple_tables")
-def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[str, str]) -> List[List[Dict[str, Any]]]:
+def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[str, str], parser_mode: str = "standard") -> List[List[InvoiceRow]]:
     """
     Extracts data for multiple tables defined by header_rows using the validated column_mapping.
     Returns a list of tables. Each table is a list of row dictionaries.
@@ -381,11 +403,11 @@ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[
         logging.warning("[extract_multiple_tables] No header rows or column mapping provided.")
         return []
 
-    all_tables_data: List[List[Dict[str, Any]]] = []
+    all_tables_data: List[List[InvoiceRow]] = []
     stop_col_letter = column_mapping.get(STOP_EXTRACTION_ON_EMPTY_COLUMN)
     prefix = "[extract_multiple_tables]"
 
-    logging.info(f"{prefix} Starting extraction for {len(header_rows)} tables: {header_rows} (Row List Format)")
+    logging.debug(f"{prefix} Starting extraction for {len(header_rows)} tables: {header_rows} (Row List Format)")
 
     for i, header_row in enumerate(header_rows):
         table_index = i + 1
@@ -403,8 +425,8 @@ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[
             all_tables_data.append([])
             continue
 
-        logging.info(f"{prefix} Table {table_index}: Extracting Data Rows {start_data_row} to {end_data_row - 1}")
-        current_table_data: List[Dict[str, Any]] = []
+        logging.debug(f"{prefix} Table {table_index}: Extracting Data Rows {start_data_row} to {end_data_row - 1}")
+        current_table_data: List[InvoiceRow] = []
 
         # HOISTED: These never change per-row — build once per table
         col_letter_to_canonical = {v: k for k, v in column_mapping.items()}
@@ -418,8 +440,25 @@ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[
             if stop_col_letter:
                 stop_cell_value = sheet[f"{stop_col_letter}{current_row}"].value
                 if stop_cell_value is None or (isinstance(stop_cell_value, str) and not stop_cell_value.strip()):
-                    logging.info(f"{prefix} Stopping extraction for Table {table_index} at row {current_row}: Empty cell in stop column '{STOP_EXTRACTION_ON_EMPTY_COLUMN}'.")
+                    logging.debug(f"{prefix} Stopping extraction for Table {table_index} at row {current_row}: Empty cell in stop column '{STOP_EXTRACTION_ON_EMPTY_COLUMN}'.")
                     break
+
+            TOTAL_KEYWORDS = {"合计", "总计", "小计", "GRANDTOTAL", "TOTAL", "SUBTOTAL"}
+            total_detected = False
+            for col_idx in range(HEADER_SEARCH_COL_RANGE[0], min(HEADER_SEARCH_COL_RANGE[1] + 1, (sheet.max_column or 30) + 1)):
+                c_val = sheet.cell(row=current_row, column=col_idx).value
+                if isinstance(c_val, str):
+                    c_clean = re.sub(r'[\s_]+', '', c_val).upper()
+                    if c_clean in TOTAL_KEYWORDS:
+                        po_col = column_mapping.get('col_po')
+                        po_val = sheet[f"{po_col}{current_row}"].value if po_col else None
+                        po_clean = re.sub(r'[\s_]+', '', str(po_val or '')).upper()
+                        if not po_val or po_clean in TOTAL_KEYWORDS:
+                            total_detected = True
+                            break
+            if total_detected:
+                logging.info(f"{prefix} Stopping extraction for Table {table_index} at row {current_row}: Total row detected.")
+                break
 
             row_dict: Dict[str, Any] = {}
 
@@ -440,6 +479,16 @@ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[
                     processed_value = cell_value.strip()
                 else:
                     processed_value = cell_value
+                if parser_mode == "summary" and canonical_name == 'col_pallet_count' and processed_value is not None:
+                    try:
+                        if isinstance(processed_value, (float, Decimal)):
+                            if float(processed_value).is_integer():
+                                processed_value = int(processed_value)
+                        elif isinstance(processed_value, str) and processed_value.strip():
+                            num_pc = float(processed_value.replace(',', '').strip())
+                            processed_value = int(num_pc) if num_pc.is_integer() else num_pc
+                    except (ValueError, TypeError, OverflowError):
+                        pass
                 row_dict[canonical_name] = processed_value
                 if canonical_name == 'col_cbm' and cell_value is not None:
                     row_dict['col_cbm_raw'] = cell_value.strip() if isinstance(cell_value, str) else cell_value
@@ -447,19 +496,19 @@ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[
             # Additional logic to skip completely empty rows (optional but good practice)
             if any(v is not None and (not isinstance(v, str) or v.strip() != "") for v in row_dict.values()):
                 row_dict['_row_num'] = current_row
-                current_table_data.append(row_dict)
+                current_table_data.append(InvoiceRow.from_raw_dict(row_dict))
 
         # Normalize pallet count format IMMEDIATELY upon extraction so all downstream JSON output has 1/0 boundaries
-        if current_table_data:
+        if current_table_data and parser_mode != "summary":
             data_processor.normalize_pallet_count(current_table_data)
 
         all_tables_data.append(current_table_data)
-        logging.info(f"{prefix} Successfully stored {len(current_table_data)} rows for Table Index {table_index}.")
+        logging.debug(f"{prefix} Successfully stored {len(current_table_data)} rows for Table Index {table_index}.")
         
     # Format pallet counts to "x-y" display format in-place across all extracted tables
-    if all_tables_data:
+    if all_tables_data and parser_mode != "summary":
         total_pallets = sum(
-            sum(row.get('col_pallet_count', 0) for row in table if isinstance(row, dict))
+            sum(row.get('col_pallet_count', 0) for row in table)
             for table in all_tables_data if isinstance(table, list)
         )
         data_processor.format_pallet_counts_to_xy(all_tables_data, total_pallets)
@@ -468,11 +517,12 @@ def extract_multiple_tables(sheet, header_rows: List[int], column_mapping: Dict[
 
 
 @loop_profiler.watch("find_all_header_rows")
-def find_all_header_rows(sheet, search_pattern, row_range, col_range, start_after_row: int = 0) -> List[int]:
+def find_all_header_rows(sheet, search_pattern, row_range, col_range, start_after_row: int = 0, parser_mode: str = "standard") -> List[int]:
     """
     Finds all 1-indexed row numbers containing a header.
     Utilizes the smart _process_row logic to prevent false positives from generic data matching.
     """
+    from .validation import DataValidationError
     found_rows: set[int] = set()
     try:
         start_row = max(row_range[0], start_after_row + 1)
@@ -481,7 +531,7 @@ def find_all_header_rows(sheet, search_pattern, row_range, col_range, start_afte
         if start_row > max_row_to_search:
              return []
 
-        logging.info(
+        logging.debug(
             f"[find_all_header_rows] Searching for additional headers using smart row scoring "
             f"in rows {start_row}-{max_row_to_search}"
         )
@@ -491,7 +541,7 @@ def find_all_header_rows(sheet, search_pattern, row_range, col_range, start_afte
                 continue
             tick("find_all_header_rows", sub="rows_scanned")
             # Reuse the smart logic that checks for multiple mapped columns
-            potential_mapping, score, header_text_matches = _process_row(sheet, r_idx)
+            potential_mapping, score, header_text_matches = _process_row(sheet, r_idx, parser_mode=parser_mode)
             
             # A valid header row must have:
             # - At least 3 recognizable column mappings
@@ -512,6 +562,8 @@ def find_all_header_rows(sheet, search_pattern, row_range, col_range, start_afte
         logging.info(f"[find_all_header_rows] Found {len(header_rows)} additional header rows at: {header_rows}")
         return header_rows
 
+    except DataValidationError:
+        raise
     except Exception as e:
         logging.error(f"[find_all_header_rows] Error finding header rows: {e}", exc_info=True)
         return []
