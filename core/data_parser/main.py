@@ -2,13 +2,11 @@
 # --- Fixed datetime JSON serialization ---
 
 import logging
-import pprint
 import decimal
 import os
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple, Union
 import time # Added for timing operations
-import argparse
 
 # --- Loop Profiler (non-invasive measurement) ---
 from core.utils.loop_profiler import loop_profiler
@@ -87,7 +85,7 @@ def main(
             except Exception as e:
                 step_name = "Configuration" if not input_excel_override else "Input File Check"
                 monitor.log_process_item(step_name, status="error", error=e)
-                raise e
+                raise
             input_filename = os.path.basename(input_filepath)
         else:
             input_filename = input_name
@@ -128,45 +126,40 @@ def main(
         try:
             source_name = getattr(input_filepath, 'name', 'in-memory buffer') if hasattr(input_filepath, 'read') else str(input_filepath)
             logging.debug(f"Loading workbook: {source_name}")
-            handler = ExcelHandler(input_filepath)
-            sheet = handler.load_sheet(sheet_name=cfg.SHEET_NAME, data_only=True)
-            if sheet is None: raise RuntimeError(f"Failed to load sheet from '{input_filepath}'.")
-            
-            actual_sheet_name = sheet.title
-            
-            # Header Detection
-            smart_result = sheet_parser.find_and_map_smart_headers(sheet, parser_mode=parser_mode)
-            if not smart_result: 
-                 err = RuntimeError("Smart header detection failed.")
-                 monitor.log_process_item("Header Detection", status="error", error=err)
-                 raise err
-            
-            header_row, column_mapping = smart_result
-            
-            # --- Validate Required Columns ---
-            # col_pallet_count is required for correct distribution of net, gross, and CBM values.
-            # Without it, distribution bleeds across pallet boundaries producing silently wrong data.
-            if parser_mode != "summary" and 'col_pallet_count' not in column_mapping:
-                err = DataValidationError(
-                    "Required column 'col_pallet_count' was not found in the worksheet headers. "
-                    "Please add a pallet count column (e.g. 'PALLET', '拖数', '件数', '托数') to the source Excel. "
-                    "This column is required for correct distribution of net weight, gross weight, and CBM values."
+            with ExcelHandler(input_filepath) as handler:
+                try:
+                    sheet = handler.load_sheet(sheet_name=cfg.SHEET_NAME, data_only=True, fallback_to_active=True)
+                except KeyError as e:
+                    err = DataValidationError(
+                        f"Worksheet '{cfg.SHEET_NAME}' not found in workbook '{source_name}'. {str(e)}"
+                    )
+                    monitor.log_process_item("Header Validation", status="error", error=err)
+                    raise err from e
+                actual_sheet_name = sheet.title
+                smart_result = sheet_parser.find_and_map_smart_headers(sheet, parser_mode=parser_mode)
+                if not smart_result:
+                    err = RuntimeError("Smart header detection failed.")
+                    monitor.log_process_item("Header Detection", status="error", error=err)
+                    raise err
+                header_row, column_mapping = smart_result
+                if parser_mode != "summary" and 'col_pallet_count' not in column_mapping:
+                    err = DataValidationError(
+                        "Required column 'col_pallet_count' was not found in the worksheet headers. "
+                        "Please add a pallet count column (e.g. 'PALLET', '拖数', '件数', '托数') to the source Excel. "
+                        "This column is required for correct distribution of net weight, gross weight, and CBM values."
+                    )
+                    monitor.log_process_item("Header Validation", status="error", error=err)
+                    raise err
+                additional_header_rows = sheet_parser.find_all_header_rows(
+                    sheet=sheet,
+                    search_pattern=cfg.HEADER_IDENTIFICATION_PATTERN,
+                    row_range=(header_row + 1, sheet.max_row),
+                    col_range=(cfg.HEADER_SEARCH_COL_RANGE[0], cfg.HEADER_SEARCH_COL_RANGE[1]),
+                    parser_mode=parser_mode
                 )
-                monitor.log_process_item("Header Validation", status="error", error=err)
-                raise err
-            
-            # Find Additional Tables
-            additional_header_rows = sheet_parser.find_all_header_rows(
-                sheet=sheet,
-                search_pattern=cfg.HEADER_IDENTIFICATION_PATTERN,
-                row_range=(header_row + 1, sheet.max_row),
-                col_range=(cfg.HEADER_SEARCH_COL_RANGE[0], cfg.HEADER_SEARCH_COL_RANGE[1]),
-                parser_mode=parser_mode
-            )
-            all_header_rows = [header_row] + additional_header_rows
-            monitor.update_logs("tables_found", len(all_header_rows))
-            
-            all_tables_data = sheet_parser.extract_multiple_tables(sheet, all_header_rows, column_mapping, parser_mode=parser_mode)
+                all_header_rows = [header_row] + additional_header_rows
+                monitor.update_logs("tables_found", len(all_header_rows))
+                all_tables_data = sheet_parser.extract_multiple_tables(sheet, all_header_rows, column_mapping, parser_mode=parser_mode)
 
             # Removed raw_tables_snapshot to avoid deepcopy overhead. Raw values are now saved in-place.
             # --- 5. Process Each Table (Instrumented) ---
@@ -221,12 +214,12 @@ def main(
                 except Exception as table_e:
                     # Log failure for this specific table and fail fast (do not swallow or export partial invoice)
                     monitor.log_process_item(table_id_str, status="error", error=table_e)
-                    raise table_e
+                    raise
 
         except Exception as e:
             # Catch-all for the main Loading/Parsing/Extraction block
             monitor.log_process_item("Data Parsing/Extraction", status="error", error=e)
-            raise e # Re-raise to trigger outer exit codes if needed, though monitor captures it
+            raise # Re-raise to trigger outer exit codes if needed, though monitor captures it
 
 
 

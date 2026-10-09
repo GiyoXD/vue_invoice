@@ -10,7 +10,6 @@ import logging # Using logging is better than print for info/errors
 class ExcelHandler:
     """Handles loading and accessing data from Excel files using openpyxl."""
     def __init__(self, file_path_or_buffer):
-        import io
         self.is_buffer = hasattr(file_path_or_buffer, "read")
         
         if not self.is_buffer:
@@ -21,52 +20,59 @@ class ExcelHandler:
         self.file_path = file_path_or_buffer
         self.workbook = None
         self.sheet = None
-        
-        target_name = "in-memory buffer" if self.is_buffer else self.file_path
-        logging.info(f"Initialized ExcelHandler for: {target_name}")
 
-    def load_sheet(self, sheet_name=None, data_only=True):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+
+    def load_sheet(self, sheet_name=None, data_only=True, fallback_to_active=True):
         """
         Loads the workbook and a specific sheet.
 
         Args:
             sheet_name (str, optional): Name of the sheet. Defaults to None (active sheet).
             data_only (bool, optional): Get cell values (True) or formulas (False). Defaults to True.
+            fallback_to_active (bool, optional): If sheet_name not found, fallback to active sheet. Defaults to True.
 
         Returns:
-            openpyxl.worksheet.worksheet.Worksheet: The loaded sheet object, or None on failure.
+            openpyxl.worksheet.worksheet.Worksheet: The loaded sheet object.
         """
         try:
-            logging.info(f"Attempting to load workbook '{self.file_path}' with data_only={data_only}")
             self.workbook = openpyxl.load_workbook(self.file_path, data_only=data_only)
-            active_sheet_title = self.workbook.active.title # Get active sheet title early
 
             if sheet_name:
                 if sheet_name in self.workbook.sheetnames:
                     self.sheet = self.workbook[sheet_name]
-                    logging.info(f"Successfully loaded specified sheet: '{self.sheet.title}'")
                 else:
-                    logging.warning(f"Sheet '{sheet_name}' not found in '{self.file_path}'. Loading active sheet: '{active_sheet_title}'")
-                    self.sheet = self.workbook.active
+                    normalized_target = sheet_name.strip().lower()
+                    sheet_map = {name.strip().lower(): name for name in self.workbook.sheetnames}
+                    if normalized_target in sheet_map:
+                        self.sheet = self.workbook[sheet_map[normalized_target]]
+                    elif fallback_to_active:
+                        logging.warning(
+                            f"Sheet '{sheet_name}' not found in workbook. "
+                            f"Falling back to active sheet '{self.workbook.active.title}'."
+                        )
+                        self.sheet = self.workbook.active
+                    else:
+                        raise KeyError(f"Sheet '{sheet_name}' not found. Available sheets: {self.workbook.sheetnames}")
             else:
                 self.sheet = self.workbook.active
-                logging.info(f"No sheet name specified. Successfully loaded active sheet: '{self.sheet.title}'")
 
-            logging.info(f"Sheet dimensions: Max Row={self.sheet.max_row}, Max Col={self.sheet.max_column}")
+            logging.debug(f"Loaded sheet '{self.sheet.title}' ({self.sheet.max_row} rows, {self.sheet.max_column} cols)")
             
             # Add diagnostic info for MOTO files
             if "MOTO" in str(self.file_path):
                 logging.warning(f"MOTO FILE DETECTED - Large max_row might cause performance issues: {self.sheet.max_row}")
             
             return self.sheet
-        except FileNotFoundError: # Already handled in __init__, but belt-and-suspenders
-             logging.error(f"File not found exception during load: {self.file_path}")
-             raise # Re-raise the specific error
         except Exception as e:
-            logging.error(f"Failed to load workbook/sheet from '{self.file_path}': {e}", exc_info=True)
-            self.workbook = None
-            self.sheet = None
-            return None
+            target_name = getattr(self.file_path, 'name', 'in-memory buffer') if self.is_buffer else str(self.file_path)
+            logging.error(f"Failed to load workbook/sheet from '{target_name}': {e}", exc_info=True)
+            self.close()
+            raise
 
     def get_sheet(self):
         """Returns the currently loaded sheet object."""
