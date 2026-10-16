@@ -19,6 +19,8 @@ __all__ = ["perform_DAF_compounding", "DAFCompoundingResult", "FinalDAFResultTyp
 def format_chunks(items: List[str], size: int, item_sep: str, line_sep: str) -> str:
     if not items:
         return ""
+    if size <= 0:
+        raise ValueError("size must be > 0")
     return line_sep.join(
         item_sep.join(str(it) for it in items[i:i + size])
         for i in range(0, len(items), size)
@@ -83,7 +85,7 @@ def perform_DAF_compounding(
     decimals_map: Optional[Dict[str, int]] = None,
 ) -> FinalDAFResultType:
     prefix = "[perform_DAF_compounding]"
-    logging.info(f"{prefix} Starting DAF Compounding directly from row data.")
+    logging.debug(f"{prefix} Starting DAF Compounding directly from row data.")
 
     try:
         chunk_size = int(chunk_size)
@@ -103,6 +105,8 @@ def perform_DAF_compounding(
         quantize_record(cast(Dict[str, Any], empty), decimals_map)
         return [empty]
 
+    # Business Note: When descriptions exist (has_desc is True), PO chunking is
+    # intentionally ignored by design. Output splits strictly by material (buffalo vs normal/cow).
     has_desc = any(r.get("col_desc") and str(r.get("col_desc")).strip() for r in data)
     buckets = _split_by_material(data) if has_desc else _split_by_po_chunks(data)
 

@@ -1,7 +1,8 @@
+import pytest
 from decimal import Decimal
 from typing import Any, Dict, List
 
-from core.data_parser.data_processor.single_table.daf import perform_DAF_compounding
+from core.data_parser.data_processor.single_table.daf import perform_DAF_compounding, format_chunks
 
 
 def test_daf_empty_input():
@@ -239,3 +240,12 @@ def test_daf_decimals_quantization():
     assert res[0]["col_qty_sf"] == Decimal("150.667")
     assert res[0]["col_amount"] == Decimal("1505.4")
     assert res[0]["col_net"] == Decimal("300.95")
+
+
+def test_format_chunks_size_guard():
+    assert format_chunks([], 0, "/", "\n") == ""
+    with pytest.raises(ValueError, match="size must be > 0"):
+        format_chunks(["A", "B"], 0, "/", "\n")
+    with pytest.raises(ValueError, match="size must be > 0"):
+        format_chunks(["A", "B"], -1, "/", "\n")
+

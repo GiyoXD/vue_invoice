@@ -53,6 +53,8 @@ def first_non_empty_reducer(values: List[Any]) -> str:
 
 def unique_join_reducer(values: List[Any]) -> str:
     """Merges distinct strings, splitting on ' / ' and rejoining in sorted order."""
+    # Note: MISSING_PO_SENTINEL ("<MISSING_PO>") is a draft-only internal placeholder
+    # and safe for finalized invoice business flow.
     unique_pos = set()
     for val in values:
         if val is None:

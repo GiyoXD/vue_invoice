@@ -73,15 +73,20 @@ def validate_cbm_pcs_proportion(
             except (decimal.InvalidOperation, ValueError, TypeError):
                 pass
         
-        if basis_dec is None or basis_dec <= 0:
-            continue
-
         cbm_dec = None
         if cbm_raw is not None:
             try:
                 cbm_dec = cbm_raw if isinstance(cbm_raw, decimal.Decimal) else DataConverter.convert_to_decimal(cbm_raw)
             except (decimal.InvalidOperation, ValueError, TypeError):
                 pass
+
+        if basis_dec is None or basis_dec <= 0:
+            if cbm_dec is not None and cbm_dec > 0:
+                row_num = row.get('_row_num', '?')
+                violations.append(
+                    f"Row {row_num}: CBM ({cbm_dec:.4f}) present but missing or zero {basis_col}. Corrupted Excel data."
+                )
+            continue
 
         # Check for Zero CBM
         if cbm_dec is None or cbm_dec == 0:
@@ -220,3 +225,58 @@ def validate_cbm_pcs_proportion(
             if monitor:
                 monitor.log_process_item(f"{table_id_str} CBM Validation", status="error", error=summary)
             raise DataValidationError(summary)
+
+
+def validate_distribution_basis(
+    data_rows: List[Dict[str, Any]],
+    table_id_str: Optional[str] = None,
+    column_mapping: Optional[Dict[str, str]] = None,
+    monitor: Optional[Any] = None,
+    ignore_cbm_warning: bool = False
+) -> None:
+    """
+    Validates that rows with distributable metrics (CBM) have a valid positive basis (e.g. PCS or SF).
+    Raises DataValidationError if a row has CBM but missing/zero basis.
+    """
+    prefix = f"[validate_distribution_basis{f' in {table_id_str}' if table_id_str else ''}]"
+    col_cbm = 'col_cbm'
+    basis_col = 'col_qty_pcs'
+    if column_mapping:
+        if basis_col not in column_mapping and 'col_qty_sf' in column_mapping:
+            basis_col = 'col_qty_sf'
+    
+    # Check if table has CBM column
+    has_cbm = any(col_cbm in row for row in data_rows)
+    if not has_cbm:
+        return
+
+    for idx, row in enumerate(data_rows):
+        cbm_val = row.get(col_cbm)
+        if cbm_val is None:
+            continue
+        try:
+            cbm_dec = cbm_val if isinstance(cbm_val, decimal.Decimal) else DataConverter.convert_to_decimal(cbm_val)
+        except (decimal.InvalidOperation, ValueError, TypeError):
+            continue
+            
+        if cbm_dec is not None and cbm_dec > 0:
+            basis_val = row.get(basis_col)
+            basis_dec = None
+            if basis_val is not None:
+                try:
+                    basis_dec = basis_val if isinstance(basis_val, decimal.Decimal) else DataConverter.convert_to_decimal(basis_val)
+                except (decimal.InvalidOperation, ValueError, TypeError):
+                    pass
+            if basis_dec is None or basis_dec <= 0:
+                row_num = row.get('_row_num', idx + 1)
+                err_msg = f"Row {row_num}: Has CBM ({cbm_dec:.4f}) but missing or zero {basis_col}. Corrupted Excel data."
+                if ignore_cbm_warning:
+                    logging.warning(f"{prefix} [Ignored]: {err_msg}")
+                    if monitor:
+                        monitor.log_warning(err_msg)
+                else:
+                    logging.error(f"{prefix} {err_msg}")
+                    if monitor:
+                        monitor.log_process_item(f"{table_id_str or 'Table'} Basis Validation", status="error", error=err_msg)
+                    raise DataValidationError(err_msg)
+

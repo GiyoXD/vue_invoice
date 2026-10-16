@@ -46,6 +46,9 @@ def normalize_pallet_count(table_data: List[Dict[str, Any]]) -> List[Dict[str, A
                 else:
                     row[pallet_key] = 0
             else:
+                # Business invariant: columns are strictly single-format; if x-y format is used,
+                # all valid pallet rows contain a hyphen. This numeric fallback is purely defensive
+                # for unexpected non-hyphen entries.
                 try:
                     row[pallet_key] = 1 if int(float(raw_str)) >= 1 else 0
                     if row[pallet_key] == 1:
@@ -54,6 +57,9 @@ def normalize_pallet_count(table_data: List[Dict[str, Any]]) -> List[Dict[str, A
                     row[pallet_key] = 0
     else:
         logging.debug(f"{prefix} Normalizing plain pallet values to 1/0...")
+        # Business invariant: plain format columns already represent binary 1/0 boundary flags
+        # (1 = new pallet start, 0 = continuation/blank). They are NOT sequential pallet IDs
+        # (e.g. 1, 1, 2, 2), so sequential deduplication across rows is intentionally not needed.
         for row in table_data:
             raw_val = row.get(pallet_key)
             if raw_val is None or not str(raw_val).strip():

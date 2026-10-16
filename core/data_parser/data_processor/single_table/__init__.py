@@ -11,6 +11,8 @@ from .footers import calculate_footer_totals
 from .serializer import format_aggregation_as_list
 from .aggregations import (
     quantize_record,
+    finalize_standard_aggregation,
+    finalize_item_merged_aggregation,
     aggregate_standard_by_po_item_price,
     aggregate_custom_by_po_item,
     aggregate_by_item_merge_po,
@@ -81,6 +83,8 @@ __all__ = [
     "calculate_footer_totals",
     "format_aggregation_as_list",
     "quantize_record",
+    "finalize_standard_aggregation",
+    "finalize_item_merged_aggregation",
     "aggregate_standard_by_po_item_price",
     "aggregate_custom_by_po_item",
     "aggregate_by_item_merge_po",

@@ -162,8 +162,7 @@ def distribute_values(
 
                          for k in block_indices:
                              if k not in indices_with_valid_basis:
-                                 if processed_col_values[k] is None:
-                                     processed_col_values[k] = decimal.Decimal(0)
+                                 processed_col_values[k] = decimal.Decimal(0)
 
                          tolerance = dist_precision / decimal.Decimal(2)
                          diff = abs(distributed_sum_check - current_val_dec)

@@ -78,7 +78,7 @@ def validate_weight_integrity(
             po_val = row.get(po_key, "Unknown PO")
             item_val = row.get(item_key, "Unknown Item")
             row_id_str = f"PO [{po_val}] / Item [{item_val}]"
-            logging.info(f"{prefix} Established reference tare weight: {reference_tare} from {row_id_str}")
+            logging.debug(f"{prefix} Established reference tare weight: {reference_tare} from {row_id_str}")
         else:
             if current_tare != reference_tare:
                 expected_gross = net_val + reference_tare

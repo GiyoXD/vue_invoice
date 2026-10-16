@@ -16,6 +16,8 @@ from .schema import (
 
 __all__ = [
     "quantize_record",
+    "finalize_standard_aggregation",
+    "finalize_item_merged_aggregation",
     "aggregate_standard_by_po_item_price",
     "aggregate_custom_by_po_item",
     "aggregate_by_item_merge_po",
@@ -36,13 +38,10 @@ def quantize_record(data_dict: Dict[str, Any], decimals_map: Optional[Dict[str, 
         val = data_dict.get(col_id)
         if val is not None:
             dec_places = decimals_map.get(col_id, 4 if col_id == "col_unit_price" else 2)
-            try:
-                data_dict[col_id] = val.quantize(
-                    decimal.Decimal(10) ** -dec_places,
-                    rounding=decimal.ROUND_HALF_UP
-                )
-            except Exception as e:
-                logging.warning(f"Failed to quantize column '{col_id}' with value {val} to {dec_places} decimals: {e}")
+            data_dict[col_id] = val.quantize(
+                decimal.Decimal(10) ** -dec_places,
+                rounding=decimal.ROUND_HALF_UP
+            )
 
 
 def _extract_po_item_key(
@@ -73,10 +72,36 @@ def _leather_key_selector(row: Dict[str, Any]) -> str:
     return LEATHER_TYPES[0] if LEATHER_TYPES[0] in desc else LEATHER_TYPES[1]
 
 
+def finalize_standard_aggregation(
+    global_aggregation_map: Dict[Tuple[Any, Any, Any, Optional[str]], Dict[str, Any]],
+    decimals_map: Optional[Dict[str, int]] = None,
+) -> Dict[Tuple[Any, Any, Any, Optional[str]], Dict[str, Any]]:
+    """
+    Finalizes standard aggregation by recalculating col_amount = sqft * price
+    when price_dec is not None, and quantizing records.
+    """
+    prefix = "[finalize_standard_aggregation]"
+    if decimals_map is None:
+        decimals_map = {"col_amount": 2, "col_qty_sf": 2, "col_net": 2, "col_cbm": 2}
+
+    for (po, item, price_dec, desc), val_dict in global_aggregation_map.items():
+        if price_dec is not None:
+            try:
+                price = price_dec
+                sqft = val_dict.get('col_qty_sf', decimal.Decimal(0))
+                val_dict['col_amount'] = sqft * price
+            except Exception as e:
+                logging.warning(f"{prefix} Failed to calculate amount for key ({po}, {item}, {price_dec}, {desc}): {e}")
+        quantize_record(val_dict, decimals_map)
+
+    return global_aggregation_map
+
+
 def aggregate_standard_by_po_item_price(
     processed_data: List[Dict[str, Any]],
     global_aggregation_map: Dict[Tuple[Any, Any, Any, Optional[str]], Dict[str, Any]],
-    decimals_map: Optional[Dict[str, int]] = None
+    decimals_map: Optional[Dict[str, int]] = None,
+    finalize: bool = True,
 ) -> Dict[Tuple[Any, Any, Any, Optional[str]], Dict[str, Any]]:
     """
     STANDARD Aggregation: Aggregates 'sqft' AND 'amount' values based on unique
@@ -102,18 +127,10 @@ def aggregate_standard_by_po_item_price(
     aggregator = Aggregator(key_selector=_extract_po_item_key, reducers=COLUMN_REDUCERS)
     aggregator.aggregate(processed_data, global_aggregation_map)
 
-    # Recalculate amount using sqft * price_dec, then quantize record
-    for (po, item, price_dec, desc), val_dict in global_aggregation_map.items():
-        if price_dec is not None:
-            try:
-                price = price_dec
-                sqft = val_dict.get('col_qty_sf', decimal.Decimal(0))
-                val_dict['col_amount'] = sqft * price
-            except Exception as e:
-                logging.warning(f"{prefix} Failed to calculate amount for key ({po}, {item}, {price_dec}, {desc}): {e}")
-        quantize_record(val_dict, decimals_map)
+    if finalize:
+        finalize_standard_aggregation(global_aggregation_map, decimals_map)
 
-    logging.info(f"{prefix} Finished processing rows.")
+    logging.debug(f"{prefix} Finished processing rows.")
     return global_aggregation_map
 
 
@@ -149,14 +166,39 @@ def aggregate_custom_by_po_item(
     for val_dict in global_custom_aggregation_map.values():
         quantize_record(val_dict, decimals_map)
 
-    logging.info(f"{prefix} Finished processing rows.")
+    logging.debug(f"{prefix} Finished processing rows.")
     return global_custom_aggregation_map
+
+
+def finalize_item_merged_aggregation(
+    global_item_aggregation_map: Dict[Tuple[Any], Dict[str, Any]],
+    decimals_map: Optional[Dict[str, int]] = None,
+) -> Dict[Tuple[Any], Dict[str, Any]]:
+    """
+    Finalizes item-merged aggregation by calculating unit price from amount and sqft,
+    ensuring col_po is a string, and quantizing records.
+    """
+    for val_dict in global_item_aggregation_map.values():
+        if 'col_po' not in val_dict or val_dict['col_po'] is None:
+            val_dict['col_po'] = ""
+        amt = val_dict.get('col_amount', decimal.Decimal(0))
+        sf = val_dict.get('col_qty_sf', decimal.Decimal(0))
+        try:
+            if sf != 0:
+                val_dict['col_unit_price'] = amt / sf
+            else:
+                val_dict['col_unit_price'] = decimal.Decimal(0)
+        except Exception:
+            val_dict['col_unit_price'] = decimal.Decimal(0)
+        quantize_record(val_dict, decimals_map)
+    return global_item_aggregation_map
 
 
 def aggregate_by_item_merge_po(
     processed_data: List[Dict[str, Any]],
     global_item_aggregation_map: Dict[Tuple[Any], Dict[str, Any]],
-    decimals_map: Optional[Dict[str, int]] = None
+    decimals_map: Optional[Dict[str, int]] = None,
+    finalize: bool = True,
 ) -> Dict[Tuple[Any], Dict[str, Any]]:
     """
     ITEM_MERGED Aggregation: Aggregates values based on unique col_item,
@@ -176,21 +218,10 @@ def aggregate_by_item_merge_po(
     aggregator = Aggregator(key_selector=_item_key_selector, reducers=COLUMN_REDUCERS)
     aggregator.aggregate(processed_data, global_item_aggregation_map)
 
-    for val_dict in global_item_aggregation_map.values():
-        if 'col_po' not in val_dict or val_dict['col_po'] is None:
-            val_dict['col_po'] = ""
-        amt = val_dict.get('col_amount', decimal.Decimal(0))
-        sf = val_dict.get('col_qty_sf', decimal.Decimal(0))
-        try:
-            if sf and sf > 0:
-                val_dict['col_unit_price'] = amt / sf
-            else:
-                val_dict['col_unit_price'] = decimal.Decimal(0)
-        except Exception:
-            val_dict['col_unit_price'] = decimal.Decimal(0)
-        quantize_record(val_dict, decimals_map)
+    if finalize:
+        finalize_item_merged_aggregation(global_item_aggregation_map, decimals_map)
 
-    logging.info(f"{prefix} Finished processing rows.")
+    logging.debug(f"{prefix} Finished processing rows.")
     return global_item_aggregation_map
 
 

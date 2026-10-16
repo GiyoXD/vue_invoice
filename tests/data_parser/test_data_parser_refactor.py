@@ -38,6 +38,35 @@ class TestDataParserRefactor(unittest.TestCase):
         self.assertEqual(processed[1]['col_amount'], Decimal('30.0000'))
         self.assertEqual(processed[2]['col_amount'], Decimal('20.0000'))
 
+    def test_distribute_values_parent_without_basis(self):
+        # Row 0 has value to distribute (100) but NO basis (None). Rows 1 and 2 have basis.
+        # Ensure row 0 is zeroed out and sum is not duplicated.
+        data = [
+            {"col_po": "A1", "col_item": "I1", "col_qty_sf": None, "col_amount": Decimal('100')},
+            {"col_po": "A1", "col_item": "I2", "col_qty_sf": Decimal('60'), "col_amount": None},
+            {"col_po": "A1", "col_item": "I3", "col_qty_sf": Decimal('40'), "col_amount": None}
+        ]
+        processed = data_processor.distribute_values(
+            data,
+            columns_to_distribute=['col_amount'],
+            basis_column='col_qty_sf'
+        )
+        self.assertEqual(processed[0]['col_amount'], Decimal('0.0000'))
+        self.assertEqual(processed[1]['col_amount'], Decimal('60.0000'))
+        self.assertEqual(processed[2]['col_amount'], Decimal('40.0000'))
+
+    def test_integrity_phase_rejects_cbm_without_basis(self):
+        # Row 1 has CBM but missing basis -> should raise DataValidationError in integrity phase
+        data = [
+            {"col_po": "PO1", "col_item": "ITEM1", "col_qty_pcs": None, "col_cbm": Decimal('2.5'), "_row_num": 5},
+            {"col_po": "PO1", "col_item": "ITEM2", "col_qty_pcs": Decimal('50'), "col_cbm": None, "_row_num": 6}
+        ]
+        column_mapping = {"col_po": "A", "col_item": "B", "col_qty_pcs": "C", "col_cbm": "D"}
+        with self.assertRaises(DataValidationError) as context:
+            validate_data(data, "Table 1", column_mapping, phase='integrity')
+        self.assertIn("Row 5: Has CBM (2.5000) but missing or zero col_qty_pcs", str(context.exception))
+
+
     def test_standard_aggregation(self):
         global_map = {}
         data = list(self.mock_new_extract[0])
@@ -868,7 +897,71 @@ class TestAggregationEntryPoints(unittest.TestCase):
         )
         self.assertEqual(direct_neg[0]["col_po"], "PO1/PO2\nPO3")
 
+    def test_standard_aggregation_deferred_finalization(self):
+        from core.data_parser.data_processor.single_table import finalize_standard_aggregation
+
+        table1 = [
+            {
+                "col_po": "PO1",
+                "col_item": "ITEM1",
+                "col_unit_price": Decimal("2.00"),
+                "col_qty_sf": Decimal("100.00"),
+                "col_amount": Decimal("200.00"),
+                "col_desc": "BUFFALO LEATHER",
+            }
+        ]
+        table2 = [
+            {
+                "col_po": "PO1",
+                "col_item": "ITEM1",
+                "col_unit_price": Decimal("2.00"),
+                "col_qty_sf": Decimal("50.00"),
+                "col_amount": Decimal("100.00"),
+                "col_desc": "BUFFALO LEATHER",
+            }
+        ]
+        global_map = {}
+        data_processor.aggregate_standard_by_po_item_price(table1, global_map, finalize=False)
+        data_processor.aggregate_standard_by_po_item_price(table2, global_map, finalize=False)
+        finalize_standard_aggregation(global_map)
+
+        expected_key = ("PO1", "ITEM1", Decimal("2.00"), "BUFFALO LEATHER")
+        self.assertIn(expected_key, global_map)
+        self.assertEqual(global_map[expected_key]["col_qty_sf"], Decimal("150.00"))
+        self.assertEqual(global_map[expected_key]["col_amount"], Decimal("300.00"))
+
+    def test_item_merged_aggregation_negative_sf_returns(self):
+        try:
+            from core.data_parser.data_processor.single_table import finalize_item_merged_aggregation
+        except ImportError:
+            finalize_item_merged_aggregation = None
+
+        return_data = [
+            {
+                "col_po": "PO1",
+                "col_item": "ITEM1",
+                "col_qty_sf": Decimal("-50.00"),
+                "col_amount": Decimal("-100.00"),
+            },
+            {
+                "col_po": "PO2",
+                "col_item": "ITEM2",
+                "col_qty_sf": Decimal("0"),
+                "col_amount": Decimal("0"),
+            },
+        ]
+        global_map = {}
+        res = data_processor.aggregate_by_item_merge_po(return_data, global_map)
+
+        return_key = ("ITEM1",)
+        zero_key = ("ITEM2",)
+        self.assertIn(return_key, res)
+        self.assertEqual(res[return_key]["col_unit_price"], Decimal("2.0000"))
+        self.assertIn(zero_key, res)
+        self.assertEqual(res[zero_key]["col_unit_price"], Decimal("0"))
+
 
 if __name__ == '__main__':
     unittest.main()
+
 

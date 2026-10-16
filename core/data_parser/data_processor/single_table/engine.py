@@ -8,21 +8,17 @@ __all__ = ["Aggregator", "coerce_input_row"]
 
 def _to_decimal(val: Any) -> decimal.Decimal:
     if val is True or val is False:
-        return decimal.Decimal(0)
-    try:
-        d = decimal.Decimal(str(val).replace(",", "").strip())
-        return decimal.Decimal(0) if (d.is_nan() or d.is_infinite()) else d
-    except Exception:
-        return decimal.Decimal(0)
+        raise TypeError(f"Boolean value cannot be converted to Decimal: {val}")
+    d = decimal.Decimal(str(val).replace(",", "").strip())
+    if d.is_nan() or d.is_infinite():
+        raise ValueError(f"Invalid decimal value: {val}")
+    return d
 
 
 def _to_integer(val: Any) -> int:
     if val is True or val is False:
-        return 0
-    try:
-        return int(float(str(val).replace(",", "").strip()))
-    except Exception:
-        return 0
+        raise TypeError(f"Boolean value cannot be converted to int: {val}")
+    return int(float(str(val).replace(",", "").strip()))
 
 
 def _to_text(val: Any) -> str:
@@ -30,10 +26,7 @@ def _to_text(val: Any) -> str:
 
 
 def coerce_input_row(row: Any) -> Dict[str, Any]:
-    try:
-        coerced = dict(row)
-    except Exception:
-        return {}
+    coerced = dict(row)
     for col in DECIMAL_COLUMNS:
         val = coerced.get(col)
         if val is not None:
@@ -94,6 +87,8 @@ class Aggregator:
                         raise TypeError(f"Invalid reducer config for '{out_col}': {reducer_config}")
                 existing_val = target_map[key].get(out_col)
                 col_values = [row.get(in_col) for row in group if row.get(in_col) is not None]
+                if not col_values and existing_val is None:
+                    continue
                 if existing_val is not None:
                     col_values.insert(0, existing_val)
 

@@ -8,7 +8,7 @@ from .presence import (
     check_discount_in_col_level,
 )
 from .weight import validate_weight_integrity
-from .cbm import validate_cbm_pcs_proportion
+from .cbm import validate_cbm_pcs_proportion, validate_distribution_basis
 from .pallet import verify_pallet_integrity
 
 __all__ = [
@@ -20,6 +20,7 @@ __all__ = [
     "check_discount_in_col_level",
     "validate_weight_integrity",
     "validate_cbm_pcs_proportion",
+    "validate_distribution_basis",
     "verify_pallet_integrity",
 ]
 

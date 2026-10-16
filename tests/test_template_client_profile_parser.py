@@ -4,14 +4,17 @@ Tests for TemplateClientProfileParser.
 Covers:
   - Unit tests with synthetic header_content dicts (no file I/O)
   - Integration smoke tests against every real *_template.json in
-    database/blueprints/bundled/ — verifying the parser runs without
+    storage/blueprints/bundled/ — verifying the parser runs without
     crashing and returns sensible types.
 """
 
 import json
+import re
 import unittest
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
+
+from openpyxl.utils import get_column_letter
 
 from core.invoice_generator.extractors.template_client_profile_parser import (
     TemplateClientProfileParser,
@@ -21,7 +24,7 @@ from core.invoice_generator.extractors.template_client_profile_parser import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-BUNDLED_DIR = Path(__file__).resolve().parent.parent / "database" / "blueprints" / "bundled"
+BUNDLED_DIR = Path(__file__).resolve().parent.parent / "storage" / "blueprints"
 
 
 def _load_header_content(template_path: Path) -> Optional[Dict[str, Any]]:
@@ -29,12 +32,32 @@ def _load_header_content(template_path: Path) -> Optional[Dict[str, Any]]:
     with open(template_path, encoding="utf-8") as f:
         data = json.load(f)
     layout = data.get("template_layout", {})
-    invoice = layout.get("Invoice", {})
-    return invoice.get("template_header_content") or invoice.get("header_content")
+    inv_key = next((k for k in layout if k.strip().upper() == "INVOICE"), None)
+    if not inv_key:
+        return None
+    invoice = layout.get(inv_key, {})
+
+    direct = invoice.get("template_header_content") or invoice.get("header_content")
+    if isinstance(direct, dict) and direct:
+        return direct
+
+    header_rows = invoice.get("header_rows", [])
+    if not header_rows:
+        return None
+
+    hc: Dict[str, Any] = {}
+    for r in header_rows:
+        row_num = r.get("relative_index", 0) + 1
+        for c in r.get("cells", []):
+            val = c.get("value")
+            if val is not None:
+                col_letter = get_column_letter(c.get("col_index", 1))
+                hc[f"{col_letter}{row_num}"] = val
+    return hc or None
 
 
-def _all_template_files():
-    return sorted(BUNDLED_DIR.rglob("*_template.json"))
+def _all_template_files() -> List[Path]:
+    return sorted(BUNDLED_DIR.glob("*_template.json"))
 
 
 # ---------------------------------------------------------------------------
@@ -237,12 +260,21 @@ class TestRealTemplateFiles(unittest.TestCase):
                 msg=f"{label}: {field_name} returned unexpected type {type(value)}"
             )
 
+        # Strict value verification on known blueprint fixture
+        if tpl_path.name == "KB_KH_template.json":
+            self.assertEqual(fullname, "Key Bay Furniture Co.,Ltd.")
+            self.assertIsNotNone(address)
+            self.assertIn("Vietnam", address or "")
+            self.assertIsNotNone(contact)
+            self.assertIn("Khang", contact or "")
+
 
 def _make_test_method(path: Path):
     """Dynamically create a test method for each template file."""
     def test_method(self):
         self._run_one(path)
-    test_method.__name__ = f"test_{path.parent.name}_{path.stem}"
+    clean_stem = re.sub(r'[^a-zA-Z0-9_]', '_', path.stem)
+    test_method.__name__ = f"test_{path.parent.name}_{clean_stem}"
     return test_method
 
 
