@@ -222,9 +222,7 @@
       "data_flow": {
         "mappings": {
           "col_unit_sf": {
-            "fallback": {
-              "default": "SF"
-            },
+            "fallback": "SF",
             "column": "col_unit_sf"
           },
           "col_po": {
@@ -234,10 +232,7 @@
             "column": "col_item"
           },
           "col_desc": {
-            "fallback": {
-              "standard": "",
-              "daf": ""
-            },
+            "fallback": "",
             "column": "col_desc"
           },
           "col_qty_sf": {
@@ -420,10 +415,7 @@
         "_comment": "Inherits from defaults. Only overrides go here.",
         "mappings": {
           "col_desc": {
-            "fallback": {
-              "standard": "COW LEATHER",
-              "daf": "COW LEATHER"
-            }
+            "fallback": "COW LEATHER"
           }
         }
       },
@@ -557,10 +549,7 @@
         "_comment": "Inherits from defaults. Only overrides go here.",
         "mappings": {
           "col_desc": {
-            "fallback": {
-              "standard": "COW LEATHER",
-              "daf": "COW LEATHER"
-            }
+            "fallback": "COW LEATHER"
           },
           "col_net": {},
           "col_gross": {},
@@ -619,10 +608,7 @@
     }
   },
   "table_info": {
-    "fallback_description": {
-      "standard": "COW LEATHER",
-      "daf": "COW LEATHER"
-    },
+    "fallback_description": "SPLIT COW LEATHER",
     "hs_code": "COW LEATHER (HS.CODE: 4107.12.00)"
   }
 }

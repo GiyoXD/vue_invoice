@@ -32,6 +32,7 @@ class ProcessExistingRequest(BaseModel):
     filename: str
     ignore_tare: bool = False
     ignore_cbm: bool = False
+    parser_mode: str = "standard"
 
 
 def get_source_folder(db: Session) -> Path:
@@ -279,7 +280,8 @@ def process_existing_file(req: ProcessExistingRequest, db: Session = Depends(get
             json_output_dir,
             input_filename_override=file_name,
             ignore_tare_warning=req.ignore_tare,
-            ignore_cbm_warning=req.ignore_cbm
+            ignore_cbm_warning=req.ignore_cbm,
+            parser_mode=req.parser_mode
         )
         return _build_upload_response(file_name, json_path, identifier)
     except DataValidationError as ve:
@@ -300,6 +302,7 @@ def upload_excel(
     file: UploadFile = File(...),
     ignore_tare: bool = Form(False),
     ignore_cbm: bool = Form(False),
+    parser_mode: str = Form("standard"),
     db: Session = Depends(get_db)
 ):
     """
@@ -351,7 +354,8 @@ def upload_excel(
             json_output_dir,
             input_filename_override=filename,
             ignore_tare_warning=ignore_tare,
-            ignore_cbm_warning=ignore_cbm
+            ignore_cbm_warning=ignore_cbm,
+            parser_mode=parser_mode
         )
         
         return _build_upload_response(filename, json_path, identifier)

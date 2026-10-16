@@ -154,7 +154,7 @@ class LoopProfiler:
 
         setattr(module, func_name, patched)
         self._patches.append((module, func_name, original))
-        logger.info(f"[LoopProfiler] Patched {patch_label}")
+        logger.debug(f"[LoopProfiler] Patched {patch_label}")
 
     def unpatch_all(self):
         """Restore all monkey-patched functions to originals."""
@@ -162,7 +162,7 @@ class LoopProfiler:
             setattr(module, func_name, original)
         count = len(self._patches)
         self._patches.clear()
-        logger.info(f"[LoopProfiler] Restored {count} patched function(s)")
+        logger.debug(f"[LoopProfiler] Restored {count} patched function(s)")
 
     def reset(self):
         """Clear all profiling data."""
@@ -198,7 +198,7 @@ class LoopProfiler:
         """
         data = self.to_dict()
         if not data:
-            logger.info(f"[{title}] No profiling data collected.")
+            logger.debug(f"[{title}] No profiling data collected.")
             return
 
         lines = [
@@ -223,7 +223,7 @@ class LoopProfiler:
         report_text = "\n".join(lines)
         
         # 1. Standard logger output
-        logger.info(f"\n{report_text}\n")
+        logger.debug(f"\n{report_text}\n")
         
         # 2. Write to dedicated profiler log (survives session log wipes)
         try:

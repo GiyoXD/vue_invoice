@@ -1,16 +1,21 @@
 import logging
+import os
+from pathlib import Path
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import declarative_base, sessionmaker
-from pathlib import Path
+from core.system_config import PROJECT_ROOT
 
 logger = logging.getLogger(__name__)
 
-# Database location: database/invoice_registry.db
-DB_DIR = Path(__file__).parent.parent.parent / "database"
+# Database location: storage/db/invoice_registry.db
+DB_DIR = PROJECT_ROOT / "storage" / "db"
 DB_DIR.mkdir(parents=True, exist_ok=True)
-DB_PATH = DB_DIR / "invoice_registry.db"
-
-# SQLAlchemy Setup
+ENV_DB_PATH = os.getenv("SQLITE_DB_PATH")
+if ENV_DB_PATH:
+    custom_path = Path(ENV_DB_PATH)
+    DB_PATH = custom_path if custom_path.is_absolute() else (PROJECT_ROOT / custom_path).resolve()
+else:
+    DB_PATH = DB_DIR / "invoice_registry.db"
 SQLALCHEMY_DATABASE_URL = f"sqlite:///{DB_PATH.absolute().as_posix()}"
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 

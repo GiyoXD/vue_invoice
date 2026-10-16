@@ -37,11 +37,23 @@ def quantize_record(data_dict: Dict[str, Any], decimals_map: Optional[Dict[str, 
     for col_id in DECIMAL_COLUMNS:
         val = data_dict.get(col_id)
         if val is not None:
-            dec_places = decimals_map.get(col_id, 4 if col_id == "col_unit_price" else 2)
-            data_dict[col_id] = val.quantize(
-                decimal.Decimal(10) ** -dec_places,
-                rounding=decimal.ROUND_HALF_UP
-            )
+            try:
+                if not isinstance(val, decimal.Decimal):
+                    clean_s = str(val).replace(",", "").strip()
+                    if not clean_s:
+                        continue
+                    val = decimal.Decimal(clean_s)
+                if val.is_nan() or val.is_infinite():
+                    continue
+                dec_places = decimals_map.get(col_id) if decimals_map else None
+                if dec_places is None:
+                    dec_places = 4 if col_id == "col_unit_price" else 2
+                data_dict[col_id] = val.quantize(
+                    decimal.Decimal(10) ** -dec_places,
+                    rounding=decimal.ROUND_HALF_UP
+                )
+            except Exception:
+                pass
 
 
 def _extract_po_item_key(
@@ -87,8 +99,14 @@ def finalize_standard_aggregation(
     for (po, item, price_dec, desc), val_dict in global_aggregation_map.items():
         if price_dec is not None:
             try:
-                price = price_dec
-                sqft = val_dict.get('col_qty_sf', decimal.Decimal(0))
+                price = price_dec if isinstance(price_dec, decimal.Decimal) else decimal.Decimal(str(price_dec).replace(",", "").strip())
+                sqft_val = val_dict.get('col_qty_sf')
+                if isinstance(sqft_val, decimal.Decimal):
+                    sqft = sqft_val
+                elif sqft_val is not None and str(sqft_val).strip() != "":
+                    sqft = decimal.Decimal(str(sqft_val).replace(",", "").strip())
+                else:
+                    sqft = decimal.Decimal(0)
                 val_dict['col_amount'] = sqft * price
             except Exception as e:
                 logging.warning(f"{prefix} Failed to calculate amount for key ({po}, {item}, {price_dec}, {desc}): {e}")

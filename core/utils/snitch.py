@@ -33,9 +33,9 @@ def snitch(func):
         tid = get_trace_id()
         func_name = func.__qualname__
         try:
-            logger.info(f"[{tid}] >> ENTER: {func_name}")
+            logger.debug(f"[{tid}] >> ENTER: {func_name}")
             result = func(*args, **kwargs)
-            logger.info(f"[{tid}] OK EXIT:  {func_name}")
+            logger.debug(f"[{tid}] OK EXIT:  {func_name}")
             return result
         except Exception as e:
             logger.error(f"[{tid}] !! CRASH: {func_name} | {e}")

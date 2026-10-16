@@ -14,10 +14,12 @@ Usage:
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 # Track if logging has been configured to prevent double-init
 _logging_initialized = False
+_console_handler: Optional[logging.Handler] = None
+_session_handler: Optional[logging.Handler] = None
 
 class SafeRotatingFileHandler(RotatingFileHandler):
     """
@@ -52,7 +54,7 @@ def setup_logging(
         - File always captures DEBUG level for thorough debugging
         - This function is idempotent; calling it multiple times has no effect
     """
-    global _logging_initialized
+    global _logging_initialized, _console_handler, _session_handler
     
     if _logging_initialized:
         logging.debug("Logging already initialized, skipping.")
@@ -106,6 +108,12 @@ def setup_logging(
     root_logger.addHandler(console_handler)
     root_logger.addHandler(history_handler)
     root_logger.addHandler(session_handler)
+
+    _console_handler = console_handler
+    _session_handler = session_handler
+
+    for noisy in ("PIL", "openpyxl", "urllib3", "python_multipart", "multipart", "faker"):
+        logging.getLogger(noisy).setLevel(logging.WARNING)
     
     _logging_initialized = True
     logging.info(f"Logging initialized.")
@@ -153,3 +161,40 @@ def get_logger(name: str) -> logging.Logger:
         Logger instance
     """
     return logging.getLogger(name)
+
+
+def set_log_level(level: Union[int, str]) -> int:
+    """
+    Dynamically set the log level for console and session handlers.
+    
+    Args:
+        level: Log level as integer or string ('DEBUG', 'INFO', 'WARNING', 'ERROR')
+        
+    Returns:
+        The integer logging level set
+    """
+    global _console_handler, _session_handler
+    if isinstance(level, str):
+        numeric_level = getattr(logging, level.upper().strip(), None)
+        if not isinstance(numeric_level, int):
+            raise ValueError(f"Invalid log level: {level}")
+    else:
+        numeric_level = int(level)
+
+    if _console_handler is not None:
+        _console_handler.setLevel(numeric_level)
+    if _session_handler is not None:
+        _session_handler.setLevel(numeric_level)
+
+    return numeric_level
+
+
+def get_log_level() -> str:
+    """
+    Get current log level name from the console handler, or root logger.
+    """
+    global _console_handler
+    if _console_handler is not None:
+        return logging.getLevelName(_console_handler.level)
+    return logging.getLevelName(logging.getLogger().level)
+

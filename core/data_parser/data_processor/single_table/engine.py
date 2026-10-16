@@ -29,12 +29,22 @@ def coerce_input_row(row: Any) -> Dict[str, Any]:
     coerced = dict(row)
     for col in DECIMAL_COLUMNS:
         val = coerced.get(col)
-        if val is not None:
-            coerced[col] = _to_decimal(val)
+        if val is not None and str(val).strip() != "":
+            try:
+                coerced[col] = _to_decimal(val)
+            except Exception:
+                coerced[col] = None
+        elif val is not None:
+            coerced[col] = None
     for col in INTEGER_COLUMNS:
         val = coerced.get(col)
-        if val is not None:
-            coerced[col] = _to_integer(val)
+        if val is not None and str(val).strip() != "":
+            try:
+                coerced[col] = _to_integer(val)
+            except Exception:
+                coerced[col] = None
+        elif val is not None:
+            coerced[col] = None
     for col in TEXT_COLUMNS:
         val = coerced.get(col)
         if val is not None:
@@ -68,9 +78,10 @@ class Aggregator:
         for row in rows:
             if not row:
                 continue
-            key = self.key_selector(row)
+            c_row = coerce_input_row(row)
+            key = self.key_selector(c_row)
             if key is not None:
-                grouped_rows[key].append(row)
+                grouped_rows[key].append(c_row)
 
         for key, group in grouped_rows.items():
             if key not in target_map:

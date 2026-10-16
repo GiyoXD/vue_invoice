@@ -55,7 +55,7 @@ def _get_worksheet(spreadsheet_id: Optional[str], worksheet_name: str):
         possible_paths = [
             sys_config.base_dir / "secret.json",
             sys_config.base_dir / "credentials.json",
-            sys_config.base_dir / "database" / "credentials.json"
+            sys_config.base_dir / "storage" / "credentials.json"
         ]
         for p in possible_paths:
             if p.exists():

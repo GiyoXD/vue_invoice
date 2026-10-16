@@ -92,40 +92,38 @@ def generate_invoice(request: GenerateRequest):
         # Price adjustments
         price_adj = request.price_adjustment
         if request.global_unit_price is None:
-            if price_adj or full_data.get("_adjusted"):
-                raw_multi = full_data.get("multi_table", [])
-                merged_data = []
-                for t in raw_multi:
-                    if isinstance(t, list):
-                        merged_data.extend(t)
+            raw_multi = full_data.get("multi_table", [])
+            merged_data = []
+            for t in raw_multi:
+                if isinstance(t, list):
+                    merged_data.extend(t)
 
-                customer_decimals = resolve_customer_decimals(request.identifier)
-                std_map = {}
-                cust_map = {}
-                aggregate_standard_by_po_item_price(merged_data, std_map, decimals_map=customer_decimals)
-                aggregate_custom_by_po_item(merged_data, cust_map, decimals_map=customer_decimals)
+            customer_decimals = resolve_customer_decimals(request.identifier)
+            std_map = {}
+            cust_map = {}
+            aggregate_standard_by_po_item_price(merged_data, std_map, decimals_map=customer_decimals)
+            aggregate_custom_by_po_item(merged_data, cust_map, decimals_map=customer_decimals)
 
-                single = full_data.get("single_table") or {}
-                single["standard"] = format_aggregation_as_list(std_map, mode='standard')
-                single["custom"] = format_aggregation_as_list(cust_map, mode='custom')
-                single["manifest_by_pallet_per_po"] = aggregate_per_po_with_pallets(merged_data, decimals_map=customer_decimals)
+            single = full_data.get("single_table") or {}
+            single["standard"] = format_aggregation_as_list(std_map)
+            single["custom"] = format_aggregation_as_list(cust_map)
+            single["manifest_by_pallet_per_po"] = aggregate_per_po_with_pallets(merged_data, decimals_map=customer_decimals)
+            full_data["single_table"] = single
+
+            footer_res = calculate_all_footers(raw_multi, merged_data, single["manifest_by_pallet_per_po"], decimals_map=customer_decimals)
+            full_data["footer_data"] = format_footer_payload(footer_res)
+            full_data["price_adjustment"] = []
+
+            if price_adj:
+                full_data = apply_aggregation_adjustment(full_data, price_adj)
+
+            single = full_data.get("single_table") or {}
+            if "custom" in single and single["custom"]:
+                single["daf"] = perform_DAF_compounding(single["custom"], decimals_map=customer_decimals)
+                item_merged_map = {}
+                aggregate_by_item_merge_po(single["custom"], item_merged_map, decimals_map=customer_decimals)
+                single["item_merged"] = format_aggregation_as_list(item_merged_map)
                 full_data["single_table"] = single
-
-                footer_res = calculate_all_footers(raw_multi, merged_data, single["manifest_by_pallet_per_po"], decimals_map=customer_decimals)
-                full_data["footer_data"] = format_footer_payload(footer_res)
-                full_data["_adjusted"] = False
-                full_data["price_adjustment"] = []
-
-                if price_adj:
-                    full_data = apply_aggregation_adjustment(full_data, price_adj)
-
-                single = full_data.get("single_table") or {}
-                if "custom" in single and single["custom"]:
-                    single["daf"] = perform_DAF_compounding(single["custom"], decimals_map=customer_decimals)
-                    item_merged_map = {}
-                    aggregate_by_item_merge_po(single["custom"], item_merged_map, decimals_map=customer_decimals)
-                    single["item_merged"] = format_aggregation_as_list(item_merged_map, mode='item_merged')
-                    full_data["single_table"] = single
 
         # Net Weight Pricing Mode: inject computed columns if global_unit_price is provided
         if request.global_unit_price is not None:
@@ -159,13 +157,13 @@ def generate_invoice(request: GenerateRequest):
             aggregate_custom_by_po_item(merged_data, cust_map, decimals_map=customer_decimals)
             
             single = full_data.get("single_table") or {}
-            single["standard"] = format_aggregation_as_list(std_map, mode='standard')
-            single["custom"] = format_aggregation_as_list(cust_map, mode='custom')
+            single["standard"] = format_aggregation_as_list(std_map)
+            single["custom"] = format_aggregation_as_list(cust_map)
             
             # Cascade item_merged from custom
             item_merged_map = {}
             aggregate_by_item_merge_po(single["custom"], item_merged_map, decimals_map=customer_decimals)
-            single["item_merged"] = format_aggregation_as_list(item_merged_map, mode='item_merged')
+            single["item_merged"] = format_aggregation_as_list(item_merged_map)
             
             single["daf"] = perform_DAF_compounding(single["custom"], decimals_map=customer_decimals)
             
@@ -179,7 +177,6 @@ def generate_invoice(request: GenerateRequest):
                 decimals_map=customer_decimals
             )
             full_data["footer_data"] = format_footer_payload(footer_res)
-            full_data["_adjusted"] = False
             full_data["price_adjustment"] = []
 
             if price_adj:
@@ -189,7 +186,7 @@ def generate_invoice(request: GenerateRequest):
                     single["daf"] = perform_DAF_compounding(single["custom"], decimals_map=customer_decimals)
                     item_merged_map = {}
                     aggregate_by_item_merge_po(single["custom"], item_merged_map, decimals_map=customer_decimals)
-                    single["item_merged"] = format_aggregation_as_list(item_merged_map, mode='item_merged')
+                    single["item_merged"] = format_aggregation_as_list(item_merged_map)
                     full_data["single_table"] = single
             
             logger.info(f"Net weight pricing: Recalculated all aggregations with unit_price={request.global_unit_price}")
@@ -356,6 +353,7 @@ def generate_invoice(request: GenerateRequest):
                         processed_any = True
                 except Exception as e:
                     task_name = f"{variant_suffix.lstrip('_')} {task['name']}" if variant_suffix else task['name']
+                    logger.error(f"Failed to generate {task_name}: {e}", exc_info=True)
                     errors.append(f"Failed to generate {task_name}: {str(e)}")
 
         if not processed_any:
@@ -369,7 +367,7 @@ def generate_invoice(request: GenerateRequest):
             config_errors = [str(err) for err in errors if "CRITICAL: No 'header_row'" in str(err)]
             if config_errors:
                 status_code = 422
-                error_message = config_errors[0].splitlines()[0].strip()
+                error_message = next((line.strip() for line in config_errors[0].splitlines() if "CRITICAL:" in line), config_errors[0].splitlines()[0].strip())
             else:
                 error_message = errors[0].splitlines()[0].strip()
 
@@ -406,6 +404,7 @@ def generate_invoice(request: GenerateRequest):
     except Exception as e:
         logger.error("Invoice generation failed", exc_info=True)
         return JSONResponse(status_code=500, content={
-            "error": "Internal server error during invoice generation",
+            "error": f"Internal server error during invoice generation: {str(e)}",
+            "details": [str(e)],
             "step": "Invoice Generation"
         })

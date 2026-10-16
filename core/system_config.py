@@ -75,7 +75,7 @@ class SystemConfig:
 
     @property
     def blueprints_root(self) -> Path:
-        return self._resolve_path("blueprints_root", "database/blueprints", env_key="BLUEPRINTS_ROOT")
+        return self._resolve_path("blueprints_root", "storage/blueprints", env_key="BLUEPRINTS_ROOT")
 
     @property
     def bundled_dir(self) -> Path:
@@ -83,7 +83,7 @@ class SystemConfig:
         The bundled directory contains customer folders with config + template co-located.
         Structure: bundled/{CustomerCode}/{CustomerCode}_config.json + {CustomerCode}.xlsx
         """
-        return self._resolve_path("bundled", "database/blueprints/bundled", env_key="BUNDLED_DIR")
+        return self._resolve_path("bundled", "storage/blueprints/bundled", env_key="BUNDLED_DIR")
 
     @property
     def templates_dir(self) -> Path:
@@ -96,8 +96,12 @@ class SystemConfig:
         return self.bundled_dir
 
     @property
+    def output_dir(self) -> Path:
+        return self._resolve_path("output_dir", "storage/generated", env_key="OUTPUT_DIR")
+
+    @property
     def temp_uploads_dir(self) -> Path:
-        return self._resolve_path("temp_uploads", "database/temp_uploads", env_key="TEMP_UPLOADS_DIR")
+        return self._resolve_path("temp_uploads", "storage/uploads", env_key="TEMP_UPLOADS_DIR")
         
     @property
     def run_log_dir(self) -> Path:
@@ -110,7 +114,7 @@ class SystemConfig:
     @property
     def template_image_dir(self) -> Path:
         """Directory containing images to be injected into every generated template sheet."""
-        return self._resolve_path("template_image_dir", "database/template_images", env_key="TEMPLATE_IMAGE_DIR")
+        return self._resolve_path("template_image_dir", "storage/template_images", env_key="TEMPLATE_IMAGE_DIR")
 
     @property
     def api_port(self) -> int:

@@ -375,7 +375,7 @@ def _process_sheets(ctx: GeneratorContext, session: GenerationSession):
                  if hasattr(processor, 'header_info'):
                      session.update_logs(header_info=processor.header_info)
             else:
-                 session.log_failure(sheet_name, error=RuntimeError("Processor returned False"))
+                 raise RuntimeError(f"Processor failed for sheet '{sheet_name}'")
 
         except Exception as e:
             session.log_failure(sheet_name, error=e)

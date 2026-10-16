@@ -19,7 +19,7 @@ def test_api_template_flow(client, db):
             "description": "Mock API Test Config"
         },
         "table_info": {
-            "fallback_description": {"standard": "Mock Standard Desc"}
+            "fallback_description": "Mock Standard Desc"
         }
     }
     mock_template = {

@@ -40,14 +40,14 @@ class PipelineMonitor:
 
     def __enter__(self):
         self.start_time = time.time()
-        logger.info(f"=== [{self.step_name}] Process Started ===")
+        logger.debug(f"=== [{self.step_name}] Process Started ===")
         return self
 
     def log_process_item(self, item_name: str, status: str = "success", error: Exception = None):
         """Log the processing of a specific sub-item (e.g., a sheet or table)."""
         if status == "success":
             self.items_processed.append(item_name)
-            logger.info(f"[{self.step_name}] Successfully processed: {item_name}")
+            logger.debug(f"[{self.step_name}] Successfully processed: {item_name}")
         else:
             self.items_failed.append(item_name)
             msg = f"[{self.step_name}] Failed to process {item_name}: {error}"
