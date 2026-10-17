@@ -8,6 +8,7 @@ import sys
 import json
 import argparse
 import logging
+from typing import Optional, Dict
 from pathlib import Path
 
 # Ensure project root is in sys.path
@@ -22,7 +23,7 @@ from core.database.models import Blueprint
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
-DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "database" / "temp_uploads"
+DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "storage" / "uploads"
 
 
 def list_blueprints(db_repo: BlueprintRepository):

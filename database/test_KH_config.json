@@ -2,21 +2,23 @@
   "_meta": {
     "config_version": "2.2_strict_mode",
     "customer": "test",
-    "created_at": "2026-08-24",
+    "created_at": "2026-09-03",
     "compatibility": "strict",
-    "description": "Auto-generated Master Config for INV PKL LV26006 FCA(1)",
-    "source_template": "C:\\Users\\JPZ031127\\Desktop\\project\\vue_invoice_project\\database\\temp_uploads\\INV PKL LV26006 FCA(1).xlsx",
+    "description": "Auto-generated Master Config for CLW26002 DAP SHIPPING DOCS NEW FORMAT MAIN - LEATHER",
+    "source_template": "C:\\Users\\JPZ031127\\Desktop\\project\\vue_invoice_project\\database\\temp_uploads\\CLW26002 DAP SHIPPING DOCS New Format Main - Leather.xlsx",
     "generator": "blueprint_generator",
     "has_static_sheets": true,
     "decimals": {
+      "col_desc": 0,
       "col_qty_sf": 2,
-      "col_unit_price": 5,
+      "col_unit_sf": 2,
+      "col_unit_price": 2,
       "col_amount": 2,
-      "col_sqm": 2,
       "col_qty_pcs": 0,
       "col_net": 2,
       "col_gross": 2,
-      "col_cbm": 2
+      "col_cbm": 2,
+      "col_pallet_no": 0
     },
     "data_preparation_module_hint": {
       "priority": [
@@ -27,21 +29,16 @@
     "pricing_mode": "standard"
   },
   "processing": {
-    "Invoice": "aggregation",
-    "Packing List": "processed_tables_multi"
+    "INVOICE": "aggregation",
+    "PACKING LIST": "processed_tables_multi",
+    "Detail packing list": "processed_tables_multi"
   },
   "styling_bundle": {
     "defaults": {
       "default_border": "full_grid"
     },
-    "Invoice": {
+    "INVOICE": {
       "columns": {
-        "col_static": {
-          "format": "@",
-          "alignment": "center",
-          "wrap_text": true,
-          "border_style": "side_only"
-        },
         "col_po": {
           "format": "@",
           "alignment": "center",
@@ -53,12 +50,7 @@
           "wrap_text": true
         },
         "col_desc": {
-          "format": "@",
-          "alignment": "center",
-          "wrap_text": true
-        },
-        "col_test": {
-          "format": "@",
+          "format": "#,##0.00",
           "alignment": "center",
           "wrap_text": true
         },
@@ -67,18 +59,18 @@
           "alignment": "center",
           "wrap_text": true
         },
+        "col_unit_sf": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "wrap_text": true
+        },
         "col_unit_price": {
-          "format": "0.00000",
+          "format": "#,##0.00",
           "alignment": "center",
           "wrap_text": true
         },
         "col_amount": {
           "format": "#,##0.00",
-          "alignment": "center",
-          "wrap_text": true
-        },
-        "col_sqm": {
-          "format": "0.00_ ",
           "alignment": "center",
           "wrap_text": true
         }
@@ -89,28 +81,28 @@
           "font_size": 12.0,
           "font_name": "Times New Roman",
           "border_style": "thin",
-          "row_height": 45.0
+          "row_height": 31.5
         },
         "data": {
           "bold": false,
           "font_size": 12.0,
           "font_name": "Times New Roman",
           "border_style": "thin",
-          "row_height": 36.0
+          "row_height": 23.25
         },
         "footer": {
           "bold": true,
           "font_size": 12.0,
           "font_name": "Times New Roman",
           "border_style": "thin",
-          "row_height": 45.0
+          "row_height": 31.5
         },
         "hs_code": {
           "bold": true,
           "font_size": 12.0,
           "font_name": "Times New Roman",
           "border_style": "thin",
-          "row_height": 45.0
+          "row_height": 31.5
         },
         "summary": {
           "bold": true,
@@ -120,14 +112,103 @@
         }
       }
     },
-    "Packing List": {
+    "PACKING LIST": {
       "columns": {
-        "col_static": {
+        "col_po": {
           "format": "@",
           "alignment": "center",
-          "wrap_text": true,
-          "border_style": "side_only"
+          "wrap_text": true
         },
+        "col_item": {
+          "format": "@",
+          "alignment": "center",
+          "wrap_text": true
+        },
+        "col_desc": {
+          "format": "0",
+          "alignment": "center",
+          "wrap_text": true
+        },
+        "col_pallet_no": {
+          "format": "@",
+          "alignment": "center",
+          "wrap_text": true
+        },
+        "col_qty_pcs": {
+          "format": "#,##0",
+          "alignment": "center",
+          "wrap_text": true
+        },
+        "col_qty_sf": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "wrap_text": true
+        },
+        "col_unit_sf": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "wrap_text": true
+        },
+        "col_net": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "wrap_text": true
+        },
+        "col_gross": {
+          "format": "0.00",
+          "alignment": "center",
+          "wrap_text": true
+        },
+        "col_cbm": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "wrap_text": true
+        },
+        "col_container_no": {
+          "format": "@",
+          "alignment": "center",
+          "wrap_text": true
+        }
+      },
+      "row_contexts": {
+        "header": {
+          "bold": true,
+          "font_size": 11.0,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 51.75
+        },
+        "data": {
+          "bold": false,
+          "font_size": 12.0,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 31.5
+        },
+        "footer": {
+          "bold": true,
+          "font_size": 11.0,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 51.75
+        },
+        "hs_code": {
+          "bold": true,
+          "font_size": 12.0,
+          "font_name": "Times New Roman",
+          "border_style": "thin",
+          "row_height": 51.75
+        },
+        "summary": {
+          "bold": true,
+          "font_size": 11.0,
+          "font_name": "Times New Roman",
+          "border_style": "none"
+        }
+      }
+    },
+    "Detail packing list": {
+      "columns": {
         "col_po": {
           "format": "@",
           "alignment": "center",
@@ -143,17 +224,25 @@
           "alignment": "center",
           "wrap_text": true
         },
-        "col_qty_header": {
-          "format": "@",
-          "alignment": "center"
+        "col_pallet_no": {
+          "format": "0",
+          "alignment": "center",
+          "wrap_text": true
         },
         "col_qty_pcs": {
           "format": "#,##0",
-          "alignment": "center"
+          "alignment": "center",
+          "wrap_text": true
         },
         "col_qty_sf": {
           "format": "#,##0.00",
-          "alignment": "center"
+          "alignment": "center",
+          "wrap_text": true
+        },
+        "col_unit_sf": {
+          "format": "#,##0.00",
+          "alignment": "center",
+          "wrap_text": true
         },
         "col_net": {
           "format": "#,##0.00",
@@ -170,8 +259,13 @@
           "alignment": "center",
           "wrap_text": true
         },
-        "col_sqm": {
-          "format": "0.00",
+        "col_container_no": {
+          "format": "@",
+          "alignment": "center",
+          "wrap_text": true
+        },
+        "col_remarks": {
+          "format": "@",
           "alignment": "center",
           "wrap_text": true
         }
@@ -179,35 +273,35 @@
       "row_contexts": {
         "header": {
           "bold": true,
-          "font_size": 12.0,
+          "font_size": 11.0,
           "font_name": "Times New Roman",
           "border_style": "thin",
-          "row_height": 27.75
+          "row_height": 51.75
         },
         "data": {
           "bold": false,
           "font_size": 12.0,
           "font_name": "Times New Roman",
           "border_style": "thin",
-          "row_height": 27.75
+          "row_height": 31.5
         },
         "footer": {
           "bold": true,
-          "font_size": 12.0,
+          "font_size": 11.0,
           "font_name": "Times New Roman",
           "border_style": "thin",
-          "row_height": 27.75
+          "row_height": 51.75
         },
         "hs_code": {
           "bold": true,
           "font_size": 12.0,
           "font_name": "Times New Roman",
           "border_style": "thin",
-          "row_height": 27.75
+          "row_height": 51.75
         },
         "summary": {
           "bold": true,
-          "font_size": 12.0,
+          "font_size": 11.0,
           "font_name": "Times New Roman",
           "border_style": "none"
         }
@@ -277,103 +371,70 @@
         ]
       }
     },
-    "Invoice": {
+    "INVOICE": {
       "_sections": [
         "structure",
         "data_flow",
         "static_payload",
         "footer",
-        "summary",
-        "hs_code"
+        "summary"
       ],
       "structure": {
-        "header_row": 23,
+        "header_row": 24,
         "columns": [
           {
-            "id": "col_static",
-            "header": "Mark & Nº",
-            "width": 24.0
-          },
-          {
             "id": "col_po",
-            "header": "P.O Nº",
-            "width": 27.57
+            "header": "PO number",
+            "width": 12.75
           },
           {
             "id": "col_item",
-            "header": "ITEM Nº",
-            "width": 19.14
+            "header": "Item No.",
+            "width": 33.38
           },
           {
             "id": "col_desc",
-            "header": "Description",
-            "width": 22.43
-          },
-          {
-            "id": "col_test",
-            "header": "test1",
-            "width": 22.43
+            "header": "Description of Goods",
+            "width": 44.38,
+            "format": "#,##0.00"
           },
           {
             "id": "col_qty_sf",
-            "header": "Quantity              \n(SF)",
-            "width": 17.71,
+            "header": "Quantity",
+            "width": 11.75,
+            "format": "#,##0.00"
+          },
+          {
+            "id": "col_unit_sf",
+            "header": "Unit",
+            "width": 8.75,
             "format": "#,##0.00"
           },
           {
             "id": "col_unit_price",
-            "header": "Unite price  \n(USD)",
-            "width": 17.0,
-            "format": "0.00000"
+            "header": "Unit Price        (USD)",
+            "width": 12.25,
+            "format": "#,##0.00"
           },
           {
             "id": "col_amount",
             "header": "Amount\n(USD)",
-            "width": 15.71,
+            "width": 18.12,
             "format": "#,##0.00"
-          },
-          {
-            "id": "col_sqm",
-            "header": "sqm（M²）",
-            "width": 19.86,
-            "format": "0.00_ "
           }
         ]
       },
       "data_flow": {
         "_comment": "Inherits from defaults. Only overrides go here.",
-        "mappings": {
-          "col_desc": {
-            "fallback": {
-              "standard": "COW LEATHER",
-              "daf": "COW LEATHER"
-            }
-          },
-          "col_test": {
-            "fallback": "name anything"
-          }
-        }
+        "mappings": {}
       },
-      "static_payload": {
-        "col_static": [
-          "VENDOR#:",
-          "Des: COW LEATHER",
-          "CASE QTY:",
-          "MADE IN CAMBODIA"
-        ],
-        "description_fallback": "COW LEATHER"
-      },
+      "static_payload": {},
       "footer": {
         "rows": [
           [
             {
-              "col_id": "col_po",
-              "value": "TOTAL OF :",
-              "style_context": "footer"
-            },
-            {
-              "col_id": "col_item",
-              "value": "{col_pallet_count} PALLET{multiple}",
+              "col_id": "col_desc",
+              "value": "TOTAL",
               "style_context": "footer"
             },
             {
@@ -387,147 +448,107 @@
               "formula": "SUM",
               "target_section": "data",
               "style_context": "footer"
-            },
-            {
-              "col_id": "col_sqm",
-              "formula": "SUM",
-              "target_section": "data",
-              "style_context": "footer"
             }
           ]
         ]
       },
       "summary": {
         "rows": []
-      },
-      "hs_code": {
-        "col_id": "col_po",
-        "value": "HS.CODE: 4107.12.00",
-        "colspan": 1,
-        "style_context": "hs_code"
       }
     },
-    "Packing List": {
+    "PACKING LIST": {
       "_sections": [
         "structure",
         "data_flow",
         "static_payload",
         "footer",
-        "summary",
-        "hs_code"
+        "summary"
       ],
       "structure": {
-        "header_row": 22,
+        "header_row": 20,
         "columns": [
           {
-            "id": "col_static",
-            "header": "Mark & Nº",
-            "width": 24.57,
-            "rowspan": 2
-          },
-          {
             "id": "col_po",
-            "header": "P.O Nº",
-            "width": 25.29,
-            "rowspan": 2
+            "header": "PO number",
+            "width": 12.5
           },
           {
             "id": "col_item",
-            "header": "ITEM Nº",
-            "width": 17.14,
-            "rowspan": 2
+            "header": "Item No.",
+            "width": 13.75
           },
           {
             "id": "col_desc",
-            "header": "Description",
-            "width": 20.86,
-            "rowspan": 2
+            "header": "Description of Goods",
+            "width": 38.0,
+            "format": "0"
           },
           {
-            "id": "col_qty_header",
-            "header": "Quantity",
-            "width": 28.0,
-            "colspan": 2,
-            "children": [
-              {
-                "id": "col_qty_pcs",
-                "header": "PCS",
-                "width": 13.0,
-                "format": "#,##0"
-              },
-              {
-                "id": "col_qty_sf",
-                "header": "SF",
-                "width": 15.0,
-                "format": "#,##0.00"
-              }
-            ]
+            "id": "col_pallet_no",
+            "header": "PALLET NO.#",
+            "width": 9.88
+          },
+          {
+            "id": "col_qty_pcs",
+            "header": "PCS",
+            "width": 9.88,
+            "format": "#,##0"
+          },
+          {
+            "id": "col_qty_sf",
+            "header": "Quantity (SF)",
+            "width": 13.0,
+            "format": "#,##0.00"
+          },
+          {
+            "id": "col_unit_sf",
+            "header": "Unit",
+            "width": 4.88,
+            "format": "#,##0.00"
           },
           {
             "id": "col_net",
-            "header": "N.W\n(kgs)",
-            "width": 13.0,
-            "format": "#,##0.00",
-            "rowspan": 2
+            "header": "Net Weight (Kgs)",
+            "width": 9.5,
+            "format": "#,##0.00"
           },
           {
             "id": "col_gross",
-            "header": "G.W\n(kgs)",
-            "width": 13.0,
-            "format": "#,##0.00",
-            "rowspan": 2
+            "header": "Gross Weight (Kgs)",
+            "width": 9.88,
+            "format": "0.00"
           },
           {
             "id": "col_cbm",
-            "header": "CBM",
-            "width": 13.0,
-            "format": "#,##0.00",
-            "rowspan": 2
+            "header": "Volume (CBM)",
+            "width": 11.0,
+            "format": "#,##0.00"
           },
           {
-            "id": "col_sqm",
-            "header": "sqm（M²）",
-            "width": 20.57,
-            "format": "0.00",
-            "rowspan": 2
+            "id": "col_container_no",
+            "header": "Container number",
+            "width": 13.38
           }
         ]
       },
       "data_flow": {
         "_comment": "Inherits from defaults. Only overrides go here.",
         "mappings": {
-          "col_desc": {
-            "fallback": {
-              "standard": "COW LEATHER",
-              "daf": "COW LEATHER"
-            }
-          },
+          "col_pallet_no": {},
+          "col_qty_pcs": {},
           "col_net": {},
           "col_gross": {},
           "col_cbm": {},
-          "col_qty_pcs": {}
+          "col_container_no": {}
         }
       },
-      "static_payload": {
-        "col_static": [
-          "VENDOR#:",
-          "Des: COW LEATHER",
-          "CASE QTY:",
-          "MADE IN CAMBODIA"
-        ],
-        "description_fallback": "COW LEATHER"
-      },
+      "static_payload": {},
       "footer": {
         "rows": [
           [
             {
-              "col_id": "col_po",
-              "value": "TOTAL OF :",
-              "style_context": "footer"
-            },
-            {
-              "col_id": "col_item",
-              "value": "{col_pallet_count} PALLET{multiple}",
+              "col_id": "col_desc",
+              "value": "TOTAL：",
               "style_context": "footer"
             },
             {
@@ -559,9 +580,141 @@
               "formula": "SUM",
               "target_section": "data",
               "style_context": "footer"
+            }
+          ]
+        ]
+      },
+      "summary": {
+        "rows": []
+      }
+    },
+    "Detail packing list": {
+      "_sections": [
+        "structure",
+        "data_flow",
+        "static_payload",
+        "footer",
+        "summary"
+      ],
+      "structure": {
+        "header_row": 20,
+        "columns": [
+          {
+            "id": "col_po",
+            "header": "PO number",
+            "width": 12.5
+          },
+          {
+            "id": "col_item",
+            "header": "Item No.",
+            "width": 14.75
+          },
+          {
+            "id": "col_desc",
+            "header": "Description of Goods",
+            "width": 43.5
+          },
+          {
+            "id": "col_pallet_no",
+            "header": "PALLET NO.#",
+            "width": 9.88,
+            "format": "0"
+          },
+          {
+            "id": "col_qty_pcs",
+            "header": "PCS",
+            "width": 9.88,
+            "format": "#,##0"
+          },
+          {
+            "id": "col_qty_sf",
+            "header": "Quantity (SF)",
+            "width": 13.75,
+            "format": "#,##0.00"
+          },
+          {
+            "id": "col_unit_sf",
+            "header": "Unit",
+            "width": 6.25,
+            "format": "#,##0.00"
+          },
+          {
+            "id": "col_net",
+            "header": "Net Weight (Kgs)",
+            "width": 12.12,
+            "format": "#,##0.00"
+          },
+          {
+            "id": "col_gross",
+            "header": "Gross Weight (Kgs)",
+            "width": 11.38,
+            "format": "#,##0.00"
+          },
+          {
+            "id": "col_cbm",
+            "header": "Volume (CBM)",
+            "width": 11.0,
+            "format": "#,##0.00"
+          },
+          {
+            "id": "col_container_no",
+            "header": "Container number",
+            "width": 16.0
+          },
+          {
+            "id": "col_remarks",
+            "header": "Remark",
+            "width": 23.5
+          }
+        ]
+      },
+      "data_flow": {
+        "_comment": "Inherits from defaults. Only overrides go here.",
+        "mappings": {
+          "col_pallet_no": {},
+          "col_qty_pcs": {},
+          "col_net": {},
+          "col_gross": {},
+          "col_cbm": {},
+          "col_container_no": {},
+          "col_remarks": {}
+        }
+      },
+      "static_payload": {},
+      "footer": {
+        "rows": [
+          [
+            {
+              "col_id": "col_desc",
+              "value": "TOTAL：",
+              "style_context": "footer"
             },
             {
-              "col_id": "col_sqm",
+              "col_id": "col_qty_pcs",
+              "formula": "SUM",
+              "target_section": "data",
+              "style_context": "footer"
+            },
+            {
+              "col_id": "col_qty_sf",
+              "formula": "SUM",
+              "target_section": "data",
+              "style_context": "footer"
+            },
+            {
+              "col_id": "col_net",
+              "formula": "SUM",
+              "target_section": "data",
+              "style_context": "footer"
+            },
+            {
+              "col_id": "col_gross",
+              "formula": "SUM",
+              "target_section": "data",
+              "style_context": "footer"
+            },
+            {
+              "col_id": "col_cbm",
               "formula": "SUM",
               "target_section": "data",
               "style_context": "footer"
@@ -571,20 +724,11 @@
       },
       "summary": {
         "rows": []
-      },
-      "hs_code": {
-        "col_id": "col_po",
-        "value": "HS.CODE: 4107.12.00",
-        "colspan": 1,
-        "style_context": "hs_code"
       }
     }
   },
   "table_info": {
-    "fallback_description": {
-      "standard": "COW LEATHER",
-      "daf": "COW LEATHER"
-    },
-    "hs_code": "HS.CODE: 4107.12.00"
+    "fallback_description": null,
+    "hs_code": null
   }
 }

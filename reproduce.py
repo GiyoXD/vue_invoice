@@ -16,7 +16,7 @@ setup_logging(log_dir=sys_config.run_log_dir, level=logging.DEBUG)
 from core.invoice_generator.generate_invoice import run_invoice_generation, InvoiceGenerationRequest, InvoicePathConfig, ExplicitOverrides, GenerationOptions
 
 # 1. Fetch blueprint from DB
-conn = sqlite3.connect('database/invoice_registry.db')
+conn = sqlite3.connect('storage/db/invoice_registry.db')
 try:
     cursor = conn.cursor()
     row = cursor.execute("SELECT config_json, template_json FROM blueprints WHERE customer_code='JF' AND locale='KH'").fetchone()
@@ -31,27 +31,27 @@ config_data = json.loads(config_json)
 template_data = json.loads(template_json)
 
 # Save to temp files to simulate regular config loading
-temp_config_path = Path("database/temp_uploads/runtime_blueprints/JF_KH_config.json")
+temp_config_path = Path("storage/uploads/runtime_blueprints/JF_KH_config.json")
 temp_config_path.parent.mkdir(parents=True, exist_ok=True)
 with open(temp_config_path, "w", encoding="utf-8") as f:
     json.dump(config_data, f, indent=2)
 
-temp_template_path = Path("database/temp_uploads/runtime_blueprints/JF_KH_template.json")
+temp_template_path = Path("storage/uploads/runtime_blueprints/JF_KH_template.json")
 with open(temp_template_path, "w", encoding="utf-8") as f:
     json.dump(template_data, f, indent=2)
 
 # Load invoice data
-with open("database/temp_uploads/processed/JF26024.json", "r", encoding="utf-8") as f:
+with open("storage/uploads/processed/JF26024.json", "r", encoding="utf-8") as f:
     invoice_data = json.load(f)
 
 # Run generation
-output_path = Path("database/generated_invoices/reproduce_output.xlsx")
+output_path = Path("storage/generated/reproduce_output.xlsx")
 req = InvoiceGenerationRequest(
     paths=InvoicePathConfig(
-        input_data_path=Path("database/temp_uploads/processed/JF26024.json"),
+        input_data_path=Path("storage/uploads/processed/JF26024.json"),
         output_path=output_path,
-        template_dir=Path("database/temp_uploads/runtime_blueprints"),
-        config_dir=Path("database/temp_uploads/runtime_blueprints")
+        template_dir=Path("storage/uploads/runtime_blueprints"),
+        config_dir=Path("storage/uploads/runtime_blueprints")
     ),
     overrides=ExplicitOverrides(
         explicit_config_path=temp_config_path,

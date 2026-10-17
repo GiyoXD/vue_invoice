@@ -228,47 +228,33 @@
       "data_flow": {
         "mappings": {
           "col_unit_sf": {
-            "fallback": {
-              "default": "SF"
-            },
-            "column": "col_unit_sf"
+            "fallback": "SF"
           },
-          "col_po": {
-            "column": "col_po"
-          },
-          "col_item": {
-            "column": "col_item"
-          },
+          "col_po": {},
+          "col_item": {},
           "col_desc": {
-            "fallback": {
-              "standard": "",
-              "daf": ""
-            },
-            "column": "col_desc"
+            "fallback": ""
           },
-          "col_qty_sf": {
-            "column": "col_qty_sf"
-          },
+          "col_qty_sf": {},
           "col_unit_price": {
             "formula": {
               "daf": "{col_amount} / {col_qty_sf}",
-              "custom": "{col_amount} / {col_qty_sf}"
-            },
-            "column": "col_unit_price"
+              "custom": "{col_amount} / {col_qty_sf}",
+              "item_merged": "{col_amount} / {col_qty_sf}"
+            }
           },
           "col_amount": {
             "formula": {
               "standard": "{col_qty_sf} * {col_unit_price}"
-            },
-            "column": "col_amount"
+            }
           },
           "col_sqm": {
             "formula": {
               "standard": "{col_qty_sf} * 0.092903",
               "daf": "{col_qty_sf} * 0.092903",
-              "custom": "{col_qty_sf} * 0.092903"
-            },
-            "column": "col_sqm"
+              "custom": "{col_qty_sf} * 0.092903",
+              "item_merged": "{col_qty_sf} * 0.092903"
+            }
           }
         }
       },
