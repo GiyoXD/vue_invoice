@@ -67,11 +67,8 @@ export default {
                     Table Information
                 </h4>
                 <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.5rem 1rem;" class="text-sm">
-                    <div class="text-muted font-medium">Fallback Desc (Standard):</div>
-                    <div class="text-primary">{{ store.currentTemplate.table_info.fallback_description?.standard || 'None' }}</div>
-
-                    <div class="text-muted font-medium">Fallback Desc (DAF):</div>
-                    <div class="text-primary">{{ store.currentTemplate.table_info.fallback_description?.daf || 'None' }}</div>
+                    <div class="text-muted font-medium">Fallback Desc:</div>
+                    <div class="text-primary">{{ (typeof store.currentTemplate?.table_info?.fallback_description === 'object' ? store.currentTemplate?.table_info?.fallback_description?.standard : store.currentTemplate?.table_info?.fallback_description) || 'None' }}</div>
 
                     <div class="text-muted font-medium">HS Code:</div>
                     <div class="text-primary">{{ store.currentTemplate.table_info.hs_code || 'None' }}</div>

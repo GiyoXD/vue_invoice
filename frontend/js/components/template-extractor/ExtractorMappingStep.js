@@ -40,7 +40,7 @@ export default {
 
             <div v-else class="flex flex-col gap-2 mt-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                 <div v-for="(headerText, index) in store.allMissingHeaders" :key="index" style="display: grid; grid-template-columns: 1fr 2fr 2fr auto; gap: 1rem; align-items: center;" class="bg-white/5 p-3 rounded-md">
-                    <div class="font-bold text-yellow-400 truncate" :title="headerText">"{{ headerText }}"</div>
+                    <div class="whitespace-pre-line break-words font-bold text-yellow-400 text-sm leading-tight" :title="headerText">"{{ headerText }}"<span v-if="headerText.includes('\\n')" class="ml-1.5 px-1.5 py-0.5 text-[10px] bg-yellow-500/20 text-yellow-300 rounded border border-yellow-500/30 select-none inline-block font-normal align-middle">↵ multiline</span></div>
                     <div class="flex flex-col gap-1 w-full">
                         <select v-model="store.userMappings[headerText]" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" :disabled="store.confirmedHeaders.includes(headerText)">
                             <option value="" disabled selected>Select a field...</option>

@@ -100,10 +100,8 @@ export const useInspectorStore = defineStore('inspector', () => {
         const gtAmount = Number(gt.col_amount || 0);
 
         const isAlreadyAdjusted = Boolean(
-            data?._adjusted ||
-            gt?._adjusted ||
-            (data?.price_adjustment && data?._adjusted) ||
-            (adjustmentSum !== 0 && rawSum > 0 && Math.abs(gtAmount - (rawSum + adjustmentSum)) < 0.01)
+            (adjustmentSum !== 0 && rawSum > 0 && Math.abs(gtAmount - (rawSum + adjustmentSum)) < 0.01) ||
+            (adjustmentSum === 0)
         );
 
         return {

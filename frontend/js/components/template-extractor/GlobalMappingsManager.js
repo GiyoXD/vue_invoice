@@ -95,7 +95,13 @@ export default {
                         </template>
                         <template v-else-if="store.activeMappingType === 'header_text_mappings'">
                             <div v-for="(val, headerText) in store.filteredMappings" :key="headerText" style="display: grid; grid-template-columns: 1.5fr 1.5fr 1.5fr auto; gap: 0.5rem; align-items: center;" class="bg-white/5 p-2 rounded">
-                                <input type="text" :value="headerText" @change="store.updateMappingHeader(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" />
+                                <div class="flex flex-col gap-1 w-full">
+                                    <div class="relative w-full flex items-center">
+                                        <input type="text" :value="headerText" @change="store.updateMappingHeader(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" :class="{ 'pr-20': headerText.includes('\\n') }" :title="headerText" />
+                                        <span v-if="headerText.includes('\\n')" class="absolute right-2 px-1.5 py-0.5 text-[10px] bg-yellow-500/20 text-yellow-300 rounded border border-yellow-500/30 select-none pointer-events-none font-medium text-center">↵ multiline</span>
+                                    </div>
+                                    <div v-if="headerText.includes('\\n')" class="text-[11px] text-yellow-400/90 whitespace-pre-line break-words leading-tight px-1 font-mono">"{{ headerText }}"</div>
+                                </div>
                                 
                                 <div class="flex flex-col gap-1 w-full">
                                     <select :value="store.getMappingSelectVal(val)" @change="store.onMappingSelectChange(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm">
@@ -115,7 +121,13 @@ export default {
                         </template>
                         <template v-else>
                             <div v-for="(colId, headerText) in store.filteredMappings" :key="headerText" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; align-items: center;" class="bg-white/5 p-2 rounded">
-                                <input type="text" :value="headerText" @change="store.updateMappingHeader(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" />
+                                <div class="flex flex-col gap-1 w-full">
+                                    <div class="relative w-full flex items-center">
+                                        <input type="text" :value="headerText" @change="store.updateMappingHeader(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" :class="{ 'pr-20': headerText.includes('\\n') }" :title="headerText" />
+                                        <span v-if="headerText.includes('\\n')" class="absolute right-2 px-1.5 py-0.5 text-[10px] bg-yellow-500/20 text-yellow-300 rounded border border-yellow-500/30 select-none pointer-events-none font-medium text-center">↵ multiline</span>
+                                    </div>
+                                    <div v-if="headerText.includes('\\n')" class="text-[11px] text-yellow-400/90 whitespace-pre-line break-words leading-tight px-1 font-mono">"{{ headerText }}"</div>
+                                </div>
                                 
                                 <input v-if="store.activeMappingType === 'footer_label_mappings'" type="text" :value="colId" @change="store.updateMappingColId(headerText, $event.target.value)" class="w-full h-9 bg-slate-900 border border-slate-700 rounded px-3 text-slate-100 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-sm" :disabled="true" />
                                 

@@ -55,30 +55,59 @@ export default {
 
             <!-- Main Content Area: Tabs + Selector/Upload -->
             <div class="p-5 space-y-4">
-                <!-- Segmented Tab Bar -->
-                <div class="inline-flex items-center p-1 bg-slate-900/90 border border-slate-700/80 rounded-lg">
-                    <button 
-                        type="button" 
-                        @click="activeTab = 'selector'" 
-                        :class="[
-                            'px-3.5 py-1.5 text-xs font-semibold rounded-md transition-all', 
-                            activeTab === 'selector' 
-                                ? 'bg-blue-600 text-white' 
-                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                        ]">
-                        Folder Files ({{ availableFiles.length }})
-                    </button>
-                    <button 
-                        type="button" 
-                        @click="activeTab = 'upload'" 
-                        :class="[
-                            'px-3.5 py-1.5 text-xs font-semibold rounded-md transition-all', 
-                            activeTab === 'upload' 
-                                ? 'bg-blue-600 text-white' 
-                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
-                        ]">
-                        Upload from PC
-                    </button>
+                <!-- Tab Bar & Mode Toggle -->
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <!-- Segmented Tab Bar -->
+                    <div class="inline-flex items-center p-1 bg-slate-900/90 border border-slate-700/80 rounded-lg">
+                        <button 
+                            type="button" 
+                            @click="activeTab = 'selector'" 
+                            :class="[
+                                'px-3.5 py-1.5 text-xs font-semibold rounded-md transition-all', 
+                                activeTab === 'selector' 
+                                    ? 'bg-blue-600 text-white' 
+                                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                            ]">
+                            Folder Files ({{ availableFiles.length }})
+                        </button>
+                        <button 
+                            type="button" 
+                            @click="activeTab = 'upload'" 
+                            :class="[
+                                'px-3.5 py-1.5 text-xs font-semibold rounded-md transition-all', 
+                                activeTab === 'upload' 
+                                    ? 'bg-blue-600 text-white' 
+                                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                            ]">
+                            Upload from PC
+                        </button>
+                    </div>
+
+                    <!-- Parser Mode Toggle -->
+                    <div class="inline-flex items-center p-1 bg-slate-900/90 border border-slate-700/80 rounded-lg">
+                        <button 
+                            type="button" 
+                            @click="parserMode = 'standard'" 
+                            :class="[
+                                'px-3.5 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5', 
+                                parserMode === 'standard' 
+                                    ? 'bg-blue-600 text-white' 
+                                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                            ]">
+                            <span>📦</span> Packing List
+                        </button>
+                        <button 
+                            type="button" 
+                            @click="parserMode = 'summary'" 
+                            :class="[
+                                'px-3.5 py-1.5 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5', 
+                                parserMode === 'summary' 
+                                    ? 'bg-blue-600 text-white' 
+                                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                            ]">
+                            <span>⚖️</span> Summary / Net Weight
+                        </button>
+                    </div>
                 </div>
 
                 <!-- TAB 1: Folder Files (Selector) -->
@@ -221,7 +250,7 @@ export default {
                     <!-- Open in Excel -->
                     <button 
                         type="button"
-                        @click="openSelectedInExcel(selectedExistingFile ? selectedExistingFile.filename : activeFilename)"
+                        @click="openSelectedInExcel(selectedExistingFile.filename)"
                         :disabled="!selectedExistingFile || hasRawFile || isOpeningFile"
                         class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3.5 py-2 rounded-lg text-xs font-semibold border border-slate-700 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                         title="Open file directly in Excel">
@@ -286,7 +315,7 @@ export default {
                 
                 <div class="error-actions mt-3 flex flex-wrap gap-2">
                     <button class="btn-retry text-xs px-3 py-1.5 rounded" @click="retryUpload">Try Again</button>
-                    <button v-if="uploadError.message && (uploadError.message.includes('Weight Integrity Error') || uploadError.message.includes('Tare mismatch') || uploadError.message.includes('Gross <= Net') || uploadError.message.includes('Missing Gross Weight') || uploadError.message.includes('Missing Net Weight'))" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded text-xs transition-colors" @click="ignoreTareAndRetry">Bypass Weight Check</button>
+                    <button v-if="isWeightError" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded text-xs transition-colors" @click="ignoreTareAndRetry">Bypass Weight Check</button>
                     <button v-if="uploadError.message && uploadError.message.includes('CBM')" class="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white font-medium rounded text-xs transition-colors" @click="ignoreCbmAndRetry">Bypass CBM Check</button>
                     <button class="btn-copy-error text-xs px-3 py-1.5 rounded" @click="copyError(uploadError)">Copy Error</button>
                 </div>
@@ -309,7 +338,8 @@ export default {
             fileSearchQuery,
             selectedExistingFile,
             isOpeningFile,
-            processingComplete
+            processingComplete,
+            parserMode
         } = storeToRefs(store);
 
         const isEditingFolder = ref(false);
@@ -327,6 +357,16 @@ export default {
 
         const activeFilename = computed(() => {
             return selectedExistingFile.value?.filename || selectedFile.value?.name || '';
+        });
+
+        const isWeightError = computed(() => {
+            const msg = uploadError.value?.message;
+            if (!msg) return false;
+            return msg.includes('Weight Integrity Error') ||
+                   msg.includes('Tare mismatch') ||
+                   msg.includes('Gross <= Net') ||
+                   msg.includes('Missing Gross Weight') ||
+                   msg.includes('Missing Net Weight');
         });
 
         const isSelected = (fileItem) => {
@@ -386,11 +426,10 @@ export default {
         const handleEnterKey = () => {
             const q = (fileSearchQuery.value || '').trim();
             if (q) {
-                if (filteredFiles.value.length > 0) {
-                    store.processExistingFile(filteredFiles.value[0].filename);
-                } else {
-                    store.processExistingFile(q);
+                if (filteredFiles.value.length === 0) {
+                    return;
                 }
+                store.processExistingFile(filteredFiles.value[0].filename);
             } else if (selectedExistingFile.value) {
                 store.processExistingFile(selectedExistingFile.value.filename);
             }
@@ -406,6 +445,11 @@ export default {
             if (file) {
                 const name = (file.name || '').toLowerCase();
                 if (!name.endsWith('.xlsx') && !name.endsWith('.xls')) {
+                    uploadError.value = {
+                        message: 'Only Excel files (.xlsx, .xls) are supported.',
+                        step: 'File Upload',
+                        traceback: null
+                    };
                     return;
                 }
                 localUploadedFile.value = file;
@@ -457,6 +501,7 @@ export default {
             isUploading,
             uploadStatus,
             uploadError,
+            isWeightError,
             showUploadTraceback,
             validationWarnings,
             sourceFolderPath,
@@ -466,6 +511,7 @@ export default {
             selectedExistingFile,
             isOpeningFile,
             processingComplete,
+            parserMode,
             isEditingFolder,
             tempFolderPath,
             activeTab,

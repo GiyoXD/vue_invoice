@@ -12,6 +12,7 @@ export const useGeneratorStore = defineStore('generator', () => {
     const showUploadTraceback = ref(false);
     const ignoreTareError = ref(false);
     const ignoreCbmError = ref(false);
+    const parserMode = ref('standard'); // 'standard' | 'summary'
 
     // Source Folder & File Selector State
     const sourceFolderPath = ref('');
@@ -470,6 +471,7 @@ export const useGeneratorStore = defineStore('generator', () => {
         formData.append('file', rawFile.value);
         formData.append('ignore_tare', ignoreTareError.value);
         formData.append('ignore_cbm', ignoreCbmError.value);
+        formData.append('parser_mode', parserMode.value);
 
         try {
             const response = await fetch('/api/upload', {
@@ -526,7 +528,8 @@ export const useGeneratorStore = defineStore('generator', () => {
                 body: JSON.stringify({
                     filename: targetFilename,
                     ignore_tare: ignoreTareError.value,
-                    ignore_cbm: ignoreCbmError.value
+                    ignore_cbm: ignoreCbmError.value,
+                    parser_mode: parserMode.value
                 })
             });
 
@@ -900,6 +903,7 @@ export const useGeneratorStore = defineStore('generator', () => {
         maxStackingLayers,
         loadingOrientation,
         isLookingUp,
+        parserMode,
 
         // computed
         hasRawFile,

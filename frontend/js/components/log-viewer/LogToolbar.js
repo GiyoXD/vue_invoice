@@ -24,6 +24,14 @@ export default {
         loading: {
             type: Boolean,
             default: false
+        },
+        logLevel: {
+            type: String,
+            default: 'INFO'
+        },
+        togglingLevel: {
+            type: Boolean,
+            default: false
         }
     },
     emits: [
@@ -31,7 +39,8 @@ export default {
         'update:autoRefresh',
         'update:autoScroll',
         'refresh',
-        'clear'
+        'clear',
+        'toggle-level'
     ],
     template: `
         <div class="bg-slate-800/80 backdrop-blur-md border border-slate-700/50 shadow-2xl rounded-2xl p-6 mb-6 flex flex-col sm:flex-row justify-between items-center gap-4 flex-shrink-0">
@@ -64,6 +73,18 @@ export default {
                     />
                     <span>Auto-scroll</span>
                 </label>
+                <button
+                    class="px-3 py-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all border flex items-center gap-1.5 shadow-sm"
+                    :class="logLevel === 'DEBUG'
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                        : 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'"
+                    @click="$emit('toggle-level')"
+                    :disabled="togglingLevel"
+                    title="Toggle between INFO and DEBUG log level"
+                >
+                    <span>{{ logLevel === 'DEBUG' ? '🐛' : '📋' }}</span>
+                    <span>Level: {{ logLevel }}</span>
+                </button>
                 <button
                     class="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg shadow-sm transition-colors text-sm"
                     @click="$emit('refresh')"
