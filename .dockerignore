@@ -11,10 +11,13 @@ __pycache__
 *.pyo
 
 # Data directories (mounted as volumes instead)
-database/generated_invoices/
-database/temp_uploads/
-database/*.db
-database/*.db-journal
+storage/generated/
+storage/uploads/
+storage/db/*.db*
+storage/db/*.db-journal
+storage/blueprints/*
+!storage/blueprints/mapper/
+!storage/blueprints/bundled/
 output/
 run_log/
 tmp/

@@ -22,11 +22,12 @@ RUN pip install --no-cache-dir --upgrade pip && \
 COPY api/ ./api/
 COPY core/ ./core/
 COPY frontend/ ./frontend/
-COPY database/ ./default_database/
+COPY storage/ ./default_storage/
 
 # Copy and set up entrypoint script
 COPY docker_entrypoint.sh /app/
-RUN chmod +x /app/docker_entrypoint.sh
+RUN sed -i 's/\r$//' /app/docker_entrypoint.sh && \
+    chmod +x /app/docker_entrypoint.sh
 
 # Set Python path so module imports resolve correctly
 ENV PYTHONPATH=.

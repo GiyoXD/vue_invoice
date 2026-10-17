@@ -1,16 +1,17 @@
 secret.json
 # Ignore Database Files (Large)
-database/*.db
-database/*.sqlite
+storage/db/*.db
+storage/db/*.sqlite
 *.db-shm
 *.db-wal
-database/*.db-shm
-database/*.db-wal
+storage/db/*.db-shm
+storage/db/*.db-wal
 
 
-# Ignore all blueprints subdirectories except mapper
-database/blueprints/*
-!database/blueprints/mapper/
+# Ignore all blueprints subdirectories except mapper and bundled
+storage/blueprints/*
+!storage/blueprints/mapper/
+!storage/blueprints/bundled/
 
 # Ignore Output Directory
 output/
@@ -32,10 +33,9 @@ env/
 venv/
 
 # Ignore Output Directories
-database/generated_invoices/
-database/temp_uploads/
-run_log/
-database/blueprints/mapper/mapping_config.json
+storage/generated/
+storage/uploads/
+storage/blueprints/mapper/mapping_config.json
 
 # Node/NPM
 node_modules/

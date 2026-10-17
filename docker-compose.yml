@@ -14,11 +14,11 @@ services:
       - "8081:8081"
     volumes:
       # Persist data directories dynamically to any user's AppData\Local
-      - ${LOCALAPPDATA}/VueInvoiceManager/database:/app/database
-      - ${LOCALAPPDATA}/VueInvoiceManager/run_log:/app/run_log
+      - ${LOCALAPPDATA:-${HOME}/.local/share}/VueInvoiceManager/storage:/app/storage
+      - ${LOCALAPPDATA:-${HOME}/.local/share}/VueInvoiceManager/run_log:/app/run_log
       # Hidden internal volume to keep temp files forever without cluttering Windows
-      - temp_data:/app/temp_inside_docker
-      - temp_data:/app/output_inside_docker
+      - temp_uploads:/app/temp_inside_docker
+      - generated_output:/app/output_inside_docker
       # Inject environment config and secrets from host
       - ./.env:/app/.env:ro
       - ./secret.json:/app/secret.json:ro
@@ -30,4 +30,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  temp_data:
+  temp_uploads:
+  generated_output:
