@@ -36,9 +36,9 @@ def main():
         elif (sample_dir / arg_path.name).exists():
             json_path = sample_dir / arg_path.name
     else:
-        target_file = sample_dir / "test101010.json"
+        target_file = sample_dir / "KB26021.json"
         if not target_file.exists():
-            target_file = sample_dir / "best111.json"
+            target_file = sample_dir / "test101010.json"
         if target_file.exists():
             json_path = target_file
         else:

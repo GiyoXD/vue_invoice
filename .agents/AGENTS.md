@@ -35,3 +35,18 @@
    - **Allowed Tools**: `view_file`, `grep_search`, `list_dir` (read-only inspection).
    - **Forbidden Tools**: Code editing and command execution tools.
 
+## ARCHITECTURAL RULES: CORE & BOUNDARIES
+
+1. PARSE, DON'T VALIDATE:
+   - Validate and convert raw data (JSON, dicts, external inputs) ONCE at boundary using strict models (Pydantic/dataclasses).
+   - Core functions MUST accept parsed, typed models only. Never pass `dict`, `Any`, or unstructured data into business logic.
+
+2. TRUST TYPES & FAIL FAST:
+   - Trust type hints 100%. Assume inputs match signature guarantees.
+   - FORBIDDEN: Defensive type checks (`isinstance`, `type()`, `getattr()`) on typed inputs.
+   - FORBIDDEN: Silent fallback defaults (e.g., returning `""` or `None` on invalid types). Let invalid calls fail immediately with natural exceptions.
+
+3. ALLOWED `isinstance`:
+   - ONLY for logical branching on explicit Union types (e.g., `x: Circle | Square`) or AST/visitor nodes.
+   - If parameter is single type, `isinstance` check is BANNED.
+

@@ -28,7 +28,7 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Change this sample name to debug specific template
-    target_sample = "CT&INV&PL JKVN26006 FCA.xlsx"
+    target_sample = "KB26021.xlsx"
 
     if len(sys.argv) > 1:
         arg_path = Path(sys.argv[1])
